@@ -3,6 +3,7 @@ Tests for pure functions in scripts/compute_deltas.py.
 All tests use in-memory data — no CSV I/O.
 """
 
+import csv
 import math
 import sys
 from datetime import date
@@ -158,3 +159,63 @@ class TestFmt:
     def test_string_nan_returns_empty_string(self):
         # "nan" as a string coerces to float nan
         assert cd._fmt("nan") == ""
+
+
+# ---------------------------------------------------------------------------
+# ensure_deltas_csv
+# ---------------------------------------------------------------------------
+
+class TestEnsureDeltasCsv:
+    def _write_old_schema_csv(self, path, rows):
+        """Write a deltas CSV using a schema that's missing rank_day."""
+        old_cols = [c for c in cd.DELTA_COLUMNS if c != "rank_day"]
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=old_cols)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({c: row.get(c, "") for c in old_cols})
+
+    def test_creates_file_when_missing(self, tmp_path):
+        csv_path = tmp_path / "deltas.csv"
+        result = cd.ensure_deltas_csv(csv_path)
+        assert csv_path.exists()
+        assert result is False
+        with open(csv_path, newline="") as f:
+            assert csv.DictReader(f).fieldnames == cd.DELTA_COLUMNS
+
+    def test_no_op_when_schema_matches(self, tmp_path):
+        csv_path = tmp_path / "deltas.csv"
+        cd.ensure_deltas_csv(csv_path)
+        mtime = csv_path.stat().st_mtime
+        result = cd.ensure_deltas_csv(csv_path)
+        assert result is False
+        assert csv_path.stat().st_mtime == mtime
+
+    def test_migration_updates_schema(self, tmp_path):
+        csv_path = tmp_path / "deltas.csv"
+        self._write_old_schema_csv(csv_path, [{"date": "2026-01-01", "name": "Tech"}])
+        result = cd.ensure_deltas_csv(csv_path)
+        assert result is True
+        with open(csv_path, newline="") as f:
+            reader = csv.DictReader(f)
+            assert reader.fieldnames == cd.DELTA_COLUMNS
+
+    def test_migration_preserves_existing_data(self, tmp_path):
+        csv_path = tmp_path / "deltas.csv"
+        self._write_old_schema_csv(csv_path, [
+            {"date": "2026-01-01", "name": "Tech", "rank_week": "1"},
+            {"date": "2026-01-01", "name": "Energy", "rank_week": "2"},
+        ])
+        cd.ensure_deltas_csv(csv_path)
+        with open(csv_path, newline="") as f:
+            rows = list(csv.DictReader(f))
+        assert len(rows) == 2
+        assert rows[0]["name"] == "Tech"
+        assert rows[0]["rank_week"] == "1"
+        assert rows[1]["name"] == "Energy"
+
+    def test_migration_leaves_no_tmp_file(self, tmp_path):
+        csv_path = tmp_path / "deltas.csv"
+        self._write_old_schema_csv(csv_path, [{"date": "2026-01-01", "name": "A"}])
+        cd.ensure_deltas_csv(csv_path)
+        assert not csv_path.with_suffix(".tmp").exists()
