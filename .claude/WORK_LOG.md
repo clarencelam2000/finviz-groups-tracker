@@ -60,7 +60,14 @@
 
 | Date | Issue | Status | Fix |
 |------|-------|--------|-----|
-| 2026-06-09 | GitHub Actions runners not allocating | Open | Enable Actions in repo Settings → Actions → General |
+| 2026-06-09 | GitHub Actions runners not allocating | Fixed | Adding a payment method to the GitHub account resolved runner allocation (account-level billing gate, even on public repos) |
+| 2026-06-09 | Node.js 20 action deprecation | Fixed | Added FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 to both workflows; forced migration deadline is 2026-06-16 |
+
+## 2026-06-09 — GitHub Actions CI now working (PR #6)
+
+Root cause of all previous CI failures identified and resolved: GitHub required a payment method on the account before allocating hosted runners, even for public repos. Once added, runners allocated normally. Also restored push/PR triggers to tests.yml and pre-emptively opted both workflows into Node.js 24 before the June 16th forced migration deadline.
+
+---
 
 ## 2026-06-09 — Commit discipline rules and test scaffolding
 
