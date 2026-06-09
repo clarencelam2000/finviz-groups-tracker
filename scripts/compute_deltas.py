@@ -26,7 +26,7 @@ SNAPSHOT_COLS = [
 
 DELTA_COLUMNS = [
     "date", "name",
-    "rank_week", "rank_month", "rank_quarter", "rank_half", "rank_year", "rank_ytd",
+    "rank_day", "rank_week", "rank_month", "rank_quarter", "rank_half", "rank_year", "rank_ytd",
     "rank_week_delta_7d", "rank_week_delta_14d", "rank_week_delta_30d",
     "rank_month_delta_7d", "rank_month_delta_14d", "rank_month_delta_30d",
     "rank_ytd_delta_7d", "rank_ytd_delta_14d", "rank_ytd_delta_30d",
@@ -55,6 +55,23 @@ def ensure_deltas_csv(csv_path: Path):
             writer = csv.DictWriter(f, fieldnames=DELTA_COLUMNS)
             writer.writeheader()
         print(f"  Created {csv_path}")
+        return
+
+    # Migrate schema if DELTA_COLUMNS has changed since the file was created
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        existing_cols = list(reader.fieldnames) if reader.fieldnames else []
+        if existing_cols == DELTA_COLUMNS:
+            return
+        rows = list(reader)
+
+    print(f"  [migrate] Schema change detected in {csv_path} — rewriting with updated columns.")
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=DELTA_COLUMNS)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({col: row.get(col, "") for col in DELTA_COLUMNS})
+    print(f"  [migrate] Migrated {len(rows)} rows.")
 
 
 def load_existing_keys(csv_path: Path) -> set:
@@ -104,6 +121,7 @@ def compute_ranks(df_day: pd.DataFrame) -> pd.DataFrame:
     """Add rank columns to a single-day snapshot DataFrame."""
     df = df_day.copy()
     rank_metrics = {
+        "rank_day": "perf_day",
         "rank_week": "perf_week",
         "rank_month": "perf_month",
         "rank_quarter": "perf_quarter",
@@ -127,12 +145,11 @@ def compute_momentum(df_day: pd.DataFrame) -> pd.Series:
 
     scores = pd.DataFrame(index=df_day.index)
     for col in PERF_RANK_METRICS:
-        if col in df_day.columns:
+        if col in df_day.columns and df_day[col].notna().any():
             ranks = df_day[col].rank(ascending=False, method="min", na_option="bottom")
             # rank 1 → percentile 1.0, rank n → percentile 0.0
             scores[col] = (n - ranks) / (n - 1)
-        else:
-            scores[col] = float("nan")
+        # missing or all-NaN columns are omitted; mean(skipna=True) handles partial coverage
 
     return scores.mean(axis=1)
 
@@ -141,10 +158,13 @@ def compute_momentum(df_day: pd.DataFrame) -> pd.Series:
 # Core computation
 # ---------------------------------------------------------------------------
 
-def compute_for_group(group_type: str, target_date_str: str = None):
+def compute_for_group(group_type: str, target_date_str: str = None,
+                      snap_path: Path = None, delta_path: Path = None):
     subdir = "sectors" if group_type == "sector" else "industries"
-    snap_path = DATA_DIR / subdir / "snapshots.csv"
-    delta_path = DATA_DIR / subdir / "deltas.csv"
+    if snap_path is None:
+        snap_path = DATA_DIR / subdir / "snapshots.csv"
+    if delta_path is None:
+        delta_path = DATA_DIR / subdir / "deltas.csv"
 
     ensure_deltas_csv(delta_path)
     existing_keys = load_existing_keys(delta_path)
@@ -197,6 +217,7 @@ def compute_for_group(group_type: str, target_date_str: str = None):
         out = {
             "date": str(target_date),
             "name": row["name"],
+            "rank_day": _fmt(row.get("rank_day")),
             "rank_week": _fmt(row.get("rank_week")),
             "rank_month": _fmt(row.get("rank_month")),
             "rank_quarter": _fmt(row.get("rank_quarter")),

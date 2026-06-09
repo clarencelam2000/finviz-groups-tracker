@@ -190,12 +190,15 @@ def parse_table(html: str, group_type: str, snapshot_date: str, collected_at: st
     # Parse header
     header_cells = rows[0].find_all(["th", "td"])
     col_mapping = []  # list of internal column names (None = skip)
+    unknown_headers = []
     for cell in header_cells:
         text = cell.get_text(strip=True)
         mapped = HEADER_MAP.get(text, None)
         if text and text not in HEADER_MAP:
-            print(f"  [warn] Unknown header: {text!r} — skipping column")
+            unknown_headers.append(text)
         col_mapping.append(mapped)
+    if unknown_headers:
+        print(f"  [warn] Unknown headers (will be dropped): {unknown_headers}", file=sys.stderr)
 
     records = []
     for row in rows[1:]:
@@ -309,9 +312,26 @@ def collect(group_type: str):
     print(f"\n[{group_type}] snapshot_date={snapshot_date}")
 
     url = URLS[group_type]
+    t0 = time.time()
     html = fetch_html(url)
+    print(f"  fetch_html took {time.time() - t0:.1f}s")
+
     records = parse_table(html, group_type, snapshot_date, collected_at)
     print(f"  Parsed {len(records)} rows from HTML.")
+
+    _EXPECTED_MIN_ROWS = {"sector": 8, "industry": 100}
+    min_expected = _EXPECTED_MIN_ROWS.get(group_type, 1)
+    if len(records) == 0:
+        raise RuntimeError(
+            f"[{group_type}] parse_table returned 0 rows — "
+            "possible page structure change or block."
+        )
+    if len(records) < min_expected:
+        print(
+            f"  [warn] Only {len(records)} rows for {group_type}; "
+            f"expected at least {min_expected}. Proceeding but this may indicate a problem.",
+            file=sys.stderr,
+        )
 
     append_records(csv_path, records, existing_keys)
 

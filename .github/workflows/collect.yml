@@ -8,6 +8,7 @@ permissions:
 jobs:
   snapshot:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,6 +20,28 @@ jobs:
           playwright install chromium --with-deps
       - name: Collect snapshot
         run: python scripts/collect.py
+      - name: Verify row counts
+        run: |
+          python - <<'EOF'
+          import csv, sys
+          from pathlib import Path
+          today = __import__("datetime").date.today().isoformat()
+          checks = [("data/sectors/snapshots.csv", 8), ("data/industries/snapshots.csv", 100)]
+          failed = False
+          for path_str, min_rows in checks:
+              path = Path(path_str)
+              if not path.exists():
+                  print(f"FAIL: {path_str} does not exist")
+                  failed = True
+                  continue
+              with open(path) as f:
+                  rows = [r for r in csv.DictReader(f) if r.get("date") == today]
+              print(f"  {path_str}: {len(rows)} rows for {today}")
+              if len(rows) < min_rows:
+                  print(f"FAIL: expected >= {min_rows}, got {len(rows)}")
+                  failed = True
+          sys.exit(1 if failed else 0)
+          EOF
       - name: Compute deltas
         run: python scripts/compute_deltas.py
       - name: Commit and push
