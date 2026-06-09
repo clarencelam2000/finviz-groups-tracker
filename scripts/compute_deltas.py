@@ -82,6 +82,20 @@ def ensure_deltas_csv(csv_path: Path) -> bool:
     return True
 
 
+def _evict_date_rows(csv_path: Path, date_str: str):
+    """Remove all rows for date_str from the deltas CSV (atomic rewrite)."""
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        kept = [r for r in reader if r.get("date") != date_str]
+    tmp = csv_path.with_suffix(".tmp")
+    with open(tmp, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=DELTA_COLUMNS)
+        writer.writeheader()
+        for row in kept:
+            writer.writerow({col: row.get(col, "") for col in DELTA_COLUMNS})
+    tmp.replace(csv_path)
+
+
 def load_existing_keys(csv_path: Path) -> set:
     keys = set()
     if not csv_path.exists():
@@ -174,8 +188,7 @@ def compute_for_group(group_type: str, target_date_str: str = None,
     if delta_path is None:
         delta_path = DATA_DIR / subdir / "deltas.csv"
 
-    ensure_deltas_csv(delta_path)
-    existing_keys = load_existing_keys(delta_path)
+    migrated = ensure_deltas_csv(delta_path)
 
     df = load_snapshots(snap_path)
     if df.empty or "date" not in df.columns:
@@ -192,6 +205,13 @@ def compute_for_group(group_type: str, target_date_str: str = None,
         target_date = datetime.strptime(target_date_str, "%Y-%m-%d").date()
     else:
         target_date = available_dates[-1]
+
+    # Migration rewrote rows with blank new columns — evict target-date rows so
+    # they are recomputed with complete data on this run.
+    if migrated:
+        _evict_date_rows(delta_path, str(target_date))
+
+    existing_keys = load_existing_keys(delta_path)
 
     print(f"  [{group_type}] Computing deltas for date={target_date}")
 
