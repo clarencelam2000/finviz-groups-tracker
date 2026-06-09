@@ -50,6 +50,7 @@ HEADER_MAP = {
     "Perf Week": "perf_week",
     "Perf Month": "perf_month",
     "Perf Quart": "perf_quarter",
+    "Perf Quarter": "perf_quarter",
     "Perf Half": "perf_half",
     "Perf Year": "perf_year",
     "Perf YTD": "perf_ytd",
@@ -185,7 +186,10 @@ def parse_table(html: str, group_type: str, snapshot_date: str, collected_at: st
     col_mapping = []  # list of internal column names (None = skip)
     for cell in header_cells:
         text = cell.get_text(strip=True)
-        col_mapping.append(HEADER_MAP.get(text, None))
+        mapped = HEADER_MAP.get(text, None)
+        if text and text not in HEADER_MAP:
+            print(f"  [warn] Unknown header: {text!r} — skipping column")
+        col_mapping.append(mapped)
 
     records = []
     for row in rows[1:]:

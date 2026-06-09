@@ -5,6 +5,7 @@ appending to deltas CSVs.
 
 import argparse
 import csv
+import math
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -112,7 +113,7 @@ def compute_ranks(df_day: pd.DataFrame) -> pd.DataFrame:
     }
     for rank_col, perf_col in rank_metrics.items():
         if perf_col in df.columns:
-            df[rank_col] = df[perf_col].rank(ascending=False, method="min")
+            df[rank_col] = df[perf_col].rank(ascending=False, method="min", na_option="bottom")
         else:
             df[rank_col] = float("nan")
     return df
@@ -127,7 +128,7 @@ def compute_momentum(df_day: pd.DataFrame) -> pd.Series:
     scores = pd.DataFrame(index=df_day.index)
     for col in PERF_RANK_METRICS:
         if col in df_day.columns:
-            ranks = df_day[col].rank(ascending=False, method="min")
+            ranks = df_day[col].rank(ascending=False, method="min", na_option="bottom")
             # rank 1 → percentile 1.0, rank n → percentile 0.0
             scores[col] = (n - ranks) / (n - 1)
         else:
@@ -263,7 +264,6 @@ def _fmt(val):
     if val is None:
         return ""
     try:
-        import math
         if math.isnan(float(val)):
             return ""
         return val
