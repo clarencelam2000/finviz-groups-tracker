@@ -29,7 +29,7 @@ SNAPSHOT_COLS = [
 
 DELTA_COLUMNS = [
     "date", "name",
-    "rank_week", "rank_month", "rank_quarter", "rank_half", "rank_year", "rank_ytd",
+    "rank_day", "rank_week", "rank_month", "rank_quarter", "rank_half", "rank_year", "rank_ytd",
     "rank_week_delta_7d", "rank_week_delta_14d", "rank_week_delta_30d",
     "rank_month_delta_7d", "rank_month_delta_14d", "rank_month_delta_30d",
     "rank_ytd_delta_7d", "rank_ytd_delta_14d", "rank_ytd_delta_30d",
@@ -156,7 +156,7 @@ else:
 # Tabs
 # ---------------------------------------------------------------------------
 
-tab1, tab2, tab3, tab4 = st.tabs(["Snapshot", "Top Movers", "Time Series", "Momentum"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["Snapshot", "Top Movers", "Time Series", "Momentum", "Heatmap"])
 
 # ---- Tab 1: Snapshot -------------------------------------------------------
 
@@ -170,12 +170,21 @@ with tab1:
         if latest_snap.empty:
             st.info(f"No data for {latest_date}.")
         else:
+            # Join rank columns from latest deltas
+            rank_cols = ["rank_day", "rank_week", "rank_month", "rank_ytd"]
+            if not delta_df.empty and "date" in delta_df.columns:
+                latest_delta_for_join = delta_df[delta_df["date"] == latest_date][
+                    ["name"] + [c for c in rank_cols if c in delta_df.columns]
+                ]
+                latest_snap = latest_snap.merge(latest_delta_for_join, on="name", how="left")
+
             # Sort by selected metric descending
             if selected_metric in latest_snap.columns:
                 latest_snap = latest_snap.sort_values(selected_metric, ascending=False)
 
             display_cols = [
-                "name", "stocks", "market_cap", "pe", "fwd_pe",
+                "name", "rank_day", "rank_week", "rank_month", "rank_ytd",
+                "stocks", "market_cap", "pe", "fwd_pe",
                 "perf_day", "perf_week", "perf_month", "perf_quarter",
                 "perf_half", "perf_year", "perf_ytd", "change",
                 "avg_volume", "rel_volume",
@@ -185,6 +194,13 @@ with tab1:
                 latest_snap[display_cols].reset_index(drop=True),
                 use_container_width=True,
                 height=600,
+            )
+            st.download_button(
+                label="Download as CSV",
+                data=latest_snap[display_cols].to_csv(index=False).encode("utf-8"),
+                file_name=f"finviz_{group_label.lower()}_snapshot_{latest_date}.csv",
+                mime="text/csv",
+                key="snapshot_download",
             )
 
 # ---- Tab 2: Top Movers -----------------------------------------------------
@@ -212,11 +228,25 @@ with tab2:
                     st.markdown("**Top 10 Rank Gainers** (most improved)")
                     gainers = valid.nlargest(10, delta_col)[["name", delta_col, "rank_ytd", "momentum_score"]]
                     st.dataframe(gainers.reset_index(drop=True), use_container_width=True)
+                    st.download_button(
+                        label="Download gainers CSV",
+                        data=gainers.to_csv(index=False).encode("utf-8"),
+                        file_name=f"finviz_{group_label.lower()}_gainers_{latest_date}.csv",
+                        mime="text/csv",
+                        key="gainers_download",
+                    )
 
                 with col2:
                     st.markdown("**Top 10 Rank Losers** (most declined)")
                     losers = valid.nsmallest(10, delta_col)[["name", delta_col, "rank_ytd", "momentum_score"]]
                     st.dataframe(losers.reset_index(drop=True), use_container_width=True)
+                    st.download_button(
+                        label="Download losers CSV",
+                        data=losers.to_csv(index=False).encode("utf-8"),
+                        file_name=f"finviz_{group_label.lower()}_losers_{latest_date}.csv",
+                        mime="text/csv",
+                        key="losers_download",
+                    )
 
 # ---- Tab 3: Time Series ----------------------------------------------------
 
@@ -230,46 +260,61 @@ with tab3:
         if not all_names:
             st.info("No group names found in snapshot data.")
         else:
-            selected_name = st.selectbox("Select group", all_names)
+            PALETTE = ["royalblue", "firebrick", "green"]
 
-            ts_df = snap_df_full[snap_df_full["name"] == selected_name].sort_values("date")
-            ts_delta = (
-                delta_df_full[delta_df_full["name"] == selected_name].sort_values("date")
-                if not delta_df_full.empty and "name" in delta_df_full.columns
-                else pd.DataFrame()
+            selected_names = st.multiselect(
+                "Select groups (up to 3 for comparison)",
+                all_names,
+                default=all_names[:1],
+                max_selections=3,
             )
 
-            if ts_df.empty:
-                st.info(f"No time series data for {selected_name}.")
+            if not selected_names:
+                st.info("Select at least one group.")
             elif not HAS_PLOTLY:
                 st.warning("plotly is not installed. Install with: pip install plotly")
-                st.dataframe(ts_df[["date", "perf_ytd", "perf_week"]].reset_index(drop=True))
+                for name in selected_names:
+                    ts_df = snap_df_full[snap_df_full["name"] == name].sort_values("date")
+                    st.caption(name)
+                    st.dataframe(ts_df[["date", "perf_ytd", "perf_week"]].reset_index(drop=True))
             else:
                 fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-                fig.add_trace(
-                    go.Scatter(
-                        x=ts_df["date"].astype(str),
-                        y=ts_df["perf_ytd"],
-                        name="perf_ytd (%)",
-                        line=dict(color="royalblue"),
-                    ),
-                    secondary_y=False,
-                )
-
-                if not ts_delta.empty and "rank_ytd" in ts_delta.columns:
-                    fig.add_trace(
-                        go.Scatter(
-                            x=ts_delta["date"].astype(str),
-                            y=ts_delta["rank_ytd"],
-                            name="rank_ytd",
-                            line=dict(color="firebrick", dash="dot"),
-                        ),
-                        secondary_y=True,
+                for i, name in enumerate(selected_names):
+                    color = PALETTE[i % len(PALETTE)]
+                    ts_df = snap_df_full[snap_df_full["name"] == name].sort_values("date")
+                    ts_delta = (
+                        delta_df_full[delta_df_full["name"] == name].sort_values("date")
+                        if not delta_df_full.empty and "name" in delta_df_full.columns
+                        else pd.DataFrame()
                     )
 
+                    if ts_df.empty:
+                        continue
+
+                    fig.add_trace(
+                        go.Scatter(
+                            x=ts_df["date"].astype(str),
+                            y=ts_df["perf_ytd"],
+                            name=f"{name} — perf_ytd",
+                            line=dict(color=color),
+                        ),
+                        secondary_y=False,
+                    )
+
+                    if not ts_delta.empty and "rank_ytd" in ts_delta.columns:
+                        fig.add_trace(
+                            go.Scatter(
+                                x=ts_delta["date"].astype(str),
+                                y=ts_delta["rank_ytd"],
+                                name=f"{name} — rank_ytd",
+                                line=dict(color=color, dash="dot"),
+                            ),
+                            secondary_y=True,
+                        )
+
                 fig.update_layout(
-                    title=f"{selected_name} — YTD Perf & Rank over Time",
+                    title=", ".join(selected_names) + " — YTD Perf & Rank",
                     xaxis_title="Date",
                     hovermode="x unified",
                     height=500,
@@ -303,10 +348,18 @@ with tab4:
                 "momentum_score", ascending=False
             )
 
+            momentum_display = momentum_df[["name", "momentum_score", "rank_ytd", "rank_week"]]
             st.dataframe(
-                momentum_df[["name", "momentum_score", "rank_ytd", "rank_week"]].reset_index(drop=True),
+                momentum_display.reset_index(drop=True),
                 use_container_width=True,
                 height=500,
+            )
+            st.download_button(
+                label="Download as CSV",
+                data=momentum_display.to_csv(index=False).encode("utf-8"),
+                file_name=f"finviz_{group_label.lower()}_momentum_{latest_date}.csv",
+                mime="text/csv",
+                key="momentum_download",
             )
 
             if HAS_PLOTLY and not momentum_df.empty:
@@ -327,3 +380,52 @@ with tab4:
                 st.plotly_chart(fig, use_container_width=True)
             elif not HAS_PLOTLY:
                 st.warning("Install plotly for charts: pip install plotly")
+
+# ---- Tab 5: Heatmap --------------------------------------------------------
+
+with tab5:
+    st.subheader("Rank Delta Heatmap")
+
+    n_dates = delta_df["date"].nunique() if not delta_df.empty and "date" in delta_df.columns else 0
+    if n_dates < 7:
+        days_remaining = max(0, 7 - n_dates)
+        st.info(
+            f"Heatmap needs at least 7 days of data. "
+            f"Currently have {n_dates} day(s). "
+            f"Check back after {days_remaining} more trading day(s)."
+        )
+    elif not HAS_PLOTLY:
+        st.warning("Install plotly for charts: pip install plotly")
+    else:
+        heatmap_delta_cols = sorted([c for c in delta_df.columns if "delta" in c])
+        if not heatmap_delta_cols:
+            st.info("No delta columns available yet.")
+        else:
+            default_col = "rank_ytd_delta_7d" if "rank_ytd_delta_7d" in heatmap_delta_cols else heatmap_delta_cols[0]
+            selected_delta = st.selectbox(
+                "Delta metric", heatmap_delta_cols,
+                index=heatmap_delta_cols.index(default_col),
+            )
+
+            pivot = delta_df.pivot_table(
+                index="name", columns="date", values=selected_delta, aggfunc="first"
+            )
+            # Sort rows: best average delta at top; sort columns: ascending date
+            row_means = pivot.mean(axis=1, skipna=True)
+            pivot = pivot.loc[row_means.sort_values(ascending=False).index]
+            pivot = pivot[sorted(pivot.columns)]
+
+            fig = go.Figure(go.Heatmap(
+                z=pivot.values,
+                x=[str(d) for d in pivot.columns],
+                y=pivot.index.tolist(),
+                colorscale="RdYlGn",
+                zmid=0,
+                hoverongaps=False,
+            ))
+            fig.update_layout(
+                title=f"Rank Delta Heatmap — {selected_delta}",
+                xaxis_title="Date",
+                height=max(400, len(pivot) * 18),
+            )
+            st.plotly_chart(fig, use_container_width=True)

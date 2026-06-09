@@ -36,6 +36,10 @@
 | Date | Feature Added | Notes |
 |------|--------------|-------|
 | 2026-06-09 | Initial 4-tab dashboard | Snapshot, Top Movers, Time Series, Momentum |
+| 2026-06-09 | Rank columns in Snapshot tab | rank_day/week/month/ytd joined from deltas |
+| 2026-06-09 | CSV download buttons | Snapshot, Top Movers, Momentum tabs |
+| 2026-06-09 | Multi-select Time Series | Up to 3 groups, color-coded |
+| 2026-06-09 | Heatmap tab (5th tab) | RdYlGn colorscale, gated behind ≥7 days of data |
 
 ---
 
@@ -52,6 +56,12 @@
 
 ---
 
+## Infrastructure Issues
+
+| Date | Issue | Status | Fix |
+|------|-------|--------|-----|
+| 2026-06-09 | GitHub Actions runners not allocating | Open | Enable Actions in repo Settings → Actions → General |
+
 ## Open Questions / Future Ideas
 
 - [ ] Confirm Finviz data finalization time (probe intraday)
@@ -59,4 +69,4 @@
 - [ ] Add sub-industry level tracking
 - [ ] Consider adding alert when momentum_score crosses threshold
 - [ ] Cross-reference with SPY/QQQ volume on same day
-- [ ] Dashboard: multi-select Time Series, heatmap view
+- [ ] 6b: Sector → Industry drill-down in dashboard sidebar (L effort)
