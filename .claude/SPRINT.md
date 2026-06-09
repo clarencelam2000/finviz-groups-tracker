@@ -8,11 +8,16 @@
 
 ### 🔴 Backlog
 
-| # | Task | File(s) | Effort |
-|---|------|---------|--------|
-| 6b | Sector → Industry drill-down | `dashboard/app.py` | L |
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| D1 | **[USER ACTION] Create `main` branch, set as default** | GitHub UI | S | Blocks cron and PWA-1. Merge `claude/elegant-babbage-hlxnfy` → new `main`, then Settings → Branches → change default. |
+| PWA-1 | Fix hardcoded `BRANCH` constant in PWA | `docs/index.html` line ~117 | S | Change `'claude/elegant-babbage-hlxnfy'` to `'main'` (or whichever branch receives daily cron data). Depends on D1. |
+| PWA-2 | Add `<link rel="apple-touch-icon">` for iOS homescreen icon | `docs/index.html` `<head>` | S | Safari ignores web manifest icons for Add-to-Home-Screen; needs explicit `apple-touch-icon` tag. Can reuse the SVG data URI from `manifest.json`. |
+| PWA-3 | Show error on active tab (not just Today) | `docs/index.html` `showError()` | S | Network failures on Movers/Momentum tabs show empty containers with no feedback. Display error in whichever tab is active. |
+| PWA-4 | Dead code cleanup: `fmtPct` forceSign + `moverCard` delta shadowing | `docs/index.html` | S | `forceSign` param is never passed `true`; inner ternary always resolves to `''`. `delta` variable in `moverCard` shadows outer array — rename to `spots`. |
+| 6b | Sector → Industry drill-down | `dashboard/app.py` | L | Hardcode `SECTOR_INDUSTRY_MAP` (11 sectors → 144 industries) in `app.py`. Sidebar selectbox filters all tabs. Effort is mostly cataloguing the mapping, not code. |
 
-> Hardcode `SECTOR_INDUSTRY_MAP` (11 sectors → 144 industries) in `app.py`. Sidebar selectbox filters all tabs. Effort is mostly cataloguing the mapping, not code.
+> **D1 note — the elegant-babbage debt**: `claude/elegant-babbage-hlxnfy` is currently the default branch (no `main` exists). GitHub Actions cron only fires on the default branch, and the PWA hardcodes this branch name. D1 is the root fix; PWA-1 is the code follow-up. Until D1 is done, the cron data will keep landing on `elegant-babbage` — so don't change the `BRANCH` constant before D1 is complete.
 
 ---
 
