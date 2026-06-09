@@ -8,7 +8,7 @@ exports/
 node_modules/
 .ipynb_checkpoints/
 
-# Claude session files (local only; not project knowledge)
-.claude/session-notes.md
-.claude/WORK_LOG.md
+# Claude session files — committed so they survive ephemeral cloud containers
+# .claude/session-notes.md  (tracked)
+# .claude/WORK_LOG.md       (tracked)
 .claude/worktrees/
