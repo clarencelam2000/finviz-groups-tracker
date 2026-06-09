@@ -133,6 +133,7 @@ python scripts/export_db.py
 > These are instructions for future Claude instances, not the user. The user runs Claude Code on the web (code.claude.com), not the CLI.
 
 - **Starting a session**: This `CLAUDE.md` auto-loads at session start. Also read `.claude/session-notes.md` immediately — it has the last session's findings, blockers, and next steps. Start the session by summarizing what's in the notes so the user knows you're oriented.
+- **Sync first**: Run `git fetch origin && git log --oneline origin/claude/elegant-babbage-hlxnfy -5` before doing anything else — GitHub Actions may have pushed data overnight, and you need the latest base before branching or editing. See `.claude/rules/git-workflow.md` for the full session-start checklist.
 - **Ending a session**: Before the user closes, update `.claude/session-notes.md` with: what was done, what was discovered, any blockers, and the prioritized next steps. Be specific — vague notes are useless next session.
 - **Work log**: Update `.claude/WORK_LOG.md` with any milestones hit (first successful scrape, first week of data, dashboard features added).
 - **Cannot run collect.py here**: The Claude Code cloud environment blocks Playwright's CDN and outbound access to finviz.com. `collect.py` must run **locally** on the user's machine or via **GitHub Actions**. Do not attempt `playwright install` or `python scripts/collect.py` in a cloud session — it will fail.
