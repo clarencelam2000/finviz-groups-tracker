@@ -133,6 +133,20 @@
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
+    function freshnessLabel(dateStr) {
+      const dateMidnight = new Date(dateStr + 'T12:00:00');
+      const now = new Date();
+      const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const dateMidnightLocal = new Date(dateMidnight.getFullYear(), dateMidnight.getMonth(), dateMidnight.getDate());
+      const diffDays = Math.round((todayMidnight - dateMidnightLocal) / 86400000);
+      const dow = now.getDay(); // 0=Sun, 6=Sat
+      const weekendExpected = (dow === 0 || dow === 1 || dow === 6) && diffDays <= 3;
+      if (diffDays === 0)      return { text: `Data current · ${dateStr}`,        cls: 'text-xs text-emerald-400' };
+      if (weekendExpected)     return { text: `Weekend · data from ${dateStr}`,   cls: 'text-xs text-slate-400' };
+      if (diffDays === 1)      return { text: `Yesterday's data · ${dateStr}`,    cls: 'text-xs text-amber-400' };
+      return                          { text: `Stale: ${dateStr} · ${diffDays}d`, cls: 'text-xs text-red-400' };
+    }
+
     function pf(v) {
       const n = parseFloat(v);
       return isNaN(n) ? null : n;
@@ -208,9 +222,12 @@
 
         if (state.data[group].snap.length > 0) {
           const d = state.data[group].snap[0].date;
-          document.getElementById('last-updated').textContent = `Updated: ${d}`;
+          const lbl = freshnessLabel(d);
+          const el = document.getElementById('last-updated');
+          el.textContent = lbl.text;
+          el.className = lbl.cls;
           // Compute expected date for 7d movers
-          const dt = new Date(d);
+          const dt = new Date(d + 'T12:00:00');
           dt.setDate(dt.getDate() + 7);
           document.getElementById('movers-date-7d').textContent =
             dt.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
