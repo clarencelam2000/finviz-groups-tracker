@@ -69,7 +69,7 @@ All "Pre-Data Improvements" sprint tasks completed (see `.claude/SPRINT.md`):
 - **`tests.yml`** CI workflow added (T8) — YAML is correct but see blocker below
 - **`requirements-dev.txt`** (pytest==8.2.2, pytest-mock==3.14.0) and **`requirements-test.txt`** (minimal CI deps) added
 - **`.claude/SPRINT.md`** sprint board committed to repo
-- **Draft PR #3** open: `claude/explore-plan-next-steps-3jlhmh` → `claude/elegant-babbage-hlxnfy`
+- **PR #3 merged** into `claude/elegant-babbage-hlxnfy`
 
 ### Key technical discoveries
 - `compute_for_group()` now accepts `snap_path`/`delta_path` kwargs — tests use `tmp_path`, no monkeypatching of DATA_DIR needed
@@ -89,11 +89,34 @@ All "Pre-Data Improvements" sprint tasks completed (see `.claude/SPRINT.md`):
 **What to do after fixing**:
 1. Re-add `push` and `pull_request` triggers to `tests.yml` (they were removed to stop noise — see commit `0e1bc6e`)
 2. Push a commit to confirm a real runner is allocated (run_id will have non-zero runner_id, logs will be available)
-3. Verify the 56 tests pass in CI
+3. Verify the 57 tests pass in CI
+
+---
+
+## Session: 2026-06-09 — Commit discipline rules and test scaffolding
+
+### What was done
+
+- Wrote `.claude/rules/commit-discipline.md` — three sections:
+  1. Keep commits small: sizing guide, "too large" signals, slice → commit → push workflow
+  2. Testing requirements: coverage table by change type, testable pure functions, fixture pattern
+  3. Session handoff checklist: what goes in session-notes vs WORK_LOG, 5-item end-of-session checklist
+- **Draft PR #4** open: `claude/commit-testing-best-practices-nfxsmn` → `claude/elegant-babbage-hlxnfy`
+
+### Rebase note
+PR #3 landed mid-session with a comprehensive test suite (57 tests). When rebasing:
+- Kept PR #3's `tests/test_compute_deltas.py` (more thorough — integration tests, rank_day coverage)
+- Reverted `requirements.txt` pytest addition (pytest already in `requirements-dev.txt` from PR #3)
+- Only net-new artifact from this session: `.claude/rules/commit-discipline.md`
+
+### Current state
+- 57 tests passing (`python3 -m pytest tests/ -q`)
+- Two open draft PRs: PR #3 is merged; PR #4 (`commit-discipline.md`) awaiting review
+- No CI running (GitHub Actions runner issue still open)
 
 ### Next steps (prioritized)
 1. [ ] **Fix GitHub Actions**: repo Settings → Actions → General → enable. Then re-add push/PR triggers to `tests.yml`.
-2. [ ] **Merge PR #3** once CI is green (or merge without CI if runner fix is deferred)
-3. [ ] **Confirm cron is running**: After enabling Actions, check that `collect.yml` schedule fires at 22:00 UTC on the next weekday. Data should appear as a commit on the default branch.
-4. [ ] **After ~2026-06-16** (~7 days of data): Heatmap tab activates, Top Movers becomes useful. Consider adding `rank_day_delta_7d` to delta schema.
-5. [ ] **6b (Sector → Industry drill-down)**: Backlog, L effort. Hardcode `SECTOR_INDUSTRY_MAP` (11 sectors → 144 industries) in `dashboard/app.py`. Sidebar selectbox filters all tabs.
+2. [ ] **Merge PR #4** (just the rules doc — trivial review)
+3. [ ] **Confirm cron is running** after enabling Actions
+4. [ ] **~2026-06-16**: 7d deltas arrive — Heatmap and Top Movers become useful
+5. [ ] **6b (Sector → Industry drill-down)**: Backlog, L effort

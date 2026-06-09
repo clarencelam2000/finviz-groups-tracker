@@ -62,6 +62,12 @@
 |------|-------|--------|-----|
 | 2026-06-09 | GitHub Actions runners not allocating | Open | Enable Actions in repo Settings → Actions → General |
 
+## 2026-06-09 — Commit discipline rules and test scaffolding
+
+`.claude/rules/commit-discipline.md` committed — covers small-commit sizing, per-change test requirements, and the session handoff checklist. PR #3 (merged) already delivered the comprehensive 57-test suite; this session contributed the written rules. PR #4 open as draft.
+
+---
+
 ## Open Questions / Future Ideas
 
 - [ ] Confirm Finviz data finalization time (probe intraday)
