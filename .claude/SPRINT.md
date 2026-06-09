@@ -18,11 +18,7 @@
 
 ### 🟡 Ready
 
-| # | Task | File(s) | Effort | Notes |
-|---|------|---------|--------|-------|
-| T7 | Test: `collect()` row-count guard | `tests/test_collect_parsing.py` | S | Mock `fetch_html` + `parse_table`; verify RuntimeError on 0 rows, warn-only when below floor. |
-| T8 | GitHub Actions CI workflow | `.github/workflows/tests.yml` (new) | S | Run `pytest tests/ -v` on every push; no Playwright needed since tests mock the browser. |
-| T9 | Test: `ensure_deltas_csv` all paths | `tests/test_compute_deltas.py` | S | Test: file doesn't exist (creates), correct schema (no-op), old schema (migrates — already covered). |
+_(nothing)_
 
 ---
 
@@ -52,6 +48,19 @@ _(nothing)_
 | 5a | GitHub Actions job timeout: `timeout-minutes: 30` | 2026-06-09 |
 | 5b | GitHub Actions post-collect row-count verification step | 2026-06-09 |
 | 6a | Heatmap tab (RdYlGn; gated behind ≥7 day data guard) | 2026-06-09 |
+| T7 | Test: `collect()` row-count guard — 56 tests, all green | 2026-06-09 |
+| T8 | GitHub Actions CI workflow (`tests.yml`) — YAML correct; see note below | 2026-06-09 |
+| T9 | Test: `ensure_deltas_csv` all 3 paths | 2026-06-09 |
+
+---
+
+## Known Issue: GitHub Actions Runners
+
+Every workflow run in this repo fails instantly (`runner_id: 0`, completes in ~4s, logs 404). This affects **all** trigger types: `push`, `pull_request`, and `workflow_dispatch`. Zero `collect.yml` runs exist in the Actions history either — confirming the data CSVs were all populated locally, not via CI.
+
+**Root cause:** GitHub Actions runners are not being allocated for this account/repo. This is likely a billing or account-level restriction, not a YAML issue. The `tests.yml` and `collect.yml` YAML files are structurally correct and will work on any standard GitHub account with Actions enabled.
+
+**To fix:** Check GitHub account → Settings → Billing → Actions usage, or enable Actions under repo Settings → Actions → General.
 
 ---
 
@@ -76,88 +85,13 @@ After 7d data arrives: consider adding `rank_day_delta_7d` to the delta schema (
 
 ---
 
-## Pending Task Details
-
-### T7: Test `collect()` row-count guard
-```python
-# In tests/test_collect_parsing.py — requires monkeypatch
-def test_collect_raises_on_zero_rows(monkeypatch, tmp_path):
-    import scripts.collect as m
-    monkeypatch.setattr(m, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(m, "fetch_html", lambda url: "<html/>")
-    monkeypatch.setattr(m, "parse_table", lambda *a, **kw: [])
-    with pytest.raises(RuntimeError, match="0 rows"):
-        m.collect("sector")
-
-def test_collect_warns_below_floor(monkeypatch, tmp_path, capsys):
-    import scripts.collect as m
-    monkeypatch.setattr(m, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(m, "fetch_html", lambda url: "<html/>")
-    # Return 3 rows — above 0, below floor of 8 for sectors
-    monkeypatch.setattr(m, "parse_table", lambda *a, **kw: [
-        {"date": "2026-06-09", "name": f"G{i}", "collected_at": "", "group_type": "sector",
-         "stocks": 1, "market_cap": 1.0, "pe": None, "fwd_pe": None,
-         "perf_day": 0.1, "perf_week": 0.1, "perf_month": 0.1, "perf_quarter": 0.1,
-         "perf_half": 0.1, "perf_year": 0.1, "perf_ytd": 0.1,
-         "avg_volume": 1000, "rel_volume": None, "change": 0.1}
-        for i in range(3)
-    ])
-    m.collect("sector")  # should not raise
-    assert "warn" in capsys.readouterr().err
-```
-
-### T8: GitHub Actions CI workflow
-New file `.github/workflows/tests.yml`:
-```yaml
-name: Tests
-on:
-  push:
-    branches-ignore: [claude/elegant-babbage-hlxnfy]
-  pull_request:
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install dependencies
-        run: pip install -r requirements.txt -r requirements-dev.txt
-      - name: Run tests
-        run: pytest tests/ -v
-```
-Note: no Playwright install needed since tests mock the browser entirely.
-
-### T9: Test `ensure_deltas_csv` all paths
-```python
-# In tests/test_compute_deltas.py
-def test_ensure_deltas_csv_creates_fresh(tmp_path):
-    path = tmp_path / "deltas.csv"
-    ensure_deltas_csv(path)
-    assert path.exists()
-    with open(path) as f:
-        header = f.readline().strip().split(",")
-    assert header == DELTA_COLUMNS
-
-def test_ensure_deltas_csv_noop_on_correct_schema(tmp_path):
-    path = tmp_path / "deltas.csv"
-    ensure_deltas_csv(path)
-    mtime_before = path.stat().st_mtime
-    ensure_deltas_csv(path)  # second call — should be no-op
-    assert path.stat().st_mtime == mtime_before
-```
-
----
-
 ## Verification Checklist
 
-- [x] `pytest tests/ -v` — 50 tests pass
+- [x] `pytest tests/ -v` — 56 tests pass
 - [x] `python scripts/compute_deltas.py` — migrates existing CSVs, `rank_day` in output
 - [x] Dashboard: rank cols in Snapshot, download buttons, Time Series multiselect, Heatmap "need 7 days" message
 - [x] GH Actions `collect.yml` — timeout + row-count step present
 - [x] Push branch; draft PR #3 created
-- [ ] T7: `collect()` guard tests added
-- [ ] T8: `tests.yml` CI workflow added
-- [ ] T9: `ensure_deltas_csv` path tests added
+- [x] T7: `collect()` guard tests added (TestCollectRowCountGuard)
+- [x] T8: `tests.yml` CI workflow YAML added and correct (runner allocation issue is account-level)
+- [x] T9: `ensure_deltas_csv` path tests added (TestEnsureDeltasCsv)
