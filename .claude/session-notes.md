@@ -7,11 +7,31 @@
 ## Current Status
 
 **Status:** Complete ✅
-**Safe to close:** Yes — all work committed, PRs #7 and #9 merged
+**Safe to close:** Yes — PR #10 merged, CI fix on default branch
 **Waiting on:** Nothing
-**Open threads:** None — GitHub Actions runners confirmed working; PWA live at https://clarencelam2000.github.io/finviz-groups-tracker/
+**Open threads:** Daily Snapshot Action still needs a manual `workflow_dispatch` test to confirm the ubuntu-22.04 fix fully resolves the Playwright install issue end-to-end (it should — the `libasound2` rename was the only failure). Recommend triggering at https://github.com/clarencelam2000/finviz-groups-tracker/actions/workflows/collect.yml
 
 > Update this block at the end of every working block. Options: `Complete ✅` / `In Progress 🔄` / `Blocked 🔴` / `Needs User Input ⚠️`
+
+---
+
+## Session: 2026-06-09 — CI fix + freshness indicators (PR #10 merged)
+
+### What was done
+- Investigated why Daily Snapshot Action had 0 runs: scheduled workflow was fixed in PR #10 but PR was sitting as a draft — never merged into default branch
+- Root cause of Action failure: `ubuntu-latest` now resolves to Ubuntu 24.04, which renamed `libasound2` → `libasound2t64`; Playwright 1.44's `--with-deps` hard-codes the old name and exits 100
+- Fixed by pinning `runs-on: ubuntu-22.04` in `collect.yml`
+- Added color-coded freshness indicators to both Streamlit dashboard (sidebar badge) and mobile PWA (header subtitle color changes: green today, blue weekend, amber yesterday, red 4d+ stale)
+- Also fixed a subtle TZ bug in mobile date parsing (`new Date(dateStr)` parses as UTC midnight; changed to `T12:00:00` to anchor to local noon)
+- PR #10 opened, CI passed (both runs green), merged
+
+### Duplicate-run safety (answered)
+Both `collect.py` and `compute_deltas.py` use `(date, name)` dedup — second run on the same day is a clean no-op. First-write-wins. No errors, no duplicate rows.
+
+### Next steps
+1. Trigger `workflow_dispatch` on Daily Snapshot to confirm end-to-end fix: https://github.com/clarencelam2000/finviz-groups-tracker/actions/workflows/collect.yml
+2. Tomorrow's 22:00 UTC scheduled run should be the first fully automated data collection
+3. ~2026-06-16: 7d deltas arrive — Movers tab and Heatmap light up
 
 ---
 

@@ -67,6 +67,10 @@
 
 Three static files added to `docs/`: `index.html` (full PWA), `manifest.json`, `sw.js`. Hosted on GitHub Pages — no server required. Fetches CSVs live from `raw.githubusercontent.com` on every load. Three tabs: Today (color-coded perf cards), Movers (rank delta leaderboard, placeholder until ~June 16), Momentum (works immediately). Installable as a home screen app on iPhone via Safari → Add to Home Screen.
 
+## 2026-06-09 — CI fix: ubuntu-22.04 + data freshness indicators (PR #10)
+
+Fixed the Daily Snapshot GitHub Action, which was failing because `ubuntu-latest` upgraded to Ubuntu 24.04 — breaking Playwright's `--with-deps` install due to the `libasound2` → `libasound2t64` rename. Pinned to `ubuntu-22.04`. Added color-coded freshness badges to both the Streamlit dashboard sidebar and the mobile PWA header (green = current, blue = weekend gap, amber = yesterday, red = 4d+ stale). PR #10 merged.
+
 ## 2026-06-09 — Commit discipline rules and test scaffolding
 
 `.claude/rules/commit-discipline.md` committed — covers small-commit sizing, per-change test requirements, and the session handoff checklist. PR #3 (merged) already delivered the comprehensive 57-test suite; this session contributed the written rules. PR #4 open as draft.

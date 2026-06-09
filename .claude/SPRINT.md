@@ -37,6 +37,8 @@ _(nothing)_
 
 | # | Task | Date |
 |---|------|------|
+| CI-1 | CI fix: pin `collect.yml` to `ubuntu-22.04` | 2026-06-09 |
+| UX-1 | Freshness indicators in dashboard + mobile PWA | 2026-06-09 |
 | — | First live scrape: 11 sectors, 144 industries | 2026-06-09 |
 | — | End-to-end pipeline verified (collect → deltas → dashboard) | 2026-06-09 |
 | — | GitHub Actions cron wired (weekdays 22:00 UTC) | 2026-06-09 |
