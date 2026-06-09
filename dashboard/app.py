@@ -2,6 +2,7 @@
 Finviz Groups Tracker — Streamlit Dashboard
 """
 
+import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -112,6 +113,19 @@ with st.sidebar:
         available_dates = sorted(snap_df_full["date"].dropna().unique())
         min_date = available_dates[0]
         max_date = available_dates[-1]
+
+        today = datetime.date.today()
+        days_old = (today - max_date).days
+        dow = today.weekday()  # 0=Mon … 6=Sun
+        weekend_gap = dow in (5, 6, 0) and days_old <= 3
+        if days_old == 0:
+            st.success(f"✅ Data current — {max_date}")
+        elif weekend_gap:
+            st.info(f"📅 Weekend — last data {max_date}")
+        elif days_old == 1:
+            st.warning(f"⚠️ Data from yesterday — {max_date}")
+        else:
+            st.error(f"🚨 Data stale — {max_date} ({days_old}d ago)")
 
         if len(available_dates) > 1:
             start_date, end_date = st.select_slider(
