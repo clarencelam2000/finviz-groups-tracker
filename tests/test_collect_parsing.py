@@ -3,6 +3,7 @@ import textwrap
 
 import pytest
 
+import scripts.collect as collect_module
 from scripts.collect import (
     CSV_COLUMNS,
     append_records,
@@ -217,3 +218,49 @@ class TestAppendRecords:
         with open(csv_path) as f:
             rows = list(csv.DictReader(f))
         assert rows[0]["name"] == "Energy"
+
+
+# ---------------------------------------------------------------------------
+# collect() — row-count guard (T7)
+# ---------------------------------------------------------------------------
+
+def _fake_record(name):
+    return {
+        "date": "2026-06-09", "name": name, "collected_at": "",
+        "group_type": "sector", "stocks": 1, "market_cap": 1.0,
+        "pe": None, "fwd_pe": None,
+        "perf_day": 0.1, "perf_week": 0.1, "perf_month": 0.1,
+        "perf_quarter": 0.1, "perf_half": 0.1, "perf_year": 0.1, "perf_ytd": 0.1,
+        "avg_volume": 1000, "rel_volume": None, "change": 0.1,
+    }
+
+
+class TestCollectRowCountGuard:
+    def test_raises_on_zero_rows(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(collect_module, "DATA_DIR", tmp_path)
+        monkeypatch.setattr(collect_module, "fetch_html", lambda url: "<html/>")
+        monkeypatch.setattr(collect_module, "parse_table", lambda *a, **kw: [])
+        with pytest.raises(RuntimeError, match="0 rows"):
+            collect_module.collect("sector")
+
+    def test_warns_when_below_floor(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr(collect_module, "DATA_DIR", tmp_path)
+        monkeypatch.setattr(collect_module, "fetch_html", lambda url: "<html/>")
+        # 3 rows: above 0, below sector floor of 8
+        monkeypatch.setattr(
+            collect_module, "parse_table",
+            lambda *a, **kw: [_fake_record(f"G{i}") for i in range(3)],
+        )
+        collect_module.collect("sector")  # must not raise
+        assert "warn" in capsys.readouterr().err.lower()
+
+    def test_no_warning_at_or_above_floor(self, monkeypatch, tmp_path, capsys):
+        monkeypatch.setattr(collect_module, "DATA_DIR", tmp_path)
+        monkeypatch.setattr(collect_module, "fetch_html", lambda url: "<html/>")
+        # 10 rows: meets sector floor of 8
+        monkeypatch.setattr(
+            collect_module, "parse_table",
+            lambda *a, **kw: [_fake_record(f"G{i}") for i in range(10)],
+        )
+        collect_module.collect("sector")
+        assert "warn" not in capsys.readouterr().err.lower()

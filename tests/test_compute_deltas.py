@@ -6,8 +6,10 @@ import pandas as pd
 import pytest
 
 from scripts.compute_deltas import (
+    DELTA_COLUMNS,
     compute_for_group,
     compute_ranks,
+    ensure_deltas_csv,
     find_nearest_date,
 )
 
@@ -193,4 +195,42 @@ class TestComputeForGroup:
                           snap_path=snap_path, delta_path=delta_path)
 
         df = pd.read_csv(delta_path)
+        assert "rank_day" in df.columns
+
+
+# ---------------------------------------------------------------------------
+# ensure_deltas_csv — all three paths (T9)
+# ---------------------------------------------------------------------------
+
+class TestEnsureDeltasCsv:
+    def test_creates_file_with_correct_header(self, tmp_path):
+        path = tmp_path / "deltas.csv"
+        assert not path.exists()
+        ensure_deltas_csv(path)
+        assert path.exists()
+        with open(path) as f:
+            header = f.readline().strip().split(",")
+        assert header == DELTA_COLUMNS
+
+    def test_noop_when_schema_matches(self, tmp_path):
+        path = tmp_path / "deltas.csv"
+        ensure_deltas_csv(path)
+        mtime_before = path.stat().st_mtime_ns
+        ensure_deltas_csv(path)  # second call — schema already correct
+        assert path.stat().st_mtime_ns == mtime_before
+
+    def test_migrates_old_schema(self, tmp_path):
+        path = tmp_path / "deltas.csv"
+        old_cols = [c for c in DELTA_COLUMNS if c != "rank_day"]
+        with open(path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=old_cols)
+            writer.writeheader()
+            writer.writerow({c: "42" for c in old_cols})
+        ensure_deltas_csv(path)
+        with open(path) as f:
+            header = f.readline().strip().split(",")
+        assert header == DELTA_COLUMNS
+        # Original row preserved; rank_day column present but empty
+        df = pd.read_csv(path)
+        assert len(df) == 1
         assert "rank_day" in df.columns
