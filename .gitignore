@@ -7,4 +7,7 @@ exports/
 .playwright/
 node_modules/
 .ipynb_checkpoints/
-.claude/
+
+# Claude session files (local only; not project knowledge)
+.claude/session-notes.md
+.claude/WORK_LOG.md

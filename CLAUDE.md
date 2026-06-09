@@ -4,48 +4,143 @@
 
 Finviz Groups Tracker — daily scraper and analysis pipeline for Finviz sector and industry group performance data. Uses Playwright (headless Chromium) because Finviz blocks plain HTTP requests. Data is stored in append-only CSVs and processed into rank/delta artifacts.
 
+The core idea: track *changes* in sector/industry rankings over time (7d/14d/30d lookbacks) to identify where capital is rotating. See `SPEC.md` for full design rationale.
+
+---
+
+## Quick start
+
+```bash
+# One-time setup
+pip install -r requirements.txt
+playwright install chromium
+
+# Daily manual run
+python scripts/collect.py          # ~2-4 min; appends to data/*/snapshots.csv
+python scripts/compute_deltas.py   # ~5 sec; appends to data/*/deltas.csv
+
+# Start dashboard locally
+streamlit run dashboard/app.py
+
+# Check data coverage
+python scripts/backfill.py --status
+
+# Export to SQLite + Parquet (local only, not committed)
+python scripts/export_db.py
+```
+
+---
+
 ## Key scripts
 
-| Script | What it does |
-|--------|-------------|
-| `scripts/collect.py` | Fetches sector and industry data from Finviz using Playwright; appends new rows to snapshot CSVs. Idempotent (deduplicates on date + name). |
-| `scripts/compute_deltas.py` | Reads snapshot CSVs; computes rankings and lookback deltas (7d/14d/30d); appends to delta CSVs. Accepts `--date YYYY-MM-DD`. |
-| `scripts/export_db.py` | Exports all CSVs to SQLite (`finviz_groups.db`) and Parquet files in `./exports/`. |
-| `scripts/backfill.py` | Shows current date coverage and instructions for manual backfill. Accepts `--status`. |
-| `dashboard/app.py` | Streamlit dashboard with Snapshot, Top Movers, Time Series, and Momentum tabs. |
+| Script | What it does | Approx tokens |
+|--------|-------------|----------------|
+| `scripts/collect.py` | Playwright scraper; appends to snapshot CSVs; deduplicates on `(date, name)` | ~200–250 |
+| `scripts/compute_deltas.py` | Computes ranks and 7d/14d/30d deltas; appends to delta CSVs. Accepts `--date YYYY-MM-DD` | ~300–400 |
+| `scripts/export_db.py` | Exports CSVs → SQLite (`finviz_groups.db`) + Parquet in `./exports/` (not committed) | ~150 |
+| `scripts/backfill.py` | Shows current date coverage; prints manual backfill instructions. Accepts `--status` | ~50 |
+| `dashboard/app.py` | Streamlit dashboard: Snapshot, Top Movers, Time Series, Momentum tabs | ~100 |
+
+> Token estimates are rough input-only counts for the script files themselves. Actual session costs depend on how much data context you load. Use `/context` to monitor live usage.
+
+---
 
 ## Data directory structure
 
 ```
 data/
   sectors/
-    snapshots.csv    # append-only; one row per (date, sector)
-    deltas.csv       # append-only; one row per (date, sector)
+    snapshots.csv    # append-only; one row per (date, sector)   ~11 rows/day
+    deltas.csv       # append-only; one row per (date, sector)   ~11 rows/day
   industries/
-    snapshots.csv
-    deltas.csv
+    snapshots.csv    # append-only; one row per (date, industry) ~150 rows/day
+    deltas.csv       # append-only; one row per (date, industry) ~150 rows/day
 ```
 
-## Running a manual collection
+### snapshots.csv columns
+`date, collected_at, group_type, name, stocks, market_cap, pe, fwd_pe, perf_day, perf_week, perf_month, perf_quarter, perf_half, perf_year, perf_ytd, avg_volume, rel_volume, change`
 
+- `perf_*` values are raw percentages (e.g., `2.34` = +2.34%)
+- `market_cap` is in billions (e.g., `1.23` = $1.23B)
+- `avg_volume` is in raw units (e.g., `1230000`)
+- Null values stored as empty string in CSV
+
+### deltas.csv columns
+`date, name, rank_week, rank_month, rank_quarter, rank_half, rank_year, rank_ytd, rank_week_delta_7d, rank_week_delta_14d, rank_week_delta_30d, rank_month_delta_7d, rank_month_delta_14d, rank_month_delta_30d, rank_ytd_delta_7d, rank_ytd_delta_14d, rank_ytd_delta_30d, perf_week_delta_7d, perf_week_delta_14d, perf_week_delta_30d, perf_month_delta_7d, perf_ytd_delta_7d, perf_ytd_delta_30d, momentum_score`
+
+- `rank_*` values: rank 1 = best performer. Derived from `perf_*` values, never scraped.
+- `rank_*_delta_*d`: positive = improved (rose in ranking). E.g., `+6` means 6 spots better than N days ago.
+- `momentum_score`: 0–1 float; average percentile rank across all 7 perf timeframes. Higher = stronger broad momentum.
+- Delta columns are `NaN` until enough history exists (e.g., 30d deltas need 30+ days of data).
+
+---
+
+## Common workflows
+
+### Run manual backfill (first week probing)
 ```bash
-# Install dependencies (once)
-pip install -r requirements.txt
-playwright install chromium
-
-# Collect today's snapshot
-python scripts/collect.py
-
-# Compute deltas for the latest date
-python scripts/compute_deltas.py
-
-# Check coverage
-python scripts/backfill.py --status
+# Run at multiple times on the same day to find when Finviz updates
+python scripts/collect.py   # run at 10am, 1pm, 4pm, 5pm ET and compare collected_at vs values
 ```
+
+### View top movers today
+```python
+import pandas as pd
+df = pd.read_csv('data/industries/deltas.csv')
+latest = df[df['date'] == df['date'].max()]
+print(latest.nlargest(10, 'rank_ytd_delta_7d')[['name', 'rank_ytd', 'rank_ytd_delta_7d', 'momentum_score']])
+```
+
+### Reload dashboard after data update
+Dashboard auto-reloads when CSV files change. Just refresh the browser.
+
+### Export for analysis in Excel/SQL
+```bash
+python scripts/export_db.py
+# Creates: finviz_groups.db, exports/sectors_snapshots.parquet, etc.
+```
+
+---
+
+## Playwright / Finviz notes
+
+> **Update this section after first successful scrape run.**
+
+- Finviz blocks plain HTTP — Playwright (headless Chromium) is required.
+- The scraper waits for `.table-groups` CSS selector before parsing.
+- Retry logic: 3 attempts, 30s / 60s / 120s backoff.
+- User-Agent is set to a realistic Chrome string to avoid fingerprinting.
+- Finviz URL pattern: `https://finviz.com/groups?g={sector|industry}&v=152&o=name&c=0,1,2,3,4,5,15,16,17,18,19,20,22,24,25,26`
+
+---
+
+## Automation
+
+- GitHub Actions runs weekdays at **22:00 UTC** (5–6pm ET depending on DST).
+- Workflow: `.github/workflows/collect.yml`
+- Trigger: `workflow_dispatch` also available for manual runs.
+- On failure: GitHub emails automatically. Retry 3x before failing.
+- Gaps in data: compute_deltas.py uses nearest available date for lookbacks, so one missed day doesn't break 7d/14d/30d deltas.
+
+---
+
+## Session continuity tips
+
+- **Name sessions** with `/rename` when starting complex work (e.g., `finviz-scraper-debug`, `dashboard-v2`).
+- **Resume sessions** with `claude --continue` to pick up where you left off.
+- **Commit decisions** to `SPEC.md` or inline in script comments so future sessions have context.
+- **Use subagents** for exploratory analysis (e.g., debugging pandas issues) to keep your main context clean.
+- **Session notes**: fill in `.claude/session-notes.md` before ending a session; paste it as your first message next session.
+- **Work log**: update `.claude/WORK_LOG.md` with milestones (first week of data, first month, dashboard updates).
+- **Auto-memory**: Claude automatically accumulates learnings in `MEMORY.md`. Review with `/memory`.
+- **Context pressure**: run `/context` to check token usage; use `/compact` to summarize when nearing limits.
+
+---
 
 ## Important notes
 
-- Playwright must be installed with `playwright install chromium` (or `playwright install chromium --with-deps` in CI). The scripts will fail without it.
+- Playwright must be installed with `playwright install chromium` (or `playwright install chromium --with-deps` in CI).
 - The `exports/` directory and `*.db` / `*.parquet` files are gitignored.
-- GitHub Actions runs the pipeline automatically on weekdays at 22:00 UTC via `.github/workflows/collect.yml`.
+- `.claude/session-notes.md` and `.claude/WORK_LOG.md` are gitignored (local only).
+- `.claude/rules/` IS committed — it contains project-level guidance for Claude.
 - All Python scripts handle empty CSVs (headers-only) gracefully without crashing.
