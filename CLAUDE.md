@@ -104,14 +104,16 @@ python scripts/export_db.py
 
 ## Playwright / Finviz notes
 
-> **Update this section after first successful scrape run.** Selectors and column names below are unverified — they're based on known Finviz structure but haven't been tested against live HTML yet.
+> Verified against live Finviz on 2026-06-09.
 
-- **Cannot run in Claude Code cloud** — Playwright CDN is blocked. Run `collect.py` locally or via GitHub Actions only.
+- **Cannot run in Claude Code cloud** — Playwright CDN is blocked. Run `collect.py` locally or via GitHub Actions only. Use an environment with unrestricted outbound network for cloud testing.
 - Finviz blocks plain HTTP — Playwright (headless Chromium) is required.
-- The scraper waits for `.table-groups` CSS selector before parsing. **Verify this selector on first run.**
-- Column header names to double-check: `Perf Quart` vs `Perf Quarter`, `Fwd P/E` vs `Forward P/E`.
-- Retry logic: 3 attempts, 30s / 60s / 120s backoff.
-- User-Agent is set to a realistic Chrome string to avoid fingerprinting.
+- CSS selector: **`.groups_table`** (not `.table-groups` — verified live).
+- `wait_until="domcontentloaded"` — analytics scripts block the `load` event; domcontentloaded works fine.
+- `ignore_https_errors=True` — needed for TLS-intercepting proxy in cloud envs; harmless in GitHub Actions.
+- `perf_day` is sourced from Finviz's `Change` column (they're identical; no separate Perf Day column).
+- `rel_volume` is always NaN — not served for this custom group URL. Expected.
+- Retry logic: 3 attempts, 30s / 60s / 120s backoff. Set `COLLECT_RETRY_DELAY=0` env var to skip waits during debugging.
 - Finviz URL pattern: `https://finviz.com/groups?g={sector|industry}&v=152&o=name&c=0,1,2,3,4,5,15,16,17,18,19,20,22,24,25,26`
 
 ---
