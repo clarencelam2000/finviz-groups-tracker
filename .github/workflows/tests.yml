@@ -1,5 +1,11 @@
 name: Tests
 on:
+  push:
+    branches-ignore:
+      - 'claude/elegant-babbage-hlxnfy'
+  pull_request:
+    branches:
+      - 'claude/elegant-babbage-hlxnfy'
   workflow_dispatch:
 permissions:
   contents: read
