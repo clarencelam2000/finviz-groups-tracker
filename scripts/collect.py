@@ -46,6 +46,7 @@ HEADER_MAP = {
     "Market Cap": "market_cap",
     "P/E": "pe",
     "Fwd P/E": "fwd_pe",
+    "PEG": None,
     "Perf Day": "perf_day",
     "Perf Week": "perf_week",
     "Perf Month": "perf_month",
@@ -56,6 +57,7 @@ HEADER_MAP = {
     "Perf YTD": "perf_ytd",
     "Avg Volume": "avg_volume",
     "Rel Volume": "rel_volume",
+    "Volume": None,
     "Change": "change",
 }
 
@@ -147,17 +149,21 @@ def parse_float(val: str):
 
 def fetch_html(url: str) -> str:
     """Fetch page HTML using Playwright with retry logic."""
-    delays = [30, 60, 120]
+    _rd = os.environ.get("COLLECT_RETRY_DELAY")
+    delays = [int(_rd)] * 3 if _rd is not None else [30, 60, 120]
     last_exc = None
     for attempt in range(3):
         try:
             with sync_playwright() as pw:
                 browser = pw.chromium.launch(headless=True)
-                context = browser.new_context(user_agent=USER_AGENT)
+                context = browser.new_context(
+                    user_agent=USER_AGENT,
+                    ignore_https_errors=True,
+                )
                 page = context.new_page()
                 print(f"  Fetching {url} (attempt {attempt + 1}/3) …")
-                page.goto(url, timeout=60_000)
-                page.wait_for_selector(".table-groups", timeout=30_000)
+                page.goto(url, timeout=60_000, wait_until="domcontentloaded")
+                page.wait_for_selector(".groups_table", timeout=30_000)
                 html = page.content()
                 browser.close()
                 return html
@@ -173,9 +179,9 @@ def fetch_html(url: str) -> str:
 def parse_table(html: str, group_type: str, snapshot_date: str, collected_at: str):
     """Parse the .table-groups HTML table and return list of row dicts."""
     soup = BeautifulSoup(html, "lxml")
-    table = soup.select_one(".table-groups")
+    table = soup.select_one(".groups_table")
     if table is None:
-        raise ValueError("Could not find .table-groups in HTML")
+        raise ValueError("Could not find .groups_table in HTML")
 
     rows = table.find_all("tr")
     if not rows:
@@ -225,6 +231,10 @@ def parse_table(html: str, group_type: str, snapshot_date: str, collected_at: st
 
         rec["avg_volume"] = parse_avg_volume(raw.get("avg_volume", ""))
         rec["rel_volume"] = parse_float(raw.get("rel_volume", ""))
+
+        # Finviz shows "Change" (not "Perf Day") for the daily metric; keep both in sync
+        if rec.get("perf_day") is None and rec.get("change") is not None:
+            rec["perf_day"] = rec["change"]
 
         records.append(rec)
 
