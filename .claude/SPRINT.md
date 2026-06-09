@@ -57,6 +57,7 @@ _(nothing)_
 | T8 | GitHub Actions CI workflow (`tests.yml`) — YAML correct; see note below | 2026-06-09 |
 | T9 | Test: `ensure_deltas_csv` all 3 paths | 2026-06-09 |
 | R1 | `.claude/rules/commit-discipline.md` — commit sizing, test requirements, handoff checklist | 2026-06-09 |
+| M1 | Mobile iPhone PWA (`docs/`): Today / Movers / Momentum tabs; GitHub Pages; Add to Home Screen | 2026-06-09 |
 
 ---
 

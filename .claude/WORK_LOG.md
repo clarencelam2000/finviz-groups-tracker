@@ -62,6 +62,10 @@
 |------|-------|--------|-----|
 | 2026-06-09 | GitHub Actions runners not allocating | Open | Enable Actions in repo Settings → Actions → General |
 
+## 2026-06-09 — Mobile iPhone PWA dashboard shipped (PR #7, merged)
+
+Three static files added to `docs/`: `index.html` (full PWA), `manifest.json`, `sw.js`. Hosted on GitHub Pages — no server required. Fetches CSVs live from `raw.githubusercontent.com` on every load. Three tabs: Today (color-coded perf cards), Movers (rank delta leaderboard, placeholder until ~June 16), Momentum (works immediately). Installable as a home screen app on iPhone via Safari → Add to Home Screen.
+
 ## 2026-06-09 — Commit discipline rules and test scaffolding
 
 `.claude/rules/commit-discipline.md` committed — covers small-commit sizing, per-change test requirements, and the session handoff checklist. PR #3 (merged) already delivered the comprehensive 57-test suite; this session contributed the written rules. PR #4 open as draft.

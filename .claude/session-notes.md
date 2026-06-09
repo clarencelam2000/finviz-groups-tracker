@@ -7,11 +7,32 @@
 ## Current Status
 
 **Status:** Complete ✅
-**Safe to close:** Yes — all work committed and pushed, PR #4 open as draft
-**Waiting on:** Nothing from Claude; user to review/merge PR #4 when ready
+**Safe to close:** Yes — all work committed, PR #7 merged
+**Waiting on:** User to enable GitHub Pages (repo Settings → Pages → branch `claude/elegant-babbage-hlxnfy`, folder `/docs`) then "Add to Home Screen" in Safari
 **Open threads:** GitHub Actions runners still not allocating (account-level issue, not a code problem)
 
 > Update this block at the end of every working block. Options: `Complete ✅` / `In Progress 🔄` / `Blocked 🔴` / `Needs User Input ⚠️`
+
+---
+
+## Session: 2026-06-09 — Mobile PWA dashboard
+
+### What was done
+- Built `docs/index.html` — full single-page PWA with Today / Movers / Momentum tabs
+- Built `docs/manifest.json` + `docs/sw.js` — makes it installable as iPhone home screen app
+- Fetches CSVs from `raw.githubusercontent.com` (base branch) on every load; no server needed
+- PR #7 opened and merged into `claude/elegant-babbage-hlxnfy`
+- README.md updated with tab guide, methodology, and install instructions
+- WORK_LOG.md, SPRINT.md, session-notes.md all updated
+
+### User actions still needed
+1. **Enable GitHub Pages**: repo Settings → Pages → branch `claude/elegant-babbage-hlxnfy`, folder `/docs` → Save → live in ~2 min
+2. **Install on iPhone**: open `https://clarencelam2000.github.io/finviz-groups-tracker/` in Safari → Share → Add to Home Screen
+
+### Current data state
+- 1 day of data (2026-06-09). Movers tab shows placeholder.
+- Momentum tab works immediately.
+- 7d deltas arrive ~2026-06-16; Movers tab lights up then.
 
 ---
 
