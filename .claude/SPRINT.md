@@ -51,6 +51,7 @@ _(nothing)_
 | T7 | Test: `collect()` row-count guard — 56 tests, all green | 2026-06-09 |
 | T8 | GitHub Actions CI workflow (`tests.yml`) — YAML correct; see note below | 2026-06-09 |
 | T9 | Test: `ensure_deltas_csv` all 3 paths | 2026-06-09 |
+| R1 | `.claude/rules/commit-discipline.md` — commit sizing, test requirements, handoff checklist | 2026-06-09 |
 
 ---
 
