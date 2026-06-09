@@ -7,9 +7,9 @@
 ## Current Status
 
 **Status:** Complete ✅
-**Safe to close:** Yes — all work committed, PR #7 merged
-**Waiting on:** User to enable GitHub Pages (repo Settings → Pages → branch `claude/elegant-babbage-hlxnfy`, folder `/docs`) then "Add to Home Screen" in Safari
-**Open threads:** GitHub Actions runners still not allocating (account-level issue, not a code problem)
+**Safe to close:** Yes — all work committed, PRs #7 and #9 merged
+**Waiting on:** Nothing
+**Open threads:** None — GitHub Actions runners confirmed working; PWA live at https://clarencelam2000.github.io/finviz-groups-tracker/
 
 > Update this block at the end of every working block. Options: `Complete ✅` / `In Progress 🔄` / `Blocked 🔴` / `Needs User Input ⚠️`
 

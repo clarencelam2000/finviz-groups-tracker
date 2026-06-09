@@ -11,7 +11,8 @@
 | 2026-06-09 | First successful scrape | 11 sectors, 144 industries |
 | 2026-06-09 | Pipeline verified end-to-end | collect → deltas → dashboard all working |
 | | Confirmed Finviz update time | Probe intraday — TBD |
-| | GitHub Actions cron enabled | Needs default branch set first |
+| 2026-06-09 | GitHub Actions cron enabled | Runners confirmed working |
+| 2026-06-09 | Mobile PWA live on GitHub Pages | https://clarencelam2000.github.io/finviz-groups-tracker/ |
 | | First 7d deltas available | Need 7 days of data |
 | | First 30d deltas available | Need 30 days of data |
 | | First `notebooks/analysis.ipynb` | After 30+ days of data |
