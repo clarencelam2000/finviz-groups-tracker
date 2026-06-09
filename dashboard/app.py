@@ -200,6 +200,7 @@ with tab1:
                 data=latest_snap[display_cols].to_csv(index=False).encode("utf-8"),
                 file_name=f"finviz_{group_label.lower()}_snapshot_{latest_date}.csv",
                 mime="text/csv",
+                key="snapshot_download",
             )
 
 # ---- Tab 2: Top Movers -----------------------------------------------------
@@ -358,6 +359,7 @@ with tab4:
                 data=momentum_display.to_csv(index=False).encode("utf-8"),
                 file_name=f"finviz_{group_label.lower()}_momentum_{latest_date}.csv",
                 mime="text/csv",
+                key="momentum_download",
             )
 
             if HAS_PLOTLY and not momentum_df.empty:
