@@ -11,7 +11,8 @@
 | 2026-06-09 | First successful scrape | 11 sectors, 144 industries |
 | 2026-06-09 | Pipeline verified end-to-end | collect → deltas → dashboard all working |
 | | Confirmed Finviz update time | Probe intraday — TBD |
-| | GitHub Actions cron enabled | Needs default branch set first |
+| 2026-06-09 | GitHub Actions cron enabled | Runners confirmed working |
+| 2026-06-09 | Mobile PWA live on GitHub Pages | https://clarencelam2000.github.io/finviz-groups-tracker/ |
 | | First 7d deltas available | Need 7 days of data |
 | | First 30d deltas available | Need 30 days of data |
 | | First `notebooks/analysis.ipynb` | After 30+ days of data |
@@ -61,6 +62,10 @@
 | Date | Issue | Status | Fix |
 |------|-------|--------|-----|
 | 2026-06-09 | GitHub Actions runners not allocating | Open | Enable Actions in repo Settings → Actions → General |
+
+## 2026-06-09 — Mobile iPhone PWA dashboard shipped (PR #7, merged)
+
+Three static files added to `docs/`: `index.html` (full PWA), `manifest.json`, `sw.js`. Hosted on GitHub Pages — no server required. Fetches CSVs live from `raw.githubusercontent.com` on every load. Three tabs: Today (color-coded perf cards), Movers (rank delta leaderboard, placeholder until ~June 16), Momentum (works immediately). Installable as a home screen app on iPhone via Safari → Add to Home Screen.
 
 ## 2026-06-09 — Commit discipline rules and test scaffolding
 
