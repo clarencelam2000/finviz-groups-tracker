@@ -50,19 +50,50 @@ Built the full project from scratch, then validated and fixed the scraper in a s
 
 ---
 
-## Session: [DATE] — [FOCUS/TITLE]
+## Session: 2026-06-09 — Sprint: robustness, tests, dashboard features
 
-### What I was working on
+### What was done
 
+All "Pre-Data Improvements" sprint tasks completed (see `.claude/SPRINT.md`):
 
-### What I found / discovered
--
+- **Test infrastructure**: 56 pytest tests across 3 test files — all green locally
+  - `tests/test_collect_parsing.py`: parse_perf, parse_market_cap, parse_avg_volume, parse_table, append_records, collect() row-count guard (T7)
+  - `tests/test_compute_deltas.py`: find_nearest_date, compute_ranks, compute_for_group (integration), ensure_deltas_csv (T9)
+  - `tests/test_momentum.py`: compute_momentum NaN edge cases
+- **`rank_day` metric** added to `DELTA_COLUMNS` in `compute_deltas.py`; existing CSVs auto-migrated by extended `ensure_deltas_csv()`
+- **Momentum score NaN fix**: all-NaN/missing perf columns excluded from mean instead of inserting full-column NaN
+- **`compute_for_group()`** refactored with optional `snap_path`/`delta_path` kwargs for testability
+- **`collect.py` hardening**: row-count guard (RuntimeError on 0 rows, warn below floor), unknown column summary logging, fetch timing
+- **Dashboard**: rank columns in Snapshot tab, CSV download buttons, multi-select Time Series (up to 3, color-coded), new Heatmap tab (gated behind ≥7 day data guard)
+- **GitHub Actions `collect.yml`**: timeout-minutes: 30, post-collect row-count verification step
+- **`tests.yml`** CI workflow added (T8) — YAML is correct but see blocker below
+- **`requirements-dev.txt`** (pytest==8.2.2, pytest-mock==3.14.0) and **`requirements-test.txt`** (minimal CI deps) added
+- **`.claude/SPRINT.md`** sprint board committed to repo
+- **Draft PR #3** open: `claude/explore-plan-next-steps-3jlhmh` → `claude/elegant-babbage-hlxnfy`
 
-### Decisions made
--
+### Key technical discoveries
+- `compute_for_group()` now accepts `snap_path`/`delta_path` kwargs — tests use `tmp_path`, no monkeypatching of DATA_DIR needed
+- `ensure_deltas_csv()` detects header mismatch and rewrites the file in-place, preserving all existing rows
+- `requirements-test.txt` exists to avoid Python 3.12 incompatibility with `notebook`/`ipykernel` packages in the main `requirements.txt`
 
 ### Current blockers
--
 
-### Next steps
-1. [ ]
+#### ⚠️ GitHub Actions runners not allocating — ALL CI fails instantly
+
+**Symptom**: Every workflow run (push, pull_request, workflow_dispatch) completes in ~3-4 seconds with `runner_id: 0`, `runner_name: ""`, and logs 404. Zero `collect.yml` run history also exists — the data CSVs were populated locally, never via scheduled Actions.
+
+**Root cause**: Almost certainly **GitHub Actions is disabled at the repository level**. `runner_id: 0` means GitHub rejects the job before even attempting to queue it — this is not a billing issue (billing failures still allocate runners).
+
+**Fix (one click)**: Go to **GitHub → repo Settings → Actions → General** → change "Disable actions" to "Allow all actions and reusable workflows" → Save.
+
+**What to do after fixing**:
+1. Re-add `push` and `pull_request` triggers to `tests.yml` (they were removed to stop noise — see commit `0e1bc6e`)
+2. Push a commit to confirm a real runner is allocated (run_id will have non-zero runner_id, logs will be available)
+3. Verify the 56 tests pass in CI
+
+### Next steps (prioritized)
+1. [ ] **Fix GitHub Actions**: repo Settings → Actions → General → enable. Then re-add push/PR triggers to `tests.yml`.
+2. [ ] **Merge PR #3** once CI is green (or merge without CI if runner fix is deferred)
+3. [ ] **Confirm cron is running**: After enabling Actions, check that `collect.yml` schedule fires at 22:00 UTC on the next weekday. Data should appear as a commit on the default branch.
+4. [ ] **After ~2026-06-16** (~7 days of data): Heatmap tab activates, Top Movers becomes useful. Consider adding `rank_day_delta_7d` to delta schema.
+5. [ ] **6b (Sector → Industry drill-down)**: Backlog, L effort. Hardcode `SECTOR_INDUSTRY_MAP` (11 sectors → 144 industries) in `dashboard/app.py`. Sidebar selectbox filters all tabs.
