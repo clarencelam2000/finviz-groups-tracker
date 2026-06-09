@@ -4,6 +4,17 @@
 
 ---
 
+## Current Status
+
+**Status:** Complete ✅
+**Safe to close:** Yes — all work committed and pushed, PR #4 open as draft
+**Waiting on:** Nothing from Claude; user to review/merge PR #4 when ready
+**Open threads:** GitHub Actions runners still not allocating (account-level issue, not a code problem)
+
+> Update this block at the end of every working block. Options: `Complete ✅` / `In Progress 🔄` / `Blocked 🔴` / `Needs User Input ⚠️`
+
+---
+
 ## Session: 2026-06-09 — Initial build + first live scrape
 
 ### What was done

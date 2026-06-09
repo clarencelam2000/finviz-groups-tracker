@@ -1,0 +1,208 @@
+# Branch, Commit Discipline, Testing, and Session Handoff
+
+## Session-start checklist
+
+Run these before doing anything else:
+
+```bash
+git fetch origin
+git log --oneline origin/claude/elegant-babbage-hlxnfy -5   # see if Actions pushed data overnight
+git status                                                    # confirm clean working tree
+```
+
+Then check branch position:
+```bash
+git log --oneline HEAD ^origin/claude/elegant-babbage-hlxnfy    # commits you have that default doesn't
+git log --oneline origin/claude/elegant-babbage-hlxnfy ^HEAD    # commits default has that you don't
+```
+
+- Second command shows commits → rebase first: `git rebase origin/claude/elegant-babbage-hlxnfy`
+- First command is empty → nothing new; work from here, no PR needed yet
+
+---
+
+## Branch lifecycle
+
+- **New work**: always branch from `origin/claude/elegant-babbage-hlxnfy`, never from a stale local ref
+- **Keep branches short**: land them before starting the next session — parallel branches on the same work is the failure mode to avoid
+- **After merge**: delete the source branch (GitHub UI if `git push --delete` returns 403)
+- **Identical to default**: if `git rev-parse HEAD` == `git rev-parse origin/claude/elegant-babbage-hlxnfy`, skip creating a PR
+
+Before creating a new branch, verify work isn't already landed:
+```bash
+git fetch origin
+git diff origin/claude/elegant-babbage-hlxnfy -- scripts/   # empty diff = already done
+```
+
+---
+
+## Keep commits small and focused
+
+Each commit is one logical, self-contained change. A reader must understand what changed and why from the diff alone — no surrounding context needed.
+
+**Sizing guide:**
+- A single bug fix → one commit
+- A new helper function + its test → one commit
+- A new script feature → one commit per script, or one if tightly coupled
+- Refactors are separate from feature work — never bundle them
+
+**Signs a commit is too large:**
+- The message needs "and" to describe what changed
+- The diff touches more than 2–3 unrelated concerns
+- You can't describe it in one imperative sentence
+
+**Workflow:**
+1. Branch from current default
+2. Work on ONE logical slice at a time
+3. Write or update the test alongside the code (not after)
+4. Run tests — must pass before committing: `python3 -m pytest tests/ -q`
+5. Commit (see style guide below)
+6. Update session logs after each working block
+7. Push; open a draft PR if one doesn't exist
+
+---
+
+## Commit message style guide
+
+**Format:**
+```
+<prefix>: <imperative summary under 50 chars>
+
+<optional body: why, not what — blank line above>
+```
+
+**Prefix conventions:**
+| Prefix | When to use |
+|--------|-------------|
+| `feat:` | New functionality |
+| `fix:` | Bug correction |
+| `docs:` | Documentation only |
+| `chore:` | Housekeeping (gitignore, deps, session notes) |
+| `test:` | Tests only, no logic change |
+| `refactor:` | Code restructure, no behavior change |
+| `data:` | Auto-generated data commits (GitHub Actions only — don't replicate manually) |
+
+**Imperative mood** — write the summary as a command, not a description:
+- `add rank_day metric to delta schema` ✓
+- `adds rank_day metric` ✗
+- `added rank_day metric` ✗
+
+**Summary line rules:**
+- 50 characters or fewer
+- No period at the end
+- Lowercase after the prefix colon
+
+**Body (optional):** Use when the *why* isn't obvious from the diff. One blank line after the summary. Focus on reasoning, constraints, or non-obvious tradeoffs — not a restatement of what the code does.
+
+**Examples:**
+```
+feat: add rank_day metric to delta schema
+
+rank_day was missing from DELTA_COLUMNS; existing CSVs auto-migrate
+via ensure_deltas_csv() header mismatch detection.
+```
+```
+fix: momentum score NaN when all-NaN column present
+
+mean() over a mix of valid and all-NaN columns returned NaN for the
+whole row. Exclude all-NaN columns before averaging.
+```
+```
+test: add integration tests for compute_for_group
+
+Uses tmp_path kwargs so tests don't touch real data/ files.
+```
+```
+chore: session handoff — sprint complete, PR #3 merged
+```
+
+---
+
+## Testing requirements
+
+Every code change to `scripts/` must include a corresponding test change in `tests/`. No exceptions for "trivial" changes — if you touched logic, add or update a test.
+
+### Coverage by change type
+
+| Change type | Minimum |
+|---|---|
+| New pure function | Happy path + at least one edge case (empty input, NaN, boundary) |
+| Modified computation | Update existing test OR add a regression test for the specific fix |
+| New CSV read/write path | Test with `io.StringIO` or `pytest`'s `tmp_path` — no real filesystem I/O |
+| Bug fix | Add a test that would have caught the bug before the fix |
+| Dashboard-only change | No test required; note it explicitly in the commit message |
+
+### Test infrastructure
+- Runner: `pytest` (in `requirements-dev.txt`)
+- Directory: `tests/`
+- Naming: `tests/test_<script_name>.py`
+- Run before every commit: `python3 -m pytest tests/ -q`
+
+### Testable pure functions in this codebase
+
+| Function | Key edge cases |
+|---|---|
+| `compute_deltas.find_nearest_date` | Empty list, exact match, within tolerance, beyond tolerance |
+| `compute_deltas.compute_ranks` | Rank 1 = highest perf; NaN goes to bottom |
+| `compute_deltas.compute_momentum` | Score 0.0–1.0; single-row → NaN; all-NaN column excluded |
+| `compute_deltas._fmt` | NaN → `""`, None → `""`, valid float passes through |
+
+---
+
+## Session handoff — end of every working block
+
+A working block ends when you push a commit, finish a feature slice, or are about to stop.
+
+### Always do before ending
+
+**`.claude/session-notes.md`** — overwrite the "Current Status" block at the top (see template in that file), then append a new session section below. The status block is what the next Claude reads first to decide whether to proceed or wait.
+
+**`.claude/WORK_LOG.md`** — append a milestone entry when:
+- A new script or feature works end-to-end
+- A significant data milestone is hit
+- A dashboard tab or visualization is added
+- A CI/workflow change lands
+
+Entry format:
+```
+## YYYY-MM-DD — <short description>
+<1–3 sentences: what now works, any caveats>
+```
+
+**`.claude/SPRINT.md`** — move completed tasks to Done, add new tasks to Backlog if discovered.
+
+### Session-end checklist
+- [ ] All working changes committed and pushed
+- [ ] `session-notes.md` Current Status block updated (status, safe-to-close, blocking-on)
+- [ ] `WORK_LOG.md` updated if a milestone was reached
+- [ ] `SPRINT.md` board reflects current task states
+- [ ] Draft PR open if any new commits were pushed
+- [ ] `git status` clean — no untracked files containing work
+- [ ] Tests pass: `python3 -m pytest tests/ -q`
+
+---
+
+## Session length — when to close vs. continue
+
+**Keep sessions short and focused.** Context window degradation is real: as a session grows, earlier instructions fade and Claude starts contradicting earlier decisions. One focused session per logical feature or investigation beats one long sprawling session.
+
+### Signs it's time to wrap up and start fresh
+- The task you came in to do is complete and committed
+- You've been in the session for a while and context feels noisy
+- A new unrelated topic has come up — don't pile it onto an existing session
+- `/context` shows you're past ~50% context used
+
+### Signs it's NOT safe to close yet
+- There's an open PR with unresolved review comments
+- CI is failing and a fix is in progress
+- A task is mid-slice — code changed but test not yet written, or not yet committed
+- You asked the user a question and are waiting on their answer
+- A rebase or merge conflict is unresolved
+
+### What to tell the user
+
+When wrapping up, Claude should explicitly say one of:
+- **"Safe to close"** — everything is committed, pushed, PR is open, no open threads
+- **"Don't close yet"** — state specifically what's unfinished or what needs their input first
+
+This is also reflected in the `session-notes.md` Current Status block so the next session can orient instantly.
