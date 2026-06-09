@@ -104,10 +104,12 @@ python scripts/export_db.py
 
 ## Playwright / Finviz notes
 
-> **Update this section after first successful scrape run.**
+> **Update this section after first successful scrape run.** Selectors and column names below are unverified — they're based on known Finviz structure but haven't been tested against live HTML yet.
 
+- **Cannot run in Claude Code cloud** — Playwright CDN is blocked. Run `collect.py` locally or via GitHub Actions only.
 - Finviz blocks plain HTTP — Playwright (headless Chromium) is required.
-- The scraper waits for `.table-groups` CSS selector before parsing.
+- The scraper waits for `.table-groups` CSS selector before parsing. **Verify this selector on first run.**
+- Column header names to double-check: `Perf Quart` vs `Perf Quarter`, `Fwd P/E` vs `Forward P/E`.
 - Retry logic: 3 attempts, 30s / 60s / 120s backoff.
 - User-Agent is set to a realistic Chrome string to avoid fingerprinting.
 - Finviz URL pattern: `https://finviz.com/groups?g={sector|industry}&v=152&o=name&c=0,1,2,3,4,5,15,16,17,18,19,20,22,24,25,26`
@@ -124,16 +126,16 @@ python scripts/export_db.py
 
 ---
 
-## Session continuity tips
+## Session continuity (Claude Code web)
 
-- **Name sessions** with `/rename` when starting complex work (e.g., `finviz-scraper-debug`, `dashboard-v2`).
-- **Resume sessions** with `claude --continue` to pick up where you left off.
-- **Commit decisions** to `SPEC.md` or inline in script comments so future sessions have context.
-- **Use subagents** for exploratory analysis (e.g., debugging pandas issues) to keep your main context clean.
-- **Session notes**: fill in `.claude/session-notes.md` before ending a session; paste it as your first message next session.
-- **Work log**: update `.claude/WORK_LOG.md` with milestones (first week of data, first month, dashboard updates).
-- **Auto-memory**: Claude automatically accumulates learnings in `MEMORY.md`. Review with `/memory`.
-- **Context pressure**: run `/context` to check token usage; use `/compact` to summarize when nearing limits.
+> These are instructions for future Claude instances, not the user. The user runs Claude Code on the web (code.claude.com), not the CLI.
+
+- **Starting a session**: This `CLAUDE.md` auto-loads at session start. Also read `.claude/session-notes.md` immediately — it has the last session's findings, blockers, and next steps. Start the session by summarizing what's in the notes so the user knows you're oriented.
+- **Ending a session**: Before the user closes, update `.claude/session-notes.md` with: what was done, what was discovered, any blockers, and the prioritized next steps. Be specific — vague notes are useless next session.
+- **Work log**: Update `.claude/WORK_LOG.md` with any milestones hit (first successful scrape, first week of data, dashboard features added).
+- **Cannot run collect.py here**: The Claude Code cloud environment blocks Playwright's CDN and outbound access to finviz.com. `collect.py` must run **locally** on the user's machine or via **GitHub Actions**. Do not attempt `playwright install` or `python scripts/collect.py` in a cloud session — it will fail.
+- **Subagents for analysis**: Use subagents (Agent tool) for exploratory pandas/data work to avoid bloating the main context window.
+- **Context pressure**: Use `/compact` when nearing limits. Prioritize keeping SPEC.md decisions and script logic in context; data rows are expendable.
 
 ---
 
