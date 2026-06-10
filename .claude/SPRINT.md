@@ -39,6 +39,9 @@ _(nothing)_
 
 | # | Task | Date |
 |---|------|------|
+| PWA-2 | Add `<link rel="apple-touch-icon">` for iOS homescreen icon | 2026-06-10 |
+| PWA-3 | Show error on active tab (not just Today) | 2026-06-10 |
+| PWA-4 | Dead code cleanup: `fmtPct` forceSign + `moverCard` delta shadowing | 2026-06-10 |
 | — | First live scrape: 11 sectors, 144 industries | 2026-06-09 |
 | — | End-to-end pipeline verified (collect → deltas → dashboard) | 2026-06-09 |
 | — | GitHub Actions cron wired (weekdays 22:00 UTC) | 2026-06-09 |
