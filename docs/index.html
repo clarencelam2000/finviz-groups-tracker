@@ -618,6 +618,14 @@
 
     document.getElementById('search-input').addEventListener('input', () => renderToday());
 
+    document.getElementById('today-cards').addEventListener('click', e => {
+      const card = e.target.closest('[data-name]');
+      if (!card) return;
+      const name = card.dataset.name;
+      state.expandedName = state.expandedName === name ? null : name;
+      renderToday();
+    });
+
     document.getElementById('refresh-btn').addEventListener('click', window.__refresh);
 
     // ── Pull-to-refresh ────────────────────────────────────────────────────
