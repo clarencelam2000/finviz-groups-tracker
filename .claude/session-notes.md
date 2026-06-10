@@ -7,11 +7,36 @@
 ## Current Status
 
 **Status:** Complete ✅
-**Safe to close:** Yes — all work committed, PR #17 merged
+**Safe to close:** Yes — all work committed, PRs #17 and #18 merged
 **Waiting on:** Nothing
 **Open threads:** None
 
-> Update this block at the end of every working block. Options: `Complete ✅` / `In Progress 🔄` / `Blocked 🔴` / `Needs User Input ⚠️`
+---
+
+## Next session — what to work on
+
+Data dependency reminder:
+- **Works today (day 1):** Sustained Strength, All Green, rank_agreement — all use Finviz-scraped perf values, no history needed
+- **~June 16 (7d data):** INS-4 (Momentum Velocity), INS-5 (Daily Brief card), INS-6 (Momentum Score Heatmap)
+- **Anytime (L effort):** INS-7 (Sector Breadth — needs static sector→industry mapping)
+
+### INS-4: Momentum Velocity (~June 16)
+`momentum_score` has been accumulating in `deltas.csv` since June 9. Once 7 days exist, add:
+- `momentum_score_delta_7d` and `momentum_score_delta_14d` to `DELTA_COLUMNS` in `scripts/compute_deltas.py`
+- Same lookback pattern as existing rank delta columns (lines ~257–294 in `compute_for_group()`)
+- "Rising Stars" view in dashboard + PWA: positive velocity, currently top-half of momentum leaderboard
+
+### INS-5: Daily Brief card (PWA) (~June 16)
+Top-of-screen card in `docs/index.html` showing 2–3 sentences: biggest mover today, who's sustained strong, what's rolling over. Implement as `buildBrief(delta, snap)` → returns HTML string inserted above the tab bar content. Gate behind `hasMoversData` check.
+
+### INS-6: Momentum Score Heatmap (~June 16)
+Same structure as Heatmap tab in `dashboard/app.py` (tab 5, ~lines 400–445) but pivot on `momentum_score` instead of a rank delta. Cells = absolute composite score over time. Gate behind ≥7 days same as existing heatmap.
+
+### INS-7: Sector Breadth (anytime)
+For each sector: % of constituent industries in top half of full universe. Needs a hardcoded `SECTOR_INDUSTRY_MAP` dict in `dashboard/app.py`. Finviz groups URL at `?g=sector` vs `?g=industry` already has the data — can cross-reference by name. L effort (mostly cataloguing).
+
+### D1 (user action still pending)
+No `main` branch exists — default is `claude/elegant-babbage-hlxnfy`. Cron and PWA `BRANCH` constant both hardcode this name. Safe to leave as-is; but if user wants to rename, do D1 first then PWA-1.
 
 ---
 
