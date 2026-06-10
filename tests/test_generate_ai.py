@@ -93,6 +93,19 @@ def test_top_movers_all_nan_delta():
     assert "No" in result
 
 
+def test_top_movers_nan_rank_ytd_does_not_raise():
+    # rank_ytd_delta_7d is valid but rank_ytd is NaN — must not raise ValueError
+    df = pd.DataFrame({
+        "name": ["A", "B"],
+        "rank_ytd_delta_7d": [5.0, -3.0],
+        "rank_ytd": [float("nan"), float("nan")],
+        "momentum_score": [0.7, 0.3],
+    })
+    result = generate_ai.serialize_top_movers(df)
+    assert "N/A" in result
+    assert "A" in result
+
+
 # ---------------------------------------------------------------------------
 # serialize_momentum_leaders
 # ---------------------------------------------------------------------------
@@ -219,3 +232,23 @@ def test_main_exits_zero_without_api_key(monkeypatch):
     with pytest.raises(SystemExit) as exc_info:
         generate_ai.main()
     assert exc_info.value.code == 0
+
+
+# ---------------------------------------------------------------------------
+# skip-trap: empty results must not write a file
+# ---------------------------------------------------------------------------
+
+def test_main_does_not_write_file_when_all_calls_fail(monkeypatch, tmp_path):
+    # Simulate a total API outage: generate_for_group returns {} for both groups.
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "generate_for_group", lambda *_: {})
+    # Inject a fake google.generativeai so the lazy import inside main() succeeds
+    monkeypatch.setitem(sys.modules, "google.generativeai", MagicMock())
+
+    with pytest.raises(SystemExit) as exc_info:
+        generate_ai.main()
+    assert exc_info.value.code == 0
+    # No JSON file should have been written — allows the next run to retry
+    assert not any((tmp_path / "ai").glob("*.json"))

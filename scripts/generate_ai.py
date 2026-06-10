@@ -97,17 +97,19 @@ def serialize_top_movers(delta_df: pd.DataFrame, n: int = 10) -> str:
     lines = ["TOP GAINERS (rank improved most in 7 days):"]
     for _, r in gainers.iterrows():
         ms = f"{r['momentum_score']:.2f}" if pd.notna(r.get("momentum_score")) else "N/A"
+        rank_str = f"{r['rank_ytd']:.0f}" if pd.notna(r.get("rank_ytd")) else "N/A"
         lines.append(
             f"  {r['name']}: +{r['rank_ytd_delta_7d']:.0f} spots, "
-            f"rank {r['rank_ytd']:.0f}, momentum {ms}"
+            f"rank {rank_str}, momentum {ms}"
         )
 
     lines.append("\nTOP LOSERS (rank declined most in 7 days):")
     for _, r in losers.iterrows():
         ms = f"{r['momentum_score']:.2f}" if pd.notna(r.get("momentum_score")) else "N/A"
+        rank_str = f"{r['rank_ytd']:.0f}" if pd.notna(r.get("rank_ytd")) else "N/A"
         lines.append(
             f"  {r['name']}: {r['rank_ytd_delta_7d']:.0f} spots, "
-            f"rank {r['rank_ytd']:.0f}, momentum {ms}"
+            f"rank {rank_str}, momentum {ms}"
         )
     return "\n".join(lines)
 
@@ -306,6 +308,11 @@ def main():
     for group_type in ("sector", "industry"):
         key = "sectors" if group_type == "sector" else "industries"
         output[key] = generate_for_group(model, group_type, today)
+
+    has_content = any(output.get(k) for k in ("sectors", "industries"))
+    if not has_content:
+        print("No AI content generated (all API calls failed) — skipping file write so next run can retry.")
+        sys.exit(0)
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
