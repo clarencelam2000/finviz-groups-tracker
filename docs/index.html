@@ -563,7 +563,10 @@
       }
 
       const n = delta.length;
-      const topN = state.topN;
+      // Cap effective threshold at half the group count so strong and weak
+      // lists can't overlap (e.g. topN=20 with n=11 sectors would otherwise
+      // match every group in both lists simultaneously).
+      const effectiveN = Math.min(state.topN, Math.floor(n / 2));
       const view = state.strengthView;
 
       threshRow.classList.toggle('hidden', view === 'allgreen');
@@ -572,13 +575,13 @@
         const strong = delta.filter(r => {
           const rm = pf(r.rank_month), rq = pf(r.rank_quarter), rh = pf(r.rank_half);
           return rm !== null && rq !== null && rh !== null
-            && rm <= topN && rq <= topN && rh <= topN;
+            && rm <= effectiveN && rq <= effectiveN && rh <= effectiveN;
         }).sort((a, b) => (pf(b.momentum_score) ?? 0) - (pf(a.momentum_score) ?? 0));
 
         const weak = delta.filter(r => {
           const rm = pf(r.rank_month), rq = pf(r.rank_quarter), rh = pf(r.rank_half);
           return rm !== null && rq !== null && rh !== null
-            && rm > n - topN && rq > n - topN && rh > n - topN;
+            && rm > n - effectiveN && rq > n - effectiveN && rh > n - effectiveN;
         }).sort((a, b) => (pf(a.momentum_score) ?? 1) - (pf(b.momentum_score) ?? 1));
 
         const renderList = (rows, isStrong) => rows.map(row => {
@@ -602,11 +605,11 @@
 
         container.innerHTML = `
           <h3 class="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">
-            Sustained Strong — top ${topN} in month, quarter &amp; half (${strong.length})
+            Sustained Strong — top ${effectiveN} in month, quarter &amp; half (${strong.length})
           </h3>
           ${strong.length ? renderList(strong, true) : '<p class="text-slate-500 text-xs mb-4 text-center">None match at this threshold.</p>'}
           <h3 class="text-xs font-semibold text-red-400 uppercase tracking-wider mt-5 mb-2">
-            Consistently Weak — bottom ${topN} in month, quarter &amp; half (${weak.length})
+            Consistently Weak — bottom ${effectiveN} in month, quarter &amp; half (${weak.length})
           </h3>
           ${weak.length ? renderList(weak, false) : '<p class="text-slate-500 text-xs text-center">None match at this threshold.</p>'}`;
 
