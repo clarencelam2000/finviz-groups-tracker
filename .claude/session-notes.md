@@ -7,9 +7,43 @@
 ## Current Status
 
 **Status:** Complete ✅
-**Safe to close:** Yes — all PRs merged, no open threads
-**Waiting on:** Nothing
+**Safe to close:** Yes — PR #26 merged, session notes committed, no open threads
+**Waiting on:** Tonight's scheduled cron (22:00 UTC = 6 PM ET) — will overwrite today's near-close data with EOD values
 **Open threads:** None
+
+---
+
+## Session: 2026-06-10 — Retrospective + silent-failure gap fixes (PR #26)
+
+### What happened (retrospective)
+
+Three failures combined to lose June 9 EOD data:
+1. **Scheduled cron failed** — `ubuntu-latest` was upgraded to 24.04, renaming `libasound2` → `libasound2t64`, breaking `playwright install --with-deps`. Fixed in prior session by pinning `ubuntu-22.04`.
+2. **Manual dispatch silently skipped all rows** — The workflow_dispatch ran on commit `edf97817` which didn't yet have `evict_today_rows`. The 2 AM rows already in the CSV for June 9 caused all 155 freshly-scraped rows to deduplicate and write nothing. `collect.py` exited 0; git said "Everything up-to-date". Silent total loss.
+3. **Verify step gave false positive** — Old verify only checked row count (`>= 8`). The stale 2 AM rows satisfied this check, so the workflow showed green despite no new data being written.
+
+### What was done
+
+- **Triggered workflow_dispatch at 3:58 PM ET** — captured near-close data at 4:00 PM ET (market close). Stored in `data/fetch_log.csv` and committed as `data: snapshot 2026-06-10`.
+
+- **PR #26 merged** (3 commits — all gap fixes):
+  1. `fix: raise RuntimeError in collect.py when 0 rows written after eviction` — `collect()` now raises if `append_records` returns 0 after eviction, so the silent no-op can never repeat.
+  2. `fix: verify step uses trading_date logic and checks collected_at freshness` — verify now uses `now_et.hour < 9` date logic (mirrors `trading_date()`), and checks that `max(collected_at)` is within 30 minutes of workflow run time.
+  3. `feat: show pipeline fetch history in PWA Today tab` — loads `data/fetch_log.csv` from GitHub, renders last 5 runs with green/red dot, timestamp (ET), trigger, row counts, and failed step.
+
+- **81 tests passing** (1 new test: `test_collect_raises_when_eviction_skipped`)
+
+### Key decisions
+
+- 30-minute freshness limit in verify: scheduled cron runs at 22:00 UTC; Playwright scrape + commit takes <5 min. 30 min gives headroom for runner queueing.
+- Pipeline history in PWA (not Streamlit): on-the-go visibility is the high-value case. Five rows is enough to see the last week of weekday runs.
+
+### What's deferred
+
+- **Healthchecks.io**: User still needs to add `HEALTHCHECK_URL` secret. Steps: healthchecks.io → New Check → period 26h → copy URL → repo Settings → Secrets → `HEALTHCHECK_URL`.
+- **Pip/playwright CI caching**: explicitly deferred to a separate task per user.
+
+### No open threads
 
 ---
 
