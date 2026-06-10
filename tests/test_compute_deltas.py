@@ -162,6 +162,64 @@ class TestFmt:
 
 
 # ---------------------------------------------------------------------------
+# compute_rank_agreement
+# ---------------------------------------------------------------------------
+
+class TestComputeRankAgreement:
+    def _make_df(self, rank_month, rank_quarter, rank_half):
+        n = len(rank_month)
+        return pd.DataFrame({
+            "name": [f"G{i}" for i in range(n)],
+            "rank_month":   rank_month,
+            "rank_quarter": rank_quarter,
+            "rank_half":    rank_half,
+        })
+
+    def test_perfect_agreement_scores_1(self):
+        # All three timeframes give identical ranks → std = 0 → agreement = 1
+        df = self._make_df([1, 2, 3], [1, 2, 3], [1, 2, 3])
+        scores = cd.compute_rank_agreement(df)
+        assert all(abs(s - 1.0) < 1e-9 for s in scores)
+
+    def test_maximum_disagreement_scores_near_0(self):
+        # Row 0: rank 1 in month, rank 3 in quarter, rank 3 in half → pct [1, 0, 0]
+        # std([1,0,0]) = 1/sqrt(3) → agreement = 0
+        df = self._make_df([1, 2, 3], [3, 2, 1], [3, 2, 1])
+        scores = cd.compute_rank_agreement(df)
+        assert scores.iloc[0] < 0.1
+
+    def test_scores_in_0_1_range(self, snapshot_3):
+        df = cd.compute_ranks(snapshot_3)
+        scores = cd.compute_rank_agreement(df)
+        assert scores.between(0.0, 1.0).all()
+
+    def test_single_row_returns_nan(self):
+        df = pd.DataFrame({
+            "name": ["A"],
+            "rank_month": [1], "rank_quarter": [1], "rank_half": [1],
+        })
+        scores = cd.compute_rank_agreement(df)
+        assert math.isnan(scores.iloc[0])
+
+    def test_missing_rank_columns_returns_nan(self):
+        # Only one rank column available → can't compute agreement
+        df = pd.DataFrame({
+            "name": ["A", "B"],
+            "rank_month": [1, 2],
+        })
+        scores = cd.compute_rank_agreement(df)
+        assert all(math.isnan(s) for s in scores)
+
+    def test_middle_of_pack_has_moderate_agreement(self):
+        # Mixed ranks — should be between 0 and 1
+        df = self._make_df([1, 2, 3], [2, 1, 3], [3, 2, 1])
+        scores = cd.compute_rank_agreement(df)
+        assert all(0.0 <= s <= 1.0 for s in scores)
+        # No perfect agreement since ranks differ per timeframe
+        assert not any(abs(s - 1.0) < 1e-9 for s in scores)
+
+
+# ---------------------------------------------------------------------------
 # ensure_deltas_csv
 # ---------------------------------------------------------------------------
 

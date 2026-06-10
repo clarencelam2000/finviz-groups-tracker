@@ -34,6 +34,7 @@ DELTA_COLUMNS = [
     "perf_month_delta_7d",
     "perf_ytd_delta_7d", "perf_ytd_delta_30d",
     "momentum_score",
+    "rank_agreement",
 ]
 
 PERF_RANK_METRICS = [
@@ -176,6 +177,35 @@ def compute_momentum(df_day: pd.DataFrame) -> pd.Series:
     return scores.mean(axis=1)
 
 
+_MAX_STD_3 = 1.0 / math.sqrt(3)  # max sample std of 3 values drawn from [0, 1]
+
+
+def compute_rank_agreement(df_day: pd.DataFrame) -> pd.Series:
+    """Compute rank_agreement: how consistently month/quarter/half ranks align.
+
+    Converts each rank to a percentile [0=worst, 1=best], then measures how
+    tightly the three percentiles cluster. Score 1.0 = all three timeframes
+    give the same relative standing; 0.0 = maximum disagreement.
+
+    A high score alongside a high momentum_score means the trend is confirmed
+    across timeframes, not just a recent flash.
+    """
+    n = len(df_day)
+    if n <= 1:
+        return pd.Series([float("nan")] * n, index=df_day.index)
+
+    pct_df = pd.DataFrame(index=df_day.index)
+    for rank_col in ["rank_month", "rank_quarter", "rank_half"]:
+        if rank_col in df_day.columns and df_day[rank_col].notna().any():
+            pct_df[rank_col] = (n - df_day[rank_col]) / (n - 1)
+
+    if pct_df.shape[1] < 2:
+        return pd.Series([float("nan")] * n, index=df_day.index)
+
+    row_std = pct_df.std(axis=1, ddof=1)
+    return (1 - row_std / _MAX_STD_3).clip(lower=0.0, upper=1.0)
+
+
 # ---------------------------------------------------------------------------
 # Core computation
 # ---------------------------------------------------------------------------
@@ -222,6 +252,7 @@ def compute_for_group(group_type: str, target_date_str: str = None,
 
     df_today = compute_ranks(df_today)
     df_today["momentum_score"] = compute_momentum(df_today)
+    df_today["rank_agreement"] = compute_rank_agreement(df_today)
 
     # Pre-load lookback snapshots
     lookback_frames = {}
@@ -294,6 +325,7 @@ def compute_for_group(group_type: str, target_date_str: str = None,
                 out[delta_col] = _fmt(val)
 
         out["momentum_score"] = _fmt(row.get("momentum_score"))
+        out["rank_agreement"] = _fmt(row.get("rank_agreement"))
         new_rows.append(out)
 
     if not new_rows:
