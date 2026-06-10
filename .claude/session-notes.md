@@ -7,9 +7,25 @@
 ## Current Status
 
 **Status:** Complete ✅
-**Safe to close:** Yes — PR open for timezone + refresh fixes, no open threads
+**Safe to close:** Yes — all PRs merged, no open threads
 **Waiting on:** Nothing
 **Open threads:** None
+
+---
+
+## Session: 2026-06-10 — PWA UX polish + collect.py date-stamping fix
+
+### What was done
+
+- **PR #20**: Freshness label improvements — short date format (`Jun 9` not `2026-06-09`) across all cases; cross-midnight collection timestamp prefixed with `"collected"` to disambiguate two dates in the label.
+- **PR #21**: 600ms minimum spinner duration on manual refresh (button + pull-to-refresh). Initial page load unaffected. Prevents spinner from flashing and disappearing on fast CDN responses.
+- **PR #22**: Haptic feedback (40ms vibration) when pull-to-refresh crosses the release threshold; tap "Finviz Tracker" title scrolls smoothly to top.
+- **PR #23**: `collect.py` date-stamping bug fix — `trading_date(now_et)` helper returns the previous calendar day if collection is before 9 AM ET. Prevents delayed GitHub Actions runners from labeling prior-session data with the next day's date. 5 new tests added; 80 total passing.
+
+### Key insight discovered
+The `collected_at` timestamp `2026-06-09T06:19:08Z` = 2:19 AM ET June 9 = 11:19 PM PT June 8. The cron ran unusually late (8+ hours past scheduled 22:00 UTC). This caused June 8's closing data to be stamped as `date = 2026-06-09` — now fixed.
+
+### No open threads
 
 ---
 
