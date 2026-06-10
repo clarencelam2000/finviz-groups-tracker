@@ -8,6 +8,52 @@
 
 ### 🔴 Backlog
 
+#### AI Integration
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| AI-1 | **Anomaly Detection + LLM Explanation** | `scripts/generate_ai.py`, `dashboard/app.py` | M | Flag rank deltas >2σ from a 14-day rolling window using pandas, then send each flagged group to Gemini for a 1-sentence contextual note. See full spec below. |
+| AI-2 | **Natural Language Q&A** | `dashboard/app.py` | M | Text input in AI Insights tab — user types a question, gets a plain-English answer backed by the actual data. Requires a real-time API call; needs an auth/cost-gate decision. See full spec below. |
+
+**AI-1 spec — Anomaly Detection + LLM Explanation**
+
+_What it does:_ Nightly, detect statistically unusual rank moves and add plain-English context for each one.
+
+_Implementation (all in `scripts/generate_ai.py`):_
+1. Add `detect_anomalies(delta_df: pd.DataFrame, min_days: int = 14) -> list` — loads ALL rows of `deltas.csv` (not just latest day), computes per-group rolling 14-day mean and std of `rank_ytd_delta_7d`, then for the latest date flags any group where `|rank_ytd_delta_7d - rolling_mean| / rolling_std > 2`. Returns list of `{"name": str, "delta": float, "z_score": float}`. Return `[]` if fewer than `min_days` rows exist — don't guess.
+2. In `generate_for_group()` (after watchlist), if anomalies detected, build a prompt: _"The following groups had unusually large rank moves today (vs. their 14-day baseline). For each, write one sentence explaining what this kind of move might indicate about capital rotation. [anomaly list]. Respond as NAME: [note] one per line."_ Catch exceptions same as the other 3 calls.
+3. Parse the response into `result["anomalies"] = [{"name": ..., "delta": ..., "z_score": ..., "note": ...}]`.
+4. JSON output already committed nightly alongside other AI content.
+5. Dashboard: in `dashboard/app.py` tab 7 (AI Insights, end of file), add a `st.expander("Notable Moves")` after the briefing section. Iterate `ai_data.get(group_key, {}).get("anomalies", [])` and render each with delta + z_score + note. Show "None detected" if list is empty.
+
+_Test additions (`tests/test_generate_ai.py`):_ `test_detect_anomalies_returns_empty_below_min_days`, `test_detect_anomalies_flags_high_z_score`, `test_detect_anomalies_no_false_positive_normal_move`.
+
+_Data gate:_ needs 14+ days of delta history. Gate with `if len(all_dates) < min_days: return []`.
+
+---
+
+**AI-2 spec — Natural Language Q&A**
+
+_What it does:_ A text input in the AI Insights tab — user asks "which industries have improved rank for 30 days straight?" or "show me everything with high momentum but weak recent move" and gets a direct answer.
+
+_Architecture decision required (pick one before starting):_
+- **Option A (recommended):** Gate on `GEMINI_API_KEY` in `st.secrets` — if present, show the Q&A widget; if absent, show a muted info message. Key stored in `.streamlit/secrets.toml` (gitignored) locally, or in Streamlit Cloud's secrets UI for deployment. This means the API key lives in the Streamlit environment — acceptable if the dashboard URL is not widely shared.
+- **Option B (local-only):** Only enable Q&A when running locally (`os.getenv("GEMINI_API_KEY")` set). No key in Streamlit deployment; hosted dashboard stays key-free. Good for personal use only.
+
+_Implementation (`dashboard/app.py`, tab 7, bottom of the file):_
+1. Check `api_key = st.secrets.get("GEMINI_API_KEY", None) or os.getenv("GEMINI_API_KEY")`. If None, show `st.info("Configure GEMINI_API_KEY to enable Q&A.")` and stop.
+2. `question = st.text_input("Ask a question about the data...")` + `st.button("Ask")`.
+3. On submit: serialize the latest `delta_df` as a compact markdown table (top 30 rows by momentum_score, columns: name / rank_ytd / rank_ytd_delta_7d / momentum_score / rank_agreement). Pass with question to `gemini-1.5-flash`. Cache with `@st.cache_data(ttl=300, show_spinner=False)` keyed on `(question, str(latest_date), group_label)`.
+4. Render response with `st.markdown(response)`.
+
+_Token budget:_ 30 rows × 5 columns ≈ ~500 tokens of data context. Well within Flash's 1M limit. Log `len(prompt)` on first run to confirm.
+
+_Test:_ mock `genai.GenerativeModel.generate_content`, verify prompt contains the question and data table, verify cache key includes the date.
+
+---
+
+#### Data / Insight Features
+
 | # | Task | File(s) | Effort | Notes |
 |---|------|---------|--------|-------|
 | D1 | **[USER ACTION] Create `main` branch, set as default** | GitHub UI | S | Blocks cron and PWA-1. Merge `claude/elegant-babbage-hlxnfy` → new `main`, then Settings → Branches → change default. |
@@ -16,9 +62,6 @@
 | INS-5 | **Daily Brief card (PWA top-of-screen)** | `docs/index.html` | M | Single card: today's breakout, sustained leaders, what's rolling over. Eliminates tab-hopping on mobile. Needs 7+ days for interesting content. |
 | INS-6 | **Momentum Score Heatmap (time × industry)** | `dashboard/app.py` | S | Companion to existing rank-delta heatmap — cells = `momentum_score` over time. Absolute picture of sustained leaders. Needs 7+ days. |
 | INS-7 | **Sector Breadth** | `dashboard/app.py` | L | % of industries in a sector that are top-half of full universe. Needs static sector→industry mapping (11 sectors × 144 industries). Hardest feature. |
-| PWA-2 | Add `<link rel="apple-touch-icon">` for iOS homescreen icon | `docs/index.html` `<head>` | S | Safari ignores web manifest icons for Add-to-Home-Screen; needs explicit `apple-touch-icon` tag. Can reuse the SVG data URI from `manifest.json`. |
-| PWA-3 | Show error on active tab (not just Today) | `docs/index.html` `showError()` | S | Network failures on Movers/Momentum tabs show empty containers with no feedback. Display error in whichever tab is active. |
-| PWA-4 | Dead code cleanup: `fmtPct` forceSign + `moverCard` delta shadowing | `docs/index.html` | S | `forceSign` param is never passed `true`; inner ternary always resolves to `''`. `delta` variable in `moverCard` shadows outer array — rename to `spots`. |
 | DEBT-1 | `evict_today_rows` concurrency race | `scripts/collect.py` | S | Two simultaneous `collect.py` processes could race on read-modify-write. Non-issue given single scheduled Action + ad-hoc manual runs. Fix would be a file lock (e.g. `fcntl.flock`). Table until concurrency is actually needed. |
 | DEBT-2 | `evict_today_rows` I/O errors not caught | `scripts/collect.py` | S | Disk-full / permission errors bubble up as exceptions. Intentional — matches rest of codebase. Could add explicit error message if this causes confusion in prod logs. |
 | 6b | Sector → Industry drill-down | `dashboard/app.py` | L | Hardcode `SECTOR_INDUSTRY_MAP` (11 sectors → 144 industries) in `app.py`. Sidebar selectbox filters all tabs. Effort is mostly cataloguing the mapping, not code. |
@@ -43,6 +86,7 @@ _(nothing)_
 
 | # | Task | Date |
 |---|------|------|
+| AI-0 | Server-side AI pipeline: daily briefing + rotation phase + watchlist (PR #25) | 2026-06-10 |
 | INS-1 | Sustained Strength / "Evergreen" list (Streamlit + PWA) | 2026-06-10 |
 | INS-2 | `rank_agreement` metric in deltas.csv | 2026-06-10 |
 | INS-3 | All Green filter + emoji dot matrix | 2026-06-10 |
