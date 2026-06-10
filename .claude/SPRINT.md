@@ -16,9 +16,6 @@
 | INS-5 | **Daily Brief card (PWA top-of-screen)** | `docs/index.html` | M | Single card: today's breakout, sustained leaders, what's rolling over. Eliminates tab-hopping on mobile. Needs 7+ days for interesting content. |
 | INS-6 | **Momentum Score Heatmap (time × industry)** | `dashboard/app.py` | S | Companion to existing rank-delta heatmap — cells = `momentum_score` over time. Absolute picture of sustained leaders. Needs 7+ days. |
 | INS-7 | **Sector Breadth** | `dashboard/app.py` | L | % of industries in a sector that are top-half of full universe. Needs static sector→industry mapping (11 sectors × 144 industries). Hardest feature. |
-| PWA-2 | Add `<link rel="apple-touch-icon">` for iOS homescreen icon | `docs/index.html` `<head>` | S | Safari ignores web manifest icons for Add-to-Home-Screen; needs explicit `apple-touch-icon` tag. Can reuse the SVG data URI from `manifest.json`. |
-| PWA-3 | Show error on active tab (not just Today) | `docs/index.html` `showError()` | S | Network failures on Movers/Momentum tabs show empty containers with no feedback. Display error in whichever tab is active. |
-| PWA-4 | Dead code cleanup: `fmtPct` forceSign + `moverCard` delta shadowing | `docs/index.html` | S | `forceSign` param is never passed `true`; inner ternary always resolves to `''`. `delta` variable in `moverCard` shadows outer array — rename to `spots`. |
 | DEBT-1 | `evict_today_rows` concurrency race | `scripts/collect.py` | S | Two simultaneous `collect.py` processes could race on read-modify-write. Non-issue given single scheduled Action + ad-hoc manual runs. Fix would be a file lock (e.g. `fcntl.flock`). Table until concurrency is actually needed. |
 | DEBT-2 | `evict_today_rows` I/O errors not caught | `scripts/collect.py` | S | Disk-full / permission errors bubble up as exceptions. Intentional — matches rest of codebase. Could add explicit error message if this causes confusion in prod logs. |
 | 6b | Sector → Industry drill-down | `dashboard/app.py` | L | Hardcode `SECTOR_INDUSTRY_MAP` (11 sectors → 144 industries) in `app.py`. Sidebar selectbox filters all tabs. Effort is mostly cataloguing the mapping, not code. |
@@ -70,16 +67,6 @@ _(nothing)_
 | T9 | Test: `ensure_deltas_csv` all 3 paths | 2026-06-09 |
 | R1 | `.claude/rules/commit-discipline.md` — commit sizing, test requirements, handoff checklist | 2026-06-09 |
 | M1 | Mobile iPhone PWA (`docs/`): Today / Movers / Momentum tabs; GitHub Pages; Add to Home Screen | 2026-06-09 |
-
----
-
-## Known Issue: GitHub Actions Runners
-
-Every workflow run in this repo fails instantly (`runner_id: 0`, completes in ~4s, logs 404). This affects **all** trigger types: `push`, `pull_request`, and `workflow_dispatch`. Zero `collect.yml` runs exist in the Actions history either — confirming the data CSVs were all populated locally, not via CI.
-
-**Root cause:** GitHub Actions runners are not being allocated for this account/repo. This is likely a billing or account-level restriction, not a YAML issue. The `tests.yml` and `collect.yml` YAML files are structurally correct and will work on any standard GitHub account with Actions enabled.
-
-**To fix:** Check GitHub account → Settings → Billing → Actions usage, or enable Actions under repo Settings → Actions → General.
 
 ---
 
