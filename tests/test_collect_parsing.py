@@ -276,9 +276,10 @@ class TestEvictTodayRows:
         second_records[0]["perf_ytd"] = 1.0   # different value in second run
 
         call_count = {"n": 0}
-        def fake_parse(*a, **kw):
+        def fake_parse(html, group_type, snapshot_date, collected_at):
             call_count["n"] += 1
-            return first_records if call_count["n"] == 1 else second_records
+            base = first_records if call_count["n"] == 1 else second_records
+            return [{**r, "date": snapshot_date} for r in base]
 
         monkeypatch.setattr(collect_module, "parse_table", fake_parse)
 
