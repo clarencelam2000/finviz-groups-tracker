@@ -28,8 +28,23 @@ jobs:
         run: |
           python - <<'EOF'
           import csv, sys
+          from datetime import datetime, timezone, timedelta
           from pathlib import Path
-          today = __import__("datetime").date.today().isoformat()
+          import pytz
+
+          eastern = pytz.timezone("US/Eastern")
+          now_utc = datetime.now(timezone.utc)
+          now_et  = datetime.now(eastern)
+          # Mirror trading_date() from collect.py: before 9 AM ET the data shown
+          # on Finviz is still the prior session's close, so the snapshot is dated
+          # to yesterday.
+          today = (
+              (now_et - timedelta(days=1)).strftime("%Y-%m-%d")
+              if now_et.hour < 9
+              else now_et.strftime("%Y-%m-%d")
+          )
+
+          FRESHNESS_MINUTES = 30
           checks = [("data/sectors/snapshots.csv", 8), ("data/industries/snapshots.csv", 100)]
           failed = False
           for path_str, min_rows in checks:
@@ -44,6 +59,27 @@ jobs:
               if len(rows) < min_rows:
                   print(f"FAIL: expected >= {min_rows}, got {len(rows)}")
                   failed = True
+                  continue
+              # Freshness check: at least one row must have been collected recently.
+              # Catches the case where stale same-day data satisfies the row count
+              # but no fresh scrape actually ran (e.g. eviction failed silently).
+              timestamps = []
+              for r in rows:
+                  ca = r.get("collected_at", "")
+                  if ca:
+                      try:
+                          timestamps.append(datetime.fromisoformat(ca.replace("Z", "+00:00")))
+                      except ValueError:
+                          pass
+              if not timestamps:
+                  print(f"FAIL: {path_str}: no parseable collected_at values")
+                  failed = True
+              else:
+                  age_m = (now_utc - max(timestamps)).total_seconds() / 60
+                  print(f"  {path_str}: most recent collected_at is {age_m:.0f}m ago")
+                  if age_m > FRESHNESS_MINUTES:
+                      print(f"FAIL: {path_str}: data is {age_m:.0f}m old (limit {FRESHNESS_MINUTES}m)")
+                      failed = True
           sys.exit(1 if failed else 0)
           EOF
       - name: Compute deltas
