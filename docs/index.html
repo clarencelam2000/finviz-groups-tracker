@@ -694,9 +694,12 @@
       }
     }
 
-    async function loadAndRender(force = false) {
+    async function loadAndRender(force = false, minMs = 0) {
       setLoading(true);
-      await Promise.all([loadGroup('sectors', force), loadGroup('industries', force)]);
+      await Promise.all([
+        Promise.all([loadGroup('sectors', force), loadGroup('industries', force)]),
+        new Promise(r => setTimeout(r, minMs)),
+      ]);
       setLoading(false);
       render();
     }
@@ -760,7 +763,7 @@
       state.data.sectors    = { snap: null, delta: null };
       state.data.industries = { snap: null, delta: null };
       document.getElementById('last-updated').textContent = 'Loading…';
-      loadAndRender(true); // force=true bypasses browser/CDN cache
+      loadAndRender(true, 600); // force=true bypasses cache; 600ms min keeps spinner visible
     };
 
     document.querySelectorAll('.tab-btn').forEach(btn =>
