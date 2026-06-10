@@ -3,6 +3,7 @@ Finviz Groups Tracker — Streamlit Dashboard
 """
 
 import datetime
+import html as html_lib
 from pathlib import Path
 
 import pandas as pd
@@ -473,9 +474,12 @@ with tab6:
             )
 
             n_total = len(latest_delta)
+            top_n_min = 5
+            top_n_max = max(top_n_min, n_total // 3)
+            top_n_default = min(top_n_max, max(top_n_min, n_total // 4))
             top_n = st.slider(
-                "Top N threshold", min_value=5, max_value=max(10, n_total // 3),
-                value=min(30, n_total // 4),
+                "Top N threshold", min_value=top_n_min, max_value=top_n_max,
+                value=top_n_default,
                 step=5,
                 key="strength_top_n",
             )
@@ -583,7 +587,7 @@ with tab6:
                         ms = f"{r['momentum_score']:.2f}" if pd.notna(r.get("momentum_score")) else "—"
                         ra = f"{r['rank_agreement']:.2f}" if pd.notna(r.get("rank_agreement")) else "—"
                         rows_html.append(
-                            f"<tr><td><b>{r['name']}</b></td><td>{dots}</td>"
+                            f"<tr><td><b>{html_lib.escape(str(r['name']))}</b></td><td>{dots}</td>"
                             f"<td style='text-align:center'>{ms}</td>"
                             f"<td style='text-align:center'>{ra}</td></tr>"
                         )
