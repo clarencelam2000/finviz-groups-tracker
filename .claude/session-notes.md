@@ -7,13 +7,45 @@
 ## Current Status
 
 **Status:** Complete ✅
-**Safe to close:** Yes — PR #26 merged, session notes committed, no open threads
-**Waiting on:** Tonight's scheduled cron (22:00 UTC = 6 PM ET) — will overwrite today's near-close data with EOD values
+**Safe to close:** Yes — PR #25 merged, session notes committed, no open threads
+**Waiting on:** `GEMINI_API_KEY` secret to be added to GitHub Actions (Settings → Secrets → Actions). Once added, the nightly cron will start generating `data/ai/YYYY-MM-DD.json` automatically.
 **Open threads:** None
 
 ---
 
-## Session: 2026-06-10 — Retrospective + silent-failure gap fixes (PR #26)
+---
+
+## Session: 2026-06-10 — AI integration pipeline (PR #25, merged)
+
+### What was done
+
+**Brainstormed 5 AI integration ideas** for the dashboard with the user. Agreed on server-side pre-computation via GitHub Actions (not runtime LLM calls from Streamlit) as the right architecture — API key lives only in Actions secrets, dashboard URL is safe to share publicly.
+
+**Implemented ideas 1–3 (AI-0 in sprint board):**
+- `scripts/generate_ai.py` — new script run nightly after `compute_deltas.py`. Calls Gemini 1.5 Flash (pinned `google-generativeai==0.8.6`) to generate: (1) daily briefing (3-paragraph narrative for sectors + industries), (2) rotation phase signal (Early/Mid/Late Cycle/Defensive + 1-sentence reasoning), (3) top-3 watchlist with thesis. Writes `data/ai/YYYY-MM-DD.json`, committed automatically by existing `git add data/` step.
+- `.github/workflows/collect.yml` — added `Generate AI analysis` step after `Compute deltas`. Uses `secrets.GEMINI_API_KEY`. Exits 0 silently if key absent (workflow never fails on unconfigured envs).
+- `dashboard/app.py` — added 7th tab "AI Insights". Reads pre-generated JSON, renders rotation phase badge, watchlist, and briefing. Zero LLM calls at dashboard runtime.
+- `requirements.txt` — added `google-generativeai==0.8.6`.
+- `tests/test_generate_ai.py` — 26 tests covering all pure functions + main() graceful exit + skip-trap (no file write on total API failure) + NaN rank_ytd guard.
+
+**Review comments addressed (two rounds):**
+1. Wrapped each `model.generate_content()` call in `try/except Exception` — transient API errors produce partial result, never fail the workflow.
+2. Pinned `google-generativeai==0.8.6`; removed unused `python-dotenv`.
+3. Removed misleading `rank_agreement` column from test fixture.
+4. Fixed NaN `rank_ytd` not guarded in `serialize_top_movers()` (ValueError → `"N/A"`).
+5. Fixed skip-trap: `main()` no longer writes the JSON if all API calls return `{}` — lets `workflow_dispatch` retry cleanly.
+
+**64 tests passing** after all changes.
+
+### Ideas still remaining (in sprint board as AI-1, AI-2)
+- **AI-1** (Anomaly Detection): flag rank deltas >2σ from 14-day rolling window, add Gemini context per anomaly. Needs 14+ days of history.
+- **AI-2** (Natural Language Q&A): real-time text input in dashboard — requires auth/cost-gate decision (key in `st.secrets` vs. local-only).
+
+### User action needed
+Add `GEMINI_API_KEY` to GitHub Actions secrets:
+**Settings → Secrets and variables → Actions → New repository secret → Name: `GEMINI_API_KEY` → Value: your Gemini API key**
+
+The next scheduled cron (weekdays 22:00 UTC) will generate the first `data/ai/YYYY-MM-DD.json` automatically.
 
 ### What happened (retrospective)
 

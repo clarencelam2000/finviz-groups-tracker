@@ -80,7 +80,11 @@ Three static files added to `docs/`: `index.html` (full PWA), `manifest.json`, `
 
 ---
 
-## 2026-06-10 — Silent-failure gap fixes shipped (PR #26, merged)
+## 2026-06-10 — Server-side AI analysis pipeline shipped (PR #25, merged)
+
+Nightly `generate_ai.py` runs after `compute_deltas.py` in GitHub Actions, calling Gemini 1.5 Flash to produce a daily briefing (3 paragraphs, sectors + industries), a rotation phase signal (Early/Mid/Late Cycle/Defensive), and a top-3 sector watchlist with thesis. Output committed to `data/ai/YYYY-MM-DD.json`. Streamlit dashboard has a new 7th "AI Insights" tab that reads the pre-generated JSON — no LLM calls at runtime. API key lives only in GitHub Actions secrets. Requires `GEMINI_API_KEY` secret to be added to the repo to activate. 64 tests passing.
+
+---
 
 Three detection gaps that caused total June 9 data loss are now closed:
 - `collect.py` raises `RuntimeError` if 0 rows written after eviction (catches silent dedup no-ops)
