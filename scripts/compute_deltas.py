@@ -199,7 +199,7 @@ def compute_rank_agreement(df_day: pd.DataFrame) -> pd.Series:
         if rank_col in df_day.columns and df_day[rank_col].notna().any():
             pct_df[rank_col] = (n - df_day[rank_col]) / (n - 1)
 
-    if pct_df.shape[1] < 2:
+    if pct_df.shape[1] < 3:
         return pd.Series([float("nan")] * n, index=df_day.index)
 
     row_std = pct_df.std(axis=1, ddof=1)

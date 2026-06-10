@@ -210,6 +210,17 @@ class TestComputeRankAgreement:
         scores = cd.compute_rank_agreement(df)
         assert all(math.isnan(s) for s in scores)
 
+    def test_two_rank_columns_returns_nan(self):
+        # With 2 of 3 columns the normalizer (_MAX_STD_3) is wrong for 2 values;
+        # require all 3 to avoid misleading scores.
+        df = pd.DataFrame({
+            "name": ["A", "B"],
+            "rank_month": [1, 2],
+            "rank_quarter": [2, 1],
+        })
+        scores = cd.compute_rank_agreement(df)
+        assert all(math.isnan(s) for s in scores)
+
     def test_middle_of_pack_has_moderate_agreement(self):
         # Mixed ranks — should be between 0 and 1
         df = self._make_df([1, 2, 3], [2, 1, 3], [3, 2, 1])
