@@ -61,7 +61,10 @@
 
 | Date | Issue | Status | Fix |
 |------|-------|--------|-----|
-| 2026-06-09 | GitHub Actions runners not allocating | Open | Enable Actions in repo Settings → Actions → General |
+| 2026-06-09 | GitHub Actions runners not allocating | Fixed | Enabled in repo Settings → Actions → General |
+| 2026-06-10 | `ubuntu-latest` → 24.04 broke playwright deps | Fixed | Pinned `ubuntu-22.04` in collect.yml (PR #?) |
+| 2026-06-10 | Silent data loss on workflow_dispatch (no eviction) | Fixed | `collect.py` now raises if 0 rows written (PR #26) |
+| 2026-06-10 | Verify step false positive on stale rows | Fixed | Added `collected_at` freshness check ≤30 min (PR #26) |
 
 ## 2026-06-09 — Mobile iPhone PWA dashboard shipped (PR #7, merged)
 
@@ -74,6 +77,17 @@ Three static files added to `docs/`: `index.html` (full PWA), `manifest.json`, `
 ## 2026-06-09 — Commit discipline rules and test scaffolding
 
 `.claude/rules/commit-discipline.md` committed — covers small-commit sizing, per-change test requirements, and the session handoff checklist. PR #3 (merged) already delivered the comprehensive 57-test suite; this session contributed the written rules. PR #4 open as draft.
+
+---
+
+## 2026-06-10 — Silent-failure gap fixes shipped (PR #26, merged)
+
+Three detection gaps that caused total June 9 data loss are now closed:
+- `collect.py` raises `RuntimeError` if 0 rows written after eviction (catches silent dedup no-ops)
+- Verify step now checks `collected_at` freshness (≤30 min) in addition to row count, and uses correct pre-9 AM date logic
+- PWA Today tab shows pipeline run history from `fetch_log.csv` (last 5 runs, outcome + row counts)
+
+Also captured today's near-close data (4:00 PM ET, market close) via manual workflow_dispatch.
 
 ---
 
