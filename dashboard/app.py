@@ -3,6 +3,7 @@ Finviz Groups Tracker — Streamlit Dashboard
 """
 
 import datetime
+import html as html_lib
 from pathlib import Path
 
 import pandas as pd
@@ -38,6 +39,7 @@ DELTA_COLUMNS = [
     "perf_month_delta_7d",
     "perf_ytd_delta_7d", "perf_ytd_delta_30d",
     "momentum_score",
+    "rank_agreement",
 ]
 
 
@@ -170,7 +172,7 @@ else:
 # Tabs
 # ---------------------------------------------------------------------------
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["Snapshot", "Top Movers", "Time Series", "Momentum", "Heatmap"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Snapshot", "Top Movers", "Time Series", "Momentum", "Heatmap", "Strength"])
 
 # ---- Tab 1: Snapshot -------------------------------------------------------
 
@@ -443,3 +445,171 @@ with tab5:
                 height=max(400, len(pivot) * 18),
             )
             st.plotly_chart(fig, use_container_width=True)
+
+# ---- Tab 6: Strength -------------------------------------------------------
+
+with tab6:
+    st.subheader(f"Strength Screens — {latest_date or 'No data'}")
+
+    if delta_df.empty or snap_df.empty or latest_date is None:
+        st.info("No data available yet.")
+    else:
+        latest_delta = (
+            delta_df[delta_df["date"] == latest_date].copy()
+            if "date" in delta_df.columns else pd.DataFrame()
+        )
+        latest_snap = (
+            snap_df[snap_df["date"] == latest_date].copy()
+            if "date" in snap_df.columns else pd.DataFrame()
+        )
+
+        if latest_delta.empty or latest_snap.empty:
+            st.info(f"No data for {latest_date}.")
+        else:
+            # ---- Section 1: Sustained Strength --------------------------------
+            st.markdown("### Sustained Strength")
+            st.caption(
+                "Groups that are top-N in rank_month, rank_quarter, AND rank_half simultaneously. "
+                "Confirms a trend is not a recent flash — it's sustained across 1, 3, and 6 months."
+            )
+
+            n_total = len(latest_delta)
+            top_n_min = 5
+            top_n_max = max(top_n_min, n_total // 3)
+            top_n_default = min(top_n_max, max(top_n_min, n_total // 4))
+            top_n = st.slider(
+                "Top N threshold", min_value=top_n_min, max_value=top_n_max,
+                value=top_n_default,
+                step=5,
+                key="strength_top_n",
+            )
+
+            rank_cols_needed = ["rank_month", "rank_quarter", "rank_half"]
+            has_rank_cols = all(c in latest_delta.columns for c in rank_cols_needed)
+
+            if not has_rank_cols:
+                st.warning("rank_quarter / rank_half columns not yet computed. Run compute_deltas.py.")
+            else:
+                sustained = latest_delta[
+                    (latest_delta["rank_month"] <= top_n) &
+                    (latest_delta["rank_quarter"] <= top_n) &
+                    (latest_delta["rank_half"] <= top_n)
+                ].copy()
+
+                weak = latest_delta[
+                    (latest_delta["rank_month"] > n_total - top_n) &
+                    (latest_delta["rank_quarter"] > n_total - top_n) &
+                    (latest_delta["rank_half"] > n_total - top_n)
+                ].copy()
+
+                col_a, col_b = st.columns(2)
+
+                with col_a:
+                    st.markdown(f"**Consistently Strong** ({len(sustained)} groups)")
+                    if sustained.empty:
+                        st.info(f"No groups in top {top_n} across all three timeframes.")
+                    else:
+                        display_cols = [c for c in [
+                            "name", "rank_month", "rank_quarter", "rank_half",
+                            "momentum_score", "rank_agreement",
+                        ] if c in sustained.columns]
+                        sustained_sorted = sustained.sort_values("momentum_score", ascending=False)
+                        st.dataframe(sustained_sorted[display_cols].reset_index(drop=True), use_container_width=True)
+                        st.download_button(
+                            label="Download CSV",
+                            data=sustained_sorted[display_cols].to_csv(index=False).encode("utf-8"),
+                            file_name=f"finviz_{group_label.lower()}_sustained_strong_{latest_date}.csv",
+                            mime="text/csv",
+                            key="sustained_strong_download",
+                        )
+
+                with col_b:
+                    st.markdown(f"**Consistently Weak** (bottom {top_n})")
+                    if weak.empty:
+                        st.info(f"No groups in bottom {top_n} across all three timeframes.")
+                    else:
+                        display_cols = [c for c in [
+                            "name", "rank_month", "rank_quarter", "rank_half",
+                            "momentum_score", "rank_agreement",
+                        ] if c in weak.columns]
+                        weak_sorted = weak.sort_values("momentum_score", ascending=True)
+                        st.dataframe(weak_sorted[display_cols].reset_index(drop=True), use_container_width=True)
+                        st.download_button(
+                            label="Download CSV",
+                            data=weak_sorted[display_cols].to_csv(index=False).encode("utf-8"),
+                            file_name=f"finviz_{group_label.lower()}_sustained_weak_{latest_date}.csv",
+                            mime="text/csv",
+                            key="sustained_weak_download",
+                        )
+
+            # ---- Section 2: All Green -----------------------------------------
+            st.markdown("---")
+            st.markdown("### All Green")
+            st.caption(
+                "Groups where performance is positive across every timeframe checked. "
+                "Everything trending up — no mixed signals."
+            )
+
+            perf_timeframes = ["perf_week", "perf_month", "perf_quarter", "perf_half", "perf_ytd"]
+            available_tf = [c for c in perf_timeframes if c in latest_snap.columns]
+
+            if not available_tf:
+                st.warning("No perf columns found in snapshot data.")
+            else:
+                snap_with_delta = latest_snap.merge(
+                    latest_delta[["name", "momentum_score", "rank_agreement"]].dropna(subset=["momentum_score"]),
+                    on="name", how="left",
+                )
+
+                mask = pd.Series(True, index=snap_with_delta.index)
+                for tf in available_tf:
+                    mask = mask & (snap_with_delta[tf].fillna(0) > 0)
+                all_green = snap_with_delta[mask].copy()
+
+                st.markdown(
+                    f"**{len(all_green)} of {len(snap_with_delta)} groups are all-green** "
+                    f"({', '.join(available_tf)})"
+                )
+
+                if all_green.empty:
+                    st.info("No groups are positive across all timeframes right now.")
+                else:
+                    all_green_sorted = all_green.sort_values("momentum_score", ascending=False)
+
+                    def dot(val):
+                        if pd.isna(val):
+                            return "⬜"
+                        return "🟢" if val > 0 else "🔴"
+
+                    rows_html = []
+                    for _, r in all_green_sorted.iterrows():
+                        dots = "".join(dot(r.get(tf)) for tf in available_tf)
+                        ms = f"{r['momentum_score']:.2f}" if pd.notna(r.get("momentum_score")) else "—"
+                        ra = f"{r['rank_agreement']:.2f}" if pd.notna(r.get("rank_agreement")) else "—"
+                        rows_html.append(
+                            f"<tr><td><b>{html_lib.escape(str(r['name']))}</b></td><td>{dots}</td>"
+                            f"<td style='text-align:center'>{ms}</td>"
+                            f"<td style='text-align:center'>{ra}</td></tr>"
+                        )
+
+                    header_tfs = [tf.replace("perf_", "") for tf in available_tf]
+                    header = (
+                        "<tr><th>Group</th>"
+                        f"<th title='{', '.join(header_tfs)}'>wk&nbsp;mo&nbsp;qtr&nbsp;half&nbsp;ytd</th>"
+                        "<th>Momentum</th><th>Agreement</th></tr>"
+                    )
+                    table_html = (
+                        "<table style='border-collapse:collapse;width:100%'>"
+                        + header + "".join(rows_html) + "</table>"
+                    )
+                    st.markdown(table_html, unsafe_allow_html=True)
+
+                    st.download_button(
+                        label="Download All Green CSV",
+                        data=all_green_sorted[
+                            ["name"] + available_tf + ["momentum_score", "rank_agreement"]
+                        ].to_csv(index=False).encode("utf-8"),
+                        file_name=f"finviz_{group_label.lower()}_all_green_{latest_date}.csv",
+                        mime="text/csv",
+                        key="all_green_download",
+                    )
