@@ -7,11 +7,34 @@
 ## Current Status
 
 **Status:** Complete ✅
-**Safe to close:** Yes — all work committed, PR #14 drafted and awaiting CI
-**Waiting on:** Nothing (CI is pending; no action needed)
+**Safe to close:** Yes — all work committed, PR #17 merged
+**Waiting on:** Nothing
 **Open threads:** None
 
 > Update this block at the end of every working block. Options: `Complete ✅` / `In Progress 🔄` / `Blocked 🔴` / `Needs User Input ⚠️`
+
+---
+
+## Session: 2026-06-10 — Composite score insights: rank_agreement + Strength tab (PR #17, merged)
+
+### What was done
+
+- **Brainstormed 7 actionable insight features** (see plan file). Prioritized for immediate value vs. data dependency.
+- **`rank_agreement` metric** added to `deltas.csv` and `compute_deltas.py`. Converts rank_month/quarter/half to percentiles, measures std of the three, normalizes by 1/√3. Score 1.0 = all timeframes confirm the same trend; 0.0 = maximum disagreement. Requires all 3 columns present (< 3 guard prevents misleading scores from wrong normalizer with 2 values). 75 tests passing.
+- **Strength tab — Streamlit** (6th tab): Sustained Strength (top-N in all three timeframes, threshold slider with proper clamping for sectors) + All Green (dot matrix of perf timeframes). HTML escaping on group names.
+- **Strength tab — PWA**: same two views via sub-toggle pill. effectiveN = min(topN, n//2) prevents Strong/Weak overlap when topN >= n (sectors, n=11).
+- **PR review response**: fixed 4 bugs (slider crash, PWA overlap, 2-col normalization, HTML injection) + SPRINT.md stale formula.
+
+### Key decisions
+- `rank_agreement` requires all 3 of rank_month/quarter/half — returning NaN for 2-column fallback is safer than using the wrong _MAX_STD_3 normalizer.
+- Slider min/max/default all derived from n_total to stay self-consistent regardless of sectors vs. industries.
+- PWA uses effectiveN = floor(n/2) as a hard cap — labels show the actual effective N used.
+
+### Deferred to backlog (INS-4 through INS-7 in SPRINT.md)
+- Momentum Velocity (needs 7+ days of history)
+- Daily Brief card
+- Momentum Score Heatmap
+- Sector Breadth (hardest — needs static sector→industry mapping)
 
 ---
 

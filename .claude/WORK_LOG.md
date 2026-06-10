@@ -67,6 +67,10 @@
 
 Three static files added to `docs/`: `index.html` (full PWA), `manifest.json`, `sw.js`. Hosted on GitHub Pages — no server required. Fetches CSVs live from `raw.githubusercontent.com` on every load. Three tabs: Today (color-coded perf cards), Movers (rank delta leaderboard, placeholder until ~June 16), Momentum (works immediately). Installable as a home screen app on iPhone via Safari → Add to Home Screen.
 
+## 2026-06-10 — rank_agreement metric + Strength tab (Streamlit + PWA) shipped (PR #17, merged)
+
+`rank_agreement` now accumulates in `deltas.csv` from today — measures how consistently rank_month, rank_quarter, and rank_half agree for each group (1.0 = all timeframes confirm same standing, 0.0 = maximum disagreement). New Strength tab in both Streamlit and PWA surfaces Sustained Strength (top-N in all three timeframes simultaneously) and All Green (all perf timeframes positive, emoji dot matrix). Works on day-1 data since perf_quarter/half are scraped live from Finviz.
+
 ## 2026-06-09 — Commit discipline rules and test scaffolding
 
 `.claude/rules/commit-discipline.md` committed — covers small-commit sizing, per-change test requirements, and the session handoff checklist. PR #3 (merged) already delivered the comprehensive 57-test suite; this session contributed the written rules. PR #4 open as draft.

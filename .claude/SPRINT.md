@@ -12,9 +12,6 @@
 |---|------|---------|--------|-------|
 | D1 | **[USER ACTION] Create `main` branch, set as default** | GitHub UI | S | Blocks cron and PWA-1. Merge `claude/elegant-babbage-hlxnfy` → new `main`, then Settings → Branches → change default. |
 | PWA-1 | Fix hardcoded `BRANCH` constant in PWA | `docs/index.html` line ~117 | S | Change `'claude/elegant-babbage-hlxnfy'` to `'main'` (or whichever branch receives daily cron data). Depends on D1. |
-| INS-1 | **Sustained Strength / "Evergreen" list** | `dashboard/app.py`, `docs/index.html` | M | Filter: rank_month AND rank_quarter AND rank_half all ≤ threshold (slider). Works on day 1 — perf_quarter/half scraped live from Finviz. Flip side: Consistently Weak list. Days-on-list counter needs rolling history. |
-| INS-2 | **`rank_agreement` metric in deltas.csv** | `scripts/compute_deltas.py`, `tests/` | M | Converts each rank to a percentile [0–1], then `1 - std(pcts) / (1/√3)`. Near 1 = all timeframes confirm trend; near 0 = conflicting signals. Requires all 3 of rank_month/quarter/half present. |
-| INS-3 | **All Green filter + dot matrix visual** | `dashboard/app.py` | S | Industries where perf_week, perf_month, perf_quarter, perf_half, perf_ytd all positive. Works day 1. Dot matrix: green/red per timeframe per row. |
 | INS-4 | **Momentum Velocity (`momentum_score_delta_7d/14d`)** | `scripts/compute_deltas.py` | M | Track momentum_score change over time. "Rising Stars" = positive velocity + currently top-half. Needs 7+ days of data. |
 | INS-5 | **Daily Brief card (PWA top-of-screen)** | `docs/index.html` | M | Single card: today's breakout, sustained leaders, what's rolling over. Eliminates tab-hopping on mobile. Needs 7+ days for interesting content. |
 | INS-6 | **Momentum Score Heatmap (time × industry)** | `dashboard/app.py` | S | Companion to existing rank-delta heatmap — cells = `momentum_score` over time. Absolute picture of sustained leaders. Needs 7+ days. |
@@ -46,6 +43,9 @@ _(nothing)_
 
 | # | Task | Date |
 |---|------|------|
+| INS-1 | Sustained Strength / "Evergreen" list (Streamlit + PWA) | 2026-06-10 |
+| INS-2 | `rank_agreement` metric in deltas.csv | 2026-06-10 |
+| INS-3 | All Green filter + emoji dot matrix | 2026-06-10 |
 | PWA-2 | Add `<link rel="apple-touch-icon">` for iOS homescreen icon | 2026-06-10 |
 | PWA-3 | Show error on active tab (not just Today) | 2026-06-10 |
 | PWA-4 | Dead code cleanup: `fmtPct` forceSign + `moverCard` delta shadowing | 2026-06-10 |
