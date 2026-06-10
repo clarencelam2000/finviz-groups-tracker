@@ -7,7 +7,7 @@
 ## Current Status
 
 **Status:** Complete ✅
-**Safe to close:** Yes — PR open for timezone + refresh fixes, no open threads
+**Safe to close:** Yes — PR #19 merged (timestamp + refresh fixes), no open threads
 **Waiting on:** Nothing
 **Open threads:** None
 
