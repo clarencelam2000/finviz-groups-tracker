@@ -146,6 +146,13 @@
 
     const PREFS_KEY = 'fvt_prefs_v1';
 
+    const ALL_METRICS = [
+      { key: 'perf_day',   label: 'Day' },
+      { key: 'perf_week',  label: 'Wk'  },
+      { key: 'perf_month', label: 'Mo'  },
+      { key: 'perf_ytd',   label: 'YTD' },
+    ];
+
     function savePrefs() {
       try {
         localStorage.setItem(PREFS_KEY, JSON.stringify({
@@ -329,12 +336,6 @@
       const deltaMap = Object.fromEntries(delta.map(r => [r.name, r]));
 
       const metric = state.sortMetric;
-      const ALL_METRICS = [
-        { key: 'perf_day',   label: 'Day' },
-        { key: 'perf_week',  label: 'Wk'  },
-        { key: 'perf_month', label: 'Mo'  },
-        { key: 'perf_ytd',   label: 'YTD' },
-      ];
 
       const siEl = document.getElementById('search-input');
       const query = siEl ? siEl.value.trim().toLowerCase() : '';
@@ -362,6 +363,7 @@
           : mainVal < -2 ? 'border-l-red-500'
           :                'border-l-red-700';
 
+        // YTD delta is a fixed anchor — a consistent momentum signal regardless of the active sort metric
         const trendDelta = pf(d.rank_ytd_delta_7d);
         const trendArrow = trendDelta !== null && trendDelta !== 0
           ? `<span class="${trendDelta > 0 ? 'text-emerald-400' : 'text-red-400'} text-xs ml-1">${trendDelta > 0 ? '↑' : '↓'}</span>`
@@ -373,7 +375,10 @@
         const isExpanded = state.expandedName === row.name;
         const q = pf(row.perf_quarter), h = pf(row.perf_half), y = pf(row.perf_year);
         const pe = pf(row.pe), cap = pf(row.market_cap);
-        const capStr = cap === null ? '—' : cap >= 1000 ? '$' + (cap/1000).toFixed(1) + 'T' : '$' + cap.toFixed(0) + 'B';
+        const capStr = cap === null ? '—'
+          : cap >= 1000 ? '$' + (cap/1000).toFixed(1) + 'T'
+          : cap >= 1    ? '$' + cap.toFixed(0) + 'B'
+          :               '$' + (cap*1000).toFixed(0) + 'M';
         const expandedDetail = isExpanded ? `
           <div class="px-3 pb-3">
             <div class="border-t border-slate-700 pt-2 grid grid-cols-3 gap-1 text-xs text-center">
@@ -562,6 +567,7 @@
 
     function switchGroup(group) {
       state.group = group;
+      state.expandedName = null;
       savePrefs();
       const sc = document.getElementById('search-container');
       const si = document.getElementById('search-input');
@@ -630,7 +636,9 @@
 
     // ── Pull-to-refresh ────────────────────────────────────────────────────
 
-    const PULL_THRESHOLD = 65;
+    const PULL_THRESHOLD  = 65;
+    const pullIndicator   = document.getElementById('pull-indicator');
+    const pullLabelEl     = document.getElementById('pull-label');
     let pullStartY = 0;
     let pullDist   = 0;
     let pullActive = false;
@@ -644,16 +652,15 @@
       pullDist = e.touches[0].clientY - pullStartY;
       if (pullDist > 8) {
         pullActive = true;
-        const indicator = document.getElementById('pull-indicator');
-        indicator.style.height = Math.min(pullDist * 0.45, 40) + 'px';
-        document.getElementById('pull-label').textContent =
+        pullIndicator.style.height = Math.min(pullDist * 0.45, 40) + 'px';
+        pullLabelEl.textContent =
           pullDist >= PULL_THRESHOLD ? '↑ Release to refresh' : '↓ Pull to refresh';
       }
     }, { passive: true });
 
     document.addEventListener('touchend', () => {
       if (pullActive) {
-        document.getElementById('pull-indicator').style.height = '0px';
+        pullIndicator.style.height = '0px';
         if (pullDist >= PULL_THRESHOLD && !state.loading) window.__refresh();
       }
       pullStartY = 0;
