@@ -7,7 +7,7 @@ import csv
 import os
 import sys
 import time
-from datetime import datetime, timezone, date
+from datetime import datetime, timezone, date, timedelta
 from pathlib import Path
 
 import pytz
@@ -317,6 +317,18 @@ def append_records(csv_path: Path, records: list, existing_keys: set):
 # Main
 # ---------------------------------------------------------------------------
 
+def trading_date(now_et: datetime) -> str:
+    """Return the trading date for a given ET datetime.
+
+    Collections before 9 AM ET reflect the previous session's data — Finviz
+    hasn't updated yet and the market hasn't opened. Use the prior calendar day
+    so the CSV date matches the data actually shown.
+    """
+    if now_et.hour < 9:
+        return (now_et - timedelta(days=1)).strftime("%Y-%m-%d")
+    return now_et.strftime("%Y-%m-%d")
+
+
 def collect(group_type: str):
     """Fetch and store one group type."""
     subdir = "sectors" if group_type == "sector" else "industries"
@@ -324,7 +336,7 @@ def collect(group_type: str):
 
     eastern = pytz.timezone("US/Eastern")
     now_utc = datetime.now(timezone.utc)
-    snapshot_date = datetime.now(eastern).strftime("%Y-%m-%d")
+    snapshot_date = trading_date(datetime.now(eastern))
     collected_at = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
 
     ensure_csv(csv_path)
