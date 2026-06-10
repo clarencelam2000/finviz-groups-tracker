@@ -319,7 +319,17 @@
       const deltaMap = Object.fromEntries(delta.map(r => [r.name, r]));
 
       const metric = state.sortMetric;
-      const sorted = [...snap].sort((a, b) => (pf(b[metric]) ?? -999) - (pf(a[metric]) ?? -999));
+      const ALL_METRICS = [
+        { key: 'perf_day',   label: 'Day' },
+        { key: 'perf_week',  label: 'Wk'  },
+        { key: 'perf_month', label: 'Mo'  },
+        { key: 'perf_ytd',   label: 'YTD' },
+      ];
+
+      const siEl = document.getElementById('search-input');
+      const query = siEl ? siEl.value.trim().toLowerCase() : '';
+      let sorted = [...snap].sort((a, b) => (pf(b[metric]) ?? -999) - (pf(a[metric]) ?? -999));
+      if (query) sorted = sorted.filter(row => row.name.toLowerCase().includes(query));
 
       container.innerHTML = sorted.map((row, i) => {
         const d = deltaMap[row.name] || {};
@@ -329,28 +339,62 @@
           : `<span class="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-xs text-slate-600 flex-shrink-0">${i+1}</span>`;
 
         const mom = pf(d.momentum_score);
-        const momStr = mom !== null ? `<span class="text-slate-500 text-xs ml-2">Mom ${(mom*100).toFixed(0)}%</span>` : '';
+        const momStr = mom !== null ? `<span class="text-slate-500 text-xs">Mom ${(mom*100).toFixed(0)}%</span>` : '';
 
         const mainVal = pf(row[metric]);
         const mainColor = mainVal !== null ? perfColor(mainVal) : 'text-slate-400';
         const mainFmt = mainVal !== null ? `${mainVal > 0 ? '+' : ''}${mainVal.toFixed(2)}%` : '—';
         const metricLabel = { perf_ytd: 'YTD', perf_week: 'Wk', perf_month: 'Mo', perf_day: 'Day' }[metric] || metric;
 
+        const borderColor = mainVal === null  ? 'border-l-slate-700'
+          : mainVal > 2  ? 'border-l-emerald-500'
+          : mainVal > 0  ? 'border-l-green-600'
+          : mainVal < -2 ? 'border-l-red-500'
+          :                'border-l-red-700';
+
+        const trendDelta = pf(d.rank_ytd_delta_7d);
+        const trendArrow = trendDelta !== null && trendDelta !== 0
+          ? `<span class="${trendDelta > 0 ? 'text-emerald-400' : 'text-red-400'} text-xs ml-1">${trendDelta > 0 ? '↑' : '↓'}</span>`
+          : '';
+
+        const subMetrics = ALL_METRICS.filter(m => m.key !== metric).slice(0, 2);
+        const subLine = subMetrics.map(m => `<span>${m.label}: ${fmtPct(row[m.key])}</span>`).join('');
+
+        const isExpanded = state.expandedName === row.name;
+        const q = pf(row.perf_quarter), h = pf(row.perf_half), y = pf(row.perf_year);
+        const pe = pf(row.pe), cap = pf(row.market_cap);
+        const capStr = cap === null ? '—' : cap >= 1000 ? '$' + (cap/1000).toFixed(1) + 'T' : '$' + cap.toFixed(0) + 'B';
+        const expandedDetail = isExpanded ? `
+          <div class="px-3 pb-3">
+            <div class="border-t border-slate-700 pt-2 grid grid-cols-3 gap-1 text-xs text-center">
+              <div><div class="${perfColor(q)}">${q !== null ? (q > 0 ? '+' : '') + q.toFixed(2) + '%' : '—'}</div><div class="text-slate-500 mt-0.5">Quarter</div></div>
+              <div><div class="${perfColor(h)}">${h !== null ? (h > 0 ? '+' : '') + h.toFixed(2) + '%' : '—'}</div><div class="text-slate-500 mt-0.5">6-Month</div></div>
+              <div><div class="${perfColor(y)}">${y !== null ? (y > 0 ? '+' : '') + y.toFixed(2) + '%' : '—'}</div><div class="text-slate-500 mt-0.5">1-Year</div></div>
+            </div>
+            <div class="grid grid-cols-3 gap-1 text-xs text-center mt-2">
+              <div><div class="text-slate-300">${pe !== null ? pe.toFixed(1) : '—'}</div><div class="text-slate-500 mt-0.5">P/E</div></div>
+              <div><div class="text-slate-300">${row.stocks || '—'}</div><div class="text-slate-500 mt-0.5">Stocks</div></div>
+              <div><div class="text-slate-300">${capStr}</div><div class="text-slate-500 mt-0.5">Mkt Cap</div></div>
+            </div>
+          </div>` : '';
+
         return `
-          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 flex items-center gap-3">
-            ${rankBadge}
-            <div class="flex-1 min-w-0">
-              <div class="font-medium text-sm text-white truncate">${row.name}</div>
-              <div class="flex gap-3 mt-0.5 text-xs flex-wrap">
-                <span>Day: ${fmtPct(row.perf_day)}</span>
-                <span>Wk: ${fmtPct(row.perf_week)}</span>
-                ${momStr}
+          <div class="rounded-xl bg-slate-800 border border-slate-700 border-l-4 ${borderColor} overflow-hidden" data-name="${row.name}">
+            <div class="p-3 flex items-center gap-3">
+              ${rankBadge}
+              <div class="flex-1 min-w-0">
+                <div class="font-medium text-sm text-white truncate">${row.name}${trendArrow}</div>
+                <div class="flex gap-3 mt-0.5 text-xs flex-wrap">
+                  ${subLine}
+                  ${momStr}
+                </div>
+              </div>
+              <div class="text-right flex-shrink-0">
+                <div class="text-base font-bold ${mainColor}">${mainFmt}</div>
+                <div class="text-xs text-slate-500">${metricLabel} ${isExpanded ? '▴' : '▾'}</div>
               </div>
             </div>
-            <div class="text-right flex-shrink-0">
-              <div class="text-base font-bold ${mainColor}">${mainFmt}</div>
-              <div class="text-xs text-slate-500">${metricLabel}</div>
-            </div>
+            ${expandedDetail}
           </div>`;
       }).join('');
     }
