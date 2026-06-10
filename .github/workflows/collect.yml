@@ -1,7 +1,9 @@
 name: Daily Snapshot
 on:
   schedule:
-    - cron: '0 22 * * 1-5'
+    - cron: '0 14 * * 1-5'
+    - cron: '5 22 * * 1-5'
+    - cron: '35 23 * * *'
   workflow_dispatch:
 permissions:
   contents: write
