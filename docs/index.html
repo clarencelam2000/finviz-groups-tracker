@@ -81,6 +81,10 @@
                class="w-full bg-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm border border-slate-600 placeholder-slate-500 outline-none focus:border-slate-500">
       </div>
       <div id="today-cards" class="space-y-2"></div>
+      <div id="pipeline-section" class="mt-5 hidden">
+        <div class="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2">Pipeline</div>
+        <div id="pipeline-rows" class="space-y-1.5"></div>
+      </div>
     </section>
 
     <!-- TAB: Movers -->
@@ -153,6 +157,7 @@
       sectors:    { snap: `${BASE}/sectors/snapshots.csv`,    delta: `${BASE}/sectors/deltas.csv` },
       industries: { snap: `${BASE}/industries/snapshots.csv`, delta: `${BASE}/industries/deltas.csv` },
     };
+    const FETCH_LOG_URL = `${BASE}/fetch_log.csv`;
 
     const state = {
       tab: 'today',
@@ -165,6 +170,7 @@
         sectors:    { snap: null, delta: null },
         industries: { snap: null, delta: null },
       },
+      fetchLog: null,
       loading: false,
       expandedName: null,
     };
@@ -344,6 +350,43 @@
       } catch (err) {
         showError(`Failed to load data. ${err.message || 'Check your connection.'}`);
       }
+    }
+
+    async function loadFetchLog(force = false) {
+      if (!force && state.fetchLog !== null) return;
+      try {
+        const res = await fetchCSV(FETCH_LOG_URL, force);
+        state.fetchLog = (res.data || []).filter(r => r.timestamp);
+      } catch (e) {
+        state.fetchLog = [];
+      }
+    }
+
+    function renderPipeline() {
+      const section = document.getElementById('pipeline-section');
+      const logs = state.fetchLog;
+      if (!logs || logs.length === 0) { section.classList.add('hidden'); return; }
+      section.classList.remove('hidden');
+      const recent = [...logs].reverse().slice(0, 5);
+      document.getElementById('pipeline-rows').innerHTML = recent.map(r => {
+        const ok = r.outcome === 'success';
+        const dot = `<span class="${ok ? 'text-green-400' : 'text-red-400'}">●</span>`;
+        const ts = r.timestamp
+          ? new Date(r.timestamp).toLocaleString('en-US', {
+              month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+              timeZone: 'America/New_York',
+            }) + ' ET'
+          : '—';
+        const rowCounts = (r.sectors_rows && r.industries_rows)
+          ? ` · ${r.sectors_rows}s / ${r.industries_rows}i`
+          : '';
+        const trigger = r.trigger === 'schedule' ? 'cron' : (r.trigger || '—');
+        const failed = r.step_failed ? ` · ✗ ${r.step_failed}` : '';
+        return `<div class="flex items-start gap-2 text-xs text-slate-400">
+          <span class="mt-px">${dot}</span>
+          <span>${ts} · ${trigger}${rowCounts}${failed}</span>
+        </div>`;
+      }).join('');
     }
 
     function showError(msg) {
@@ -675,7 +718,7 @@
     // ── Master render ──────────────────────────────────────────────────────
 
     function render() {
-      if (state.tab === 'today')    renderToday();
+      if (state.tab === 'today')    { renderToday(); renderPipeline(); }
       if (state.tab === 'movers')   renderMovers();
       if (state.tab === 'momentum') renderMomentum();
       if (state.tab === 'strength') renderStrength();
@@ -698,6 +741,7 @@
       setLoading(true);
       await Promise.all([
         Promise.all([loadGroup('sectors', force), loadGroup('industries', force)]),
+        loadFetchLog(force),
         new Promise(r => setTimeout(r, minMs)),
       ]);
       setLoading(false);
@@ -762,6 +806,7 @@
       if (state.loading) return;
       state.data.sectors    = { snap: null, delta: null };
       state.data.industries = { snap: null, delta: null };
+      state.fetchLog = null;
       document.getElementById('last-updated').textContent = 'Loading…';
       loadAndRender(true, 600); // force=true bypasses cache; 600ms min keeps spinner visible
     };
