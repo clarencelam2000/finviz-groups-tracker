@@ -8,6 +8,7 @@ from scripts.collect import (
     CSV_COLUMNS,
     append_records,
     ensure_csv,
+    evict_today_rows,
     parse_avg_volume,
     parse_market_cap,
     parse_perf,
@@ -218,6 +219,78 @@ class TestAppendRecords:
         with open(csv_path) as f:
             rows = list(csv.DictReader(f))
         assert rows[0]["name"] == "Energy"
+
+
+# ---------------------------------------------------------------------------
+# evict_today_rows — last-write-wins
+# ---------------------------------------------------------------------------
+
+class TestEvictTodayRows:
+    def _write_rows(self, csv_path, rows):
+        ensure_csv(csv_path)
+        append_records(csv_path, rows, set())
+
+    def _base_record(self, date, name):
+        return {
+            "date": date, "collected_at": f"{date}T22:00:00Z",
+            "group_type": "sector", "name": name,
+            "stocks": 10, "market_cap": 1.0, "pe": None, "fwd_pe": None,
+            "perf_day": 1.0, "perf_week": 1.0, "perf_month": 1.0,
+            "perf_quarter": 1.0, "perf_half": 1.0, "perf_year": 1.0, "perf_ytd": 1.0,
+            "avg_volume": 1000, "rel_volume": None, "change": 1.0,
+        }
+
+    def test_evicts_only_target_date(self, tmp_path):
+        csv_path = tmp_path / "snap.csv"
+        self._write_rows(csv_path, [
+            self._base_record("2026-06-08", "Tech"),
+            self._base_record("2026-06-09", "Tech"),
+        ])
+        evicted = evict_today_rows(csv_path, "2026-06-09")
+        assert evicted == 1
+        with open(csv_path) as f:
+            rows = list(csv.DictReader(f))
+        assert len(rows) == 1
+        assert rows[0]["date"] == "2026-06-08"
+
+    def test_no_op_when_date_absent(self, tmp_path):
+        csv_path = tmp_path / "snap.csv"
+        self._write_rows(csv_path, [self._base_record("2026-06-08", "Tech")])
+        evicted = evict_today_rows(csv_path, "2026-06-09")
+        assert evicted == 0
+
+    def test_no_op_on_missing_file(self, tmp_path):
+        evicted = evict_today_rows(tmp_path / "nonexistent.csv", "2026-06-09")
+        assert evicted == 0
+
+    def test_second_run_overwrites_first(self, monkeypatch, tmp_path):
+        """Re-running collect() on the same day replaces earlier data."""
+        import scripts.collect as collect_module
+        monkeypatch.setattr(collect_module, "DATA_DIR", tmp_path)
+        monkeypatch.setattr(collect_module, "fetch_html", lambda url: "<html/>")
+
+        first_records = [self._base_record("2026-06-09", f"G{i}") for i in range(10)]
+        first_records[0]["perf_ytd"] = 99.0  # sentinel value from first run
+
+        second_records = [self._base_record("2026-06-09", f"G{i}") for i in range(10)]
+        second_records[0]["perf_ytd"] = 1.0   # different value in second run
+
+        call_count = {"n": 0}
+        def fake_parse(*a, **kw):
+            call_count["n"] += 1
+            return first_records if call_count["n"] == 1 else second_records
+
+        monkeypatch.setattr(collect_module, "parse_table", fake_parse)
+
+        collect_module.collect("sector")
+        collect_module.collect("sector")  # second run same day
+
+        csv_path = tmp_path / "sectors" / "snapshots.csv"
+        with open(csv_path) as f:
+            rows = list(csv.DictReader(f))
+        g0_rows = [r for r in rows if r["name"] == "G0"]
+        assert len(g0_rows) == 1, "should have exactly one row for G0"
+        assert float(g0_rows[0]["perf_ytd"]) == pytest.approx(1.0), "second run should win"
 
 
 # ---------------------------------------------------------------------------
