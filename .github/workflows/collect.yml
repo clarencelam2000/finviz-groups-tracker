@@ -85,6 +85,11 @@ jobs:
       - name: Compute deltas
         id: deltas
         run: python scripts/compute_deltas.py
+      - name: Generate AI analysis
+        if: steps.deltas.outcome == 'success'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/generate_ai.py
       - name: Log fetch result
         if: always()
         env:

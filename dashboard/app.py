@@ -4,6 +4,7 @@ Finviz Groups Tracker — Streamlit Dashboard
 
 import datetime
 import html as html_lib
+import json
 from pathlib import Path
 
 import pandas as pd
@@ -172,7 +173,7 @@ else:
 # Tabs
 # ---------------------------------------------------------------------------
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Snapshot", "Top Movers", "Time Series", "Momentum", "Heatmap", "Strength"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Snapshot", "Top Movers", "Time Series", "Momentum", "Heatmap", "Strength", "AI Insights"])
 
 # ---- Tab 1: Snapshot -------------------------------------------------------
 
@@ -613,3 +614,78 @@ with tab6:
                         mime="text/csv",
                         key="all_green_download",
                     )
+
+# ---- Tab 7: AI Insights ----------------------------------------------------
+
+with tab7:
+    st.subheader("AI Insights")
+
+    ai_dir = DATA_DIR / "ai"
+    ai_file = None
+
+    if latest_date is not None:
+        candidate = ai_dir / f"{latest_date}.json"
+        if candidate.exists():
+            ai_file = candidate
+        else:
+            # Fall back to most recent available AI file
+            existing = sorted(ai_dir.glob("*.json")) if ai_dir.exists() else []
+            if existing:
+                ai_file = existing[-1]
+
+    if ai_file is None:
+        st.info(
+            "AI analysis not yet available. "
+            "It is generated automatically after each evening data collection "
+            "(requires GEMINI_API_KEY in GitHub Actions secrets)."
+        )
+    else:
+        try:
+            ai_data = json.loads(ai_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            st.warning("Could not read AI analysis file.")
+            ai_data = None
+
+        if ai_data:
+            gen_at = ai_data.get("generated_at", "")
+            model_name = ai_data.get("model", "")
+            caption = f"Generated {gen_at} · {model_name}" if gen_at else ""
+            if caption:
+                st.caption(caption)
+
+            # --- Rotation phase (sectors only) ---
+            sector_data = ai_data.get("sectors", {})
+            phase = sector_data.get("rotation_phase")
+            if phase:
+                label = phase.get("label", "")
+                reasoning = phase.get("reasoning", "")
+                phase_colors = {
+                    "Early Cycle": "🟢",
+                    "Mid Cycle": "🟡",
+                    "Late Cycle": "🟠",
+                    "Defensive": "🔵",
+                }
+                icon = phase_colors.get(label, "⚪")
+                st.markdown(f"### {icon} Rotation Phase: {label}")
+                if reasoning:
+                    st.markdown(f"*{reasoning}*")
+                st.divider()
+
+            # --- Watchlist (sectors only) ---
+            watchlist = sector_data.get("watchlist", [])
+            if watchlist:
+                st.markdown("### Watchlist — Top Setups")
+                for i, item in enumerate(watchlist, 1):
+                    name = item.get("name", "")
+                    thesis = item.get("thesis", "")
+                    st.markdown(f"**{i}. {name}** — {thesis}")
+                st.divider()
+
+            # --- Briefings ---
+            group_key = "sectors" if group_label == "Sectors" else "industries"
+            briefing = ai_data.get(group_key, {}).get("briefing", "")
+            if briefing:
+                st.markdown(f"### Daily Briefing — {group_label}")
+                st.markdown(briefing)
+            else:
+                st.info(f"No briefing available for {group_label.lower()} yet.")
