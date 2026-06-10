@@ -155,6 +155,8 @@ A working block ends when you push a commit, finish a feature slice, or are abou
 
 ### Always do before ending
 
+> These three files are pre-approved in `.claude/settings.json` — no permission prompt from the user is needed to edit them.
+
 **`.claude/session-notes.md`** — overwrite the "Current Status" block at the top (see template in that file), then append a new session section below. The status block is what the next Claude reads first to decide whether to proceed or wait.
 
 **`.claude/WORK_LOG.md`** — append a milestone entry when:

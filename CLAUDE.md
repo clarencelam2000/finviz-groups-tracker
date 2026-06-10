@@ -147,5 +147,6 @@ python scripts/export_db.py
 - Playwright must be installed with `playwright install chromium` (or `playwright install chromium --with-deps` in CI).
 - The `exports/` directory and `*.db` / `*.parquet` files are gitignored.
 - `.claude/session-notes.md`, `.claude/WORK_LOG.md`, and `.claude/SPRINT.md` are tracked in Git (not gitignored) — cloud containers are ephemeral.
+- `.claude/settings.json` pre-approves edits to those three session files so Claude never prompts the user for permission when updating them. Rules files (`.claude/rules/`) remain protected and will still prompt.
 - `.claude/rules/` IS committed — see `.claude/rules/README.md` for an index of all rules files and when to consult each.
 - All Python scripts handle empty CSVs (headers-only) gracefully without crashing.
