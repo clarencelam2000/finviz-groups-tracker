@@ -21,8 +21,10 @@ jobs:
           pip install -r requirements.txt
           playwright install chromium --with-deps
       - name: Collect snapshot
+        id: collect
         run: python scripts/collect.py
       - name: Verify row counts
+        id: verify
         run: |
           python - <<'EOF'
           import csv, sys
@@ -45,8 +47,65 @@ jobs:
           sys.exit(1 if failed else 0)
           EOF
       - name: Compute deltas
+        id: deltas
         run: python scripts/compute_deltas.py
+      - name: Log fetch result
+        if: always()
+        env:
+          COLLECT_OUTCOME: ${{ steps.collect.outcome }}
+          VERIFY_OUTCOME: ${{ steps.verify.outcome }}
+          DELTAS_OUTCOME: ${{ steps.deltas.outcome }}
+        run: |
+          python - <<'EOF'
+          import csv, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          import pytz
+
+          eastern = pytz.timezone("US/Eastern")
+          run_date = datetime.now(eastern).strftime("%Y-%m-%d")
+          timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+          def count_today_rows(csv_path, run_date):
+              p = Path(csv_path)
+              if not p.exists():
+                  return ""
+              with open(p) as f:
+                  rows = [r for r in csv.DictReader(f) if r.get("date") == run_date]
+              return len(rows)
+
+          sectors_rows = count_today_rows("data/sectors/snapshots.csv", run_date)
+          industries_rows = count_today_rows("data/industries/snapshots.csv", run_date)
+
+          collect_outcome = os.environ.get("COLLECT_OUTCOME", "")
+          verify_outcome = os.environ.get("VERIFY_OUTCOME", "")
+          deltas_outcome = os.environ.get("DELTAS_OUTCOME", "")
+          all_steps = [("collect", collect_outcome), ("verify", verify_outcome), ("deltas", deltas_outcome)]
+          overall = "success" if all(o == "success" for _, o in all_steps if o) else "failure"
+          step_failed = ",".join(s for s, o in all_steps if o and o != "success")
+
+          log_path = Path("data/fetch_log.csv")
+          log_columns = ["timestamp", "run_date", "trigger", "run_id", "outcome",
+                         "sectors_rows", "industries_rows", "step_failed"]
+          write_header = not log_path.exists() or log_path.stat().st_size == 0
+          with open(log_path, "a", newline="", encoding="utf-8") as f:
+              writer = csv.DictWriter(f, fieldnames=log_columns)
+              if write_header:
+                  writer.writeheader()
+              writer.writerow({
+                  "timestamp": timestamp,
+                  "run_date": run_date,
+                  "trigger": os.environ.get("GITHUB_EVENT_NAME", ""),
+                  "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+                  "outcome": overall,
+                  "sectors_rows": sectors_rows,
+                  "industries_rows": industries_rows,
+                  "step_failed": step_failed,
+              })
+          print(f"Logged {overall}: sectors={sectors_rows} industries={industries_rows} step_failed={step_failed!r}")
+          EOF
       - name: Commit and push
+        if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -54,7 +113,7 @@ jobs:
           git diff --cached --quiet || git commit -m "data: snapshot $(TZ=America/New_York date +%Y-%m-%d)"
           git push
       - name: Ping healthcheck
-        if: success()
+        if: steps.collect.outcome == 'success' && steps.verify.outcome == 'success' && steps.deltas.outcome == 'success'
         env:
           HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
         run: |
