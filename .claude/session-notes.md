@@ -7,11 +7,36 @@
 ## Current Status
 
 **Status:** Complete ✅
-**Safe to close:** Yes — all work committed, PRs #7 and #9 merged
-**Waiting on:** Nothing
-**Open threads:** None — GitHub Actions runners confirmed working; PWA live at https://clarencelam2000.github.io/finviz-groups-tracker/
+**Safe to close:** Yes — all work committed, PR #14 drafted and awaiting CI
+**Waiting on:** Nothing (CI is pending; no action needed)
+**Open threads:** None
 
 > Update this block at the end of every working block. Options: `Complete ✅` / `In Progress 🔄` / `Blocked 🔴` / `Needs User Input ⚠️`
+
+---
+
+## Session: 2026-06-10 — PWA small tasks: iOS icon, error display, dead code cleanup
+
+### What was done
+
+Three high-priority small tasks from the sprint backlog completed and merged into PR #14:
+
+- **PWA-2**: Added `<link rel="apple-touch-icon">` in `<head>` with SVG data URI from manifest.json. iOS Safari will now show the icon when user adds app to home screen.
+- **PWA-3**: Fixed `showError()` to display errors on the currently active tab instead of always on Today tab. Now network failures on Movers/Momentum tabs show feedback in the correct location.
+- **PWA-4**: Dead code cleanup:
+  - Removed unused `forceSign` parameter from `fmtPct()` that had unreachable ternary logic
+  - Renamed shadowing `delta` variable to `spots` in `moverCard()` for clarity
+
+### PR & CI status
+- **PR #14** opened as draft: `claude/sprint-small-tasks-en5pkd` → `claude/elegant-babbage-hlxnfy`
+- Changes: 8 additions, 7 deletions in `docs/index.html` only
+- CI status: pending (no checks reported yet; should be clean — HTML-only changes)
+- No review comments
+
+### Session characteristics
+- Focused, short session (3 small tasks from sprint backlog)
+- All work committed and pushed
+- Sprint board updated to mark PWA-2, PWA-3, PWA-4 as Done
 
 ---
 
