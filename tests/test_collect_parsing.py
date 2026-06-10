@@ -1,6 +1,8 @@
 import csv
 import textwrap
+from datetime import datetime
 
+import pytz
 import pytest
 
 import scripts.collect as collect_module
@@ -13,7 +15,42 @@ from scripts.collect import (
     parse_market_cap,
     parse_perf,
     parse_table,
+    trading_date,
 )
+
+# ---------------------------------------------------------------------------
+# trading_date
+# ---------------------------------------------------------------------------
+
+class TestTradingDate:
+    _et = pytz.timezone("US/Eastern")
+
+    def _et_dt(self, date_str, hour, minute=0):
+        return self._et.localize(datetime(
+            int(date_str[:4]), int(date_str[5:7]), int(date_str[8:]),
+            hour, minute,
+        ))
+
+    def test_normal_collection_same_day(self):
+        # 22:00 ET (after market close) → same calendar day
+        assert trading_date(self._et_dt("2026-06-09", 22)) == "2026-06-09"
+
+    def test_collection_at_market_open_boundary(self):
+        # Exactly 9:00 AM ET → same day (market open, data is today's)
+        assert trading_date(self._et_dt("2026-06-09", 9)) == "2026-06-09"
+
+    def test_collection_before_market_open(self):
+        # 2:19 AM ET → previous calendar day (Finviz shows yesterday's session)
+        assert trading_date(self._et_dt("2026-06-09", 2, 19)) == "2026-06-08"
+
+    def test_collection_just_before_boundary(self):
+        # 8:59 AM ET → previous calendar day
+        assert trading_date(self._et_dt("2026-06-09", 8, 59)) == "2026-06-08"
+
+    def test_midnight_collection(self):
+        # Midnight ET → previous calendar day
+        assert trading_date(self._et_dt("2026-06-09", 0)) == "2026-06-08"
+
 
 # ---------------------------------------------------------------------------
 # parse_perf
