@@ -7,9 +7,11 @@
 ## Current Status
 
 **Status:** Complete ✅
-**Safe to close:** Yes — all work committed, PRs #7 and #9 merged
+**Safe to close:** Yes — PRs #10–#13 all merged
 **Waiting on:** Nothing
-**Open threads:** None — GitHub Actions runners confirmed working; PWA live at https://clarencelam2000.github.io/finviz-groups-tracker/
+**Open threads:**
+- Trigger `workflow_dispatch` on Daily Snapshot to confirm ubuntu-22.04 fix end-to-end: https://github.com/clarencelam2000/finviz-groups-tracker/actions/workflows/collect.yml
+- Set up healthchecks.io: create check (26h period, 1h grace) → add ping URL as `HEALTHCHECK_URL` secret in repo Settings → Secrets → Actions
 
 > Update this block at the end of every working block. Options: `Complete ✅` / `In Progress 🔄` / `Blocked 🔴` / `Needs User Input ⚠️`
 
