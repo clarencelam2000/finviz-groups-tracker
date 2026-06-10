@@ -369,7 +369,12 @@ def collect(group_type: str):
             file=sys.stderr,
         )
 
-    append_records(csv_path, records, existing_keys)
+    n_written = append_records(csv_path, records, existing_keys)
+    if n_written == 0:
+        raise RuntimeError(
+            f"[{group_type}] 0 rows written despite {len(records)} records parsed — "
+            "eviction may have failed; aborting to prevent silent data loss."
+        )
 
 
 def main():

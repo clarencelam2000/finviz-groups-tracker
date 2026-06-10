@@ -257,6 +257,29 @@ class TestAppendRecords:
             rows = list(csv.DictReader(f))
         assert rows[0]["name"] == "Energy"
 
+    def test_collect_raises_when_eviction_skipped(self, tmp_path, monkeypatch):
+        """collect() raises RuntimeError if eviction is a no-op and all rows deduplicate."""
+        import scripts.collect as collect_module
+
+        snap_dir = tmp_path / "sectors"
+        snap_dir.mkdir(parents=True)
+        snap_path = snap_dir / "snapshots.csv"
+        ensure_csv(snap_path)
+        # Pre-populate with 2 rows dated 2026-06-09 so append_records returns 0
+        for name in ["Technology", "Energy"]:
+            rec = {col: "" for col in CSV_COLUMNS}
+            rec.update({"date": "2026-06-09", "collected_at": "2026-06-09T06:00:00Z",
+                        "group_type": "sector", "name": name})
+            append_records(snap_path, [rec], set())
+
+        monkeypatch.setattr(collect_module, "evict_today_rows", lambda path, date: 0)
+        monkeypatch.setattr(collect_module, "trading_date", lambda _: "2026-06-09")
+        monkeypatch.setattr(collect_module, "fetch_html", lambda url: MINIMAL_HTML)
+        monkeypatch.setattr(collect_module, "DATA_DIR", tmp_path)
+
+        with pytest.raises(RuntimeError, match="0 rows written"):
+            collect_module.collect("sector")
+
 
 # ---------------------------------------------------------------------------
 # evict_today_rows — last-write-wins
