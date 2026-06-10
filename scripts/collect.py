@@ -260,6 +260,27 @@ def load_existing_keys(csv_path: Path) -> set:
     return keys
 
 
+def evict_today_rows(csv_path: Path, date_str: str) -> int:
+    """Remove all rows for date_str and rewrite atomically. Returns count removed."""
+    if not csv_path.exists():
+        return 0
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        all_rows = list(reader)
+    kept = [r for r in all_rows if r.get("date") != date_str]
+    evicted = len(all_rows) - len(kept)
+    if evicted == 0:
+        return 0
+    tmp = csv_path.with_suffix(".tmp")
+    with open(tmp, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+        writer.writeheader()
+        for row in kept:
+            writer.writerow({col: row.get(col, "") for col in CSV_COLUMNS})
+    tmp.replace(csv_path)
+    return evicted
+
+
 def ensure_csv(csv_path: Path):
     """Create CSV with header row if it doesn't exist."""
     if not csv_path.exists():
@@ -301,13 +322,16 @@ def collect(group_type: str):
     subdir = "sectors" if group_type == "sector" else "industries"
     csv_path = DATA_DIR / subdir / "snapshots.csv"
 
-    ensure_csv(csv_path)
-    existing_keys = load_existing_keys(csv_path)
-
     eastern = pytz.timezone("US/Eastern")
     now_utc = datetime.now(timezone.utc)
     snapshot_date = datetime.now(eastern).strftime("%Y-%m-%d")
     collected_at = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    ensure_csv(csv_path)
+    evicted = evict_today_rows(csv_path, snapshot_date)
+    if evicted:
+        print(f"  Evicted {evicted} existing rows for {snapshot_date} (last-write-wins).")
+    existing_keys = load_existing_keys(csv_path)
 
     print(f"\n[{group_type}] snapshot_date={snapshot_date}")
 
