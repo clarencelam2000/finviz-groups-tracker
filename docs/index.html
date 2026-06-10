@@ -43,6 +43,11 @@
     </div>
   </header>
 
+  <!-- Pull-to-refresh indicator (height animated via JS) -->
+  <div id="pull-indicator" class="overflow-hidden flex items-center justify-center bg-slate-900 text-slate-400 text-xs" style="height:0">
+    <span id="pull-label">↓ Pull to refresh</span>
+  </div>
+
   <!-- Tab bar -->
   <nav id="tab-bar" class="sticky z-20 flex bg-slate-800 border-b border-slate-700 text-sm font-medium"
        style="top: calc(env(safe-area-inset-top) + 58px)">
@@ -607,6 +612,39 @@
     });
 
     document.getElementById('refresh-btn').addEventListener('click', window.__refresh);
+
+    // ── Pull-to-refresh ────────────────────────────────────────────────────
+
+    const PULL_THRESHOLD = 65;
+    let pullStartY = 0;
+    let pullDist   = 0;
+    let pullActive = false;
+
+    document.addEventListener('touchstart', e => {
+      if (window.scrollY === 0 && !state.loading) pullStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    document.addEventListener('touchmove', e => {
+      if (!pullStartY) return;
+      pullDist = e.touches[0].clientY - pullStartY;
+      if (pullDist > 8) {
+        pullActive = true;
+        const indicator = document.getElementById('pull-indicator');
+        indicator.style.height = Math.min(pullDist * 0.45, 40) + 'px';
+        document.getElementById('pull-label').textContent =
+          pullDist >= PULL_THRESHOLD ? '↑ Release to refresh' : '↓ Pull to refresh';
+      }
+    }, { passive: true });
+
+    document.addEventListener('touchend', () => {
+      if (pullActive) {
+        document.getElementById('pull-indicator').style.height = '0px';
+        if (pullDist >= PULL_THRESHOLD && !state.loading) window.__refresh();
+      }
+      pullStartY = 0;
+      pullDist   = 0;
+      pullActive = false;
+    });
 
     // ── Boot ───────────────────────────────────────────────────────────────
 
