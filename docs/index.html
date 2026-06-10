@@ -229,10 +229,22 @@
       let timeStr = '';
       if (collectedAt) {
         try {
-          timeStr = ' · ' + new Date(collectedAt).toLocaleTimeString('en-US', {
+          const d = new Date(collectedAt);
+          // en-CA gives YYYY-MM-DD format — compare PT calendar date against trading date
+          const ptDateISO = d.toLocaleDateString('en-CA', { timeZone: 'America/Los_Angeles' });
+          const ptTime = d.toLocaleTimeString('en-US', {
             timeZone: 'America/Los_Angeles',
             hour: 'numeric', minute: '2-digit', hour12: true,
-          }) + ' PT';
+          });
+          if (ptDateISO === dateStr) {
+            timeStr = ' · ' + ptTime + ' PT';
+          } else {
+            // PT date differs from trading date (e.g. 06:00 UTC = 11pm PT the night before)
+            const ptDateFmt = d.toLocaleDateString('en-US', {
+              timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric',
+            });
+            timeStr = ' · ' + ptDateFmt + ', ' + ptTime + ' PT';
+          }
         } catch(e) {}
       }
 
@@ -295,21 +307,22 @@
 
     // ── Data loading ───────────────────────────────────────────────────────
 
-    function fetchCSV(url) {
+    function fetchCSV(url, cacheBust = false) {
+      const finalUrl = cacheBust ? `${url}?_=${Date.now()}` : url;
       return new Promise((resolve, reject) => {
-        Papa.parse(url, {
+        Papa.parse(finalUrl, {
           download: true, header: true, skipEmptyLines: true,
           complete: resolve, error: reject,
         });
       });
     }
 
-    async function loadGroup(group) {
-      if (state.data[group].snap !== null) return; // already cached
+    async function loadGroup(group, force = false) {
+      if (!force && state.data[group].snap !== null) return; // already cached
       try {
         const [snapRes, deltaRes] = await Promise.all([
-          fetchCSV(URLS[group].snap),
-          fetchCSV(URLS[group].delta),
+          fetchCSV(URLS[group].snap, force),
+          fetchCSV(URLS[group].delta, force),
         ]);
         state.data[group].snap  = getLatest(snapRes.data);
         state.data[group].delta = getLatest(deltaRes.data);
@@ -679,9 +692,9 @@
       }
     }
 
-    async function loadAndRender() {
+    async function loadAndRender(force = false) {
       setLoading(true);
-      await Promise.all([loadGroup('sectors'), loadGroup('industries')]);
+      await Promise.all([loadGroup('sectors', force), loadGroup('industries', force)]);
       setLoading(false);
       render();
     }
@@ -741,10 +754,11 @@
 
     // Expose refresh globally for the retry button
     window.__refresh = function() {
+      if (state.loading) return;
       state.data.sectors    = { snap: null, delta: null };
       state.data.industries = { snap: null, delta: null };
       document.getElementById('last-updated').textContent = 'Loading…';
-      loadAndRender();
+      loadAndRender(true); // force=true bypasses browser/CDN cache
     };
 
     document.querySelectorAll('.tab-btn').forEach(btn =>

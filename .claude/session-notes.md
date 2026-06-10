@@ -7,7 +7,7 @@
 ## Current Status
 
 **Status:** Complete ✅
-**Safe to close:** Yes — all work committed, PRs #17 and #18 merged
+**Safe to close:** Yes — PR open for timezone + refresh fixes, no open threads
 **Waiting on:** Nothing
 **Open threads:** None
 
@@ -40,7 +40,23 @@ No `main` branch exists — default is `claude/elegant-babbage-hlxnfy`. Cron and
 
 ---
 
-## Session: 2026-06-10 — Composite score insights: rank_agreement + Strength tab (PR #17, merged)
+## Session: 2026-06-10 — PWA bug fixes: timestamp timezone + refresh cache-bust
+
+### What was done
+
+Two user-reported bugs in `docs/index.html` fixed:
+
+**Bug 1 — "Last updated" PT time showed 11pm when data collected at 5pm PT**
+- Root cause: `collected_at` is stored UTC (`2026-06-09T06:19:08Z`). Converting to PT gives 11:19 PM PDT on June 8, but the label showed `"2026-06-09 · 11:19 PM PT"` which users read as "June 9 at 11pm" (confusing / seemingly future).
+- Fix in `freshnessLabel()`: compare PT calendar date of `collected_at` against the trading date. If they differ (cross-midnight), prepend the PT date: shows `"Jun 8, 11:19 PM PT"` instead of just `"11:19 PM PT"`. Normal cron collections (22:00 UTC = 3pm PDT, same calendar day) are unaffected.
+
+**Bug 2 — Refresh button only worked once then seemed frozen**
+- Root cause: `fetchCSV` used PapaParse `download: true` (XHR) without cache-busting. raw.githubusercontent.com CDN caches responses; subsequent refreshes within the cache TTL returned identical data, making the UI appear unchanged. No re-entrancy guard either.
+- Fix: added `force` parameter through `fetchCSV` → `loadGroup` → `loadAndRender`. When `force=true`, appends `?_=${Date.now()}` to bypass browser/CDN cache. Added `if (state.loading) return` guard to `window.__refresh` to prevent concurrent calls.
+
+---
+
+
 
 ### What was done
 
