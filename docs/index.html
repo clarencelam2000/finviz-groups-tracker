@@ -73,6 +73,11 @@
           <option value="perf_day">Day %</option>
         </select>
       </div>
+      <div id="search-container" class="mb-3 hidden">
+        <input id="search-input" type="search" inputmode="search" autocomplete="off" spellcheck="false"
+               placeholder="Filter industries…"
+               class="w-full bg-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm border border-slate-600 placeholder-slate-500 outline-none focus:border-slate-500">
+      </div>
       <div id="today-cards" class="space-y-2"></div>
     </section>
 
@@ -610,6 +615,8 @@
       savePrefs();
       renderToday();
     });
+
+    document.getElementById('search-input').addEventListener('input', () => renderToday());
 
     document.getElementById('refresh-btn').addEventListener('click', window.__refresh);
 
