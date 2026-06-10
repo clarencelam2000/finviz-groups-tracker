@@ -129,7 +129,47 @@
         industries: { snap: null, delta: null },
       },
       loading: false,
+      expandedName: null,
     };
+
+    // ── Preferences (localStorage) ─────────────────────────────────────────
+
+    const PREFS_KEY = 'fvt_prefs_v1';
+
+    function savePrefs() {
+      try {
+        localStorage.setItem(PREFS_KEY, JSON.stringify({
+          group: state.group, sortMetric: state.sortMetric, lookback: state.lookback,
+        }));
+      } catch(e) {}
+    }
+
+    function loadPrefs() {
+      try {
+        const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+        if (['sectors','industries'].includes(p.group)) state.group = p.group;
+        if (['perf_ytd','perf_week','perf_month','perf_day'].includes(p.sortMetric)) state.sortMetric = p.sortMetric;
+        if (['7d','14d','30d'].includes(p.lookback)) state.lookback = p.lookback;
+      } catch(e) {}
+    }
+
+    function initUIFromState() {
+      document.querySelectorAll('.group-toggle-btn').forEach(btn => {
+        const active = btn.dataset.group === state.group;
+        btn.classList.toggle('bg-slate-600', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('text-slate-400', !active);
+      });
+      document.querySelectorAll('.lookback-btn').forEach(btn => {
+        const active = btn.dataset.window === state.lookback;
+        btn.classList.toggle('bg-slate-600', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('text-slate-400', !active);
+      });
+      document.getElementById('sort-metric').value = state.sortMetric;
+      const sc = document.getElementById('search-container');
+      if (sc) sc.classList.toggle('hidden', state.group !== 'industries');
+    }
 
     // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -442,7 +482,7 @@
 
     async function loadAndRender() {
       setLoading(true);
-      await loadGroup(state.group);
+      await Promise.all([loadGroup('sectors'), loadGroup('industries')]);
       setLoading(false);
       render();
     }
@@ -468,6 +508,11 @@
 
     function switchGroup(group) {
       state.group = group;
+      savePrefs();
+      const sc = document.getElementById('search-container');
+      const si = document.getElementById('search-input');
+      if (sc) sc.classList.toggle('hidden', group !== 'industries');
+      if (si && group !== 'industries') si.value = '';
       // Update all group toggles (Today, Movers, Momentum each have one)
       document.querySelectorAll('.group-toggle-btn').forEach(btn => {
         const active = btn.dataset.group === group;
@@ -484,6 +529,7 @@
 
     function switchLookback(win) {
       state.lookback = win;
+      savePrefs();
       document.querySelectorAll('.lookback-btn').forEach(btn => {
         const active = btn.dataset.window === win;
         btn.classList.toggle('bg-slate-600', active);
@@ -512,6 +558,7 @@
 
     document.getElementById('sort-metric').addEventListener('change', e => {
       state.sortMetric = e.target.value;
+      savePrefs();
       renderToday();
     });
 
@@ -519,6 +566,8 @@
 
     // ── Boot ───────────────────────────────────────────────────────────────
 
+    loadPrefs();
+    initUIFromState();
     loadAndRender();
 
     if ('serviceWorker' in navigator) {
