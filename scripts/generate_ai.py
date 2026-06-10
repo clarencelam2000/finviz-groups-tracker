@@ -239,22 +239,31 @@ def generate_for_group(model, group_type: str, date_str: str) -> dict:
     result = {}
 
     print(f"  [{group_type}] Generating briefing...")
-    result["briefing"] = model.generate_content(
-        build_briefing_prompt(group_type, snap_df, delta_df, date_str)
-    ).text.strip()
+    try:
+        result["briefing"] = model.generate_content(
+            build_briefing_prompt(group_type, snap_df, delta_df, date_str)
+        ).text.strip()
+    except Exception as e:
+        print(f"  [{group_type}] Briefing failed: {e}")
 
     if group_type == "sector":
         print(f"  [{group_type}] Generating rotation phase...")
-        phase_text = model.generate_content(
-            build_phase_prompt(snap_df, delta_df, date_str)
-        ).text.strip()
-        result["rotation_phase"] = parse_phase_response(phase_text)
+        try:
+            phase_text = model.generate_content(
+                build_phase_prompt(snap_df, delta_df, date_str)
+            ).text.strip()
+            result["rotation_phase"] = parse_phase_response(phase_text)
+        except Exception as e:
+            print(f"  [{group_type}] Phase generation failed: {e}")
 
         print(f"  [{group_type}] Generating watchlist...")
-        watchlist_text = model.generate_content(
-            build_watchlist_prompt(snap_df, delta_df, date_str)
-        ).text.strip()
-        result["watchlist"] = parse_watchlist_response(watchlist_text)
+        try:
+            watchlist_text = model.generate_content(
+                build_watchlist_prompt(snap_df, delta_df, date_str)
+            ).text.strip()
+            result["watchlist"] = parse_watchlist_response(watchlist_text)
+        except Exception as e:
+            print(f"  [{group_type}] Watchlist generation failed: {e}")
 
     return result
 

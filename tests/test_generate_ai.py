@@ -33,10 +33,9 @@ def delta_df():
     return pd.DataFrame({
         "date": [pd.Timestamp("2026-06-10").date()] * 3,
         "name": ["Energy", "Technology", "Healthcare"],
-        "rank_ytd":         [1.0, 3.0, 2.0],
+        "rank_ytd":          [1.0, 3.0, 2.0],
         "rank_ytd_delta_7d": [5.0, -3.0, 1.0],
-        "momentum_score":   [0.85, 0.30, 0.60],
-        "rank_agreement":   [0.90, 0.40, 0.70],
+        "momentum_score":    [0.85, 0.30, 0.60],
     })
 
 
