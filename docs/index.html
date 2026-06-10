@@ -30,7 +30,7 @@
           style="padding-top: calc(env(safe-area-inset-top) + 0.6rem)">
     <div class="flex items-center justify-between">
       <div>
-        <h1 class="text-lg font-bold text-white leading-tight">Finviz Tracker</h1>
+        <h1 class="text-lg font-bold text-white leading-tight cursor-pointer" id="title-scroll-top">Finviz Tracker</h1>
         <p id="last-updated" class="text-xs text-slate-400">Loading…</p>
       </div>
       <button id="refresh-btn"
@@ -825,9 +825,14 @@
     const PULL_THRESHOLD  = 65;
     const pullIndicator   = document.getElementById('pull-indicator');
     const pullLabelEl     = document.getElementById('pull-label');
-    let pullStartY = 0;
-    let pullDist   = 0;
-    let pullActive = false;
+    let pullStartY   = 0;
+    let pullDist     = 0;
+    let pullActive   = false;
+    let pullVibrated = false;
+
+    document.getElementById('title-scroll-top').addEventListener('click', () => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
 
     document.addEventListener('touchstart', e => {
       if (window.scrollY === 0 && !state.loading) pullStartY = e.touches[0].clientY;
@@ -839,8 +844,12 @@
       if (pullDist > 8) {
         pullActive = true;
         pullIndicator.style.height = Math.min(pullDist * 0.45, 40) + 'px';
-        pullLabelEl.textContent =
-          pullDist >= PULL_THRESHOLD ? '↑ Release to refresh' : '↓ Pull to refresh';
+        const overThreshold = pullDist >= PULL_THRESHOLD;
+        pullLabelEl.textContent = overThreshold ? '↑ Release to refresh' : '↓ Pull to refresh';
+        if (overThreshold && !pullVibrated) {
+          navigator.vibrate?.(40);
+          pullVibrated = true;
+        }
       }
     }, { passive: true });
 
@@ -849,9 +858,10 @@
         pullIndicator.style.height = '0px';
         if (pullDist >= PULL_THRESHOLD && !state.loading) window.__refresh();
       }
-      pullStartY = 0;
-      pullDist   = 0;
-      pullActive = false;
+      pullStartY   = 0;
+      pullDist     = 0;
+      pullActive   = false;
+      pullVibrated = false;
     });
 
     // ── Boot ───────────────────────────────────────────────────────────────
