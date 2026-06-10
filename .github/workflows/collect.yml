@@ -53,3 +53,11 @@ jobs:
           git add data/
           git diff --cached --quiet || git commit -m "data: snapshot $(TZ=America/New_York date +%Y-%m-%d)"
           git push
+      - name: Ping healthcheck
+        if: success()
+        env:
+          HEALTHCHECK_URL: ${{ secrets.HEALTHCHECK_URL }}
+        run: |
+          # Silently skip if secret not configured; otherwise ping to confirm success.
+          # Setup: healthchecks.io → New Check → period 26h → copy URL → repo Settings → Secrets → HEALTHCHECK_URL
+          [ -z "$HEALTHCHECK_URL" ] || curl -fsS --retry 3 "$HEALTHCHECK_URL" > /dev/null
