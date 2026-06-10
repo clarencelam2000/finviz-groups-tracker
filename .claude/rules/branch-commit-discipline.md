@@ -176,9 +176,24 @@ Entry format:
 - [ ] `session-notes.md` Current Status block updated (status, safe-to-close, blocking-on)
 - [ ] `WORK_LOG.md` updated if a milestone was reached
 - [ ] `SPRINT.md` board reflects current task states
-- [ ] Draft PR open if any new commits were pushed
+- [ ] **PR open for every commit on the branch** — run `git log --oneline origin/claude/elegant-babbage-hlxnfy..HEAD` to confirm nothing is stranded
 - [ ] `git status` clean — no untracked files containing work
 - [ ] Tests pass: `python3 -m pytest tests/ -q`
+
+### Session-notes commit ordering trap
+
+**Never push session-notes commits to a feature branch after its last PR is already merged.**
+Commits pushed after the last PR is merged are stranded — they sit on the feature branch but have no path into the base branch.
+
+**Rule:** Update `session-notes.md`, `WORK_LOG.md`, and `SPRINT.md` *before* merging the last PR of a session. Either:
+- Include the notes update in the last substantive PR (commit it, then merge), or
+- Open an immediate follow-up chore PR for the notes commit before ending the session
+
+To check for stranded commits at any time:
+```bash
+git log --oneline origin/claude/elegant-babbage-hlxnfy..HEAD
+```
+An empty result = nothing stranded. Any output = open a PR.
 
 ---
 
