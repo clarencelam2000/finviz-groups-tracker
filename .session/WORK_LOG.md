@@ -95,6 +95,20 @@ Also captured today's near-close data (4:00 PM ET, market close) via manual work
 
 ---
 
+## 2026-06-11 — Workflow logging, monitoring, and AI partial completion fix (PR #35, merged)
+
+Three interrelated problems solved in one PR:
+
+**1. AI partial completion bug fixed.** `generate_ai.py` previously skipped re-running if any output file existed for today — even if it only had `sectors.briefing` (which is exactly what happened today: 429 rate-limit interrupted after the first of 4 API calls). The idempotency check now validates all 4 expected fields (`sectors.briefing`, `sectors.rotation_phase`, `sectors.watchlist`, `industries.briefing`). Incomplete files trigger incremental retry: only missing fields are regenerated, preserving what already succeeded.
+
+**2. Structured AI run log.** Every `generate_ai.py` execution now appends to `data/ai_run_log.jsonl` with: per-field outcomes (`ok`/`error`/`skipped`/`no_data`), per-field wall time, rate-limit hit count, total API calls, full error text, and overall outcome. Analogous to CloudWatch structured logs.
+
+**3. Workflow monitoring.** `fetch_log.csv` gains two new columns (`ai_outcome`, `ai_fields_missing`). Schema migration runs automatically on the first workflow execution after the update. The PWA pipeline history section now shows an AI status diamond (◆ green = complete, amber = partial, grey = skipped) per run row. `data/ai_run_summary.json` is a per-run sidecar that collect.yml reads to populate the new columns.
+
+41 new tests added; 122 total passing.
+
+---
+
 ## Open Questions / Future Ideas
 
 - [ ] Confirm Finviz data finalization time (probe intraday)

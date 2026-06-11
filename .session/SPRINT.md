@@ -86,6 +86,7 @@ _(nothing)_
 
 | # | Task | Date |
 |---|------|------|
+| MON-1 | Workflow logging + monitoring: AI partial completion fix, `ai_run_log.jsonl`, `fetch_log.csv` AI columns, PWA pipeline diamond (PR #35) | 2026-06-11 |
 | AI-0 | Server-side AI pipeline: daily briefing + rotation phase + watchlist (PR #25) | 2026-06-10 |
 | INS-1 | Sustained Strength / "Evergreen" list (Streamlit + PWA) | 2026-06-10 |
 | INS-2 | `rank_agreement` metric in deltas.csv | 2026-06-10 |

@@ -7,11 +7,55 @@
 ## Current Status
 
 **Status:** Complete ✅
-**Safe to close:** Yes — PR #25 merged, session notes committed, no open threads
-**Waiting on:** `GEMINI_API_KEY` secret to be added to GitHub Actions (Settings → Secrets → Actions). Once added, the nightly cron will start generating `data/ai/YYYY-MM-DD.json` automatically.
+**Safe to close:** Yes — PR #35 merged, session notes committed, no open threads
+**Waiting on:** Tonight's cron will complete `data/ai/2026-06-11.json` (3 fields missing from today's partial run: `sectors.rotation_phase`, `sectors.watchlist`, `industries.briefing`). Check `data/ai_run_log.jsonl` afterward for the first real structured log entry.
 **Open threads:** None
 
 ---
+
+---
+
+## Session: 2026-06-11 — Workflow logging, monitoring, and AI partial completion fix (PR #35, merged)
+
+### What was done
+
+**Problem that triggered this session:**
+`generate_ai.py` ran on 2026-06-11, generated `sectors.briefing`, then hit 429 rate-limiting and failed the remaining 3 calls. It wrote a partial `data/ai/2026-06-11.json`. On re-run, the old idempotency check (`output_path.exists()`) bailed immediately — partial content was locked in permanently.
+
+**Three changes shipped:**
+
+1. **AI partial completion fix (`scripts/generate_ai.py`):**
+   - Idempotency check changed from "file exists" → "file is complete" (all 4 expected fields: `sectors.briefing`, `sectors.rotation_phase`, `sectors.watchlist`, `industries.briefing`)
+   - `_is_complete(data)` and `_missing_fields(data)` added as pure functions
+   - Incremental retry: loads existing partial file, passes per-group data to `generate_for_group` which skips already-present fields and regenerates only missing ones
+   - Per-field outcomes tracked in module-level `_field_log` (reset at start of each `main()` call)
+
+2. **Structured AI run log (`data/ai_run_log.jsonl` + `data/ai_run_summary.json`):**
+   - Every run appends to `ai_run_log.jsonl`: timestamp, run_id, trigger, per-field status (`ok`/`error`/`skipped`/`no_data`), per-field elapsed seconds, rate-limit hit count, total API calls, full error text
+   - `ai_run_summary.json` is a per-run sidecar (overwritten each run) consumed by collect.yml
+
+3. **Workflow monitoring (`collect.yml` + `docs/index.html`):**
+   - AI step gets `id: ai_gen`; outcome passed to Log fetch result step
+   - `fetch_log.csv` gains `ai_outcome` and `ai_fields_missing` columns (schema migration runs automatically)
+   - PWA pipeline history rows show ◆ green (complete), amber (partial with inline field names), grey (skipped)
+
+**41 new tests; 122 total passing.**
+
+Key CI fix: new `main()` tests mock both `sys.modules["google"]` AND `sys.modules["google.genai"]` — CI test env lacks google-genai, old test masked this because it accepted any `SystemExit(0)`.
+
+5 reviewer findings addressed: `"step_skipped"` → `"skipped"` string fix (HIGH), `no_data` fields in `fields_missing` (MEDIUM), correct `skipped` vs `no_data` logging for existing fields, plus two dead-code removals.
+
+### Next steps (prioritized)
+
+1. **~2026-06-16**: 7d deltas arrive → INS-4 (Momentum Velocity), INS-5 (Daily Brief card), INS-6 (Momentum Score Heatmap) all unblock
+2. **AI-1** (Anomaly Detection): flag rank deltas >2σ from 14-day rolling window. Gate on 14+ days of history.
+3. **INS-7** (Sector Breadth): % of industries in a sector in top half. L effort (mostly mapping work).
+
+### Key decisions
+
+- Incremental retry (not reset) for partial AI files — preserves successful API calls, avoids quota waste
+- "Complete" = all 4 fields non-empty (not just file presence)
+- `ai_run_summary.json` in `data/` root (not `data/ai/`) so collect.yml's relative paths work
 
 ---
 
