@@ -155,11 +155,11 @@ A working block ends when you push a commit, finish a feature slice, or are abou
 
 ### Always do before ending
 
-> These three files are pre-approved in `.claude/settings.json` — no permission prompt from the user is needed to edit them.
+> These three files live in `.session/` (not `.claude/`) so Claude can edit them without permission prompts.
 
-**`.claude/session-notes.md`** — overwrite the "Current Status" block at the top (see template in that file), then append a new session section below. The status block is what the next Claude reads first to decide whether to proceed or wait.
+**`.session/session-notes.md`** — overwrite the "Current Status" block at the top (see template in that file), then append a new session section below. The status block is what the next Claude reads first to decide whether to proceed or wait.
 
-**`.claude/WORK_LOG.md`** — append a milestone entry when:
+**`.session/WORK_LOG.md`** — append a milestone entry when:
 - A new script or feature works end-to-end
 - A significant data milestone is hit
 - A dashboard tab or visualization is added
@@ -171,7 +171,7 @@ Entry format:
 <1–3 sentences: what now works, any caveats>
 ```
 
-**`.claude/SPRINT.md`** — move completed tasks to Done, add new tasks to Backlog if discovered.
+**`.session/SPRINT.md`** — move completed tasks to Done, add new tasks to Backlog if discovered.
 
 ### Session-end checklist
 - [ ] All working changes committed and pushed

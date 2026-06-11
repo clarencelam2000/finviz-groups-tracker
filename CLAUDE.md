@@ -132,10 +132,10 @@ python scripts/export_db.py
 
 > These are instructions for future Claude instances, not the user. The user runs Claude Code on the web (code.claude.com), not the CLI.
 
-- **Starting a session**: This `CLAUDE.md` auto-loads at session start. Also read `.claude/session-notes.md` immediately — it has the last session's findings, blockers, and next steps. Start the session by summarizing what's in the notes so the user knows you're oriented.
+- **Starting a session**: This `CLAUDE.md` auto-loads at session start. Also read `.session/session-notes.md` immediately — it has the last session's findings, blockers, and next steps. Start the session by summarizing what's in the notes so the user knows you're oriented.
 - **Sync first**: Run `git fetch origin && git log --oneline origin/claude/elegant-babbage-hlxnfy -5` before doing anything else — GitHub Actions may have pushed data overnight, and you need the latest base before branching or editing. See `.claude/rules/branch-commit-discipline.md` for the full session-start checklist.
-- **Ending a session**: Before the user closes, update `.claude/session-notes.md` with: what was done, what was discovered, any blockers, and the prioritized next steps. Be specific — vague notes are useless next session.
-- **Work log**: Update `.claude/WORK_LOG.md` with any milestones hit (first successful scrape, first week of data, dashboard features added).
+- **Ending a session**: Before the user closes, update `.session/session-notes.md` with: what was done, what was discovered, any blockers, and the prioritized next steps. Be specific — vague notes are useless next session.
+- **Work log**: Update `.session/WORK_LOG.md` with any milestones hit (first successful scrape, first week of data, dashboard features added).
 - **Cannot run collect.py here**: The Claude Code cloud environment blocks Playwright's CDN and outbound access to finviz.com. `collect.py` must run **locally** on the user's machine or via **GitHub Actions**. Do not attempt `playwright install` or `python scripts/collect.py` in a cloud session — it will fail.
 - **Subagents for analysis**: Use subagents (Agent tool) for exploratory pandas/data work to avoid bloating the main context window.
 - **Context pressure**: Use `/compact` when nearing limits. Prioritize keeping SPEC.md decisions and script logic in context; data rows are expendable.
@@ -146,7 +146,6 @@ python scripts/export_db.py
 
 - Playwright must be installed with `playwright install chromium` (or `playwright install chromium --with-deps` in CI).
 - The `exports/` directory and `*.db` / `*.parquet` files are gitignored.
-- `.claude/session-notes.md`, `.claude/WORK_LOG.md`, and `.claude/SPRINT.md` are tracked in Git (not gitignored) — cloud containers are ephemeral.
-- `.claude/settings.json` pre-approves edits to those three session files so Claude never prompts the user for permission when updating them. Rules files (`.claude/rules/`) remain protected and will still prompt.
+- `.session/session-notes.md`, `.session/WORK_LOG.md`, and `.session/SPRINT.md` are tracked in Git (not gitignored) — cloud containers are ephemeral. They live in `.session/` (not `.claude/`) so Claude can edit them without permission prompts.
 - `.claude/rules/` IS committed — see `.claude/rules/README.md` for an index of all rules files and when to consult each.
 - All Python scripts handle empty CSVs (headers-only) gracefully without crashing.
