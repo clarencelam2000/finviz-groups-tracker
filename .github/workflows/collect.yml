@@ -88,6 +88,7 @@ jobs:
         id: deltas
         run: python scripts/compute_deltas.py
       - name: Generate AI analysis
+        id: ai_gen
         if: steps.deltas.outcome == 'success'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -98,9 +99,10 @@ jobs:
           COLLECT_OUTCOME: ${{ steps.collect.outcome }}
           VERIFY_OUTCOME: ${{ steps.verify.outcome }}
           DELTAS_OUTCOME: ${{ steps.deltas.outcome }}
+          AI_GEN_OUTCOME: ${{ steps.ai_gen.outcome }}
         run: |
           python - <<'EOF'
-          import csv, os
+          import csv, json, os
           from datetime import datetime, timezone
           from pathlib import Path
           import pytz
@@ -123,16 +125,51 @@ jobs:
           collect_outcome = os.environ.get("COLLECT_OUTCOME", "")
           verify_outcome = os.environ.get("VERIFY_OUTCOME", "")
           deltas_outcome = os.environ.get("DELTAS_OUTCOME", "")
+          ai_gen_outcome = os.environ.get("AI_GEN_OUTCOME", "")
           all_steps = [("collect", collect_outcome), ("verify", verify_outcome), ("deltas", deltas_outcome)]
           overall = "success" if all(o == "success" for _, o in all_steps if o) else "failure"
           step_failed = ",".join(s for s, o in all_steps if o and o != "success")
 
-          log_path = Path("data/fetch_log.csv")
-          log_columns = ["timestamp", "run_date", "trigger", "run_id", "outcome",
+          # Read AI run summary written by generate_ai.py (absent if AI step was skipped).
+          ai_outcome = ""
+          ai_fields_missing = ""
+          summary_path = Path("data/ai_run_summary.json")
+          if summary_path.exists():
+              try:
+                  with open(summary_path) as f:
+                      s = json.load(f)
+                  ai_outcome = s.get("outcome", "")
+                  ai_fields_missing = s.get("fields_missing", "")
+              except Exception:
+                  pass
+          elif ai_gen_outcome == "skipped":
+              ai_outcome = "step_skipped"
+
+          LOG_COLUMNS = ["timestamp", "run_date", "trigger", "run_id", "outcome",
+                         "sectors_rows", "industries_rows", "step_failed",
+                         "ai_outcome", "ai_fields_missing"]
+          OLD_COLUMNS = ["timestamp", "run_date", "trigger", "run_id", "outcome",
                          "sectors_rows", "industries_rows", "step_failed"]
+
+          log_path = Path("data/fetch_log.csv")
+
+          # Migrate schema if file exists with old columns (no ai_* columns).
+          if log_path.exists() and log_path.stat().st_size > 0:
+              with open(log_path, newline="", encoding="utf-8") as f:
+                  header = next(csv.reader(f), [])
+              if "ai_outcome" not in header:
+                  with open(log_path, newline="", encoding="utf-8") as f:
+                      old_rows = list(csv.DictReader(f))
+                  with open(log_path, "w", newline="", encoding="utf-8") as f:
+                      w = csv.DictWriter(f, fieldnames=LOG_COLUMNS, extrasaction="ignore")
+                      w.writeheader()
+                      for row in old_rows:
+                          w.writerow(row)
+                  print("Migrated fetch_log.csv to include ai_outcome / ai_fields_missing columns.")
+
           write_header = not log_path.exists() or log_path.stat().st_size == 0
           with open(log_path, "a", newline="", encoding="utf-8") as f:
-              writer = csv.DictWriter(f, fieldnames=log_columns)
+              writer = csv.DictWriter(f, fieldnames=LOG_COLUMNS, extrasaction="ignore")
               if write_header:
                   writer.writeheader()
               writer.writerow({
@@ -144,8 +181,13 @@ jobs:
                   "sectors_rows": sectors_rows,
                   "industries_rows": industries_rows,
                   "step_failed": step_failed,
+                  "ai_outcome": ai_outcome,
+                  "ai_fields_missing": ai_fields_missing,
               })
-          print(f"Logged {overall}: sectors={sectors_rows} industries={industries_rows} step_failed={step_failed!r}")
+          print(
+              f"Logged {overall}: sectors={sectors_rows} industries={industries_rows} "
+              f"step_failed={step_failed!r} ai={ai_outcome!r}"
+          )
           EOF
       - name: Commit and push
         if: always()

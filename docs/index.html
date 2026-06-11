@@ -382,9 +382,18 @@
           : '';
         const trigger = r.trigger === 'schedule' ? 'cron' : (r.trigger || '—');
         const failed = r.step_failed ? ` · ✗ ${r.step_failed}` : '';
+        const aiDot = r.ai_outcome === 'complete' ? '<span class="text-green-400">◆</span>'
+          : r.ai_outcome === 'partial' ? '<span class="text-amber-400">◆</span>'
+          : r.ai_outcome === 'skipped' ? '<span class="text-slate-600">◆</span>'
+          : r.ai_outcome === 'no_key' ? '<span class="text-slate-600">◆</span>'
+          : '';
+        const aiLabel = r.ai_outcome === 'partial' && r.ai_fields_missing
+          ? ` AI⚠ ${r.ai_fields_missing.split(',').map(f => f.replace(/^(sectors|industries)\./, '')).join(', ')}`
+          : '';
         return `<div class="flex items-start gap-2 text-xs text-slate-400">
           <span class="mt-px">${dot}</span>
-          <span>${ts} · ${trigger}${rowCounts}${failed}</span>
+          <span>${ts} · ${trigger}${rowCounts}${failed}${aiLabel ? `<span class="text-amber-400">${aiLabel}</span>` : ''}</span>
+          ${aiDot ? `<span class="mt-px ml-auto">${aiDot}</span>` : ''}
         </div>`;
       }).join('');
     }
