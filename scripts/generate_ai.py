@@ -8,6 +8,7 @@ Run after compute_deltas.py. Exits 0 silently if GEMINI_API_KEY is not set.
 import json
 import os
 import sys
+import time
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -18,6 +19,10 @@ DATA_DIR = BASE_DIR / "data"
 AI_DIR = DATA_DIR / "ai"
 
 GEMINI_MODEL = "gemini-flash-latest"
+
+# Free tier: 5 requests/minute. Enforce >=13s between calls to stay safely under.
+_INTER_CALL_DELAY = 13
+_last_api_call: float = 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -227,10 +232,43 @@ def parse_watchlist_response(text: str) -> list:
 
 
 # ---------------------------------------------------------------------------
+# API call helper
+# ---------------------------------------------------------------------------
+
+def _call_api(client, prompt: str, max_retries: int = 3) -> str:
+    """Call Gemini with rate-limit spacing and exponential-backoff retry."""
+    global _last_api_call
+    elapsed = time.monotonic() - _last_api_call
+    if elapsed < _INTER_CALL_DELAY:
+        time.sleep(_INTER_CALL_DELAY - elapsed)
+
+    for attempt in range(max_retries + 1):
+        _last_api_call = time.monotonic()
+        try:
+            response = client.models.generate_content(
+                model=GEMINI_MODEL, contents=prompt
+            )
+            return response.text.strip()
+        except Exception as e:
+            err_str = str(e)
+            is_quota = (
+                "429" in err_str
+                or "quota" in err_str.lower()
+                or "resource_exhausted" in err_str.lower()
+            )
+            if is_quota and attempt < max_retries:
+                wait = 30 * (2 ** attempt)  # 30s, 60s, 120s
+                print(f"    Rate limited, waiting {wait}s (attempt {attempt + 1}/{max_retries + 1})...")
+                time.sleep(wait)
+                continue
+            raise
+
+
+# ---------------------------------------------------------------------------
 # Generation
 # ---------------------------------------------------------------------------
 
-def generate_for_group(model, group_type: str, date_str: str) -> dict:
+def generate_for_group(client, group_type: str, date_str: str) -> dict:
     snap_df = load_latest_snapshot(group_type)
     delta_df = load_latest_delta(group_type)
 
@@ -242,27 +280,23 @@ def generate_for_group(model, group_type: str, date_str: str) -> dict:
 
     print(f"  [{group_type}] Generating briefing...")
     try:
-        result["briefing"] = model.generate_content(
-            build_briefing_prompt(group_type, snap_df, delta_df, date_str)
-        ).text.strip()
+        result["briefing"] = _call_api(
+            client, build_briefing_prompt(group_type, snap_df, delta_df, date_str)
+        )
     except Exception as e:
         print(f"  [{group_type}] Briefing failed: {e}")
 
     if group_type == "sector":
         print(f"  [{group_type}] Generating rotation phase...")
         try:
-            phase_text = model.generate_content(
-                build_phase_prompt(snap_df, delta_df, date_str)
-            ).text.strip()
+            phase_text = _call_api(client, build_phase_prompt(snap_df, delta_df, date_str))
             result["rotation_phase"] = parse_phase_response(phase_text)
         except Exception as e:
             print(f"  [{group_type}] Phase generation failed: {e}")
 
         print(f"  [{group_type}] Generating watchlist...")
         try:
-            watchlist_text = model.generate_content(
-                build_watchlist_prompt(snap_df, delta_df, date_str)
-            ).text.strip()
+            watchlist_text = _call_api(client, build_watchlist_prompt(snap_df, delta_df, date_str))
             result["watchlist"] = parse_watchlist_response(watchlist_text)
         except Exception as e:
             print(f"  [{group_type}] Watchlist generation failed: {e}")
@@ -281,13 +315,12 @@ def main():
         sys.exit(0)
 
     try:
-        import google.generativeai as genai
+        import google.genai as genai
     except ImportError:
-        print("google-generativeai not installed. Run: pip install google-generativeai")
+        print("google-genai not installed. Run: pip install google-genai")
         sys.exit(0)
 
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel(GEMINI_MODEL)
+    client = genai.Client(api_key=api_key)
 
     today = date.today().isoformat()
     AI_DIR.mkdir(parents=True, exist_ok=True)
@@ -307,7 +340,7 @@ def main():
 
     for group_type in ("sector", "industry"):
         key = "sectors" if group_type == "sector" else "industries"
-        output[key] = generate_for_group(model, group_type, today)
+        output[key] = generate_for_group(client, group_type, today)
 
     has_content = any(output.get(k) for k in ("sectors", "industries"))
     if not has_content:
