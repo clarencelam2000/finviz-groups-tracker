@@ -224,6 +224,68 @@ def test_parse_watchlist_missing_pipe():
 
 
 # ---------------------------------------------------------------------------
+# _call_api
+# ---------------------------------------------------------------------------
+
+def _make_client(responses):
+    """Return a fake client whose generate_content() yields responses in order.
+    Each entry is either a string (success) or an exception instance (raise)."""
+    from unittest.mock import MagicMock
+    call_count = {"n": 0}
+
+    def _generate_content(**_kwargs):
+        idx = call_count["n"]
+        call_count["n"] += 1
+        r = responses[idx]
+        if isinstance(r, Exception):
+            raise r
+        mock_resp = MagicMock()
+        mock_resp.text = r
+        return mock_resp
+
+    client = MagicMock()
+    client.models.generate_content.side_effect = _generate_content
+    return client
+
+
+def test_call_api_happy_path(monkeypatch):
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    client = _make_client(["  hello world  "])
+    result = generate_ai._call_api(client, "prompt")
+    assert result == "hello world"
+
+
+def test_call_api_retries_on_quota_error(monkeypatch):
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    sleep_calls = []
+    monkeypatch.setattr("time.sleep", lambda s: sleep_calls.append(s))
+    client = _make_client([Exception("429 quota exceeded"), "ok"])
+    result = generate_ai._call_api(client, "prompt")
+    assert result == "ok"
+    assert len(sleep_calls) >= 1  # slept before retry
+
+
+def test_call_api_reraises_non_quota_exception_immediately(monkeypatch):
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    client = _make_client([ValueError("unrelated error")])
+    with pytest.raises(ValueError, match="unrelated error"):
+        generate_ai._call_api(client, "prompt")
+    assert client.models.generate_content.call_count == 1
+
+
+def test_call_api_reraises_after_max_retries(monkeypatch):
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    quota_err = Exception("429 quota exceeded")
+    client = _make_client([quota_err] * 4)  # fail all 4 attempts (0..3)
+    with pytest.raises(Exception, match="429"):
+        generate_ai._call_api(client, "prompt", max_retries=3)
+    assert client.models.generate_content.call_count == 4  # initial + 3 retries
+
+
+# ---------------------------------------------------------------------------
 # main exits gracefully without API key
 # ---------------------------------------------------------------------------
 

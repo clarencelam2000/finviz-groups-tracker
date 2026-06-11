@@ -9,4 +9,4 @@ streamlit==1.35.0
 notebook==7.2.0
 ipykernel==6.29.5
 pandas-market-calendars==4.4.1
-google-genai
+google-genai>=2.8.0,<3.0.0
