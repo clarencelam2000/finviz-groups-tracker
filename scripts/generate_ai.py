@@ -440,14 +440,17 @@ def main():
     _reset_tracking()
     run_start = time.monotonic()
 
-    # Use the latest snapshot date as the AI file date so PWA can match them.
-    # date.today() breaks when the workflow runs after midnight UTC (market date
-    # is still "yesterday" from the PWA's perspective).
+    # Use the latest snapshot date as the AI file name so the PWA can match them.
+    # The workflow starts at 22:00 UTC but the AI step can run past midnight UTC
+    # (due to rate-limit retries), making date.today() return the next calendar
+    # day while the snapshot CSV still holds the prior market date.
     snap_df = load_latest_snapshot("sector")
+    snap_date = None
     if not snap_df.empty and "date" in snap_df.columns:
-        today = snap_df["date"].max().isoformat()
-    else:
-        today = date.today().isoformat()
+        d = snap_df["date"].max()
+        if pd.notna(d):
+            snap_date = d.isoformat()
+    today = snap_date if snap_date else date.today().isoformat()
 
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
