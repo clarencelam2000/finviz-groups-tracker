@@ -299,6 +299,84 @@ def test_main_exits_zero_without_api_key(monkeypatch, tmp_path):
     assert exc_info.value.code == 0
 
 
+def _write_snap_csv(sectors_dir, snap_date):
+    import csv
+    snap_csv = sectors_dir / "snapshots.csv"
+    with open(snap_csv, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["date", "name", "perf_week", "perf_ytd"])
+        writer.writeheader()
+        writer.writerow({"date": snap_date, "name": "Energy", "perf_week": "1.0", "perf_ytd": "5.0"})
+
+
+def test_main_uses_snapshot_date_not_today(monkeypatch, tmp_path):
+    """AI file name must match the latest snapshot date, not date.today().
+
+    The workflow starts at 22:00 UTC but rate-limit retries can push the AI
+    step past midnight UTC, making date.today() return the next calendar day
+    while the snapshot CSV still holds the prior market date.
+    """
+    snap_date = "2026-06-10"  # market date, intentionally not today
+    sectors_dir = tmp_path / "sectors"
+    sectors_dir.mkdir(parents=True)
+    _write_snap_csv(sectors_dir, snap_date)
+
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+
+    artifact_calls = []
+    monkeypatch.setattr(generate_ai, "_write_run_artifacts",
+                        lambda *args: artifact_calls.append(args))
+
+    with pytest.raises(SystemExit):
+        generate_ai.main()
+
+    assert artifact_calls, "expected _write_run_artifacts to be called"
+    assert artifact_calls[0][3] == snap_date, (
+        f"AI date should be snapshot date {snap_date!r}, got {artifact_calls[0][3]!r}"
+    )
+
+
+def test_main_falls_back_to_today_when_no_snapshot(monkeypatch, tmp_path):
+    """With no snapshot data, date falls back to date.today() — no crash."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    # Simulate missing snapshot by returning empty DataFrame
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: pd.DataFrame())
+
+    artifact_calls = []
+    monkeypatch.setattr(generate_ai, "_write_run_artifacts",
+                        lambda *args: artifact_calls.append(args))
+
+    with pytest.raises(SystemExit):
+        generate_ai.main()
+
+    assert artifact_calls, "expected _write_run_artifacts to be called"
+    date_used = artifact_calls[0][3]
+    # Should be a valid YYYY-MM-DD string (date.today() fallback)
+    assert len(date_used) == 10 and date_used[4] == "-" and date_used[7] == "-"
+
+
+def test_main_falls_back_to_today_when_snapshot_dates_all_invalid(monkeypatch, tmp_path):
+    """Snapshot with all-unparseable dates → load_latest_snapshot returns empty → fallback, no crash."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    # load_latest_snapshot returns empty when all dates are NaT (filters to latest == NaT → empty)
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: pd.DataFrame())
+
+    artifact_calls = []
+    monkeypatch.setattr(generate_ai, "_write_run_artifacts",
+                        lambda *args: artifact_calls.append(args))
+
+    with pytest.raises(SystemExit):
+        generate_ai.main()
+
+    date_used = artifact_calls[0][3]
+    assert len(date_used) == 10 and date_used[4] == "-" and date_used[7] == "-"
+
+
 # ---------------------------------------------------------------------------
 # skip-trap: empty results must not write a file
 # ---------------------------------------------------------------------------
