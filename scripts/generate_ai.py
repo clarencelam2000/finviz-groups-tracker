@@ -24,6 +24,11 @@ GEMINI_MODEL = "gemini-flash-latest"
 _INTER_CALL_DELAY = 13
 _last_api_call: float = 0.0
 
+# Run-level tracking (reset by main() at start of each run).
+_api_call_count: int = 0
+_rate_limit_hits: int = 0
+_field_log: dict = {}  # "sectors.briefing" -> {status, was_new, elapsed_seconds?, error?}
+
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -60,6 +65,55 @@ def load_latest_delta(group_type: str) -> pd.DataFrame:
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
     latest = df["date"].max()
     return df[df["date"] == latest].copy()
+
+
+# ---------------------------------------------------------------------------
+# Run tracking helpers
+# ---------------------------------------------------------------------------
+
+def _reset_tracking() -> None:
+    global _api_call_count, _rate_limit_hits, _field_log
+    _api_call_count = 0
+    _rate_limit_hits = 0
+    _field_log = {}
+
+
+def _record_field(key: str, status: str, *, was_new: bool = True,
+                  elapsed: float = 0.0, error: str = "") -> None:
+    entry = {"status": status, "was_new": was_new}
+    if was_new and elapsed:
+        entry["elapsed_seconds"] = round(elapsed, 1)
+    if error:
+        entry["error"] = error
+    _field_log[key] = entry
+
+
+def _is_complete(data: dict) -> bool:
+    """Return True if all expected AI fields are present and non-empty."""
+    s = data.get("sectors", {})
+    i = data.get("industries", {})
+    return (
+        bool(s.get("briefing"))
+        and isinstance(s.get("rotation_phase"), dict)
+        and bool(s.get("watchlist"))
+        and bool(i.get("briefing"))
+    )
+
+
+def _missing_fields(data: dict) -> list:
+    """Return dotted field names that are absent or empty in data."""
+    missing = []
+    s = data.get("sectors", {})
+    i = data.get("industries", {})
+    if not s.get("briefing"):
+        missing.append("sectors.briefing")
+    if not isinstance(s.get("rotation_phase"), dict):
+        missing.append("sectors.rotation_phase")
+    if not s.get("watchlist"):
+        missing.append("sectors.watchlist")
+    if not i.get("briefing"):
+        missing.append("industries.briefing")
+    return missing
 
 
 # ---------------------------------------------------------------------------
@@ -237,11 +291,12 @@ def parse_watchlist_response(text: str) -> list:
 
 def _call_api(client, prompt: str, max_retries: int = 3) -> str:
     """Call Gemini with rate-limit spacing and exponential-backoff retry."""
-    global _last_api_call
+    global _last_api_call, _api_call_count, _rate_limit_hits
     elapsed = time.monotonic() - _last_api_call
     if elapsed < _INTER_CALL_DELAY:
         time.sleep(_INTER_CALL_DELAY - elapsed)
 
+    _api_call_count += 1
     for attempt in range(max_retries + 1):
         _last_api_call = time.monotonic()
         try:
@@ -257,6 +312,7 @@ def _call_api(client, prompt: str, max_retries: int = 3) -> str:
                 or "resource_exhausted" in err_str.lower()
             )
             if is_quota and attempt < max_retries:
+                _rate_limit_hits += 1
                 wait = 30 * (2 ** attempt)  # 30s, 60s, 120s
                 print(f"    Rate limited, waiting {wait}s (attempt {attempt + 1}/{max_retries + 1})...")
                 time.sleep(wait)
@@ -268,40 +324,112 @@ def _call_api(client, prompt: str, max_retries: int = 3) -> str:
 # Generation
 # ---------------------------------------------------------------------------
 
-def generate_for_group(client, group_type: str, date_str: str) -> dict:
+def generate_for_group(client, group_type: str, date_str: str,
+                       existing=None) -> dict:
+    if existing is None:
+        existing = {}
+
+    key_prefix = "sectors" if group_type == "sector" else "industries"
     snap_df = load_latest_snapshot(group_type)
     delta_df = load_latest_delta(group_type)
 
     if snap_df.empty:
         print(f"  [{group_type}] No snapshot data — skipping.")
-        return {}
+        expected = ["briefing"] + (["rotation_phase", "watchlist"] if group_type == "sector" else [])
+        for field in expected:
+            fkey = f"{key_prefix}.{field}"
+            if fkey not in _field_log:
+                # Field already present in existing → skipped; absent → no_data
+                status = "skipped" if field in result else "no_data"
+                _record_field(fkey, status, was_new=False)
+        return result
 
-    result = {}
+    result = dict(existing)
 
-    print(f"  [{group_type}] Generating briefing...")
-    try:
-        result["briefing"] = _call_api(
-            client, build_briefing_prompt(group_type, snap_df, delta_df, date_str)
-        )
-    except Exception as e:
-        print(f"  [{group_type}] Briefing failed: {e}")
+    # Briefing
+    fkey = f"{key_prefix}.briefing"
+    if "briefing" in result:
+        _record_field(fkey, "skipped", was_new=False)
+    else:
+        print(f"  [{group_type}] Generating briefing...")
+        t0 = time.monotonic()
+        try:
+            result["briefing"] = _call_api(
+                client, build_briefing_prompt(group_type, snap_df, delta_df, date_str)
+            )
+            _record_field(fkey, "ok", was_new=True, elapsed=time.monotonic() - t0)
+        except Exception as e:
+            print(f"  [{group_type}] Briefing failed: {e}")
+            _record_field(fkey, "error", was_new=True, elapsed=time.monotonic() - t0, error=str(e))
 
     if group_type == "sector":
-        print(f"  [{group_type}] Generating rotation phase...")
-        try:
-            phase_text = _call_api(client, build_phase_prompt(snap_df, delta_df, date_str))
-            result["rotation_phase"] = parse_phase_response(phase_text)
-        except Exception as e:
-            print(f"  [{group_type}] Phase generation failed: {e}")
+        fkey = "sectors.rotation_phase"
+        if "rotation_phase" in result:
+            _record_field(fkey, "skipped", was_new=False)
+        else:
+            print(f"  [{group_type}] Generating rotation phase...")
+            t0 = time.monotonic()
+            try:
+                phase_text = _call_api(client, build_phase_prompt(snap_df, delta_df, date_str))
+                result["rotation_phase"] = parse_phase_response(phase_text)
+                _record_field(fkey, "ok", was_new=True, elapsed=time.monotonic() - t0)
+            except Exception as e:
+                print(f"  [{group_type}] Phase generation failed: {e}")
+                _record_field(fkey, "error", was_new=True, elapsed=time.monotonic() - t0, error=str(e))
 
-        print(f"  [{group_type}] Generating watchlist...")
-        try:
-            watchlist_text = _call_api(client, build_watchlist_prompt(snap_df, delta_df, date_str))
-            result["watchlist"] = parse_watchlist_response(watchlist_text)
-        except Exception as e:
-            print(f"  [{group_type}] Watchlist generation failed: {e}")
+        fkey = "sectors.watchlist"
+        if "watchlist" in result:
+            _record_field(fkey, "skipped", was_new=False)
+        else:
+            print(f"  [{group_type}] Generating watchlist...")
+            t0 = time.monotonic()
+            try:
+                watchlist_text = _call_api(client, build_watchlist_prompt(snap_df, delta_df, date_str))
+                result["watchlist"] = parse_watchlist_response(watchlist_text)
+                _record_field(fkey, "ok", was_new=True, elapsed=time.monotonic() - t0)
+            except Exception as e:
+                print(f"  [{group_type}] Watchlist generation failed: {e}")
+                _record_field(fkey, "error", was_new=True, elapsed=time.monotonic() - t0, error=str(e))
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Run artifact writing
+# ---------------------------------------------------------------------------
+
+def _write_run_artifacts(outcome: str, was_incremental: bool,
+                         run_elapsed: float, date_str: str) -> None:
+    """Append one entry to ai_run_log.jsonl and overwrite ai_run_summary.json."""
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    log_entry = {
+        "timestamp": timestamp,
+        "run_id": os.environ.get("GITHUB_RUN_ID", ""),
+        "trigger": os.environ.get("GITHUB_EVENT_NAME", ""),
+        "date": date_str,
+        "model": GEMINI_MODEL,
+        "outcome": outcome,
+        "was_incremental": was_incremental,
+        "elapsed_seconds": round(run_elapsed, 1),
+        "api_calls": _api_call_count,
+        "rate_limit_hits": _rate_limit_hits,
+        "fields": dict(_field_log),
+    }
+    try:
+        log_path = DATA_DIR / "ai_run_log.jsonl"
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(log_entry) + "\n")
+    except Exception as e:
+        print(f"  [log] Failed to write ai_run_log.jsonl: {e}")
+
+    # Sidecar for collect.yml: fields that failed or had no snapshot data
+    error_fields = [k for k, v in _field_log.items() if v.get("status") in ("error", "no_data")]
+    summary = {"outcome": outcome, "fields_missing": ",".join(error_fields)}
+    try:
+        with open(DATA_DIR / "ai_run_summary.json", "w", encoding="utf-8") as f:
+            json.dump(summary, f)
+    except Exception as e:
+        print(f"  [log] Failed to write ai_run_summary.json: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -309,48 +437,82 @@ def generate_for_group(client, group_type: str, date_str: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def main():
+    _reset_tracking()
+    run_start = time.monotonic()
+    today = date.today().isoformat()
+
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         print("GEMINI_API_KEY not set — skipping AI generation.")
+        _write_run_artifacts("no_key", False, time.monotonic() - run_start, today)
         sys.exit(0)
 
     try:
         import google.genai as genai
     except ImportError:
         print("google-genai not installed. Run: pip install google-genai")
+        _write_run_artifacts("no_key", False, time.monotonic() - run_start, today)
         sys.exit(0)
 
     client = genai.Client(api_key=api_key)
 
-    today = date.today().isoformat()
     AI_DIR.mkdir(parents=True, exist_ok=True)
     output_path = AI_DIR / f"{today}.json"
 
-    if output_path.exists():
-        print(f"AI analysis for {today} already exists — skipping.")
-        sys.exit(0)
+    was_incremental = False
+    existing_output = {}
 
-    print(f"Generating AI analysis for {today}...")
+    if output_path.exists():
+        try:
+            with open(output_path, encoding="utf-8") as f:
+                existing_output = json.load(f)
+        except Exception:
+            existing_output = {}
+
+        if _is_complete(existing_output):
+            print(f"AI analysis for {today} already exists and is complete — skipping.")
+            _write_run_artifacts("skipped", False, time.monotonic() - run_start, today)
+            sys.exit(0)
+        else:
+            missing = _missing_fields(existing_output)
+            print(
+                f"AI analysis for {today} is incomplete "
+                f"({len(missing)} field(s) missing: {', '.join(missing)}) — "
+                f"regenerating missing fields."
+            )
+            was_incremental = True
+
+    print(f"{'Completing' if was_incremental else 'Generating'} AI analysis for {today}...")
 
     output = {
         "date": today,
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": existing_output.get(
+            "generated_at",
+            datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        ),
         "model": GEMINI_MODEL,
     }
 
     for group_type in ("sector", "industry"):
         key = "sectors" if group_type == "sector" else "industries"
-        output[key] = generate_for_group(client, group_type, today)
+        output[key] = generate_for_group(
+            client, group_type, today, existing=existing_output.get(key, {})
+        )
 
     has_content = any(output.get(k) for k in ("sectors", "industries"))
-    if not has_content:
+    if not was_incremental and not has_content:
         print("No AI content generated (all API calls failed) — skipping file write so next run can retry.")
+        _write_run_artifacts("failed", False, time.monotonic() - run_start, today)
         sys.exit(0)
 
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(output, f, indent=2, ensure_ascii=False)
 
-    print(f"Written to {output_path}")
+    action = "Updated" if was_incremental else "Written"
+    print(f"{action} {output_path}")
+
+    outcome = "complete" if _is_complete(output) else "partial"
+    _write_run_artifacts(outcome, was_incremental, time.monotonic() - run_start, today)
 
 
 if __name__ == "__main__":

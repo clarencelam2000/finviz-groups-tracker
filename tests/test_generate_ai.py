@@ -3,6 +3,7 @@ Tests for scripts/generate_ai.py pure functions.
 No real filesystem I/O, no real API calls.
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -289,8 +290,10 @@ def test_call_api_reraises_after_max_retries(monkeypatch):
 # main exits gracefully without API key
 # ---------------------------------------------------------------------------
 
-def test_main_exits_zero_without_api_key(monkeypatch):
+def test_main_exits_zero_without_api_key(monkeypatch, tmp_path):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
     with pytest.raises(SystemExit) as exc_info:
         generate_ai.main()
     assert exc_info.value.code == 0
@@ -305,15 +308,258 @@ def test_main_does_not_write_file_when_all_calls_fail(monkeypatch, tmp_path):
     from unittest.mock import MagicMock
     monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
     monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
-    monkeypatch.setattr(generate_ai, "generate_for_group", lambda *_: {})
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "generate_for_group", lambda *_, **__: {})
     # Inject a fake google.genai so the lazy import inside main() succeeds.
-    # Setting sys.modules["google.genai"] is sufficient — Python returns the
-    # cached entry without importing the parent package.
     mock_genai = MagicMock()
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
     with pytest.raises(SystemExit) as exc_info:
         generate_ai.main()
     assert exc_info.value.code == 0
-    # No JSON file should have been written — allows the next run to retry
-    assert not any((tmp_path / "ai").glob("*.json"))
+    # No dated JSON file should have been written — allows the next run to retry
+    assert not any((tmp_path / "ai").glob("????-??-??.json"))
+
+
+# ---------------------------------------------------------------------------
+# _is_complete
+# ---------------------------------------------------------------------------
+
+def test_is_complete_returns_true_for_full_data():
+    data = {
+        "sectors": {
+            "briefing": "Some text",
+            "rotation_phase": {"label": "Defensive", "reasoning": "..."},
+            "watchlist": [{"name": "Energy", "thesis": "Strong"}],
+        },
+        "industries": {"briefing": "Industry text"},
+    }
+    assert generate_ai._is_complete(data) is True
+
+
+def test_is_complete_returns_false_for_missing_briefing():
+    data = {
+        "sectors": {
+            "rotation_phase": {"label": "Defensive", "reasoning": "..."},
+            "watchlist": [{"name": "Energy", "thesis": "Strong"}],
+        },
+        "industries": {"briefing": "Industry text"},
+    }
+    assert generate_ai._is_complete(data) is False
+
+
+def test_is_complete_returns_false_for_empty_watchlist():
+    data = {
+        "sectors": {
+            "briefing": "Some text",
+            "rotation_phase": {"label": "Defensive", "reasoning": "..."},
+            "watchlist": [],
+        },
+        "industries": {"briefing": "Industry text"},
+    }
+    assert generate_ai._is_complete(data) is False
+
+
+def test_is_complete_returns_false_for_missing_industries_briefing():
+    data = {
+        "sectors": {
+            "briefing": "Some text",
+            "rotation_phase": {"label": "Defensive", "reasoning": "..."},
+            "watchlist": [{"name": "Energy", "thesis": "Strong"}],
+        },
+        "industries": {},
+    }
+    assert generate_ai._is_complete(data) is False
+
+
+def test_is_complete_returns_false_for_actual_partial_file():
+    # Mirrors the real data/ai/2026-06-11.json: only sectors.briefing present
+    data = {
+        "sectors": {"briefing": "Defensive sectors leading..."},
+        "industries": {},
+    }
+    assert generate_ai._is_complete(data) is False
+
+
+# ---------------------------------------------------------------------------
+# _missing_fields
+# ---------------------------------------------------------------------------
+
+def test_missing_fields_empty_data():
+    missing = generate_ai._missing_fields({})
+    assert set(missing) == {
+        "sectors.briefing", "sectors.rotation_phase",
+        "sectors.watchlist", "industries.briefing",
+    }
+
+
+def test_missing_fields_partial_file():
+    data = {
+        "sectors": {"briefing": "Some text"},
+        "industries": {},
+    }
+    missing = generate_ai._missing_fields(data)
+    assert "sectors.rotation_phase" in missing
+    assert "sectors.watchlist" in missing
+    assert "industries.briefing" in missing
+    assert "sectors.briefing" not in missing
+
+
+def test_missing_fields_complete_data():
+    data = {
+        "sectors": {
+            "briefing": "text",
+            "rotation_phase": {"label": "Defensive", "reasoning": "..."},
+            "watchlist": [{"name": "Energy", "thesis": "..."}],
+        },
+        "industries": {"briefing": "text"},
+    }
+    assert generate_ai._missing_fields(data) == []
+
+
+# ---------------------------------------------------------------------------
+# generate_for_group skips already-present fields
+# ---------------------------------------------------------------------------
+
+def test_generate_for_group_skips_existing_briefing(monkeypatch):
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    generate_ai._reset_tracking()
+
+    # Supply existing briefing so the API should NOT be called for it
+    existing = {"briefing": "Already written briefing"}
+    client = _make_client(["Phase response", "Watchlist response"])
+
+    # Use monkeypatch to avoid real data loading
+    snap = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "perf_week": [2.0], "perf_month": [3.0], "perf_ytd": [5.0],
+    })
+    delta = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "rank_ytd": [1.0], "rank_ytd_delta_7d": [2.0], "momentum_score": [0.8],
+    })
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
+
+    result = generate_ai.generate_for_group(client, "sector", "2026-06-11", existing=existing)
+
+    # Briefing was pre-existing — should NOT have been regenerated
+    assert result["briefing"] == "Already written briefing"
+    # API was called for rotation_phase and watchlist only (2 calls, not 3)
+    assert client.models.generate_content.call_count == 2
+    # Field log should show briefing as skipped
+    assert generate_ai._field_log["sectors.briefing"]["status"] == "skipped"
+    assert generate_ai._field_log["sectors.briefing"]["was_new"] is False
+
+
+# ---------------------------------------------------------------------------
+# main() incremental completion
+# ---------------------------------------------------------------------------
+
+def test_main_completes_partial_file(monkeypatch, tmp_path):
+    """Re-running with a partial file fills in missing fields without re-calling for existing ones."""
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+
+    # Write the partial file (mirrors real 2026-06-11.json)
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+    (tmp_path / "ai").mkdir(parents=True)
+    partial = {
+        "date": today,
+        "generated_at": "2026-06-11T04:30:50Z",
+        "model": "gemini-flash-latest",
+        "sectors": {"briefing": "Existing briefing"},
+        "industries": {},
+    }
+    with open(tmp_path / "ai" / f"{today}.json", "w") as f:
+        json.dump(partial, f)
+
+    # generate_for_group returns new content; verify briefing is NOT regenerated for sectors
+    call_log = []
+    def fake_generate(client, group_type, date_str, existing=None):
+        call_log.append((group_type, list(existing.keys()) if existing else []))
+        if group_type == "sector":
+            return {
+                "briefing": existing.get("briefing", ""),  # preserve
+                "rotation_phase": {"label": "Defensive", "reasoning": "test"},
+                "watchlist": [{"name": "Energy", "thesis": "ok"}],
+            }
+        return {"briefing": "Industry briefing"}
+
+    monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
+    # Mock both parent and child so import succeeds even without google-genai installed.
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    generate_ai.main()  # completes normally (no sys.exit on success)
+
+    # File should now be complete
+    with open(tmp_path / "ai" / f"{today}.json") as f:
+        result = json.load(f)
+
+    assert result["sectors"]["briefing"] == "Existing briefing"  # preserved
+    assert isinstance(result["sectors"]["rotation_phase"], dict)
+    assert result["industries"]["briefing"] == "Industry briefing"
+
+    # generate_for_group was called with the existing sector data
+    sector_call = next(c for c in call_log if c[0] == "sector")
+    assert "briefing" in sector_call[1]  # existing keys passed in
+
+    # Sidecar was written
+    assert (tmp_path / "ai_run_summary.json").exists()
+    with open(tmp_path / "ai_run_summary.json") as f:
+        summary = json.load(f)
+    assert summary["outcome"] == "complete"
+
+
+def test_main_skips_already_complete_file(monkeypatch, tmp_path):
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+    (tmp_path / "ai").mkdir(parents=True)
+    complete = {
+        "date": today,
+        "generated_at": "2026-06-11T04:30:50Z",
+        "model": "gemini-flash-latest",
+        "sectors": {
+            "briefing": "text",
+            "rotation_phase": {"label": "Defensive", "reasoning": "..."},
+            "watchlist": [{"name": "Energy", "thesis": "ok"}],
+        },
+        "industries": {"briefing": "Industry text"},
+    }
+    with open(tmp_path / "ai" / f"{today}.json", "w") as f:
+        json.dump(complete, f)
+
+    generate_called = []
+    monkeypatch.setattr(generate_ai, "generate_for_group",
+                        lambda *_, **__: generate_called.append(True) or {})
+    # Mock both parent and child so import succeeds even without google-genai installed.
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    with pytest.raises(SystemExit) as exc_info:
+        generate_ai.main()
+    assert exc_info.value.code == 0
+    # generate_for_group must NOT have been called — file was already complete
+    assert generate_called == []
+
+    with open(tmp_path / "ai_run_summary.json") as f:
+        summary = json.load(f)
+    assert summary["outcome"] == "skipped"
