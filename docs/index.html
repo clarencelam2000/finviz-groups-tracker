@@ -50,12 +50,13 @@
   </div>
 
   <!-- Tab bar -->
-  <nav id="tab-bar" class="sticky z-20 flex bg-slate-800 border-b border-slate-700 text-sm font-medium"
+  <nav id="tab-bar" class="sticky z-20 flex bg-slate-800 border-b border-slate-700 text-xs font-medium"
        style="top: calc(env(safe-area-inset-top) + 58px)">
-    <button class="tab-btn flex-1 py-3 tab-active" data-tab="today">Today</button>
-    <button class="tab-btn flex-1 py-3 text-slate-400" data-tab="movers">Movers</button>
-    <button class="tab-btn flex-1 py-3 text-slate-400" data-tab="momentum">Momentum</button>
-    <button class="tab-btn flex-1 py-3 text-slate-400" data-tab="strength">Strength</button>
+    <button class="tab-btn flex-1 py-2.5 tab-active" data-tab="today">Today</button>
+    <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="movers">Movers</button>
+    <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="momentum">Momentum</button>
+    <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="strength">Strength</button>
+    <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="ai">AI</button>
   </nav>
 
   <main>
@@ -145,6 +146,15 @@
       <div id="strength-list" class="space-y-2"></div>
     </section>
 
+    <!-- TAB: AI Insights -->
+    <section id="tab-ai" class="px-3 pt-3 pb-24 hidden">
+      <div class="flex bg-slate-800 rounded-lg p-1 mb-3">
+        <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-group="sectors">Sectors</button>
+        <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-group="industries">Industries</button>
+      </div>
+      <div id="ai-content" class="space-y-3"></div>
+    </section>
+
   </main>
 
   <script>
@@ -171,6 +181,7 @@
         industries: { snap: null, delta: null },
       },
       fetchLog: null,
+      aiData: null,
       loading: false,
       expandedName: null,
     };
@@ -301,6 +312,15 @@
       return rows.some(r => r[col] !== '' && r[col] !== undefined && !isNaN(parseFloat(r[col])));
     }
 
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function skeleton(n) {
       return Array.from({ length: n }, () => `
         <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 animate-pulse flex gap-3 items-center">
@@ -362,6 +382,17 @@
       }
     }
 
+    async function loadAI(dateStr, force = false) {
+      if (!force && state.aiData !== null) return;
+      const url = `${BASE}/ai/${dateStr}.json${force ? `?_=${Date.now()}` : ''}`;
+      try {
+        const res = await fetch(url);
+        state.aiData = res.ok ? await res.json() : {};
+      } catch (e) {
+        state.aiData = {};
+      }
+    }
+
     function renderPipeline() {
       const section = document.getElementById('pipeline-section');
       const logs = state.fetchLog;
@@ -390,13 +421,14 @@
     }
 
     function showError(msg) {
-      ['today-cards', 'movers-content', 'movers-placeholder', 'momentum-list', 'strength-list'].forEach(id => {
+      ['today-cards', 'movers-content', 'movers-placeholder', 'momentum-list', 'strength-list', 'ai-content'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.innerHTML = '';
       });
       const targetId = state.tab === 'today' ? 'today-cards'
         : state.tab === 'movers' ? 'movers-content'
         : state.tab === 'strength' ? 'strength-list'
+        : state.tab === 'ai' ? 'ai-content'
         : 'momentum-list';
       document.getElementById(targetId).innerHTML = `
         <div class="rounded-xl p-5 bg-red-900/30 border border-red-700/50 text-center">
@@ -715,6 +747,96 @@
       }
     }
 
+    // ── Render: AI Insights ────────────────────────────────────────────────
+
+    function renderAI() {
+      const container = document.getElementById('ai-content');
+
+      if (state.aiData === null) {
+        container.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">Loading…</p>';
+        return;
+      }
+
+      const data = state.aiData;
+
+      if (!data || Object.keys(data).length === 0) {
+        container.innerHTML = `
+          <div class="rounded-xl p-6 bg-slate-800 border border-slate-700 text-center">
+            <div class="text-3xl mb-3">🤖</div>
+            <p class="text-white font-semibold mb-1">AI analysis not yet available</p>
+            <p class="text-slate-400 text-sm">Generated automatically after each evening data collection.</p>
+            <p class="text-slate-500 text-xs mt-2">Requires GEMINI_API_KEY in GitHub Actions secrets.</p>
+          </div>`;
+        return;
+      }
+
+      const sectors    = data.sectors    || {};
+      const industries = data.industries || {};
+      let html = '';
+
+      // Generated-at caption
+      if (data.generated_at) {
+        const genFmt = new Date(data.generated_at).toLocaleString('en-US', {
+          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+          timeZone: 'America/New_York', hour12: true,
+        }) + ' ET';
+        html += `<p class="text-xs text-slate-500 mb-4">Generated ${genFmt}${data.model ? ' · ' + escapeHtml(data.model) : ''}</p>`;
+      }
+
+      // Rotation phase (sectors-only concept; always shown when present)
+      const phase = sectors.rotation_phase;
+      if (phase && phase.label) {
+        const phaseMap = {
+          'Early Cycle': { icon: '🟢', bg: 'bg-emerald-900/40', border: 'border-emerald-600/50', text: 'text-emerald-300' },
+          'Mid Cycle':   { icon: '🟡', bg: 'bg-yellow-900/40',  border: 'border-yellow-600/50',  text: 'text-yellow-300' },
+          'Late Cycle':  { icon: '🟠', bg: 'bg-orange-900/40',  border: 'border-orange-600/50',  text: 'text-orange-300' },
+          'Defensive':   { icon: '🔵', bg: 'bg-sky-900/40',     border: 'border-sky-600/50',     text: 'text-sky-300'    },
+        };
+        const pm = phaseMap[phase.label] || { icon: '⚪', bg: 'bg-slate-800', border: 'border-slate-600', text: 'text-slate-300' };
+        html += `
+          <div class="rounded-xl p-4 ${pm.bg} border ${pm.border} mb-3">
+            <div class="text-sm font-bold ${pm.text} mb-1">${pm.icon} Rotation Phase: ${escapeHtml(phase.label)}</div>
+            ${phase.reasoning ? `<div class="text-xs text-slate-300 italic leading-relaxed">${escapeHtml(phase.reasoning)}</div>` : ''}
+          </div>`;
+      }
+
+      // Watchlist (sectors-only concept; always shown when present)
+      const watchlist = sectors.watchlist || [];
+      if (watchlist.length > 0) {
+        html += `
+          <div class="rounded-xl p-4 bg-slate-800 border border-slate-700 mb-3">
+            <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Watchlist — Top Setups</div>
+            ${watchlist.map((item, i) => `
+              <div class="${i < watchlist.length - 1 ? 'pb-3 mb-3 border-b border-slate-700' : ''}">
+                <div class="text-sm font-medium text-white">${i + 1}. ${escapeHtml(item.name)}</div>
+                <div class="text-xs text-slate-300 mt-0.5 leading-relaxed">${escapeHtml(item.thesis)}</div>
+              </div>`).join('')}
+          </div>`;
+      }
+
+      // Daily briefing — group-toggle-aware
+      const groupLabel = state.group === 'sectors' ? 'Sectors' : 'Industries';
+      const briefingGroup = state.group === 'sectors' ? sectors : industries;
+      const briefing = briefingGroup.briefing || '';
+
+      html += `<div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Daily Briefing — ${groupLabel}</div>`;
+      if (briefing) {
+        const paras = briefing.split(/\n\n+/).filter(Boolean);
+        html += `<div class="rounded-xl p-4 bg-slate-800 border border-slate-700 text-sm text-slate-200 leading-relaxed space-y-3">
+          ${paras.map(p => `<p>${escapeHtml(p).replace(/\n/g, ' ')}</p>`).join('')}
+        </div>`;
+      } else {
+        html += `<div class="rounded-xl p-4 bg-slate-800 border border-slate-700 text-center">
+          <p class="text-slate-500 text-sm">No ${groupLabel.toLowerCase()} briefing for this date.</p>
+          ${state.group === 'industries' && sectors.briefing
+            ? '<p class="text-slate-500 text-xs mt-1">Switch to Sectors for the available briefing.</p>'
+            : ''}
+        </div>`;
+      }
+
+      container.innerHTML = html;
+    }
+
     // ── Master render ──────────────────────────────────────────────────────
 
     function render() {
@@ -722,6 +844,7 @@
       if (state.tab === 'movers')   renderMovers();
       if (state.tab === 'momentum') renderMomentum();
       if (state.tab === 'strength') renderStrength();
+      if (state.tab === 'ai')       renderAI();
     }
 
     function setLoading(on) {
@@ -734,6 +857,7 @@
         document.getElementById('losers-list').innerHTML  = skeleton(3);
         document.getElementById('momentum-list').innerHTML = skeleton(5);
         document.getElementById('strength-list').innerHTML = skeleton(5);
+        document.getElementById('ai-content').innerHTML = skeleton(3);
       }
     }
 
@@ -744,6 +868,10 @@
         loadFetchLog(force),
         new Promise(r => setTimeout(r, minMs)),
       ]);
+      // AI JSON is keyed by the latest data date — derive it after CSVs are loaded
+      const snap = state.data.sectors.snap || [];
+      const latestDate = snap.length > 0 ? snap[0].date : new Date().toISOString().slice(0, 10);
+      await loadAI(latestDate, force);
       setLoading(false);
       render();
     }
@@ -807,6 +935,7 @@
       state.data.sectors    = { snap: null, delta: null };
       state.data.industries = { snap: null, delta: null };
       state.fetchLog = null;
+      state.aiData = null;
       document.getElementById('last-updated').textContent = 'Loading…';
       loadAndRender(true, 600); // force=true bypasses cache; 600ms min keeps spinner visible
     };
