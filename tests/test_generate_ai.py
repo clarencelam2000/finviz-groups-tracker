@@ -244,11 +244,11 @@ def test_main_does_not_write_file_when_all_calls_fail(monkeypatch, tmp_path):
     monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
     monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
     monkeypatch.setattr(generate_ai, "generate_for_group", lambda *_: {})
-    # Inject a fake google.genai so the lazy import inside main() succeeds
+    # Inject a fake google.genai so the lazy import inside main() succeeds.
+    # Setting sys.modules["google.genai"] is sufficient — Python returns the
+    # cached entry without importing the parent package.
     mock_genai = MagicMock()
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
-    import google
-    monkeypatch.setattr(google, "genai", mock_genai, raising=False)
 
     with pytest.raises(SystemExit) as exc_info:
         generate_ai.main()
