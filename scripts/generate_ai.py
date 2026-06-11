@@ -439,7 +439,15 @@ def _write_run_artifacts(outcome: str, was_incremental: bool,
 def main():
     _reset_tracking()
     run_start = time.monotonic()
-    today = date.today().isoformat()
+
+    # Use the latest snapshot date as the AI file date so PWA can match them.
+    # date.today() breaks when the workflow runs after midnight UTC (market date
+    # is still "yesterday" from the PWA's perspective).
+    snap_df = load_latest_snapshot("sector")
+    if not snap_df.empty and "date" in snap_df.columns:
+        today = snap_df["date"].max().isoformat()
+    else:
+        today = date.today().isoformat()
 
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:

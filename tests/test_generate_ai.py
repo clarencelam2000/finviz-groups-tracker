@@ -299,6 +299,41 @@ def test_main_exits_zero_without_api_key(monkeypatch, tmp_path):
     assert exc_info.value.code == 0
 
 
+def test_main_uses_snapshot_date_not_today(monkeypatch, tmp_path):
+    """AI file must be named after the latest snapshot date, not date.today().
+
+    When the workflow runs after midnight UTC the run date diverges from the
+    market data date by one day, breaking the PWA's fetch.
+    """
+    import csv
+    snap_date = "2026-06-10"  # market date, intentionally not today
+    sectors_dir = tmp_path / "sectors"
+    sectors_dir.mkdir(parents=True)
+    snap_csv = sectors_dir / "snapshots.csv"
+    with open(snap_csv, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["date", "name", "perf_week", "perf_ytd"])
+        writer.writeheader()
+        writer.writerow({"date": snap_date, "name": "Energy", "perf_week": "1.0", "perf_ytd": "5.0"})
+
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+
+    artifact_calls = []
+    monkeypatch.setattr(generate_ai, "_write_run_artifacts",
+                        lambda *args: artifact_calls.append(args))
+
+    with pytest.raises(SystemExit):
+        generate_ai.main()
+
+    # The date_str passed to _write_run_artifacts must come from the snapshot,
+    # not from date.today().
+    assert artifact_calls, "expected _write_run_artifacts to be called"
+    assert artifact_calls[0][3] == snap_date, (
+        f"AI date should be snapshot date {snap_date!r}, got {artifact_calls[0][3]!r}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # skip-trap: empty results must not write a file
 # ---------------------------------------------------------------------------
