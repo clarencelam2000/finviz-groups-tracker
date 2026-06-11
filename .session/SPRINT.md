@@ -86,6 +86,7 @@ _(nothing)_
 
 | # | Task | Date |
 |---|------|------|
+| — | SW cache bump v1→v2: AI tab now visible after PR #33 deploy (PR #34) | 2026-06-11 |
 | AI-0 | Server-side AI pipeline: daily briefing + rotation phase + watchlist (PR #25) | 2026-06-10 |
 | INS-1 | Sustained Strength / "Evergreen" list (Streamlit + PWA) | 2026-06-10 |
 | INS-2 | `rank_agreement` metric in deltas.csv | 2026-06-10 |

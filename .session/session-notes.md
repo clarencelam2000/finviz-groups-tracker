@@ -7,11 +7,28 @@
 ## Current Status
 
 **Status:** Complete ✅
-**Safe to close:** Yes — PR #25 merged, session notes committed, no open threads
+**Safe to close:** Yes — PR #34 merged, session notes being committed now, no open threads
 **Waiting on:** `GEMINI_API_KEY` secret to be added to GitHub Actions (Settings → Secrets → Actions). Once added, the nightly cron will start generating `data/ai/YYYY-MM-DD.json` automatically.
 **Open threads:** None
 
 ---
+
+---
+
+## Session: 2026-06-11 — Service worker cache fix (PR #34, merged)
+
+### What was done
+
+**Investigated user report that the 5th tab (AI Insights) added in PR #33 was not visible on the GitHub Pages PWA.**
+
+- Root cause: `docs/sw.js` had a hardcoded cache name `CACHE = 'finviz-v1'`. The service worker cached `index.html` on first install. After PR #33 deployed the updated 5-tab page, the `activate` event only deletes caches with a *different* name — since the name never changed, browsers kept serving the old 4-tab version from the `finviz-v1` cache indefinitely.
+- Fix: bumped `CACHE = 'finviz-v1'` → `'finviz-v2'` in `docs/sw.js`. On next visit, the new SW installs, activates, deletes `finviz-v1`, and fetches the current page fresh.
+- PR #34 opened as draft, merged same session.
+
+### Key decisions
+- Cache name should be bumped any time `index.html` is updated going forward. Consider a comment in sw.js reminding future sessions to bump on PWA deploys.
+
+### No open threads
 
 ---
 

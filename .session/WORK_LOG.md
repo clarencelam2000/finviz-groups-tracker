@@ -95,6 +95,12 @@ Also captured today's near-close data (4:00 PM ET, market close) via manual work
 
 ---
 
+## 2026-06-11 — Service worker cache bump (PR #34, merged)
+
+`docs/sw.js` cache name bumped from `finviz-v1` to `finviz-v2`. Fixes PWA serving stale 4-tab `index.html` after PR #33 added the AI Insights tab. Root cause: fixed cache name meant `activate` event never evicted the old cache. Going forward, bump the cache version whenever `index.html` is updated.
+
+---
+
 ## Open Questions / Future Ideas
 
 - [ ] Confirm Finviz data finalization time (probe intraday)
