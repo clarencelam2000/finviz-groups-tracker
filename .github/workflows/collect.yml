@@ -143,13 +143,11 @@ jobs:
               except Exception:
                   pass
           elif ai_gen_outcome == "skipped":
-              ai_outcome = "step_skipped"
+              ai_outcome = "skipped"
 
           LOG_COLUMNS = ["timestamp", "run_date", "trigger", "run_id", "outcome",
                          "sectors_rows", "industries_rows", "step_failed",
                          "ai_outcome", "ai_fields_missing"]
-          OLD_COLUMNS = ["timestamp", "run_date", "trigger", "run_id", "outcome",
-                         "sectors_rows", "industries_rows", "step_failed"]
 
           log_path = Path("data/fetch_log.csv")
 

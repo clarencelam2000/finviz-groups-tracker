@@ -339,8 +339,10 @@ def generate_for_group(client, group_type: str, date_str: str,
         for field in expected:
             fkey = f"{key_prefix}.{field}"
             if fkey not in _field_log:
-                _record_field(fkey, "no_data", was_new=False)
-        return dict(existing)
+                # Field already present in existing → skipped; absent → no_data
+                status = "skipped" if field in result else "no_data"
+                _record_field(fkey, status, was_new=False)
+        return result
 
     result = dict(existing)
 
@@ -420,8 +422,8 @@ def _write_run_artifacts(outcome: str, was_incremental: bool,
     except Exception as e:
         print(f"  [log] Failed to write ai_run_log.jsonl: {e}")
 
-    # Sidecar for collect.yml: which fields errored (still missing after this run)
-    error_fields = [k for k, v in _field_log.items() if v.get("status") == "error"]
+    # Sidecar for collect.yml: fields that failed or had no snapshot data
+    error_fields = [k for k, v in _field_log.items() if v.get("status") in ("error", "no_data")]
     summary = {"outcome": outcome, "fields_missing": ",".join(error_fields)}
     try:
         with open(DATA_DIR / "ai_run_summary.json", "w", encoding="utf-8") as f:

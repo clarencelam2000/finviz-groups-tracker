@@ -430,10 +430,7 @@ def test_generate_for_group_skips_existing_briefing(monkeypatch):
     existing = {"briefing": "Already written briefing"}
     client = _make_client(["Phase response", "Watchlist response"])
 
-    result = generate_ai.generate_for_group.__wrapped__(client, "sector", "2026-06-11", existing=existing) \
-        if hasattr(generate_ai.generate_for_group, "__wrapped__") else None
-
-    # Direct call (no wrapper): use monkeypatch to avoid real data loading
+    # Use monkeypatch to avoid real data loading
     snap = pd.DataFrame({
         "date": [pd.Timestamp("2026-06-11").date()],
         "name": ["Energy"],
