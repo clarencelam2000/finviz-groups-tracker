@@ -496,7 +496,11 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
         return {"briefing": "Industry briefing"}
 
     monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
+    # Mock both parent and child so import succeeds even without google-genai installed.
     mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
     generate_ai.main()  # completes normally (no sys.exit on success)
@@ -546,7 +550,11 @@ def test_main_skips_already_complete_file(monkeypatch, tmp_path):
     generate_called = []
     monkeypatch.setattr(generate_ai, "generate_for_group",
                         lambda *_, **__: generate_called.append(True) or {})
+    # Mock both parent and child so import succeeds even without google-genai installed.
     mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
     with pytest.raises(SystemExit) as exc_info:
