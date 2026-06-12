@@ -10,7 +10,7 @@
 | 3 | ✅ Done | `feat: add data/ai/index.json master manifest` |
 | 4 | ✅ Done | `feat: load AI data via index.json in dashboard and PWA` |
 | 5 | ✅ Done | `chore: pin Gemini model to gemini-2.5-flash` |
-| 6 | ⬜ Pending | Update plan + session notes |
+| 6 | ✅ Done | `docs: mark AI architecture revamp complete` |
 
 > **Resuming after a context reset**: read this table first to know where to start.
 > Then run `python3 -m pytest tests/ -q` to confirm green baseline.
