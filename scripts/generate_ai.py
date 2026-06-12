@@ -501,6 +501,49 @@ def _write_run_artifacts(outcome: str, was_incremental: bool,
 
 
 # ---------------------------------------------------------------------------
+# Index manifest
+# ---------------------------------------------------------------------------
+
+def _update_index(date_str: str, status: str, output: dict) -> None:
+    """Upsert one entry in data/ai/index.json so the dashboard/PWA can find the latest file."""
+    index_path = AI_DIR / "index.json"
+    try:
+        existing = json.loads(index_path.read_text(encoding="utf-8")) if index_path.exists() else {}
+    except (json.JSONDecodeError, OSError):
+        existing = {}
+
+    entries = existing.get("entries", [])
+    rotation_phase_val = output.get("sectors", {}).get("rotation_phase")
+    new_entry = {
+        "date": date_str,
+        "status": status,
+        "model": GEMINI_MODEL,
+        "generated_at": output.get("generated_at", ""),
+        "rotation_phase": (
+            rotation_phase_val.get("label", "")
+            if isinstance(rotation_phase_val, dict)
+            else ""
+        ),
+    }
+
+    entries = [e for e in entries if e.get("date") != date_str]
+    entries.insert(0, new_entry)
+    entries.sort(key=lambda e: e.get("date", ""), reverse=True)
+    entries = entries[:90]
+
+    index = {
+        "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "entries": entries,
+    }
+    try:
+        tmp = index_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(index, indent=2, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(index_path)
+    except Exception as e:
+        print(f"  [index] Failed to write index.json: {e}")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -551,6 +594,7 @@ def main():
         if _is_complete(existing_output):
             print(f"AI analysis for {today} already exists and is complete — skipping.")
             _write_run_artifacts("skipped", False, time.monotonic() - run_start, today)
+            _update_index(today, "skipped", existing_output)
             sys.exit(0)
         else:
             missing = _missing_fields(existing_output)
@@ -592,6 +636,7 @@ def main():
 
     outcome = "complete" if _is_complete(output) else "partial"
     _write_run_artifacts(outcome, was_incremental, time.monotonic() - run_start, today)
+    _update_index(today, outcome, output)
 
 
 if __name__ == "__main__":

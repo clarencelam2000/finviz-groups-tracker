@@ -482,6 +482,78 @@ def test_call_api_passes_generation_config_values(monkeypatch):
 # main exits gracefully without API key
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# _update_index
+# ---------------------------------------------------------------------------
+
+def test_update_index_creates_file_if_missing(tmp_path):
+    idx = _run_update_index(tmp_path, "2026-06-11", "complete", {"generated_at": "2026-06-11T22:00:00Z"})
+    assert len(idx["entries"]) == 1
+    assert idx["entries"][0]["date"] == "2026-06-11"
+    assert idx["entries"][0]["status"] == "complete"
+
+
+def _run_update_index(tmp_path, date_str, status, output):
+    orig = generate_ai.AI_DIR
+    generate_ai.AI_DIR = tmp_path
+    generate_ai._update_index(date_str, status, output)
+    generate_ai.AI_DIR = orig
+    return json.loads((tmp_path / "index.json").read_text())
+
+
+def test_update_index_upserts_same_date(tmp_path):
+    out = {"generated_at": "2026-06-11T22:00:00Z"}
+    _run_update_index(tmp_path, "2026-06-11", "partial", out)
+    idx = _run_update_index(tmp_path, "2026-06-11", "complete", out)
+    dates = [e["date"] for e in idx["entries"]]
+    assert dates.count("2026-06-11") == 1
+    assert idx["entries"][0]["status"] == "complete"
+
+
+def test_update_index_newest_first(tmp_path):
+    out = {"generated_at": ""}
+    for d in ["2026-06-09", "2026-06-11", "2026-06-10"]:
+        _run_update_index(tmp_path, d, "complete", out)
+    idx = json.loads((tmp_path / "index.json").read_text())
+    dates = [e["date"] for e in idx["entries"]]
+    assert dates == sorted(dates, reverse=True)
+
+
+def test_update_index_trims_to_90(tmp_path):
+    orig = generate_ai.AI_DIR
+    generate_ai.AI_DIR = tmp_path
+    # Seed with 90 existing entries
+    entries = [{"date": f"2025-{i:04d}", "status": "complete"} for i in range(90)]
+    (tmp_path / "index.json").write_text(json.dumps({"entries": entries}))
+    generate_ai._update_index("2026-06-11", "complete", {"generated_at": ""})
+    generate_ai.AI_DIR = orig
+    idx = json.loads((tmp_path / "index.json").read_text())
+    assert len(idx["entries"]) == 90
+
+
+def test_update_index_corrupt_file_fallback(tmp_path):
+    (tmp_path / "index.json").write_text("NOTJSON")
+    idx = _run_update_index(tmp_path, "2026-06-11", "complete", {"generated_at": ""})
+    assert len(idx["entries"]) == 1
+    assert idx["entries"][0]["date"] == "2026-06-11"
+
+
+def test_update_index_rotation_phase_extracted(tmp_path):
+    output = {
+        "generated_at": "2026-06-11T22:00:00Z",
+        "sectors": {
+            "rotation_phase": {"label": "Late Cycle", "reasoning": "Energy leads."}
+        },
+    }
+    idx = _run_update_index(tmp_path, "2026-06-11", "complete", output)
+    assert idx["entries"][0]["rotation_phase"] == "Late Cycle"
+
+
+def test_update_index_missing_rotation_phase(tmp_path):
+    idx = _run_update_index(tmp_path, "2026-06-11", "complete", {"generated_at": ""})
+    assert idx["entries"][0]["rotation_phase"] == ""
+
+
 def test_main_exits_zero_without_api_key(monkeypatch, tmp_path):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
