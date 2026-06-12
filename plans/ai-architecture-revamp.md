@@ -9,7 +9,7 @@
 | 2 | ✅ Done | `refactor: replace hardcoded AI pipeline with TASK_SPECS` |
 | 3 | ✅ Done | `feat: add data/ai/index.json master manifest` |
 | 4 | ✅ Done | `feat: load AI data via index.json in dashboard and PWA` |
-| 5 | ⬜ Pending | Model upgrade |
+| 5 | ✅ Done | `chore: pin Gemini model to gemini-2.5-flash` |
 | 6 | ⬜ Pending | Update plan + session notes |
 
 > **Resuming after a context reset**: read this table first to know where to start.

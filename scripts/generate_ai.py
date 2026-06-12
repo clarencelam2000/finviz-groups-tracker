@@ -18,7 +18,7 @@ BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
 AI_DIR = DATA_DIR / "ai"
 
-GEMINI_MODEL = "gemini-flash-latest"
+GEMINI_MODEL = "gemini-2.5-flash"
 
 PHASE_SCHEMA = {
     "type": "object",

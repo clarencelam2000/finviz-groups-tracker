@@ -253,6 +253,10 @@ def _make_client(responses):
 # PHASE_SCHEMA and WATCHLIST_SCHEMA constants
 # ---------------------------------------------------------------------------
 
+def test_gemini_model_is_pinned_version():
+    assert generate_ai.GEMINI_MODEL == "gemini-2.5-flash"
+
+
 def test_phase_schema_required_fields():
     assert generate_ai.PHASE_SCHEMA["required"] == ["label", "reasoning", "confidence"]
     enum_vals = generate_ai.PHASE_SCHEMA["properties"]["label"]["enum"]
