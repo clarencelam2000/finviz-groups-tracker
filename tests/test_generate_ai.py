@@ -1070,13 +1070,13 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
     with open(tmp_path / "ai" / f"{today}.json", "w") as f:
         json.dump(partial, f)
 
-    # generate_for_group returns new content; verify briefing is NOT regenerated for sectors
+    # generate_for_group returns fresh content (force regeneration)
     call_log = []
     def fake_generate(client, group_type, date_str, existing=None):
         call_log.append((group_type, list(existing.keys()) if existing else []))
         if group_type == "sector":
             return {
-                "briefing": existing.get("briefing", ""),  # preserve
+                "briefing": "Sector briefing",  # always regenerate, not preserve
                 "rotation_phase": {"label": "Defensive", "reasoning": "test"},
                 "watchlist": [{"name": "Energy", "thesis": "ok"}],
             }
@@ -1100,15 +1100,20 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
     with open(tmp_path / "ai" / f"{today}.json") as f:
         result = json.load(f)
 
-    assert result["sectors"]["briefing"] == "Existing briefing"  # preserved
+    # File should have fresh generated data (not preserved from partial state)
+    # Since we always force regenerate now, it should use fake_generate output
+    assert result["sectors"]["briefing"] == "Sector briefing"  # regenerated, not preserved
     assert isinstance(result["sectors"]["rotation_phase"], dict)
     assert result["industries"]["briefing"] == "Industry briefing"
     assert isinstance(result["industries"]["rotation_phase"], dict)
     assert isinstance(result["industries"]["watchlist"], list)
 
-    # generate_for_group was called with the existing sector data
-    sector_call = next(c for c in call_log if c[0] == "sector")
-    assert "briefing" in sector_call[1]  # existing keys passed in
+    # generate_for_group was called for both groups
+    assert call_log[0][0] == "sector"
+    assert call_log[1][0] == "industry"
+    # existing is always empty now (force regeneration)
+    assert call_log[0][1] == []  # existing = {} for both groups
+    assert call_log[1][1] == []
 
     # Sidecar was written
     assert (tmp_path / "ai_run_summary.json").exists()
@@ -1247,8 +1252,22 @@ def test_main_skips_already_complete_file(monkeypatch, tmp_path):
         json.dump(complete, f)
 
     generate_called = []
-    monkeypatch.setattr(generate_ai, "generate_for_group",
-                        lambda *_, **__: generate_called.append(True) or {})
+    def mock_generate(*_, **__):
+        generate_called.append(True)
+        # Return full data so outcome is "complete" not "failed"
+        if len(generate_called) == 1:  # sector call
+            return {
+                "briefing": "Sector content",
+                "rotation_phase": {"label": "Early Cycle", "reasoning": "test"},
+                "watchlist": [{"name": "Tech", "thesis": "test"}],
+            }
+        else:  # industry call
+            return {
+                "briefing": "Industry content",
+                "rotation_phase": {"label": "Growth", "reasoning": "test"},
+                "watchlist": [{"name": "Healthcare", "thesis": "test"}],
+            }
+    monkeypatch.setattr(generate_ai, "generate_for_group", mock_generate)
     # Mock both parent and child so import succeeds even without google-genai installed.
     mock_genai = MagicMock()
     mock_google = MagicMock()
@@ -1256,15 +1275,15 @@ def test_main_skips_already_complete_file(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "google", mock_google)
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
-    with pytest.raises(SystemExit) as exc_info:
-        generate_ai.main()
-    assert exc_info.value.code == 0
-    # generate_for_group must NOT have been called — file was already complete
-    assert generate_called == []
+    # main() completes normally (no SystemExit) since content is generated
+    generate_ai.main()
+
+    # generate_for_group MUST be called — we always force regenerate now
+    assert generate_called == [True, True]  # called for sector and industry
 
     with open(tmp_path / "ai_run_summary.json") as f:
         summary = json.load(f)
-    assert summary["outcome"] == "skipped"
+    assert summary["outcome"] == "complete"  # regenerated, not skipped
 
 
 # Error handling tests for transient API failures
@@ -1343,3 +1362,157 @@ def test_call_api_retries_on_preamble_response(monkeypatch):
         generation_config=None, response_schema=None
     )
     assert result == '{"result": "ok"}'
+
+
+# ---------------------------------------------------------------------------
+# _normalize_briefing
+# ---------------------------------------------------------------------------
+
+def test_normalize_briefing_valid_dict():
+    """Normalize a valid dict with briefing and key_signals."""
+    parsed = {
+        "briefing": "Energy maintains dominance.",
+        "key_signals": ["Signal 1", "Signal 2"],
+    }
+    result = generate_ai._normalize_briefing(parsed)
+    assert result == {
+        "briefing": "Energy maintains dominance.",
+        "key_signals": ["Signal 1", "Signal 2"],
+    }
+
+
+def test_normalize_briefing_dict_missing_key_signals():
+    """Normalize a dict with only briefing, missing key_signals."""
+    parsed = {"briefing": "Energy maintains dominance."}
+    result = generate_ai._normalize_briefing(parsed)
+    assert result == {"briefing": "Energy maintains dominance.", "key_signals": []}
+
+
+def test_normalize_briefing_dict_with_null_key_signals():
+    """Normalize a dict where key_signals is None."""
+    parsed = {"briefing": "Energy maintains dominance.", "key_signals": None}
+    result = generate_ai._normalize_briefing(parsed)
+    assert result == {"briefing": "Energy maintains dominance.", "key_signals": []}
+
+
+def test_normalize_briefing_dict_with_empty_key_signals():
+    """Normalize a dict with empty key_signals list."""
+    parsed = {"briefing": "Energy maintains dominance.", "key_signals": []}
+    result = generate_ai._normalize_briefing(parsed)
+    assert result == {"briefing": "Energy maintains dominance.", "key_signals": []}
+
+
+def test_normalize_briefing_dict_with_null_items_in_key_signals():
+    """Normalize key_signals that contains None and empty strings."""
+    parsed = {
+        "briefing": "Energy maintains dominance.",
+        "key_signals": ["Signal 1", None, "", "Signal 2"],
+    }
+    result = generate_ai._normalize_briefing(parsed)
+    assert result == {
+        "briefing": "Energy maintains dominance.",
+        "key_signals": ["Signal 1", "Signal 2"],
+    }
+
+
+def test_normalize_briefing_plain_string():
+    """Normalize when parsed is a raw string."""
+    parsed = "This is a briefing string."
+    result = generate_ai._normalize_briefing(parsed)
+    assert result == {"briefing": "This is a briefing string.", "key_signals": []}
+
+
+def test_normalize_briefing_string_with_whitespace():
+    """Normalize a string that has leading/trailing whitespace."""
+    parsed = "  Energy briefing.  \n"
+    result = generate_ai._normalize_briefing(parsed)
+    assert result == {"briefing": "Energy briefing.", "key_signals": []}
+
+
+def test_normalize_briefing_none_or_non_dict_non_string():
+    """Normalize when parsed is None, int, or other invalid type."""
+    assert generate_ai._normalize_briefing(None) == {"briefing": "", "key_signals": []}
+    assert generate_ai._normalize_briefing(123) == {"briefing": "", "key_signals": []}
+    assert generate_ai._normalize_briefing([]) == {"briefing": "", "key_signals": []}
+
+
+def test_normalize_briefing_dict_missing_briefing():
+    """Normalize a dict with key_signals but no briefing key."""
+    parsed = {"key_signals": ["Signal 1"]}
+    result = generate_ai._normalize_briefing(parsed)
+    assert result == {"briefing": "", "key_signals": ["Signal 1"]}
+
+
+def test_normalize_briefing_dict_with_null_briefing():
+    """Normalize a dict where briefing is None."""
+    parsed = {"briefing": None, "key_signals": ["Signal 1"]}
+    result = generate_ai._normalize_briefing(parsed)
+    assert result == {"briefing": "", "key_signals": ["Signal 1"]}
+
+
+# ---------------------------------------------------------------------------
+# _normalize_phase
+# ---------------------------------------------------------------------------
+
+def test_normalize_phase_valid_dict():
+    """Normalize a valid phase dict."""
+    parsed = {
+        "label": "Early Cycle",
+        "reasoning": "Momentum is strong.",
+    }
+    result = generate_ai._normalize_phase(parsed)
+    assert result == {
+        "label": "Early Cycle",
+        "reasoning": "Momentum is strong.",
+    }
+
+
+def test_normalize_phase_dict_missing_reasoning():
+    """Normalize a phase dict with only label."""
+    parsed = {"label": "Mid Cycle"}
+    result = generate_ai._normalize_phase(parsed)
+    assert result == {"label": "Mid Cycle", "reasoning": ""}
+
+
+def test_normalize_phase_dict_with_null_values():
+    """Normalize a phase dict where fields are None."""
+    parsed = {"label": None, "reasoning": None}
+    result = generate_ai._normalize_phase(parsed)
+    assert result == {"label": "", "reasoning": ""}
+
+
+def test_normalize_phase_dict_with_whitespace():
+    """Normalize a phase dict with whitespace in values."""
+    parsed = {"label": "  Late Cycle  ", "reasoning": "\n  Defensive  "}
+    result = generate_ai._normalize_phase(parsed)
+    assert result == {"label": "Late Cycle", "reasoning": "Defensive"}
+
+
+def test_normalize_phase_plain_string():
+    """Normalize when parsed is a raw string (fallback)."""
+    parsed = "This is the reasoning text."
+    result = generate_ai._normalize_phase(parsed)
+    assert result == {
+        "label": "Unknown",
+        "reasoning": "This is the reasoning text.",
+    }
+
+
+def test_normalize_phase_none_or_invalid():
+    """Normalize when parsed is None or invalid type."""
+    assert generate_ai._normalize_phase(None) == {"label": "Unknown", "reasoning": ""}
+    assert generate_ai._normalize_phase(123) == {"label": "Unknown", "reasoning": ""}
+    assert generate_ai._normalize_phase([]) == {"label": "Unknown", "reasoning": ""}
+
+
+def test_normalize_phase_free_form_label():
+    """Normalize a phase with free-form (non-enum) label."""
+    parsed = {
+        "label": "Market Micro-Phase: Transition",
+        "reasoning": "Custom industry phase.",
+    }
+    result = generate_ai._normalize_phase(parsed)
+    assert result == {
+        "label": "Market Micro-Phase: Transition",
+        "reasoning": "Custom industry phase.",
+    }
