@@ -125,7 +125,7 @@ No server required — it fetches the latest CSVs directly from GitHub on every 
 
 ### Tab guide
 
-**Today** — All sectors or industries as color-coded cards, sorted by YTD % by default. Use the sort dropdown to switch to Week / Month / Day. Each card shows the group's YTD rank badge, its name, Day % and Week % as secondary metrics, and the selected metric as the big number on the right. Green = positive, red = negative. Below the cards, a Pipeline section shows the last 5 workflow run outcomes including AI generation status (◆ green = complete, amber = partial, grey = skipped).
+**Today** — All sectors or industries as color-coded cards, sorted by Week % by default. Use the sort dropdown to switch between Week / YTD / Month / Qtr / 6-Month / 1-Year / Day. Each card shows the group's 6-Month rank badge (rank 1 = strongest 6-month performer), its name, and two secondary metrics, with the selected metric as the big number on the right. Green = positive, red = negative. Below the cards, a Pipeline section shows the last 5 workflow run outcomes including AI generation status (◆ green = complete, amber = partial, grey = skipped).
 
 **Movers** — The biggest rank climbers and fallers over 7 / 14 / 30 days. A "data accumulating" placeholder is shown until enough history exists (7-day deltas arrive ~7 trading days after first collection). Each row shows how many ranking spots the group gained or lost. Green left border = gainer, red = loser.
 
