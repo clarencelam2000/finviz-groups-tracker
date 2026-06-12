@@ -74,8 +74,8 @@
       <div class="flex items-center justify-between mb-3">
         <span class="text-xs text-slate-400">Sort by</span>
         <select id="sort-metric" class="bg-slate-700 text-slate-200 rounded-lg px-2 py-1.5 text-xs border border-slate-600">
-          <option value="perf_ytd">YTD %</option>
           <option value="perf_week">Week %</option>
+          <option value="perf_ytd">YTD %</option>
           <option value="perf_month">Month %</option>
           <option value="perf_day">Day %</option>
         </select>
@@ -195,7 +195,7 @@
       tab: 'today',
       group: 'sectors',
       lookback: '7d',
-      sortMetric: 'perf_ytd',
+      sortMetric: 'perf_week',
       strengthView: 'sustained',
       topN: 20,
       data: {
