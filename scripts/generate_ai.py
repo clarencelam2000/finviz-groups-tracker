@@ -444,6 +444,30 @@ def parse_watchlist_response(text: str) -> list:
     return items
 
 
+def _normalize_briefing(parsed) -> dict:
+    """Normalize briefing response to guaranteed shape: {briefing: str, key_signals: list}."""
+    if isinstance(parsed, dict):
+        return {
+            "briefing": str(parsed.get("briefing") or "").strip(),
+            "key_signals": [s for s in (parsed.get("key_signals") or []) if s],
+        }
+    if isinstance(parsed, str):
+        return {"briefing": parsed.strip(), "key_signals": []}
+    return {"briefing": "", "key_signals": []}
+
+
+def _normalize_phase(parsed) -> dict:
+    """Normalize phase response to guaranteed shape: {label: str, reasoning: str}."""
+    if isinstance(parsed, dict):
+        return {
+            "label": str(parsed.get("label") or "").strip(),
+            "reasoning": str(parsed.get("reasoning") or "").strip(),
+        }
+    if isinstance(parsed, str):
+        return {"label": "Unknown", "reasoning": parsed.strip()}
+    return {"label": "Unknown", "reasoning": ""}
+
+
 # ---------------------------------------------------------------------------
 # Task registry — single source of truth for what to generate and for whom
 # ---------------------------------------------------------------------------
@@ -651,12 +675,12 @@ def generate_for_group(client, group_type: str, date_str: str, existing=None) ->
                         parsed.get("picks", []) if isinstance(parsed, dict) else parsed
                     )
                 elif spec["name"] == "briefing":
-                    if isinstance(parsed, dict):
-                        result["briefing"] = parsed.get("briefing", "")
-                        if parsed.get("key_signals"):
-                            result["key_signals"] = parsed["key_signals"]
-                    else:
-                        result["briefing"] = str(parsed)
+                    normalized = _normalize_briefing(parsed)
+                    result["briefing"] = normalized["briefing"]
+                    if normalized["key_signals"]:
+                        result["key_signals"] = normalized["key_signals"]
+                elif spec["name"] == "rotation_phase":
+                    result["rotation_phase"] = _normalize_phase(parsed)
                 else:
                     result[spec["name"]] = parsed
             else:
@@ -791,28 +815,7 @@ def main():
     was_incremental = False
     existing_output = {}
 
-    if output_path.exists():
-        try:
-            with open(output_path, encoding="utf-8") as f:
-                existing_output = json.load(f)
-        except Exception:
-            existing_output = {}
-
-        if _is_complete(existing_output):
-            print(f"AI analysis for {today} already exists and is complete — skipping.")
-            _write_run_artifacts("skipped", False, time.monotonic() - run_start, today)
-            _update_index(today, "skipped", existing_output)
-            sys.exit(0)
-        else:
-            missing = _missing_fields(existing_output)
-            print(
-                f"AI analysis for {today} is incomplete "
-                f"({len(missing)} field(s) missing: {', '.join(missing)}) — "
-                f"regenerating missing fields."
-            )
-            was_incremental = True
-
-    print(f"{'Completing' if was_incremental else 'Generating'} AI analysis for {today}...")
+    print(f"Generating AI analysis for {today}...")
 
     output = {
         "date": today,
