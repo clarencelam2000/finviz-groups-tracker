@@ -46,8 +46,8 @@ git status                                         # confirm clean working tree
   - [x] Item 2: "What changed since yesterday" delta card
 - [x] Phase 6 — Item 5 (phase history strip)
   - [x] Item 5: Rotation phase history strip
-- [ ] Phase 7 — Item 4 (historical navigation)
-  - [ ] Item 4: Historical briefing date navigation
+- [x] Phase 7 — Item 4 (historical navigation)
+  - [x] Item 4: Historical briefing date navigation
 
 ---
 
@@ -206,12 +206,12 @@ The current AI tab only shows today's analysis. If a user missed a day, was curi
 - A "history" modal showing the last 14 days as a list. Higher information density but more complex. Add to backlog.
 
 **Acceptance criteria**
-- [ ] Prev/Next buttons render in AI tab header
-- [ ] "Next" is disabled when on the latest date
-- [ ] Clicking "Prev" loads and renders the prior available date's JSON
-- [ ] If no file found within 7-day scan, shows "No data available" message
-- [ ] Date label updates correctly with each navigation
-- [ ] Navigation works across the sectors/industries toggle (same date, different group)
+- [x] Prev/Next buttons render in AI tab header
+- [x] "Next" is disabled when on the latest date
+- [x] Clicking "Prev" loads and renders the prior available date's JSON
+- [x] If no file found within 7-day scan, shows "No data available" message
+- [x] Date label updates correctly with each navigation
+- [x] Navigation works across the sectors/industries toggle (same date, different group)
 
 **Happy path**
 User taps "← Prev" 3 times → navigates back through Monday/Friday/Thursday briefings → sees older analysis.

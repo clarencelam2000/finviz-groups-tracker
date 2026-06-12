@@ -36,6 +36,7 @@
 
 | Date | Feature Added | Notes |
 |------|--------------|-------|
+| 2026-06-12 | AI tab PWA improvements (all 8 items) | key signals bullets, collapsible briefing, conviction tags, industries rotation phase + watchlist, "what changed" delta card, relative timestamp, native share, phase history strip, historical date navigation |
 | 2026-06-09 | Initial 4-tab dashboard | Snapshot, Top Movers, Time Series, Momentum |
 | 2026-06-09 | Rank columns in Snapshot tab | rank_day/week/month/ytd joined from deltas |
 | 2026-06-09 | CSV download buttons | Snapshot, Top Movers, Momentum tabs |

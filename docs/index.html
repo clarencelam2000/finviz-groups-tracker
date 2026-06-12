@@ -163,6 +163,17 @@
           </svg>
         </button>
       </div>
+      <div id="ai-date-nav" class="hidden flex items-center justify-between mb-3 px-0.5">
+        <button id="ai-nav-prev" class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+          Prev
+        </button>
+        <span id="ai-nav-date" class="text-xs font-medium text-slate-300"></span>
+        <button id="ai-nav-next" class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+          Next
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </button>
+      </div>
       <div id="ai-content" class="space-y-3"></div>
     </section>
 
@@ -193,6 +204,8 @@
       },
       fetchLog: null,
       aiData: null,
+      latestAiDate: null,
+      currentAiDate: null,
       loading: false,
       expandedName: null,
     };
@@ -899,6 +912,15 @@
 
       const data = state.aiData;
 
+      if (data && data._noData) {
+        container.innerHTML = `
+          <div class="rounded-xl p-6 bg-slate-800 border border-slate-700 text-center">
+            <p class="text-slate-400 text-sm">No data available for this period.</p>
+          </div>`;
+        updateAINavUI();
+        return;
+      }
+
       if (!data || Object.keys(data).length === 0) {
         container.innerHTML = `
           <div class="rounded-xl p-6 bg-slate-800 border border-slate-700 text-center">
@@ -1054,6 +1076,52 @@
       }
     }
 
+    // ── AI date navigation ─────────────────────────────────────────────────
+
+    function updateAINavUI() {
+      const nav = document.getElementById('ai-date-nav');
+      const dateLabel = document.getElementById('ai-nav-date');
+      const prevBtn   = document.getElementById('ai-nav-prev');
+      const nextBtn   = document.getElementById('ai-nav-next');
+      if (!nav || !state.currentAiDate) return;
+      nav.classList.remove('hidden');
+      const d = new Date(state.currentAiDate + 'T12:00:00Z');
+      dateLabel.textContent = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+      nextBtn.disabled = state.currentAiDate === state.latestAiDate;
+    }
+
+    async function navigateAI(direction) {
+      if (state.loading || !state.currentAiDate) return;
+      const prevBtn = document.getElementById('ai-nav-prev');
+      const nextBtn = document.getElementById('ai-nav-next');
+      if (prevBtn) prevBtn.disabled = true;
+      if (nextBtn) nextBtn.disabled = true;
+
+      const base = new Date(state.currentAiDate + 'T12:00:00Z');
+      let found = null;
+      for (let i = 1; i <= 7; i++) {
+        const candidate = new Date(base);
+        candidate.setUTCDate(candidate.getUTCDate() + (direction === 'next' ? i : -i));
+        const dateStr = candidate.toISOString().slice(0, 10);
+        if (direction === 'next' && dateStr > state.latestAiDate) break;
+        const data = await fetchAIForDate(dateStr);
+        if (data && Object.keys(data).length > 0) {
+          found = { dateStr, data };
+          break;
+        }
+      }
+
+      if (found) {
+        state.currentAiDate = found.dateStr;
+        state.aiData = found.data;
+      } else {
+        // Mark sentinel so renderAI can show "no data" message
+        state.aiData = { _noData: true };
+      }
+      renderAI();
+      updateAINavUI();
+    }
+
     // ── Master render ──────────────────────────────────────────────────────
 
     function render() {
@@ -1091,8 +1159,15 @@
       const snap = state.data.sectors.snap || [];
       const latestDate = snap.length > 0 ? snap[0].date : new Date().toISOString().slice(0, 10);
       await loadAI(latestDate, force);
+      // Track latest and current date for historical navigation
+      if (state.aiData && !state.aiData._noData && Object.keys(state.aiData).length > 0) {
+        const aiDate = state.aiData.date || latestDate;
+        state.latestAiDate = aiDate;
+        state.currentAiDate = aiDate;
+      }
       setLoading(false);
       render();
+      updateAINavUI();
     }
 
     // ── UI wiring ──────────────────────────────────────────────────────────
@@ -1155,6 +1230,10 @@
       state.data.industries = { snap: null, delta: null };
       state.fetchLog = null;
       state.aiData = null;
+      state.latestAiDate = null;
+      state.currentAiDate = null;
+      const nav = document.getElementById('ai-date-nav');
+      if (nav) nav.classList.add('hidden');
       document.getElementById('last-updated').textContent = 'Loading…';
       loadAndRender(true, 600); // force=true bypasses cache; 600ms min keeps spinner visible
     };
@@ -1186,6 +1265,8 @@
 
     document.getElementById('refresh-btn').addEventListener('click', window.__refresh);
     document.getElementById('ai-share-btn').addEventListener('click', shareAI);
+    document.getElementById('ai-nav-prev').addEventListener('click', () => navigateAI('prev'));
+    document.getElementById('ai-nav-next').addEventListener('click', () => navigateAI('next'));
 
     document.querySelectorAll('.strength-view-btn').forEach(btn =>
       btn.addEventListener('click', () => {
