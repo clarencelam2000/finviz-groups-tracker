@@ -13,43 +13,42 @@
 
 ---
 
-## Session: 2026-06-12 — AI workflow 503 error troubleshooting
+## Session: 2026-06-12 — AI workflow error troubleshooting & fix
 
-### What was done
+### Root cause analysis
 
-**Diagnosis:**
-- Reviewed 2026-06-12 AI workflow run (ID: 27425327799) that showed "partial" completion
-- Found 3 failed fields: `sectors.briefing`, `industries.watchlist`, `sectors.daily_delta`
-- Root cause: Gemini API returned 503 UNAVAILABLE ("high demand") errors
-- Side effect: Responses that did come through were truncated/corrupted with text like `"Here is the JSON requested:\n\`\`\`json"`
-- The `_call_api()` function only retried on 429 quota errors, not 503 service unavailable
+**Re-run diagnostic (workflow 27425327799, attempt 2):**
+- Workflow completed but **failed** — not due to 503 this time
+- Real error: `'NoneType' object has no attribute 'strip'` in `_call_api()` line 563
+- This occurs when Gemini API returns a successful response object where `.response.text` is `None`
+- Likely cause: API returning 503 (service unavailable) as a successful response with empty body, not as an exception
 
-**Fix deployed (PR #41):**
-1. **Handle 503 errors**: Extended `_call_api()` retryable error detection to include "503" and "unavailable" (previously only checked for "429", "quota", "resource_exhausted")
-2. **Detect truncated responses**: Added validation to reject responses starting with obvious preambles like "Here is the JSON requested:", treating them as API failures to retry
-3. **Leverage existing partial completion**: The code already had partial retry logic; these fixes allow it to properly retry transient API failures
+### Root issues fixed (PR #41)
 
-**Testing & Deployment:**
-- All 84 existing tests pass locally ✅
-- Queued workflow re-run (27425327799) to retry the 3 failed API calls
-- PR #41 created as draft; ready to merge once re-run completes
+1. **No 503 retry logic**: `_call_api()` only retried on 429 (quota) errors, not 503 (service unavailable)
+2. **None response.text handling**: When API returns success response with empty text, code crashed trying to call `.strip()` on None
+3. **Truncated response acceptance**: Responses like `"Here is the JSON requested:\n\`\`\`json"` were stored as-is instead of being rejected as malformed
 
-### Expected outcome
+**Fixes implemented:**
+- **Commit 374c6e8**: Added "503" and "unavailable" to retryable error detection; added truncated response rejection
+- **Commit 738cf3d**: Added check for empty response.text; treat as transient error and retry
 
-The re-run should:
-1. Load the existing partial `data/ai/2026-06-12.json` (status: incomplete)
-2. Skip already-generated fields (rotation_phase, daily_delta attempt)
-3. Retry the 3 failed fields with 503 resilience
-4. Update `data/ai/2026-06-12.json` with complete data
-5. The dashboard should display correct AI insights instead of "Unknown" phases and truncated briefings
+**Testing:**
+- All 84 tests pass locally ✅
+- Ready for next workflow run
 
-### Next steps
+### Current status
 
-1. Monitor the queued workflow run to completion (~5-10 min from 15:55 UTC)
-2. Verify `data/ai/2026-06-12.json` is now complete (all 6 fields present)
-3. Confirm dashboard AI Insights tab shows proper data (no "Unknown" phases)
-4. Merge PR #41
-5. Document this fix in WORK_LOG.md
+- Branch `claude/ai-workflow-troubleshoot-p4ya51` has 2 commits with robust error handling
+- PR #41 open as draft with detailed explanation
+- Next step: Merge PR and trigger new workflow run to complete the 2026-06-12 analysis
+
+### Key learning
+
+Gemini API 503 errors can manifest as:
+1. Exception with message containing "503 UNAVAILABLE" (now caught + retried)
+2. Successful response with `response.text == None` (now caught + retried)
+3. Truncated/incomplete JSON responses (now detected + retried)
 
 ---
 
