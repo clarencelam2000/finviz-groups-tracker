@@ -207,6 +207,33 @@ def test_parse_watchlist_full():
     assert "momentum" in result[0]["thesis"].lower()
 
 
+def test_parse_watchlist_with_conviction():
+    text = (
+        "1. NAME: Energy | THESIS: Strong momentum. | CONVICTION: strong\n"
+        "2. NAME: Financials | THESIS: Mixed signals. | CONVICTION: moderate\n"
+        "3. NAME: Tech | THESIS: Early rotation. | CONVICTION: speculative\n"
+    )
+    result = generate_ai.parse_watchlist_response(text)
+    assert len(result) == 3
+    assert result[0]["conviction"] == "strong"
+    assert result[1]["conviction"] == "moderate"
+    assert result[2]["conviction"] == "speculative"
+
+
+def test_parse_watchlist_invalid_conviction_omitted():
+    text = "1. NAME: Energy | THESIS: Good setup. | CONVICTION: high\n"
+    result = generate_ai.parse_watchlist_response(text)
+    assert len(result) == 1
+    assert "conviction" not in result[0]
+
+
+def test_parse_watchlist_missing_conviction_omitted():
+    text = "1. NAME: Energy | THESIS: Good setup.\n"
+    result = generate_ai.parse_watchlist_response(text)
+    assert len(result) == 1
+    assert "conviction" not in result[0]
+
+
 def test_parse_watchlist_empty():
     assert generate_ai.parse_watchlist_response("") == []
 
@@ -269,6 +296,101 @@ def test_watchlist_schema_has_picks_array():
     assert generate_ai.WATCHLIST_SCHEMA["required"] == ["picks"]
     item_props = generate_ai.WATCHLIST_SCHEMA["properties"]["picks"]["items"]["properties"]
     assert "name" in item_props and "thesis" in item_props
+    assert "conviction" in item_props
+    conviction_enum = item_props["conviction"]["enum"]
+    assert set(conviction_enum) == {"strong", "moderate", "speculative"}
+    item_required = generate_ai.WATCHLIST_SCHEMA["properties"]["picks"]["items"]["required"]
+    assert "conviction" in item_required
+
+
+def test_briefing_schema_has_key_signals_and_briefing():
+    schema = generate_ai.BRIEFING_SCHEMA
+    assert schema["required"] == ["key_signals", "briefing"]
+    assert schema["properties"]["key_signals"]["type"] == "array"
+    assert schema["properties"]["key_signals"]["items"]["type"] == "string"
+    assert schema["properties"]["briefing"]["type"] == "string"
+
+
+# ---------------------------------------------------------------------------
+# parse_briefing_response
+# ---------------------------------------------------------------------------
+
+def test_parse_briefing_response_plain_text():
+    result = generate_ai.parse_briefing_response("Some market analysis text.")
+    assert result["briefing"] == "Some market analysis text."
+    assert result["key_signals"] == []
+
+
+def test_parse_briefing_response_strips_whitespace():
+    result = generate_ai.parse_briefing_response("  text with spaces  \n")
+    assert result["briefing"] == "text with spaces"
+
+
+# ---------------------------------------------------------------------------
+# generate_for_group briefing JSON extraction
+# ---------------------------------------------------------------------------
+
+def test_generate_for_group_briefing_extracts_key_signals(monkeypatch):
+    """When briefing returns valid JSON, both briefing and key_signals are stored."""
+    from unittest.mock import MagicMock
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    generate_ai._reset_tracking()
+    mock_genai = MagicMock()
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    snap = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "perf_week": [2.0], "perf_month": [3.0], "perf_ytd": [5.0],
+    })
+    delta = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "rank_ytd": [1.0], "rank_ytd_delta_7d": [2.0], "momentum_score": [0.8],
+    })
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
+
+    signals = ["Energy +5% YTD, rank #1", "Momentum score 0.80", "7d rank gain +2 spots"]
+    briefing_json = json.dumps({"key_signals": signals, "briefing": "Energy is leading."})
+    client = _make_client([briefing_json, "PHASE: Late Cycle\nREASONING: Energy leads.",
+                           "1. NAME: Energy | THESIS: Strong.\n2. NAME: Fin | THESIS: Ok.\n3. NAME: Tech | THESIS: Watch."])
+    result = generate_ai.generate_for_group(client, "sector", "2026-06-11")
+
+    assert result["briefing"] == "Energy is leading."
+    assert result["key_signals"] == signals
+
+
+def test_generate_for_group_briefing_fallback_no_key_signals(monkeypatch):
+    """When briefing JSON parse fails, prose is stored without key_signals."""
+    from unittest.mock import MagicMock
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    generate_ai._reset_tracking()
+    mock_genai = MagicMock()
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    snap = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "perf_week": [2.0], "perf_month": [3.0], "perf_ytd": [5.0],
+    })
+    delta = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "rank_ytd": [1.0], "rank_ytd_delta_7d": [2.0], "momentum_score": [0.8],
+    })
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
+
+    client = _make_client(["Plain text briefing — not JSON.",
+                           "PHASE: Late Cycle\nREASONING: Energy leads.",
+                           "1. NAME: Energy | THESIS: Strong.\n2. NAME: Fin | THESIS: Ok.\n3. NAME: Tech | THESIS: Watch."])
+    result = generate_ai.generate_for_group(client, "sector", "2026-06-11")
+
+    assert result["briefing"] == "Plain text briefing — not JSON."
+    assert "key_signals" not in result
 
 
 # ---------------------------------------------------------------------------
@@ -280,10 +402,38 @@ def test_task_specs_has_expected_names():
     assert names == {"briefing", "rotation_phase", "watchlist"}
 
 
+def test_industry_phase_schema_has_free_form_label():
+    schema = generate_ai.INDUSTRY_PHASE_SCHEMA
+    assert schema["required"] == ["label", "reasoning", "confidence"]
+    # Free-form label — no enum constraint
+    assert "enum" not in schema["properties"]["label"]
+    assert schema["properties"]["label"]["type"] == "string"
+
+
+def test_task_specs_rotation_phase_covers_both_group_types():
+    phase_specs = [s for s in generate_ai.TASK_SPECS if s["name"] == "rotation_phase"]
+    assert len(phase_specs) == 2
+    gtypes = {gt for s in phase_specs for gt in s["group_types"]}
+    assert gtypes == {"sector", "industry"}
+    sector_spec = next(s for s in phase_specs if "sector" in s["group_types"])
+    assert sector_spec["response_schema"] is generate_ai.PHASE_SCHEMA
+    industry_spec = next(s for s in phase_specs if "industry" in s["group_types"])
+    assert industry_spec["response_schema"] is generate_ai.INDUSTRY_PHASE_SCHEMA
+
+
+def test_task_specs_watchlist_covers_both_group_types():
+    watchlist_specs = [s for s in generate_ai.TASK_SPECS if s["name"] == "watchlist"]
+    assert len(watchlist_specs) == 2
+    gtypes = {gt for s in watchlist_specs for gt in s["group_types"]}
+    assert gtypes == {"sector", "industry"}
+
+
 def test_task_specs_briefing_covers_both_group_types():
     spec = next(s for s in generate_ai.TASK_SPECS if s["name"] == "briefing")
     assert "sector" in spec["group_types"]
     assert "industry" in spec["group_types"]
+    assert spec["use_json_schema"] is True
+    assert spec["response_schema"] is generate_ai.BRIEFING_SCHEMA
 
 
 def test_task_specs_rotation_phase_sector_only():
@@ -300,21 +450,26 @@ def test_task_specs_watchlist_sector_only():
     assert spec["response_schema"] is generate_ai.WATCHLIST_SCHEMA
 
 
-def test_expected_fields_returns_all_four():
+def test_expected_fields_returns_all_six():
     fields = set(generate_ai._expected_fields())
     assert fields == {
         "sectors.briefing",
         "sectors.rotation_phase",
         "sectors.watchlist",
         "industries.briefing",
+        "industries.rotation_phase",
+        "industries.watchlist",
     }
 
 
-def test_generate_for_group_industry_calls_api_once(monkeypatch):
-    """Industry group only runs briefing — 1 API call, not 3."""
+def test_generate_for_group_industry_calls_api_three_times(monkeypatch):
+    """Industry group now runs briefing, rotation_phase, and watchlist — 3 API calls."""
+    from unittest.mock import MagicMock
     monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
     monkeypatch.setattr("time.sleep", lambda _: None)
     generate_ai._reset_tracking()
+    mock_genai = MagicMock()
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
     snap = pd.DataFrame({
         "date": [pd.Timestamp("2026-06-11").date()],
@@ -329,13 +484,24 @@ def test_generate_for_group_industry_calls_api_once(monkeypatch):
     monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
     monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
 
-    client = _make_client(["Industry briefing text"])
+    briefing_json = json.dumps({
+        "key_signals": ["Software up 3% YTD", "Momentum score 0.70", "Rank stable week-over-week"],
+        "briefing": "Industry briefing text",
+    })
+    client = _make_client([
+        briefing_json,
+        "PHASE: Tech pullback\nREASONING: Software leading defensively.",
+        "1. NAME: Software | THESIS: Strong trend. | CONVICTION: strong\n"
+        "2. NAME: Retail | THESIS: Early bid. | CONVICTION: moderate\n"
+        "3. NAME: Energy | THESIS: Watch. | CONVICTION: speculative",
+    ])
     result = generate_ai.generate_for_group(client, "industry", "2026-06-11")
 
-    assert client.models.generate_content.call_count == 1
+    assert client.models.generate_content.call_count == 3
     assert result.get("briefing") == "Industry briefing text"
-    assert "rotation_phase" not in result
-    assert "watchlist" not in result
+    assert result.get("key_signals") == ["Software up 3% YTD", "Momentum score 0.70", "Rank stable week-over-week"]
+    assert result.get("rotation_phase", {}).get("label") == "Tech pullback"
+    assert isinstance(result.get("watchlist"), list)
 
 
 def test_generate_for_group_empty_snapshot_returns_existing(monkeypatch):
@@ -352,6 +518,20 @@ def test_generate_for_group_empty_snapshot_returns_existing(monkeypatch):
     assert client.models.generate_content.call_count == 0
     assert generate_ai._field_log["sectors.briefing"]["status"] == "skipped"
     assert generate_ai._field_log["sectors.rotation_phase"]["status"] == "no_data"
+
+
+def test_generate_for_group_industry_empty_snapshot_records_no_data(monkeypatch):
+    """Industry empty snapshot records no_data for rotation_phase and watchlist."""
+    generate_ai._reset_tracking()
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: pd.DataFrame())
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: pd.DataFrame())
+
+    client = _make_client([])
+    generate_ai.generate_for_group(client, "industry", "2026-06-11")
+
+    assert client.models.generate_content.call_count == 0
+    assert generate_ai._field_log["industries.rotation_phase"]["status"] == "no_data"
+    assert generate_ai._field_log["industries.watchlist"]["status"] == "no_data"
 
 
 def test_generate_for_group_json_parse_fallback(monkeypatch):
@@ -490,6 +670,52 @@ def test_call_api_passes_generation_config_values(monkeypatch):
 # ---------------------------------------------------------------------------
 # main exits gracefully without API key
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# _find_prior_ai_file
+# ---------------------------------------------------------------------------
+
+def test_find_prior_ai_file_returns_nearest(tmp_path):
+    orig = generate_ai.AI_DIR
+    generate_ai.AI_DIR = tmp_path
+    (tmp_path / "2026-06-10.json").write_text("{}")
+    result = generate_ai._find_prior_ai_file("2026-06-11")
+    generate_ai.AI_DIR = orig
+    assert result is not None
+    assert result.name == "2026-06-10.json"
+
+
+def test_find_prior_ai_file_returns_none_when_missing(tmp_path):
+    orig = generate_ai.AI_DIR
+    generate_ai.AI_DIR = tmp_path
+    result = generate_ai._find_prior_ai_file("2026-06-11")
+    generate_ai.AI_DIR = orig
+    assert result is None
+
+
+def test_find_prior_ai_file_skips_beyond_5_days(tmp_path):
+    orig = generate_ai.AI_DIR
+    generate_ai.AI_DIR = tmp_path
+    (tmp_path / "2026-06-04.json").write_text("{}")  # 7 days before June 11
+    result = generate_ai._find_prior_ai_file("2026-06-11")
+    generate_ai.AI_DIR = orig
+    assert result is None
+
+
+def test_find_prior_ai_file_skips_weekends_finds_friday(tmp_path):
+    orig = generate_ai.AI_DIR
+    generate_ai.AI_DIR = tmp_path
+    (tmp_path / "2026-06-05.json").write_text("{}")  # Friday, 2 days before Monday June 8
+    result = generate_ai._find_prior_ai_file("2026-06-08")
+    generate_ai.AI_DIR = orig
+    assert result is not None
+    assert result.name == "2026-06-05.json"
+
+
+def test_find_prior_ai_file_invalid_date():
+    result = generate_ai._find_prior_ai_file("not-a-date")
+    assert result is None
+
 
 # ---------------------------------------------------------------------------
 # _update_index
@@ -683,7 +909,11 @@ def test_is_complete_returns_true_for_full_data():
             "rotation_phase": {"label": "Defensive", "reasoning": "..."},
             "watchlist": [{"name": "Energy", "thesis": "Strong"}],
         },
-        "industries": {"briefing": "Industry text"},
+        "industries": {
+            "briefing": "Industry text",
+            "rotation_phase": {"label": "Tech pullback", "reasoning": "Software leads."},
+            "watchlist": [{"name": "Software", "thesis": "Strong trend."}],
+        },
     }
     assert generate_ai._is_complete(data) is True
 
@@ -741,6 +971,7 @@ def test_missing_fields_empty_data():
     assert set(missing) == {
         "sectors.briefing", "sectors.rotation_phase",
         "sectors.watchlist", "industries.briefing",
+        "industries.rotation_phase", "industries.watchlist",
     }
 
 
@@ -763,7 +994,11 @@ def test_missing_fields_complete_data():
             "rotation_phase": {"label": "Defensive", "reasoning": "..."},
             "watchlist": [{"name": "Energy", "thesis": "..."}],
         },
-        "industries": {"briefing": "text"},
+        "industries": {
+            "briefing": "text",
+            "rotation_phase": {"label": "Tech pullback", "reasoning": "..."},
+            "watchlist": [{"name": "Software", "thesis": "..."}],
+        },
     }
     assert generate_ai._missing_fields(data) == []
 
@@ -845,7 +1080,11 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
                 "rotation_phase": {"label": "Defensive", "reasoning": "test"},
                 "watchlist": [{"name": "Energy", "thesis": "ok"}],
             }
-        return {"briefing": "Industry briefing"}
+        return {
+            "briefing": "Industry briefing",
+            "rotation_phase": {"label": "Tech pullback", "reasoning": "test"},
+            "watchlist": [{"name": "Software", "thesis": "ok"}],
+        }
 
     monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
     # Mock both parent and child so import succeeds even without google-genai installed.
@@ -864,6 +1103,8 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
     assert result["sectors"]["briefing"] == "Existing briefing"  # preserved
     assert isinstance(result["sectors"]["rotation_phase"], dict)
     assert result["industries"]["briefing"] == "Industry briefing"
+    assert isinstance(result["industries"]["rotation_phase"], dict)
+    assert isinstance(result["industries"]["watchlist"], list)
 
     # generate_for_group was called with the existing sector data
     sector_call = next(c for c in call_log if c[0] == "sector")
@@ -874,6 +1115,108 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
     with open(tmp_path / "ai_run_summary.json") as f:
         summary = json.load(f)
     assert summary["outcome"] == "complete"
+
+
+def test_main_generates_daily_delta_when_prior_file_exists(monkeypatch, tmp_path):
+    """When a prior day's AI file exists, main() generates sectors.daily_delta."""
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+    yesterday = (_dt.date.today() - _dt.timedelta(days=1)).isoformat()
+    (tmp_path / "ai").mkdir(parents=True)
+
+    # Write yesterday's AI file with a sectors briefing
+    prior = {
+        "date": yesterday,
+        "sectors": {"briefing": "Yesterday energy was leading."},
+        "industries": {},
+    }
+    (tmp_path / "ai" / f"{yesterday}.json").write_text(json.dumps(prior))
+
+    calls = []
+    def fake_generate(client, group_type, date_str, existing=None):
+        calls.append(group_type)
+        if group_type == "sector":
+            return {
+                "briefing": "Today briefing",
+                "rotation_phase": {"label": "Late Cycle", "reasoning": "Energy leads."},
+                "watchlist": [{"name": "Energy", "thesis": "ok"}],
+            }
+        return {
+            "briefing": "Industry briefing",
+            "rotation_phase": {"label": "Commodity", "reasoning": "..."},
+            "watchlist": [{"name": "Software", "thesis": "ok"}],
+        }
+
+    delta_calls = []
+    def fake_delta(client, prior_briefing, date_str):
+        delta_calls.append(prior_briefing)
+        return ["Energy rank improved to #1", "Healthcare lost momentum"]
+
+    monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
+    monkeypatch.setattr(generate_ai, "_generate_daily_delta", fake_delta)
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    generate_ai.main()
+
+    with open(tmp_path / "ai" / f"{today}.json") as f:
+        result = json.load(f)
+
+    assert result["sectors"]["daily_delta"] == ["Energy rank improved to #1", "Healthcare lost momentum"]
+    assert delta_calls[0] == "Yesterday energy was leading."
+
+
+def test_main_skips_delta_when_no_prior_file(monkeypatch, tmp_path):
+    """When no prior AI file exists, daily_delta is absent from output."""
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+    (tmp_path / "ai").mkdir(parents=True)
+
+    delta_calls = []
+    def fake_delta(*args, **kwargs):
+        delta_calls.append(True)
+        return ["change"]
+
+    def fake_generate(client, group_type, date_str, existing=None):
+        if group_type == "sector":
+            return {
+                "briefing": "Today briefing",
+                "rotation_phase": {"label": "Late Cycle", "reasoning": "..."},
+                "watchlist": [{"name": "Energy", "thesis": "ok"}],
+            }
+        return {
+            "briefing": "Industry briefing",
+            "rotation_phase": {"label": "Commodity", "reasoning": "..."},
+            "watchlist": [{"name": "Software", "thesis": "ok"}],
+        }
+
+    monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
+    monkeypatch.setattr(generate_ai, "_generate_daily_delta", fake_delta)
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    generate_ai.main()
+
+    assert delta_calls == []  # _generate_daily_delta was not called
+    with open(tmp_path / "ai" / f"{today}.json") as f:
+        result = json.load(f)
+    assert "daily_delta" not in result.get("sectors", {})
 
 
 def test_main_skips_already_complete_file(monkeypatch, tmp_path):
@@ -894,7 +1237,11 @@ def test_main_skips_already_complete_file(monkeypatch, tmp_path):
             "rotation_phase": {"label": "Defensive", "reasoning": "..."},
             "watchlist": [{"name": "Energy", "thesis": "ok"}],
         },
-        "industries": {"briefing": "Industry text"},
+        "industries": {
+            "briefing": "Industry text",
+            "rotation_phase": {"label": "Tech pullback", "reasoning": "..."},
+            "watchlist": [{"name": "Software", "thesis": "ok"}],
+        },
     }
     with open(tmp_path / "ai" / f"{today}.json", "w") as f:
         json.dump(complete, f)

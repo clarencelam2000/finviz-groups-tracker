@@ -21,6 +21,10 @@
     .tab-active { border-bottom: 2px solid #38bdf8; color: #38bdf8; }
     .spinning { animation: spin 1s linear infinite; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
+    .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+    .scrollbar-none::-webkit-scrollbar { display: none; }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen font-sans select-none">
@@ -148,9 +152,27 @@
 
     <!-- TAB: AI Insights -->
     <section id="tab-ai" class="px-3 pt-3 pb-24 hidden">
-      <div class="flex bg-slate-800 rounded-lg p-1 mb-3">
-        <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-group="sectors">Sectors</button>
-        <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-group="industries">Industries</button>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="flex flex-1 bg-slate-800 rounded-lg p-1">
+          <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-group="sectors">Sectors</button>
+          <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-group="industries">Industries</button>
+        </div>
+        <button id="ai-share-btn" class="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-30" disabled title="Share briefing">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+          </svg>
+        </button>
+      </div>
+      <div id="ai-date-nav" class="hidden flex items-center justify-between mb-3 px-0.5">
+        <button id="ai-nav-prev" class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+          Prev
+        </button>
+        <span id="ai-nav-date" class="text-xs font-medium text-slate-300"></span>
+        <button id="ai-nav-next" class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-800 text-slate-400 hover:text-white text-xs font-medium transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+          Next
+          <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </button>
       </div>
       <div id="ai-content" class="space-y-3"></div>
     </section>
@@ -182,6 +204,8 @@
       },
       fetchLog: null,
       aiData: null,
+      latestAiDate: null,
+      currentAiDate: null,
       loading: false,
       expandedName: null,
     };
@@ -321,6 +345,55 @@
         .replace(/'/g, '&#39;');
     }
 
+    function showToast(msg) {
+      let toast = document.getElementById('share-toast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'share-toast';
+        toast.style.cssText = 'position:fixed;bottom:6rem;left:50%;transform:translateX(-50%);background:#334155;color:#f1f5f9;font-size:0.875rem;padding:0.5rem 1.25rem;border-radius:9999px;box-shadow:0 4px 12px rgba(0,0,0,0.4);transition:opacity 0.3s;z-index:50;pointer-events:none;';
+        document.body.appendChild(toast);
+      }
+      toast.textContent = msg;
+      toast.style.opacity = '1';
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+    }
+
+    async function shareAI() {
+      if (!state.aiData) return;
+      const data = state.aiData;
+      const group = state.group === 'sectors' ? (data.sectors || {}) : (data.industries || {});
+      const groupLabel = state.group === 'sectors' ? 'Sectors' : 'Industries';
+      const dateStr = data.date || new Date().toISOString().slice(0, 10);
+
+      const lines = [`Finviz AI Briefing — ${dateStr} (${groupLabel})`];
+      if (Array.isArray(group.key_signals) && group.key_signals.length > 0) {
+        group.key_signals.forEach(s => lines.push('• ' + s));
+        lines.push('');
+      }
+      if (group.briefing) {
+        const snippet = group.briefing.length > 500 ? group.briefing.slice(0, 500) + '…' : group.briefing;
+        lines.push(snippet);
+      }
+      const text = lines.join('\n');
+
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: 'Finviz AI Briefing', text, url: window.location.href });
+        } else {
+          await navigator.clipboard.writeText(text + '\n\n' + window.location.href);
+          showToast('Copied!');
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          try {
+            await navigator.clipboard.writeText(text + '\n\n' + window.location.href);
+            showToast('Copied!');
+          } catch {}
+        }
+      }
+    }
+
     function skeleton(n) {
       return Array.from({ length: n }, () => `
         <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 animate-pulse flex gap-3 items-center">
@@ -380,6 +453,63 @@
       } catch (e) {
         state.fetchLog = [];
       }
+    }
+
+    async function fetchAIForDate(dateStr) {
+      const cacheKey = `ai_${dateStr}`;
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) { try { return JSON.parse(cached); } catch {} }
+      try {
+        const resp = await fetch(`${BASE}/ai/${dateStr}.json`);
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        try { sessionStorage.setItem(cacheKey, JSON.stringify(data)); } catch {}
+        return data;
+      } catch { return null; }
+    }
+
+    async function loadPhaseHistory(latestDateStr) {
+      const container = document.getElementById('ai-phase-history');
+      if (!container) return;
+
+      const dates = [];
+      const base = new Date(latestDateStr + 'T12:00:00Z');
+      for (let i = 0; i < 30; i++) {
+        const d = new Date(base);
+        d.setUTCDate(d.getUTCDate() - i);
+        dates.push(d.toISOString().slice(0, 10));
+      }
+
+      const settled = await Promise.allSettled(dates.map(d => fetchAIForDate(d)));
+
+      const pills = [];
+      for (let i = settled.length - 1; i >= 0; i--) {
+        if (settled[i].status !== 'fulfilled' || !settled[i].value) continue;
+        const label = settled[i].value?.sectors?.rotation_phase?.label;
+        if (label) pills.push({ date: dates[i], label, isToday: i === 0 });
+        if (pills.length >= 14) break;
+      }
+
+      if (pills.length < 2) { container.innerHTML = ''; return; }
+
+      const phaseMap = {
+        'Early Cycle': { icon: '🟢', short: 'Early' },
+        'Mid Cycle':   { icon: '🟡', short: 'Mid' },
+        'Late Cycle':  { icon: '🟠', short: 'Late' },
+        'Defensive':   { icon: '🔵', short: 'Def' },
+      };
+
+      container.innerHTML = `
+        <div class="text-xs text-slate-500 uppercase tracking-wider mb-2 px-0.5">Phase history</div>
+        <div class="flex gap-1.5 overflow-x-auto scrollbar-none pb-1">
+          ${pills.map(p => {
+            const pm = phaseMap[p.label] || { icon: '⚪', short: p.label.slice(0, 4) };
+            return `<div class="flex-shrink-0 flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg ${p.isToday ? 'bg-slate-600 ring-1 ring-slate-400' : 'bg-slate-800 border border-slate-700'} text-center min-w-[44px]" title="${p.date}">
+              <span class="text-sm leading-none">${pm.icon}</span>
+              <span class="text-xs text-slate-400 leading-none">${pm.short}</span>
+            </div>`;
+          }).join('')}
+        </div>`;
     }
 
     async function loadAI(fallbackDateStr, force = false) {
@@ -782,6 +912,15 @@
 
       const data = state.aiData;
 
+      if (data && data._noData) {
+        container.innerHTML = `
+          <div class="rounded-xl p-6 bg-slate-800 border border-slate-700 text-center">
+            <p class="text-slate-400 text-sm">No data available for this period.</p>
+          </div>`;
+        updateAINavUI();
+        return;
+      }
+
       if (!data || Object.keys(data).length === 0) {
         container.innerHTML = `
           <div class="rounded-xl p-6 bg-slate-800 border border-slate-700 text-center">
@@ -795,19 +934,50 @@
 
       const sectors    = data.sectors    || {};
       const industries = data.industries || {};
+      const activeGroup = state.group === 'sectors' ? sectors : industries;
       let html = '';
 
-      // Generated-at caption
+      // Generated-at caption with relative time
       if (data.generated_at) {
-        const genFmt = new Date(data.generated_at).toLocaleString('en-US', {
+        const genDate = new Date(data.generated_at);
+        const genFmt = genDate.toLocaleString('en-US', {
           month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
           timeZone: 'America/New_York', hour12: true,
         }) + ' ET';
-        html += `<p class="text-xs text-slate-500 mb-4">Generated ${genFmt}${data.model ? ' · ' + escapeHtml(data.model) : ''}</p>`;
+        let relStr = '';
+        try {
+          const diffMin = Math.max(0, Math.floor((Date.now() - genDate.getTime()) / 60000));
+          if (diffMin < 1)    relStr = 'just now';
+          else if (diffMin < 60)   relStr = `${diffMin}m ago`;
+          else if (diffMin < 1440) relStr = `${Math.floor(diffMin / 60)}h ago`;
+          else if (diffMin < 10080) relStr = `${Math.floor(diffMin / 1440)}d ago`;
+        } catch {}
+        const prefix = relStr ? `Updated ${relStr} · ` : 'Generated ';
+        html += `<p class="text-xs text-slate-500 mb-4">${prefix}<span class="text-slate-600">${genFmt}${data.model ? ' · ' + escapeHtml(data.model) : ''}</span></p>`;
       }
 
-      // Rotation phase (sectors-only concept; always shown when present)
-      const phase = sectors.rotation_phase;
+      // Enable share button now that we have data
+      const shareBtn = document.getElementById('ai-share-btn');
+      if (shareBtn) shareBtn.disabled = false;
+
+      // What changed card — sectors daily delta, shown above everything else
+      const dailyDelta = Array.isArray(sectors.daily_delta) ? sectors.daily_delta : [];
+      if (dailyDelta.length > 0) {
+        html += `
+          <div class="rounded-xl p-4 bg-indigo-900/30 border border-indigo-700/50 mb-3">
+            <div class="text-xs font-semibold text-indigo-300 uppercase tracking-wider mb-2">↕ What changed</div>
+            <ul class="space-y-1.5">
+              ${dailyDelta.map(c => `
+                <li class="flex gap-2 text-sm text-slate-200">
+                  <span class="text-indigo-400 flex-shrink-0 select-none">•</span>
+                  <span>${escapeHtml(c)}</span>
+                </li>`).join('')}
+            </ul>
+          </div>`;
+      }
+
+      // Rotation phase — group-toggle-aware
+      const phase = activeGroup.rotation_phase;
       if (phase && phase.label) {
         const phaseMap = {
           'Early Cycle': { icon: '🟢', bg: 'bg-emerald-900/40', border: 'border-emerald-600/50', text: 'text-emerald-300' },
@@ -815,23 +985,40 @@
           'Late Cycle':  { icon: '🟠', bg: 'bg-orange-900/40',  border: 'border-orange-600/50',  text: 'text-orange-300' },
           'Defensive':   { icon: '🔵', bg: 'bg-sky-900/40',     border: 'border-sky-600/50',     text: 'text-sky-300'    },
         };
-        const pm = phaseMap[phase.label] || { icon: '⚪', bg: 'bg-slate-800', border: 'border-slate-600', text: 'text-slate-300' };
+        // Industries use free-form micro-phase labels → default neutral style
+        const pm = phaseMap[phase.label] || { icon: '🔍', bg: 'bg-slate-800', border: 'border-slate-600', text: 'text-slate-300' };
+        const phaseTitle = state.group === 'sectors' ? 'Rotation Phase' : 'Market Micro-Phase';
         html += `
           <div class="rounded-xl p-4 ${pm.bg} border ${pm.border} mb-3">
-            <div class="text-sm font-bold ${pm.text} mb-1">${pm.icon} Rotation Phase: ${escapeHtml(phase.label)}</div>
+            <div class="text-sm font-bold ${pm.text} mb-1">${pm.icon} ${phaseTitle}: ${escapeHtml(phase.label)}</div>
             ${phase.reasoning ? `<div class="text-xs text-slate-300 italic leading-relaxed">${escapeHtml(phase.reasoning)}</div>` : ''}
           </div>`;
+        if (state.group === 'sectors') {
+          html += `<div id="ai-phase-history" class="mb-3"></div>`;
+        }
       }
 
-      // Watchlist (sectors-only concept; always shown when present)
-      const watchlist = sectors.watchlist || [];
+      // Watchlist — group-toggle-aware
+      const watchlist = activeGroup.watchlist || [];
       if (watchlist.length > 0) {
+        const convictionTag = (c) => {
+          const tags = {
+            strong:      { cls: 'bg-emerald-900/60 text-emerald-300 border border-emerald-700/50', label: 'strong' },
+            moderate:    { cls: 'bg-amber-900/60 text-amber-300 border border-amber-700/50',       label: 'moderate' },
+            speculative: { cls: 'bg-sky-900/60 text-sky-300 border border-sky-700/50',             label: 'speculative' },
+          };
+          const t = tags[c];
+          return t ? `<span class="inline-block px-1.5 py-0.5 rounded text-xs font-medium ${t.cls}">${t.label}</span>` : '';
+        };
         html += `
           <div class="rounded-xl p-4 bg-slate-800 border border-slate-700 mb-3">
             <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Watchlist — Top Setups</div>
             ${watchlist.map((item, i) => `
               <div class="${i < watchlist.length - 1 ? 'pb-3 mb-3 border-b border-slate-700' : ''}">
-                <div class="text-sm font-medium text-white">${i + 1}. ${escapeHtml(item.name)}</div>
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-sm font-medium text-white">${i + 1}. ${escapeHtml(item.name)}</span>
+                  ${item.conviction ? convictionTag(item.conviction) : ''}
+                </div>
                 <div class="text-xs text-slate-300 mt-0.5 leading-relaxed">${escapeHtml(item.thesis)}</div>
               </div>`).join('')}
           </div>`;
@@ -839,25 +1026,100 @@
 
       // Daily briefing — group-toggle-aware
       const groupLabel = state.group === 'sectors' ? 'Sectors' : 'Industries';
-      const briefingGroup = state.group === 'sectors' ? sectors : industries;
-      const briefing = briefingGroup.briefing || '';
+      const briefing = activeGroup.briefing || '';
+      const keySignals = Array.isArray(activeGroup.key_signals) ? activeGroup.key_signals : [];
 
       html += `<div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Daily Briefing — ${groupLabel}</div>`;
-      if (briefing) {
-        const paras = briefing.split(/\n\n+/).filter(Boolean);
-        html += `<div class="rounded-xl p-4 bg-slate-800 border border-slate-700 text-sm text-slate-200 leading-relaxed space-y-3">
-          ${paras.map(p => `<p>${escapeHtml(p).replace(/\n/g, ' ')}</p>`).join('')}
+      if (briefing || keySignals.length > 0) {
+        const signalBullets = keySignals.length > 0 ? `
+          <ul class="space-y-1.5 mb-3 pl-0">
+            ${keySignals.map(s => `
+              <li class="flex gap-2 text-sm text-slate-100">
+                <span class="text-sky-400 flex-shrink-0 select-none">▸</span>
+                <span>${escapeHtml(s)}</span>
+              </li>`).join('')}
+          </ul>` : '';
+
+        let briefingHtml = '';
+        if (briefing) {
+          const paras = briefing.split(/\n\n+/).filter(Boolean);
+          const parasHtml = `<div class="text-sm text-slate-300 leading-relaxed space-y-3">
+            ${paras.map(p => `<p>${escapeHtml(p).replace(/\n/g, ' ')}</p>`).join('')}
+          </div>`;
+          briefingHtml = keySignals.length > 0 ? `
+            <details>
+              <summary class="text-xs text-slate-500 hover:text-slate-300 transition-colors select-none">
+                ▶ Read full briefing
+              </summary>
+              <div class="mt-2">${parasHtml}</div>
+            </details>` : parasHtml;
+        }
+
+        html += `<div class="rounded-xl p-4 bg-slate-800 border border-slate-700">
+          ${signalBullets}${briefingHtml}
         </div>`;
       } else {
         html += `<div class="rounded-xl p-4 bg-slate-800 border border-slate-700 text-center">
           <p class="text-slate-500 text-sm">No ${groupLabel.toLowerCase()} briefing for this date.</p>
-          ${state.group === 'industries' && sectors.briefing
+          ${state.group === 'industries' && !industries.briefing && sectors.briefing
             ? '<p class="text-slate-500 text-xs mt-1">Switch to Sectors for the available briefing.</p>'
             : ''}
         </div>`;
       }
 
       container.innerHTML = html;
+
+      // Async phase history strip — load after DOM is updated, non-blocking
+      if (state.group === 'sectors' && data && data.sectors?.rotation_phase?.label) {
+        const histDate = data.date || new Date().toISOString().slice(0, 10);
+        loadPhaseHistory(histDate).catch(() => {});
+      }
+    }
+
+    // ── AI date navigation ─────────────────────────────────────────────────
+
+    function updateAINavUI() {
+      const nav = document.getElementById('ai-date-nav');
+      const dateLabel = document.getElementById('ai-nav-date');
+      const prevBtn   = document.getElementById('ai-nav-prev');
+      const nextBtn   = document.getElementById('ai-nav-next');
+      if (!nav || !state.currentAiDate) return;
+      nav.classList.remove('hidden');
+      const d = new Date(state.currentAiDate + 'T12:00:00Z');
+      dateLabel.textContent = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+      nextBtn.disabled = state.currentAiDate === state.latestAiDate;
+    }
+
+    async function navigateAI(direction) {
+      if (state.loading || !state.currentAiDate) return;
+      const prevBtn = document.getElementById('ai-nav-prev');
+      const nextBtn = document.getElementById('ai-nav-next');
+      if (prevBtn) prevBtn.disabled = true;
+      if (nextBtn) nextBtn.disabled = true;
+
+      const base = new Date(state.currentAiDate + 'T12:00:00Z');
+      let found = null;
+      for (let i = 1; i <= 7; i++) {
+        const candidate = new Date(base);
+        candidate.setUTCDate(candidate.getUTCDate() + (direction === 'next' ? i : -i));
+        const dateStr = candidate.toISOString().slice(0, 10);
+        if (direction === 'next' && dateStr > state.latestAiDate) break;
+        const data = await fetchAIForDate(dateStr);
+        if (data && Object.keys(data).length > 0) {
+          found = { dateStr, data };
+          break;
+        }
+      }
+
+      if (found) {
+        state.currentAiDate = found.dateStr;
+        state.aiData = found.data;
+      } else {
+        // Mark sentinel so renderAI can show "no data" message
+        state.aiData = { _noData: true };
+      }
+      renderAI();
+      updateAINavUI();
     }
 
     // ── Master render ──────────────────────────────────────────────────────
@@ -874,6 +1136,8 @@
       state.loading = on;
       const btn = document.getElementById('refresh-btn');
       btn.querySelector('svg').classList.toggle('spinning', on);
+      const shareBtn = document.getElementById('ai-share-btn');
+      if (shareBtn && on) shareBtn.disabled = true;
       if (on) {
         document.getElementById('today-cards').innerHTML = skeleton(5);
         document.getElementById('gainers-list').innerHTML = skeleton(3);
@@ -895,8 +1159,15 @@
       const snap = state.data.sectors.snap || [];
       const latestDate = snap.length > 0 ? snap[0].date : new Date().toISOString().slice(0, 10);
       await loadAI(latestDate, force);
+      // Track latest and current date for historical navigation
+      if (state.aiData && !state.aiData._noData && Object.keys(state.aiData).length > 0) {
+        const aiDate = state.aiData.date || latestDate;
+        state.latestAiDate = aiDate;
+        state.currentAiDate = aiDate;
+      }
       setLoading(false);
       render();
+      updateAINavUI();
     }
 
     // ── UI wiring ──────────────────────────────────────────────────────────
@@ -959,6 +1230,10 @@
       state.data.industries = { snap: null, delta: null };
       state.fetchLog = null;
       state.aiData = null;
+      state.latestAiDate = null;
+      state.currentAiDate = null;
+      const nav = document.getElementById('ai-date-nav');
+      if (nav) nav.classList.add('hidden');
       document.getElementById('last-updated').textContent = 'Loading…';
       loadAndRender(true, 600); // force=true bypasses cache; 600ms min keeps spinner visible
     };
@@ -989,6 +1264,9 @@
     });
 
     document.getElementById('refresh-btn').addEventListener('click', window.__refresh);
+    document.getElementById('ai-share-btn').addEventListener('click', shareAI);
+    document.getElementById('ai-nav-prev').addEventListener('click', () => navigateAI('prev'));
+    document.getElementById('ai-nav-next').addEventListener('click', () => navigateAI('next'));
 
     document.querySelectorAll('.strength-view-btn').forEach(btn =>
       btn.addEventListener('click', () => {

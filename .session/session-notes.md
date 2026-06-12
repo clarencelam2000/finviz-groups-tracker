@@ -6,9 +6,9 @@
 
 ## Current Status
 
-**Status:** Complete ✅ — AI architecture revamp done, PR open, needs review/merge
-**Safe to close:** Yes — all 6 phases committed and pushed, PR created
-**Waiting on:** PR review/merge. Tonight's cron will use the new `gemini-2.5-flash` model and write `data/ai/index.json` for the first time.
+**Status:** Complete ✅ — All 7 phases of AI tab improvements done, ready to push/PR
+**Safe to close:** Yes — all changes committed, tests passing (165), PR needs to be created
+**Waiting on:** PR creation (push + `mcp__github__create_pull_request` call)
 **Open threads:** None
 
 ---

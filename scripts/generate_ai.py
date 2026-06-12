@@ -9,7 +9,7 @@ import json
 import os
 import sys
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -33,6 +33,16 @@ PHASE_SCHEMA = {
     "required": ["label", "reasoning", "confidence"],
 }
 
+INDUSTRY_PHASE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "label": {"type": "string"},
+        "reasoning": {"type": "string"},
+        "confidence": {"type": "number"},
+    },
+    "required": ["label", "reasoning", "confidence"],
+}
+
 WATCHLIST_SCHEMA = {
     "type": "object",
     "properties": {
@@ -43,15 +53,46 @@ WATCHLIST_SCHEMA = {
                 "properties": {
                     "name": {"type": "string"},
                     "thesis": {"type": "string"},
+                    "conviction": {
+                        "type": "string",
+                        "enum": ["strong", "moderate", "speculative"],
+                    },
                     "confidence": {"type": "number"},
                 },
-                "required": ["name", "thesis"],
+                "required": ["name", "thesis", "conviction"],
             },
             "minItems": 3,
             "maxItems": 3,
         }
     },
     "required": ["picks"],
+}
+
+BRIEFING_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "key_signals": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 3,
+            "maxItems": 5,
+        },
+        "briefing": {"type": "string"},
+    },
+    "required": ["key_signals", "briefing"],
+}
+
+DAILY_DELTA_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "changes": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 2,
+            "maxItems": 3,
+        }
+    },
+    "required": ["changes"],
 }
 
 # Free tier: 5 requests/minute. Enforce >=13s between calls to stay safely under.
@@ -203,11 +244,11 @@ def build_briefing_prompt(group_type: str, snap_df: pd.DataFrame,
     snapshot = serialize_snapshot_summary(snap_df)
     movers = serialize_top_movers(delta_df)
     leaders = serialize_momentum_leaders(delta_df)
-    return f"""You are a quantitative market analyst. Based on the following Finviz {group_name} data for {date_str}, write a concise market briefing (3 short paragraphs, ~150 words total).
+    return f"""You are a quantitative market analyst. Based on the following Finviz {group_name} data for {date_str}, write a market analysis.
 
-Focus on: (1) what is rotating in / gaining momentum, (2) what is weakening or losing ground, (3) any notable divergence or pattern worth watching.
-
-Write in plain English, directly useful to an investor tracking sector rotation. Do not add generic risk disclaimers.
+Return JSON with exactly two fields:
+- "key_signals": array of 3-5 short strings, each a specific actionable observation (e.g. "Energy +8% YTD, rank improved 4 spots in 7 days" — not vague like "Energy is rising")
+- "briefing": 3 short paragraphs (~150 words total) covering rotation, weakness, and notable patterns
 
 DATA:
 {snapshot}
@@ -216,7 +257,7 @@ DATA:
 
 {leaders}
 
-Write 3 short paragraphs. No headings, no bullet points. Be specific — name the {group_name}."""
+Be specific — name the {group_name}. No generic risk disclaimers."""
 
 
 def build_phase_prompt(snap_df: pd.DataFrame, delta_df: pd.DataFrame, date_str: str) -> str:
@@ -251,10 +292,107 @@ def build_watchlist_prompt(snap_df: pd.DataFrame, delta_df: pd.DataFrame, date_s
 
 {movers}
 
+For each pick include a conviction rating:
+- "strong": momentum_score >0.65 AND rank improving across multiple timeframes (week, month, ytd aligned)
+- "moderate": improving in 1-2 timeframes, mixed signals elsewhere
+- "speculative": single-timeframe signal or very early trend, needs confirmation
+
 For each pick, respond with EXACTLY:
-1. NAME: [sector name] | THESIS: [one sentence — why momentum/rank trajectory makes this interesting]
-2. NAME: [sector name] | THESIS: [one sentence]
-3. NAME: [sector name] | THESIS: [one sentence]
+1. NAME: [sector name] | THESIS: [one sentence — why momentum/rank trajectory makes this interesting] | CONVICTION: [strong/moderate/speculative]
+2. NAME: [sector name] | THESIS: [one sentence] | CONVICTION: [strong/moderate/speculative]
+3. NAME: [sector name] | THESIS: [one sentence] | CONVICTION: [strong/moderate/speculative]
+
+No other text. No disclaimers."""
+
+
+def _find_prior_ai_file(date_str: str) -> "Path | None":
+    """Return the most recent AI JSON file dated before date_str, within 5 calendar days."""
+    try:
+        base = date.fromisoformat(date_str)
+    except ValueError:
+        return None
+    for days_back in range(1, 6):
+        candidate = AI_DIR / f"{(base - timedelta(days=days_back)).isoformat()}.json"
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def build_daily_delta_prompt(prior_briefing: str, snap_df: pd.DataFrame,
+                              delta_df: pd.DataFrame, date_str: str) -> str:
+    movers = serialize_top_movers(delta_df, n=5)
+    return f"""You are a quantitative analyst. Compare today's market data with yesterday's sector analysis and identify what changed.
+
+YESTERDAY'S ANALYSIS:
+{prior_briefing}
+
+TODAY'S TOP MOVERS ({date_str}):
+{movers}
+
+Identify 2-3 specific things that changed since yesterday. Focus on:
+- Sectors that gained or lost momentum relative to yesterday
+- Notable rank changes
+- Phase shifts or new patterns emerging
+
+Return JSON with a "changes" array of 2-3 short specific strings.
+Good example: "Energy rank improved from #3 to #1 YTD, up 2 spots in 7 days"
+Bad example: "Energy sector improved"
+No generic commentary."""
+
+
+def _generate_daily_delta(client, prior_briefing: str, date_str: str) -> list:
+    """Generate 2-3 change observations vs yesterday. Returns list or [] on failure."""
+    snap_df = load_latest_snapshot("sector")
+    delta_df = load_latest_delta("sector")
+    prompt = build_daily_delta_prompt(prior_briefing, snap_df, delta_df, date_str)
+    try:
+        raw = _call_api(client, prompt,
+                        generation_config={"temperature": 0.4, "max_output_tokens": 300},
+                        response_schema=DAILY_DELTA_SCHEMA)
+        parsed = json.loads(raw)
+        return parsed.get("changes", []) if isinstance(parsed, dict) else []
+    except Exception as e:
+        print(f"  [daily_delta] API call failed: {e}")
+        return []
+
+
+def build_industry_phase_prompt(snap_df: pd.DataFrame, delta_df: pd.DataFrame, date_str: str) -> str:
+    movers = serialize_top_movers(delta_df, n=5)
+    leaders = serialize_momentum_leaders(delta_df, n=5)
+    return f"""You are a macro analyst. Based on the Finviz industry data for {date_str}, classify the current industry rotation in 1-3 words.
+
+Example micro-phase labels: "Commodity rotation", "Defensive consumer", "Tech pullback", "Broad advance", "Cyclical recovery", "Healthcare bid", "Energy & materials", "Consumer staples", "Small-cap growth"
+
+Use whichever label best describes which types of industries are leading RIGHT NOW.
+
+DATA:
+{movers}
+
+{leaders}
+
+Respond with EXACTLY this format (no other text):
+PHASE: [1-3 word micro-phase label]
+REASONING: [One sentence: which specific industries are leading and why this suggests the stated micro-phase]"""
+
+
+def build_industry_watchlist_prompt(snap_df: pd.DataFrame, delta_df: pd.DataFrame, date_str: str) -> str:
+    leaders = serialize_momentum_leaders(delta_df, n=10)
+    movers = serialize_top_movers(delta_df, n=5)
+    return f"""You are a systematic trader. Based on the Finviz industry data for {date_str}, identify the top 3 industry setups worth watching.
+
+{leaders}
+
+{movers}
+
+For each pick include a conviction rating:
+- "strong": momentum_score >0.65 AND rank improving across multiple timeframes
+- "moderate": improving in 1-2 timeframes, mixed signals elsewhere
+- "speculative": single-timeframe signal or very early trend
+
+For each pick, respond with EXACTLY:
+1. NAME: [industry name] | THESIS: [one sentence — why momentum/rank trajectory makes this interesting] | CONVICTION: [strong/moderate/speculative]
+2. NAME: [industry name] | THESIS: [one sentence] | CONVICTION: [strong/moderate/speculative]
+3. NAME: [industry name] | THESIS: [one sentence] | CONVICTION: [strong/moderate/speculative]
 
 No other text. No disclaimers."""
 
@@ -274,22 +412,35 @@ def parse_phase_response(text: str) -> dict:
     return result
 
 
+def parse_briefing_response(text: str) -> dict:
+    """Fallback when JSON parse fails for briefing — treat entire response as prose."""
+    return {"briefing": text.strip(), "key_signals": []}
+
+
 def parse_watchlist_response(text: str) -> list:
+    _valid_convictions = {"strong", "moderate", "speculative"}
     items = []
     for line in text.split("\n"):
         line = line.strip()
         if not line or not line[0].isdigit():
             continue
         content = line.lstrip("0123456789. ")
-        if "NAME:" in content and "THESIS:" in content:
-            try:
-                name_part, thesis_part = content.split("|", 1)
-                items.append({
-                    "name": name_part.replace("NAME:", "").strip(),
-                    "thesis": thesis_part.replace("THESIS:", "").strip(),
-                })
-            except ValueError:
-                pass
+        if "NAME:" not in content or "THESIS:" not in content:
+            continue
+        try:
+            parts = [p.strip() for p in content.split("|")]
+            name = next(p.replace("NAME:", "").strip() for p in parts if p.startswith("NAME:"))
+            thesis_raw = next(p for p in parts if p.startswith("THESIS:"))
+            thesis = thesis_raw.replace("THESIS:", "").strip()
+            item: dict = {"name": name, "thesis": thesis}
+            conviction_part = next((p for p in parts if p.startswith("CONVICTION:")), None)
+            if conviction_part:
+                conviction_val = conviction_part.replace("CONVICTION:", "").strip().lower()
+                if conviction_val in _valid_convictions:
+                    item["conviction"] = conviction_val
+            items.append(item)
+        except (StopIteration, ValueError):
+            pass
     return items
 
 
@@ -310,8 +461,10 @@ TASK_SPECS = [
         "group_types": ("sector", "industry"),
         "build_prompt": build_briefing_prompt,
         "pass_group_type": True,
-        "use_json_schema": False,
-        "generation_config": {"temperature": 0.7, "max_output_tokens": 500},
+        "use_json_schema": True,
+        "response_schema": BRIEFING_SCHEMA,
+        "fallback_parse": parse_briefing_response,
+        "generation_config": {"temperature": 0.7, "max_output_tokens": 800},
     },
     {
         "name": "rotation_phase",
@@ -326,6 +479,24 @@ TASK_SPECS = [
         "name": "watchlist",
         "group_types": ("sector",),
         "build_prompt": build_watchlist_prompt,
+        "use_json_schema": True,
+        "response_schema": WATCHLIST_SCHEMA,
+        "fallback_parse": parse_watchlist_response,
+        "generation_config": {"temperature": 0.5, "max_output_tokens": 400},
+    },
+    {
+        "name": "rotation_phase",
+        "group_types": ("industry",),
+        "build_prompt": build_industry_phase_prompt,
+        "use_json_schema": True,
+        "response_schema": INDUSTRY_PHASE_SCHEMA,
+        "fallback_parse": parse_phase_response,
+        "generation_config": {"temperature": 0.2, "max_output_tokens": 300},
+    },
+    {
+        "name": "watchlist",
+        "group_types": ("industry",),
+        "build_prompt": build_industry_watchlist_prompt,
         "use_json_schema": True,
         "response_schema": WATCHLIST_SCHEMA,
         "fallback_parse": parse_watchlist_response,
@@ -450,6 +621,13 @@ def generate_for_group(client, group_type: str, date_str: str, existing=None) ->
                     result["watchlist"] = (
                         parsed.get("picks", []) if isinstance(parsed, dict) else parsed
                     )
+                elif spec["name"] == "briefing":
+                    if isinstance(parsed, dict):
+                        result["briefing"] = parsed.get("briefing", "")
+                        if parsed.get("key_signals"):
+                            result["key_signals"] = parsed["key_signals"]
+                    else:
+                        result["briefing"] = str(parsed)
                 else:
                     result[spec["name"]] = parsed
             else:
@@ -621,6 +799,27 @@ def main():
         output[key] = generate_for_group(
             client, group_type, today, existing=existing_output.get(key, {})
         )
+
+    # Daily delta — compare today vs yesterday's sectors briefing
+    if not output.get("sectors", {}).get("daily_delta"):
+        prior_path = _find_prior_ai_file(today)
+        if prior_path:
+            try:
+                prior_data = json.loads(prior_path.read_text(encoding="utf-8"))
+                prior_briefing = prior_data.get("sectors", {}).get("briefing", "")
+                if prior_briefing:
+                    print(f"  [daily_delta] Generating from {prior_path.name}...")
+                    t0 = time.monotonic()
+                    changes = _generate_daily_delta(client, prior_briefing, today)
+                    if changes:
+                        output["sectors"]["daily_delta"] = changes
+                        _record_field("sectors.daily_delta", "ok", was_new=True,
+                                      elapsed=time.monotonic() - t0)
+                    else:
+                        _record_field("sectors.daily_delta", "error", was_new=True)
+            except Exception as e:
+                print(f"  [daily_delta] Failed to load prior file: {e}")
+                _record_field("sectors.daily_delta", "error", was_new=True, error=str(e))
 
     has_content = any(output.get(k) for k in ("sectors", "industries"))
     if not was_incremental and not has_content:
