@@ -402,6 +402,32 @@ def test_task_specs_has_expected_names():
     assert names == {"briefing", "rotation_phase", "watchlist"}
 
 
+def test_industry_phase_schema_has_free_form_label():
+    schema = generate_ai.INDUSTRY_PHASE_SCHEMA
+    assert schema["required"] == ["label", "reasoning", "confidence"]
+    # Free-form label — no enum constraint
+    assert "enum" not in schema["properties"]["label"]
+    assert schema["properties"]["label"]["type"] == "string"
+
+
+def test_task_specs_rotation_phase_covers_both_group_types():
+    phase_specs = [s for s in generate_ai.TASK_SPECS if s["name"] == "rotation_phase"]
+    assert len(phase_specs) == 2
+    gtypes = {gt for s in phase_specs for gt in s["group_types"]}
+    assert gtypes == {"sector", "industry"}
+    sector_spec = next(s for s in phase_specs if "sector" in s["group_types"])
+    assert sector_spec["response_schema"] is generate_ai.PHASE_SCHEMA
+    industry_spec = next(s for s in phase_specs if "industry" in s["group_types"])
+    assert industry_spec["response_schema"] is generate_ai.INDUSTRY_PHASE_SCHEMA
+
+
+def test_task_specs_watchlist_covers_both_group_types():
+    watchlist_specs = [s for s in generate_ai.TASK_SPECS if s["name"] == "watchlist"]
+    assert len(watchlist_specs) == 2
+    gtypes = {gt for s in watchlist_specs for gt in s["group_types"]}
+    assert gtypes == {"sector", "industry"}
+
+
 def test_task_specs_briefing_covers_both_group_types():
     spec = next(s for s in generate_ai.TASK_SPECS if s["name"] == "briefing")
     assert "sector" in spec["group_types"]
@@ -424,18 +450,20 @@ def test_task_specs_watchlist_sector_only():
     assert spec["response_schema"] is generate_ai.WATCHLIST_SCHEMA
 
 
-def test_expected_fields_returns_all_four():
+def test_expected_fields_returns_all_six():
     fields = set(generate_ai._expected_fields())
     assert fields == {
         "sectors.briefing",
         "sectors.rotation_phase",
         "sectors.watchlist",
         "industries.briefing",
+        "industries.rotation_phase",
+        "industries.watchlist",
     }
 
 
-def test_generate_for_group_industry_calls_api_once(monkeypatch):
-    """Industry group only runs briefing — 1 API call, not 3."""
+def test_generate_for_group_industry_calls_api_three_times(monkeypatch):
+    """Industry group now runs briefing, rotation_phase, and watchlist — 3 API calls."""
     from unittest.mock import MagicMock
     monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
     monkeypatch.setattr("time.sleep", lambda _: None)
@@ -460,14 +488,20 @@ def test_generate_for_group_industry_calls_api_once(monkeypatch):
         "key_signals": ["Software up 3% YTD", "Momentum score 0.70", "Rank stable week-over-week"],
         "briefing": "Industry briefing text",
     })
-    client = _make_client([briefing_json])
+    client = _make_client([
+        briefing_json,
+        "PHASE: Tech pullback\nREASONING: Software leading defensively.",
+        "1. NAME: Software | THESIS: Strong trend. | CONVICTION: strong\n"
+        "2. NAME: Retail | THESIS: Early bid. | CONVICTION: moderate\n"
+        "3. NAME: Energy | THESIS: Watch. | CONVICTION: speculative",
+    ])
     result = generate_ai.generate_for_group(client, "industry", "2026-06-11")
 
-    assert client.models.generate_content.call_count == 1
+    assert client.models.generate_content.call_count == 3
     assert result.get("briefing") == "Industry briefing text"
     assert result.get("key_signals") == ["Software up 3% YTD", "Momentum score 0.70", "Rank stable week-over-week"]
-    assert "rotation_phase" not in result
-    assert "watchlist" not in result
+    assert result.get("rotation_phase", {}).get("label") == "Tech pullback"
+    assert isinstance(result.get("watchlist"), list)
 
 
 def test_generate_for_group_empty_snapshot_returns_existing(monkeypatch):
@@ -484,6 +518,20 @@ def test_generate_for_group_empty_snapshot_returns_existing(monkeypatch):
     assert client.models.generate_content.call_count == 0
     assert generate_ai._field_log["sectors.briefing"]["status"] == "skipped"
     assert generate_ai._field_log["sectors.rotation_phase"]["status"] == "no_data"
+
+
+def test_generate_for_group_industry_empty_snapshot_records_no_data(monkeypatch):
+    """Industry empty snapshot records no_data for rotation_phase and watchlist."""
+    generate_ai._reset_tracking()
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: pd.DataFrame())
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: pd.DataFrame())
+
+    client = _make_client([])
+    generate_ai.generate_for_group(client, "industry", "2026-06-11")
+
+    assert client.models.generate_content.call_count == 0
+    assert generate_ai._field_log["industries.rotation_phase"]["status"] == "no_data"
+    assert generate_ai._field_log["industries.watchlist"]["status"] == "no_data"
 
 
 def test_generate_for_group_json_parse_fallback(monkeypatch):
@@ -815,7 +863,11 @@ def test_is_complete_returns_true_for_full_data():
             "rotation_phase": {"label": "Defensive", "reasoning": "..."},
             "watchlist": [{"name": "Energy", "thesis": "Strong"}],
         },
-        "industries": {"briefing": "Industry text"},
+        "industries": {
+            "briefing": "Industry text",
+            "rotation_phase": {"label": "Tech pullback", "reasoning": "Software leads."},
+            "watchlist": [{"name": "Software", "thesis": "Strong trend."}],
+        },
     }
     assert generate_ai._is_complete(data) is True
 
@@ -873,6 +925,7 @@ def test_missing_fields_empty_data():
     assert set(missing) == {
         "sectors.briefing", "sectors.rotation_phase",
         "sectors.watchlist", "industries.briefing",
+        "industries.rotation_phase", "industries.watchlist",
     }
 
 
@@ -895,7 +948,11 @@ def test_missing_fields_complete_data():
             "rotation_phase": {"label": "Defensive", "reasoning": "..."},
             "watchlist": [{"name": "Energy", "thesis": "..."}],
         },
-        "industries": {"briefing": "text"},
+        "industries": {
+            "briefing": "text",
+            "rotation_phase": {"label": "Tech pullback", "reasoning": "..."},
+            "watchlist": [{"name": "Software", "thesis": "..."}],
+        },
     }
     assert generate_ai._missing_fields(data) == []
 
@@ -977,7 +1034,11 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
                 "rotation_phase": {"label": "Defensive", "reasoning": "test"},
                 "watchlist": [{"name": "Energy", "thesis": "ok"}],
             }
-        return {"briefing": "Industry briefing"}
+        return {
+            "briefing": "Industry briefing",
+            "rotation_phase": {"label": "Tech pullback", "reasoning": "test"},
+            "watchlist": [{"name": "Software", "thesis": "ok"}],
+        }
 
     monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
     # Mock both parent and child so import succeeds even without google-genai installed.
@@ -996,6 +1057,8 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
     assert result["sectors"]["briefing"] == "Existing briefing"  # preserved
     assert isinstance(result["sectors"]["rotation_phase"], dict)
     assert result["industries"]["briefing"] == "Industry briefing"
+    assert isinstance(result["industries"]["rotation_phase"], dict)
+    assert isinstance(result["industries"]["watchlist"], list)
 
     # generate_for_group was called with the existing sector data
     sector_call = next(c for c in call_log if c[0] == "sector")
@@ -1026,7 +1089,11 @@ def test_main_skips_already_complete_file(monkeypatch, tmp_path):
             "rotation_phase": {"label": "Defensive", "reasoning": "..."},
             "watchlist": [{"name": "Energy", "thesis": "ok"}],
         },
-        "industries": {"briefing": "Industry text"},
+        "industries": {
+            "briefing": "Industry text",
+            "rotation_phase": {"label": "Tech pullback", "reasoning": "..."},
+            "watchlist": [{"name": "Software", "thesis": "ok"}],
+        },
     }
     with open(tmp_path / "ai" / f"{today}.json", "w") as f:
         json.dump(complete, f)

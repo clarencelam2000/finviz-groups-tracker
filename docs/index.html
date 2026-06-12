@@ -853,6 +853,7 @@
 
       const sectors    = data.sectors    || {};
       const industries = data.industries || {};
+      const activeGroup = state.group === 'sectors' ? sectors : industries;
       let html = '';
 
       // Generated-at caption with relative time
@@ -878,8 +879,8 @@
       const shareBtn = document.getElementById('ai-share-btn');
       if (shareBtn) shareBtn.disabled = false;
 
-      // Rotation phase (sectors-only concept; always shown when present)
-      const phase = sectors.rotation_phase;
+      // Rotation phase — group-toggle-aware
+      const phase = activeGroup.rotation_phase;
       if (phase && phase.label) {
         const phaseMap = {
           'Early Cycle': { icon: '🟢', bg: 'bg-emerald-900/40', border: 'border-emerald-600/50', text: 'text-emerald-300' },
@@ -887,16 +888,18 @@
           'Late Cycle':  { icon: '🟠', bg: 'bg-orange-900/40',  border: 'border-orange-600/50',  text: 'text-orange-300' },
           'Defensive':   { icon: '🔵', bg: 'bg-sky-900/40',     border: 'border-sky-600/50',     text: 'text-sky-300'    },
         };
-        const pm = phaseMap[phase.label] || { icon: '⚪', bg: 'bg-slate-800', border: 'border-slate-600', text: 'text-slate-300' };
+        // Industries use free-form micro-phase labels → default neutral style
+        const pm = phaseMap[phase.label] || { icon: '🔍', bg: 'bg-slate-800', border: 'border-slate-600', text: 'text-slate-300' };
+        const phaseTitle = state.group === 'sectors' ? 'Rotation Phase' : 'Market Micro-Phase';
         html += `
           <div class="rounded-xl p-4 ${pm.bg} border ${pm.border} mb-3">
-            <div class="text-sm font-bold ${pm.text} mb-1">${pm.icon} Rotation Phase: ${escapeHtml(phase.label)}</div>
+            <div class="text-sm font-bold ${pm.text} mb-1">${pm.icon} ${phaseTitle}: ${escapeHtml(phase.label)}</div>
             ${phase.reasoning ? `<div class="text-xs text-slate-300 italic leading-relaxed">${escapeHtml(phase.reasoning)}</div>` : ''}
           </div>`;
       }
 
-      // Watchlist (sectors-only concept; always shown when present)
-      const watchlist = sectors.watchlist || [];
+      // Watchlist — group-toggle-aware
+      const watchlist = activeGroup.watchlist || [];
       if (watchlist.length > 0) {
         const convictionTag = (c) => {
           const tags = {
@@ -923,9 +926,8 @@
 
       // Daily briefing — group-toggle-aware
       const groupLabel = state.group === 'sectors' ? 'Sectors' : 'Industries';
-      const briefingGroup = state.group === 'sectors' ? sectors : industries;
-      const briefing = briefingGroup.briefing || '';
-      const keySignals = Array.isArray(briefingGroup.key_signals) ? briefingGroup.key_signals : [];
+      const briefing = activeGroup.briefing || '';
+      const keySignals = Array.isArray(activeGroup.key_signals) ? activeGroup.key_signals : [];
 
       html += `<div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Daily Briefing — ${groupLabel}</div>`;
       if (briefing || keySignals.length > 0) {
@@ -959,7 +961,7 @@
       } else {
         html += `<div class="rounded-xl p-4 bg-slate-800 border border-slate-700 text-center">
           <p class="text-slate-500 text-sm">No ${groupLabel.toLowerCase()} briefing for this date.</p>
-          ${state.group === 'industries' && sectors.briefing
+          ${state.group === 'industries' && !industries.briefing && sectors.briefing
             ? '<p class="text-slate-500 text-xs mt-1">Switch to Sectors for the available briefing.</p>'
             : ''}
         </div>`;

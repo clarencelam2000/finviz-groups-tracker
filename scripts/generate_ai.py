@@ -33,6 +33,16 @@ PHASE_SCHEMA = {
     "required": ["label", "reasoning", "confidence"],
 }
 
+INDUSTRY_PHASE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "label": {"type": "string"},
+        "reasoning": {"type": "string"},
+        "confidence": {"type": "number"},
+    },
+    "required": ["label", "reasoning", "confidence"],
+}
+
 WATCHLIST_SCHEMA = {
     "type": "object",
     "properties": {
@@ -282,6 +292,47 @@ For each pick, respond with EXACTLY:
 No other text. No disclaimers."""
 
 
+def build_industry_phase_prompt(snap_df: pd.DataFrame, delta_df: pd.DataFrame, date_str: str) -> str:
+    movers = serialize_top_movers(delta_df, n=5)
+    leaders = serialize_momentum_leaders(delta_df, n=5)
+    return f"""You are a macro analyst. Based on the Finviz industry data for {date_str}, classify the current industry rotation in 1-3 words.
+
+Example micro-phase labels: "Commodity rotation", "Defensive consumer", "Tech pullback", "Broad advance", "Cyclical recovery", "Healthcare bid", "Energy & materials", "Consumer staples", "Small-cap growth"
+
+Use whichever label best describes which types of industries are leading RIGHT NOW.
+
+DATA:
+{movers}
+
+{leaders}
+
+Respond with EXACTLY this format (no other text):
+PHASE: [1-3 word micro-phase label]
+REASONING: [One sentence: which specific industries are leading and why this suggests the stated micro-phase]"""
+
+
+def build_industry_watchlist_prompt(snap_df: pd.DataFrame, delta_df: pd.DataFrame, date_str: str) -> str:
+    leaders = serialize_momentum_leaders(delta_df, n=10)
+    movers = serialize_top_movers(delta_df, n=5)
+    return f"""You are a systematic trader. Based on the Finviz industry data for {date_str}, identify the top 3 industry setups worth watching.
+
+{leaders}
+
+{movers}
+
+For each pick include a conviction rating:
+- "strong": momentum_score >0.65 AND rank improving across multiple timeframes
+- "moderate": improving in 1-2 timeframes, mixed signals elsewhere
+- "speculative": single-timeframe signal or very early trend
+
+For each pick, respond with EXACTLY:
+1. NAME: [industry name] | THESIS: [one sentence — why momentum/rank trajectory makes this interesting] | CONVICTION: [strong/moderate/speculative]
+2. NAME: [industry name] | THESIS: [one sentence] | CONVICTION: [strong/moderate/speculative]
+3. NAME: [industry name] | THESIS: [one sentence] | CONVICTION: [strong/moderate/speculative]
+
+No other text. No disclaimers."""
+
+
 # ---------------------------------------------------------------------------
 # Response parsers
 # ---------------------------------------------------------------------------
@@ -364,6 +415,24 @@ TASK_SPECS = [
         "name": "watchlist",
         "group_types": ("sector",),
         "build_prompt": build_watchlist_prompt,
+        "use_json_schema": True,
+        "response_schema": WATCHLIST_SCHEMA,
+        "fallback_parse": parse_watchlist_response,
+        "generation_config": {"temperature": 0.5, "max_output_tokens": 400},
+    },
+    {
+        "name": "rotation_phase",
+        "group_types": ("industry",),
+        "build_prompt": build_industry_phase_prompt,
+        "use_json_schema": True,
+        "response_schema": INDUSTRY_PHASE_SCHEMA,
+        "fallback_parse": parse_phase_response,
+        "generation_config": {"temperature": 0.2, "max_output_tokens": 300},
+    },
+    {
+        "name": "watchlist",
+        "group_types": ("industry",),
+        "build_prompt": build_industry_watchlist_prompt,
         "use_json_schema": True,
         "response_schema": WATCHLIST_SCHEMA,
         "fallback_parse": parse_watchlist_response,

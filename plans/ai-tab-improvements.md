@@ -40,8 +40,8 @@ git status                                         # confirm clean working tree
   - [x] Item 1: Key signals bullets + collapsible briefing
 - [x] Phase 3 — Item 8 (conviction tags)
   - [x] Item 8: Conviction tags on watchlist items
-- [ ] Phase 4 — Item 3 (industries structure)
-  - [ ] Item 3: Industries watchlist + rotation micro-phase
+- [x] Phase 4 — Item 3 (industries structure)
+  - [x] Item 3: Industries watchlist + rotation micro-phase
 - [ ] Phase 5 — Item 2 (delta card)
   - [ ] Item 2: "What changed since yesterday" delta card
 - [ ] Phase 6 — Item 5 (phase history strip)
