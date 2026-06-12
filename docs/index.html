@@ -1026,8 +1026,24 @@
 
       // Daily briefing — group-toggle-aware
       const groupLabel = state.group === 'sectors' ? 'Sectors' : 'Industries';
-      const briefing = activeGroup.briefing || '';
-      const keySignals = Array.isArray(activeGroup.key_signals) ? activeGroup.key_signals : [];
+
+      // Defensive parsing: briefing might be object or string
+      let briefing = '';
+      let keySignals = [];
+      if (activeGroup.briefing) {
+        if (typeof activeGroup.briefing === 'string') {
+          briefing = activeGroup.briefing;
+        } else if (typeof activeGroup.briefing === 'object') {
+          briefing = activeGroup.briefing.briefing || '';
+          keySignals = activeGroup.briefing.key_signals || [];
+        }
+      }
+      // key_signals might also be at top level
+      if (Array.isArray(activeGroup.key_signals) && activeGroup.key_signals.length > 0) {
+        keySignals = activeGroup.key_signals;
+      }
+      // Filter out nulls and empty strings from key_signals
+      keySignals = keySignals.filter(s => s && typeof s === 'string' && s.trim());
 
       html += `<div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Daily Briefing — ${groupLabel}</div>`;
       if (briefing || keySignals.length > 0) {
@@ -1036,12 +1052,12 @@
             ${keySignals.map(s => `
               <li class="flex gap-2 text-sm text-slate-100">
                 <span class="text-sky-400 flex-shrink-0 select-none">▸</span>
-                <span>${escapeHtml(s)}</span>
+                <span>${escapeHtml(s.trim())}</span>
               </li>`).join('')}
           </ul>` : '';
 
         let briefingHtml = '';
-        if (briefing) {
+        if (briefing && typeof briefing === 'string') {
           const paras = briefing.split(/\n\n+/).filter(Boolean);
           const parasHtml = `<div class="text-sm text-slate-300 leading-relaxed space-y-3">
             ${paras.map(p => `<p>${escapeHtml(p).replace(/\n/g, ' ')}</p>`).join('')}
