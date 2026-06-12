@@ -623,15 +623,25 @@ with tab7:
     ai_dir = DATA_DIR / "ai"
     ai_file = None
 
-    if latest_date is not None:
-        candidate = ai_dir / f"{latest_date}.json"
-        if candidate.exists():
-            ai_file = candidate
-        else:
-            # Fall back to most recent available AI file
-            existing = sorted(ai_dir.glob("*.json")) if ai_dir.exists() else []
-            if existing:
-                ai_file = existing[-1]
+    # Prefer index.json: find the most recent entry with status "complete".
+    index_path = ai_dir / "index.json"
+    if index_path.exists():
+        try:
+            idx = json.loads(index_path.read_text(encoding="utf-8"))
+            for entry in idx.get("entries", []):
+                if entry.get("status") == "complete":
+                    candidate = ai_dir / f"{entry['date']}.json"
+                    if candidate.exists():
+                        ai_file = candidate
+                        break
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    # Glob fallback for repos that predate index.json.
+    if ai_file is None and ai_dir.exists():
+        existing = [p for p in sorted(ai_dir.glob("*.json")) if p.stem != "index"]
+        if existing:
+            ai_file = existing[-1]
 
     if ai_file is None:
         st.info(

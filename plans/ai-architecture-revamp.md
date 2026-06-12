@@ -8,7 +8,7 @@
 | 1 | ✅ Done | `feat: add JSON schema mode for phase and watchlist` |
 | 2 | ✅ Done | `refactor: replace hardcoded AI pipeline with TASK_SPECS` |
 | 3 | ✅ Done | `feat: add data/ai/index.json master manifest` |
-| 4 | ⬜ Pending | Dashboard + PWA consume index |
+| 4 | ✅ Done | `feat: load AI data via index.json in dashboard and PWA` |
 | 5 | ⬜ Pending | Model upgrade |
 | 6 | ⬜ Pending | Update plan + session notes |
 
