@@ -42,8 +42,8 @@ git status                                         # confirm clean working tree
   - [x] Item 8: Conviction tags on watchlist items
 - [x] Phase 4 — Item 3 (industries structure)
   - [x] Item 3: Industries watchlist + rotation micro-phase
-- [ ] Phase 5 — Item 2 (delta card)
-  - [ ] Item 2: "What changed since yesterday" delta card
+- [x] Phase 5 — Item 2 (delta card)
+  - [x] Item 2: "What changed since yesterday" delta card
 - [ ] Phase 6 — Item 5 (phase history strip)
   - [ ] Item 5: Rotation phase history strip
 - [ ] Phase 7 — Item 4 (historical navigation)

@@ -672,6 +672,52 @@ def test_call_api_passes_generation_config_values(monkeypatch):
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
+# _find_prior_ai_file
+# ---------------------------------------------------------------------------
+
+def test_find_prior_ai_file_returns_nearest(tmp_path):
+    orig = generate_ai.AI_DIR
+    generate_ai.AI_DIR = tmp_path
+    (tmp_path / "2026-06-10.json").write_text("{}")
+    result = generate_ai._find_prior_ai_file("2026-06-11")
+    generate_ai.AI_DIR = orig
+    assert result is not None
+    assert result.name == "2026-06-10.json"
+
+
+def test_find_prior_ai_file_returns_none_when_missing(tmp_path):
+    orig = generate_ai.AI_DIR
+    generate_ai.AI_DIR = tmp_path
+    result = generate_ai._find_prior_ai_file("2026-06-11")
+    generate_ai.AI_DIR = orig
+    assert result is None
+
+
+def test_find_prior_ai_file_skips_beyond_5_days(tmp_path):
+    orig = generate_ai.AI_DIR
+    generate_ai.AI_DIR = tmp_path
+    (tmp_path / "2026-06-04.json").write_text("{}")  # 7 days before June 11
+    result = generate_ai._find_prior_ai_file("2026-06-11")
+    generate_ai.AI_DIR = orig
+    assert result is None
+
+
+def test_find_prior_ai_file_skips_weekends_finds_friday(tmp_path):
+    orig = generate_ai.AI_DIR
+    generate_ai.AI_DIR = tmp_path
+    (tmp_path / "2026-06-05.json").write_text("{}")  # Friday, 2 days before Monday June 8
+    result = generate_ai._find_prior_ai_file("2026-06-08")
+    generate_ai.AI_DIR = orig
+    assert result is not None
+    assert result.name == "2026-06-05.json"
+
+
+def test_find_prior_ai_file_invalid_date():
+    result = generate_ai._find_prior_ai_file("not-a-date")
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
 # _update_index
 # ---------------------------------------------------------------------------
 
@@ -1069,6 +1115,108 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
     with open(tmp_path / "ai_run_summary.json") as f:
         summary = json.load(f)
     assert summary["outcome"] == "complete"
+
+
+def test_main_generates_daily_delta_when_prior_file_exists(monkeypatch, tmp_path):
+    """When a prior day's AI file exists, main() generates sectors.daily_delta."""
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+    yesterday = (_dt.date.today() - _dt.timedelta(days=1)).isoformat()
+    (tmp_path / "ai").mkdir(parents=True)
+
+    # Write yesterday's AI file with a sectors briefing
+    prior = {
+        "date": yesterday,
+        "sectors": {"briefing": "Yesterday energy was leading."},
+        "industries": {},
+    }
+    (tmp_path / "ai" / f"{yesterday}.json").write_text(json.dumps(prior))
+
+    calls = []
+    def fake_generate(client, group_type, date_str, existing=None):
+        calls.append(group_type)
+        if group_type == "sector":
+            return {
+                "briefing": "Today briefing",
+                "rotation_phase": {"label": "Late Cycle", "reasoning": "Energy leads."},
+                "watchlist": [{"name": "Energy", "thesis": "ok"}],
+            }
+        return {
+            "briefing": "Industry briefing",
+            "rotation_phase": {"label": "Commodity", "reasoning": "..."},
+            "watchlist": [{"name": "Software", "thesis": "ok"}],
+        }
+
+    delta_calls = []
+    def fake_delta(client, prior_briefing, date_str):
+        delta_calls.append(prior_briefing)
+        return ["Energy rank improved to #1", "Healthcare lost momentum"]
+
+    monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
+    monkeypatch.setattr(generate_ai, "_generate_daily_delta", fake_delta)
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    generate_ai.main()
+
+    with open(tmp_path / "ai" / f"{today}.json") as f:
+        result = json.load(f)
+
+    assert result["sectors"]["daily_delta"] == ["Energy rank improved to #1", "Healthcare lost momentum"]
+    assert delta_calls[0] == "Yesterday energy was leading."
+
+
+def test_main_skips_delta_when_no_prior_file(monkeypatch, tmp_path):
+    """When no prior AI file exists, daily_delta is absent from output."""
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+    (tmp_path / "ai").mkdir(parents=True)
+
+    delta_calls = []
+    def fake_delta(*args, **kwargs):
+        delta_calls.append(True)
+        return ["change"]
+
+    def fake_generate(client, group_type, date_str, existing=None):
+        if group_type == "sector":
+            return {
+                "briefing": "Today briefing",
+                "rotation_phase": {"label": "Late Cycle", "reasoning": "..."},
+                "watchlist": [{"name": "Energy", "thesis": "ok"}],
+            }
+        return {
+            "briefing": "Industry briefing",
+            "rotation_phase": {"label": "Commodity", "reasoning": "..."},
+            "watchlist": [{"name": "Software", "thesis": "ok"}],
+        }
+
+    monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
+    monkeypatch.setattr(generate_ai, "_generate_daily_delta", fake_delta)
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    generate_ai.main()
+
+    assert delta_calls == []  # _generate_daily_delta was not called
+    with open(tmp_path / "ai" / f"{today}.json") as f:
+        result = json.load(f)
+    assert "daily_delta" not in result.get("sectors", {})
 
 
 def test_main_skips_already_complete_file(monkeypatch, tmp_path):
