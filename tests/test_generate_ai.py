@@ -1070,13 +1070,13 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
     with open(tmp_path / "ai" / f"{today}.json", "w") as f:
         json.dump(partial, f)
 
-    # generate_for_group returns new content; verify briefing is NOT regenerated for sectors
+    # generate_for_group returns fresh content (force regeneration)
     call_log = []
     def fake_generate(client, group_type, date_str, existing=None):
         call_log.append((group_type, list(existing.keys()) if existing else []))
         if group_type == "sector":
             return {
-                "briefing": existing.get("briefing", ""),  # preserve
+                "briefing": "Sector briefing",  # always regenerate, not preserve
                 "rotation_phase": {"label": "Defensive", "reasoning": "test"},
                 "watchlist": [{"name": "Energy", "thesis": "ok"}],
             }
@@ -1111,8 +1111,9 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
     # generate_for_group was called for both groups
     assert call_log[0][0] == "sector"
     assert call_log[1][0] == "industry"
-    # Partial data passed to generate_for_group but regenerated (not preserved)
-    assert "briefing" in call_log[0][1]  # existing = {...}
+    # existing is always empty now (force regeneration)
+    assert call_log[0][1] == []  # existing = {} for both groups
+    assert call_log[1][1] == []
 
     # Sidecar was written
     assert (tmp_path / "ai_run_summary.json").exists()
@@ -1251,8 +1252,22 @@ def test_main_skips_already_complete_file(monkeypatch, tmp_path):
         json.dump(complete, f)
 
     generate_called = []
-    monkeypatch.setattr(generate_ai, "generate_for_group",
-                        lambda *_, **__: generate_called.append(True) or {})
+    def mock_generate(*_, **__):
+        generate_called.append(True)
+        # Return full data so outcome is "complete" not "failed"
+        if len(generate_called) == 1:  # sector call
+            return {
+                "briefing": "Sector content",
+                "rotation_phase": {"label": "Early Cycle", "reasoning": "test"},
+                "watchlist": [{"name": "Tech", "thesis": "test"}],
+            }
+        else:  # industry call
+            return {
+                "briefing": "Industry content",
+                "rotation_phase": {"label": "Growth", "reasoning": "test"},
+                "watchlist": [{"name": "Healthcare", "thesis": "test"}],
+            }
+    monkeypatch.setattr(generate_ai, "generate_for_group", mock_generate)
     # Mock both parent and child so import succeeds even without google-genai installed.
     mock_genai = MagicMock()
     mock_google = MagicMock()
@@ -1260,9 +1275,9 @@ def test_main_skips_already_complete_file(monkeypatch, tmp_path):
     monkeypatch.setitem(sys.modules, "google", mock_google)
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
-    with pytest.raises(SystemExit) as exc_info:
-        generate_ai.main()
-    assert exc_info.value.code == 0
+    # main() completes normally (no SystemExit) since content is generated
+    generate_ai.main()
+
     # generate_for_group MUST be called — we always force regenerate now
     assert generate_called == [True, True]  # called for sector and industry
 
