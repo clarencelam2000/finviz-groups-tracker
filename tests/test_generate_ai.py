@@ -249,6 +249,24 @@ def _make_client(responses):
     return client
 
 
+# ---------------------------------------------------------------------------
+# PHASE_SCHEMA and WATCHLIST_SCHEMA constants
+# ---------------------------------------------------------------------------
+
+def test_phase_schema_required_fields():
+    assert generate_ai.PHASE_SCHEMA["required"] == ["label", "reasoning", "confidence"]
+    enum_vals = generate_ai.PHASE_SCHEMA["properties"]["label"]["enum"]
+    assert set(enum_vals) == {"Early Cycle", "Mid Cycle", "Late Cycle", "Defensive"}
+
+
+def test_watchlist_schema_has_picks_array():
+    assert "picks" in generate_ai.WATCHLIST_SCHEMA["properties"]
+    assert generate_ai.WATCHLIST_SCHEMA["properties"]["picks"]["type"] == "array"
+    assert generate_ai.WATCHLIST_SCHEMA["required"] == ["picks"]
+    item_props = generate_ai.WATCHLIST_SCHEMA["properties"]["picks"]["items"]["properties"]
+    assert "name" in item_props and "thesis" in item_props
+
+
 def test_call_api_happy_path(monkeypatch):
     monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
     monkeypatch.setattr("time.sleep", lambda _: None)
@@ -284,6 +302,66 @@ def test_call_api_reraises_after_max_retries(monkeypatch):
     with pytest.raises(Exception, match="429"):
         generate_ai._call_api(client, "prompt", max_retries=3)
     assert client.models.generate_content.call_count == 4  # initial + 3 retries
+
+
+def test_call_api_no_schema_omits_config_kwarg(monkeypatch):
+    """Without schema kwargs, generate_content is called without a config kwarg."""
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    client = _make_client(["result"])
+    generate_ai._call_api(client, "prompt")
+    call_kwargs = client.models.generate_content.call_args[1]
+    assert "config" not in call_kwargs
+
+
+def test_call_api_passes_response_schema_as_config(monkeypatch):
+    """With response_schema, generate_content receives a config kwarg with response_mime_type=application/json."""
+    from unittest.mock import MagicMock
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    mock_config_instance = MagicMock()
+    mock_types = MagicMock()
+    mock_types.GenerateContentConfig.return_value = mock_config_instance
+    mock_genai_module = MagicMock()
+    mock_genai_module.types = mock_types
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai_module)
+
+    schema = generate_ai.PHASE_SCHEMA
+    client = _make_client(["result"])
+    result = generate_ai._call_api(client, "prompt", response_schema=schema)
+
+    assert result == "result"
+    mock_types.GenerateContentConfig.assert_called_once()
+    ctor_kwargs = mock_types.GenerateContentConfig.call_args[1]
+    assert ctor_kwargs["response_mime_type"] == "application/json"
+    assert ctor_kwargs["response_schema"] == schema
+
+    call_kwargs = client.models.generate_content.call_args[1]
+    assert "config" in call_kwargs
+    assert call_kwargs["config"] is mock_config_instance
+
+
+def test_call_api_passes_generation_config_values(monkeypatch):
+    """Custom temperature and max_output_tokens are forwarded to GenerateContentConfig."""
+    from unittest.mock import MagicMock
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    mock_types = MagicMock()
+    mock_genai_module = MagicMock()
+    mock_genai_module.types = mock_types
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai_module)
+
+    client = _make_client(["result"])
+    generate_ai._call_api(
+        client, "prompt",
+        generation_config={"temperature": 0.2, "max_output_tokens": 300},
+    )
+
+    ctor_kwargs = mock_types.GenerateContentConfig.call_args[1]
+    assert ctor_kwargs["temperature"] == 0.2
+    assert ctor_kwargs["max_output_tokens"] == 300
 
 
 # ---------------------------------------------------------------------------

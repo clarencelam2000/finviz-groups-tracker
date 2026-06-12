@@ -20,6 +20,40 @@ AI_DIR = DATA_DIR / "ai"
 
 GEMINI_MODEL = "gemini-flash-latest"
 
+PHASE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "label": {
+            "type": "string",
+            "enum": ["Early Cycle", "Mid Cycle", "Late Cycle", "Defensive"],
+        },
+        "reasoning": {"type": "string"},
+        "confidence": {"type": "number"},
+    },
+    "required": ["label", "reasoning", "confidence"],
+}
+
+WATCHLIST_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "picks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "thesis": {"type": "string"},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["name", "thesis"],
+            },
+            "minItems": 3,
+            "maxItems": 3,
+        }
+    },
+    "required": ["picks"],
+}
+
 # Free tier: 5 requests/minute. Enforce >=13s between calls to stay safely under.
 _INTER_CALL_DELAY = 13
 _last_api_call: float = 0.0
@@ -289,19 +323,30 @@ def parse_watchlist_response(text: str) -> list:
 # API call helper
 # ---------------------------------------------------------------------------
 
-def _call_api(client, prompt: str, max_retries: int = 3) -> str:
+def _call_api(client, prompt: str, max_retries: int = 3,
+              generation_config: dict = None, response_schema: dict = None) -> str:
     """Call Gemini with rate-limit spacing and exponential-backoff retry."""
     global _last_api_call, _api_call_count, _rate_limit_hits
     elapsed = time.monotonic() - _last_api_call
     if elapsed < _INTER_CALL_DELAY:
         time.sleep(_INTER_CALL_DELAY - elapsed)
 
+    extra = {}
+    if generation_config or response_schema:
+        from google.genai import types  # noqa: PLC0415 — lazy import; google-genai only required at runtime
+        extra["config"] = types.GenerateContentConfig(
+            temperature=(generation_config or {}).get("temperature", 0.7),
+            max_output_tokens=(generation_config or {}).get("max_output_tokens", 500),
+            response_mime_type="application/json" if response_schema else None,
+            response_schema=response_schema,
+        )
+
     _api_call_count += 1
     for attempt in range(max_retries + 1):
         _last_api_call = time.monotonic()
         try:
             response = client.models.generate_content(
-                model=GEMINI_MODEL, contents=prompt
+                model=GEMINI_MODEL, contents=prompt, **extra
             )
             return response.text.strip()
         except Exception as e:
