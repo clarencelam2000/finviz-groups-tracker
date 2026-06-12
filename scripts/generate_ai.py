@@ -535,6 +535,25 @@ def _missing_fields(data: dict) -> list:
 # API call helper
 # ---------------------------------------------------------------------------
 
+def _looks_like_preamble(text: str) -> bool:
+    """Detect if text is a preamble (e.g., 'Here is the JSON requested:')
+    rather than actual content. Catches LLM failures to follow JSON schema."""
+    preamble_patterns = [
+        "here is",
+        "below is",
+        "the json",
+        "json requested",
+        "json follows",
+        "json response",
+        "json output",
+        "```json",  # code fence without closing
+    ]
+    text_lower = text.lower()
+    return any(pattern in text_lower for pattern in preamble_patterns) and not text.startswith(
+        "{"
+    )
+
+
 def _call_api(client, prompt: str, max_retries: int = 3,
               generation_config: dict = None, response_schema: dict = None) -> str:
     """Call Gemini with rate-limit spacing and exponential-backoff retry."""
@@ -560,18 +579,28 @@ def _call_api(client, prompt: str, max_retries: int = 3,
             response = client.models.generate_content(
                 model=GEMINI_MODEL, contents=prompt, **extra
             )
-            return response.text.strip()
+            # Handle None or whitespace-only response text (transient API error)
+            if not response.text or not response.text.strip():
+                raise ValueError("empty response (503-like transient error)")
+
+            text = response.text.strip()
+            # Reject responses that are obvious preambles instead of content
+            # (catches LLM failures to follow JSON schema instructions)
+            if _looks_like_preamble(text):
+                raise ValueError(f"response is preamble, not content: {text[:60]}")
+
+            return text
         except Exception as e:
             err_str = str(e)
-            is_quota = (
-                "429" in err_str
-                or "quota" in err_str.lower()
-                or "resource_exhausted" in err_str.lower()
+            is_retryable = (
+                "429" in err_str or "quota" in err_str.lower() or "resource_exhausted" in err_str.lower()
+                or "503" in err_str or "unavailable" in err_str.lower()
+                or "empty response" in err_str.lower() or "preamble" in err_str.lower()
             )
-            if is_quota and attempt < max_retries:
+            if is_retryable and attempt < max_retries:
                 _rate_limit_hits += 1
                 wait = 30 * (2 ** attempt)  # 30s, 60s, 120s
-                print(f"    Rate limited, waiting {wait}s (attempt {attempt + 1}/{max_retries + 1})...")
+                print(f"    Transient error, waiting {wait}s (attempt {attempt + 1}/{max_retries + 1})...")
                 time.sleep(wait)
                 continue
             raise

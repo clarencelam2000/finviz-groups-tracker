@@ -1265,3 +1265,81 @@ def test_main_skips_already_complete_file(monkeypatch, tmp_path):
     with open(tmp_path / "ai_run_summary.json") as f:
         summary = json.load(f)
     assert summary["outcome"] == "skipped"
+
+
+# Error handling tests for transient API failures
+def test_looks_like_preamble_detects_common_patterns():
+    """Test preamble detection catches various LLM failure patterns."""
+    assert generate_ai._looks_like_preamble("Here is the JSON requested:")
+    assert generate_ai._looks_like_preamble("Below is the JSON response:")
+    assert generate_ai._looks_like_preamble("The JSON follows:")
+    assert generate_ai._looks_like_preamble("JSON output:\n```json")
+    assert not generate_ai._looks_like_preamble('{"name": "Energy"}')  # valid JSON
+
+
+def test_looks_like_preamble_case_insensitive():
+    """Test preamble detection is case-insensitive."""
+    assert generate_ai._looks_like_preamble("HERE IS THE JSON:")
+    assert generate_ai._looks_like_preamble("Below Is The JSON:")
+
+
+def test_call_api_retries_on_empty_response(monkeypatch):
+    """Test that empty response.text is treated as retryable error."""
+    from unittest.mock import MagicMock
+
+    client = MagicMock()
+    # First two calls return empty text, third succeeds
+    response_empty = MagicMock()
+    response_empty.text = None
+    response_ok = MagicMock()
+    response_ok.text = '{"result": "ok"}'
+
+    client.models.generate_content.side_effect = [response_empty, response_empty, response_ok]
+    monkeypatch.setattr(generate_ai, "_INTER_CALL_DELAY", 0)  # skip sleep in tests
+
+    result = generate_ai._call_api(
+        client, "prompt", max_retries=3,
+        generation_config=None, response_schema=None
+    )
+    assert result == '{"result": "ok"}'
+    assert client.models.generate_content.call_count == 3
+
+
+def test_call_api_retries_on_whitespace_response(monkeypatch):
+    """Test that whitespace-only response.text is treated as retryable error."""
+    from unittest.mock import MagicMock
+
+    client = MagicMock()
+    response_ws = MagicMock()
+    response_ws.text = "   \n\n  "
+    response_ok = MagicMock()
+    response_ok.text = '{"result": "ok"}'
+
+    client.models.generate_content.side_effect = [response_ws, response_ok]
+    monkeypatch.setattr(generate_ai, "_INTER_CALL_DELAY", 0)
+
+    result = generate_ai._call_api(
+        client, "prompt", max_retries=3,
+        generation_config=None, response_schema=None
+    )
+    assert result == '{"result": "ok"}'
+
+
+def test_call_api_retries_on_preamble_response(monkeypatch):
+    """Test that preamble responses are detected and retried."""
+    from unittest.mock import MagicMock
+
+    client = MagicMock()
+    response_preamble = MagicMock()
+    response_preamble.text = "Here is the JSON requested:\n```json"
+    response_ok = MagicMock()
+    response_ok.text = '{"result": "ok"}'
+
+    client.models.generate_content.side_effect = [response_preamble, response_ok]
+    monkeypatch.setattr(generate_ai, "_INTER_CALL_DELAY", 0)
+
+    result = generate_ai._call_api(
+        client, "prompt", max_retries=3,
+        generation_config=None, response_schema=None
+    )
+    assert result == '{"result": "ok"}'
