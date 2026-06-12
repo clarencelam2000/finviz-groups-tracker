@@ -77,6 +77,9 @@
           <option value="perf_week">Week %</option>
           <option value="perf_ytd">YTD %</option>
           <option value="perf_month">Month %</option>
+          <option value="perf_quarter">Qtr %</option>
+          <option value="perf_half">6-Month %</option>
+          <option value="perf_year">1-Year %</option>
           <option value="perf_day">Day %</option>
         </select>
       </div>
@@ -233,7 +236,7 @@
       try {
         const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
         if (['sectors','industries'].includes(p.group)) state.group = p.group;
-        if (['perf_ytd','perf_week','perf_month','perf_day'].includes(p.sortMetric)) state.sortMetric = p.sortMetric;
+        if (['perf_ytd','perf_week','perf_month','perf_quarter','perf_half','perf_year','perf_day'].includes(p.sortMetric)) state.sortMetric = p.sortMetric;
         if (['7d','14d','30d'].includes(p.lookback)) state.lookback = p.lookback;
       } catch(e) {}
     }
@@ -617,7 +620,7 @@
 
       container.innerHTML = sorted.map((row, i) => {
         const d = deltaMap[row.name] || {};
-        const rank = pf(d.rank_ytd);
+        const rank = pf(d.rank_half);
         const rankBadge = rank !== null
           ? `<span class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300 flex-shrink-0">${rank}</span>`
           : `<span class="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-xs text-slate-600 flex-shrink-0">${i+1}</span>`;
@@ -628,7 +631,7 @@
         const mainVal = pf(row[metric]);
         const mainColor = mainVal !== null ? perfColor(mainVal) : 'text-slate-400';
         const mainFmt = mainVal !== null ? `${mainVal > 0 ? '+' : ''}${mainVal.toFixed(2)}%` : '—';
-        const metricLabel = { perf_ytd: 'YTD', perf_week: 'Wk', perf_month: 'Mo', perf_day: 'Day' }[metric] || metric;
+        const metricLabel = { perf_ytd: 'YTD', perf_week: 'Wk', perf_month: 'Mo', perf_quarter: 'Qtr', perf_half: '6M', perf_year: '1Y', perf_day: 'Day' }[metric] || metric;
 
         const borderColor = mainVal === null  ? 'border-l-slate-700'
           : mainVal > 2  ? 'border-l-emerald-500'
