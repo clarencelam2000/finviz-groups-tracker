@@ -148,9 +148,16 @@
 
     <!-- TAB: AI Insights -->
     <section id="tab-ai" class="px-3 pt-3 pb-24 hidden">
-      <div class="flex bg-slate-800 rounded-lg p-1 mb-3">
-        <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-group="sectors">Sectors</button>
-        <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-group="industries">Industries</button>
+      <div class="flex items-center gap-2 mb-3">
+        <div class="flex flex-1 bg-slate-800 rounded-lg p-1">
+          <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-group="sectors">Sectors</button>
+          <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-group="industries">Industries</button>
+        </div>
+        <button id="ai-share-btn" class="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-white transition-colors disabled:opacity-30" disabled title="Share briefing">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+          </svg>
+        </button>
       </div>
       <div id="ai-content" class="space-y-3"></div>
     </section>
@@ -319,6 +326,55 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function showToast(msg) {
+      let toast = document.getElementById('share-toast');
+      if (!toast) {
+        toast = document.createElement('div');
+        toast.id = 'share-toast';
+        toast.style.cssText = 'position:fixed;bottom:6rem;left:50%;transform:translateX(-50%);background:#334155;color:#f1f5f9;font-size:0.875rem;padding:0.5rem 1.25rem;border-radius:9999px;box-shadow:0 4px 12px rgba(0,0,0,0.4);transition:opacity 0.3s;z-index:50;pointer-events:none;';
+        document.body.appendChild(toast);
+      }
+      toast.textContent = msg;
+      toast.style.opacity = '1';
+      clearTimeout(toast._timer);
+      toast._timer = setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+    }
+
+    async function shareAI() {
+      if (!state.aiData) return;
+      const data = state.aiData;
+      const group = state.group === 'sectors' ? (data.sectors || {}) : (data.industries || {});
+      const groupLabel = state.group === 'sectors' ? 'Sectors' : 'Industries';
+      const dateStr = data.date || new Date().toISOString().slice(0, 10);
+
+      const lines = [`Finviz AI Briefing — ${dateStr} (${groupLabel})`];
+      if (Array.isArray(group.key_signals) && group.key_signals.length > 0) {
+        group.key_signals.forEach(s => lines.push('• ' + s));
+        lines.push('');
+      }
+      if (group.briefing) {
+        const snippet = group.briefing.length > 500 ? group.briefing.slice(0, 500) + '…' : group.briefing;
+        lines.push(snippet);
+      }
+      const text = lines.join('\n');
+
+      try {
+        if (navigator.share) {
+          await navigator.share({ title: 'Finviz AI Briefing', text, url: window.location.href });
+        } else {
+          await navigator.clipboard.writeText(text + '\n\n' + window.location.href);
+          showToast('Copied!');
+        }
+      } catch (err) {
+        if (err.name !== 'AbortError') {
+          try {
+            await navigator.clipboard.writeText(text + '\n\n' + window.location.href);
+            showToast('Copied!');
+          } catch {}
+        }
+      }
     }
 
     function skeleton(n) {
@@ -797,14 +853,28 @@
       const industries = data.industries || {};
       let html = '';
 
-      // Generated-at caption
+      // Generated-at caption with relative time
       if (data.generated_at) {
-        const genFmt = new Date(data.generated_at).toLocaleString('en-US', {
+        const genDate = new Date(data.generated_at);
+        const genFmt = genDate.toLocaleString('en-US', {
           month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
           timeZone: 'America/New_York', hour12: true,
         }) + ' ET';
-        html += `<p class="text-xs text-slate-500 mb-4">Generated ${genFmt}${data.model ? ' · ' + escapeHtml(data.model) : ''}</p>`;
+        let relStr = '';
+        try {
+          const diffMin = Math.max(0, Math.floor((Date.now() - genDate.getTime()) / 60000));
+          if (diffMin < 1)    relStr = 'just now';
+          else if (diffMin < 60)   relStr = `${diffMin}m ago`;
+          else if (diffMin < 1440) relStr = `${Math.floor(diffMin / 60)}h ago`;
+          else if (diffMin < 10080) relStr = `${Math.floor(diffMin / 1440)}d ago`;
+        } catch {}
+        const prefix = relStr ? `Updated ${relStr} · ` : 'Generated ';
+        html += `<p class="text-xs text-slate-500 mb-4">${prefix}<span class="text-slate-600">${genFmt}${data.model ? ' · ' + escapeHtml(data.model) : ''}</span></p>`;
       }
+
+      // Enable share button now that we have data
+      const shareBtn = document.getElementById('ai-share-btn');
+      if (shareBtn) shareBtn.disabled = false;
 
       // Rotation phase (sectors-only concept; always shown when present)
       const phase = sectors.rotation_phase;
@@ -874,6 +944,8 @@
       state.loading = on;
       const btn = document.getElementById('refresh-btn');
       btn.querySelector('svg').classList.toggle('spinning', on);
+      const shareBtn = document.getElementById('ai-share-btn');
+      if (shareBtn && on) shareBtn.disabled = true;
       if (on) {
         document.getElementById('today-cards').innerHTML = skeleton(5);
         document.getElementById('gainers-list').innerHTML = skeleton(3);
@@ -989,6 +1061,7 @@
     });
 
     document.getElementById('refresh-btn').addEventListener('click', window.__refresh);
+    document.getElementById('ai-share-btn').addEventListener('click', shareAI);
 
     document.querySelectorAll('.strength-view-btn').forEach(btn =>
       btn.addEventListener('click', () => {
