@@ -207,6 +207,33 @@ def test_parse_watchlist_full():
     assert "momentum" in result[0]["thesis"].lower()
 
 
+def test_parse_watchlist_with_conviction():
+    text = (
+        "1. NAME: Energy | THESIS: Strong momentum. | CONVICTION: strong\n"
+        "2. NAME: Financials | THESIS: Mixed signals. | CONVICTION: moderate\n"
+        "3. NAME: Tech | THESIS: Early rotation. | CONVICTION: speculative\n"
+    )
+    result = generate_ai.parse_watchlist_response(text)
+    assert len(result) == 3
+    assert result[0]["conviction"] == "strong"
+    assert result[1]["conviction"] == "moderate"
+    assert result[2]["conviction"] == "speculative"
+
+
+def test_parse_watchlist_invalid_conviction_omitted():
+    text = "1. NAME: Energy | THESIS: Good setup. | CONVICTION: high\n"
+    result = generate_ai.parse_watchlist_response(text)
+    assert len(result) == 1
+    assert "conviction" not in result[0]
+
+
+def test_parse_watchlist_missing_conviction_omitted():
+    text = "1. NAME: Energy | THESIS: Good setup.\n"
+    result = generate_ai.parse_watchlist_response(text)
+    assert len(result) == 1
+    assert "conviction" not in result[0]
+
+
 def test_parse_watchlist_empty():
     assert generate_ai.parse_watchlist_response("") == []
 
@@ -269,6 +296,11 @@ def test_watchlist_schema_has_picks_array():
     assert generate_ai.WATCHLIST_SCHEMA["required"] == ["picks"]
     item_props = generate_ai.WATCHLIST_SCHEMA["properties"]["picks"]["items"]["properties"]
     assert "name" in item_props and "thesis" in item_props
+    assert "conviction" in item_props
+    conviction_enum = item_props["conviction"]["enum"]
+    assert set(conviction_enum) == {"strong", "moderate", "speculative"}
+    item_required = generate_ai.WATCHLIST_SCHEMA["properties"]["picks"]["items"]["required"]
+    assert "conviction" in item_required
 
 
 def test_briefing_schema_has_key_signals_and_briefing():

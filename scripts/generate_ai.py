@@ -43,9 +43,13 @@ WATCHLIST_SCHEMA = {
                 "properties": {
                     "name": {"type": "string"},
                     "thesis": {"type": "string"},
+                    "conviction": {
+                        "type": "string",
+                        "enum": ["strong", "moderate", "speculative"],
+                    },
                     "confidence": {"type": "number"},
                 },
-                "required": ["name", "thesis"],
+                "required": ["name", "thesis", "conviction"],
             },
             "minItems": 3,
             "maxItems": 3,
@@ -265,10 +269,15 @@ def build_watchlist_prompt(snap_df: pd.DataFrame, delta_df: pd.DataFrame, date_s
 
 {movers}
 
+For each pick include a conviction rating:
+- "strong": momentum_score >0.65 AND rank improving across multiple timeframes (week, month, ytd aligned)
+- "moderate": improving in 1-2 timeframes, mixed signals elsewhere
+- "speculative": single-timeframe signal or very early trend, needs confirmation
+
 For each pick, respond with EXACTLY:
-1. NAME: [sector name] | THESIS: [one sentence — why momentum/rank trajectory makes this interesting]
-2. NAME: [sector name] | THESIS: [one sentence]
-3. NAME: [sector name] | THESIS: [one sentence]
+1. NAME: [sector name] | THESIS: [one sentence — why momentum/rank trajectory makes this interesting] | CONVICTION: [strong/moderate/speculative]
+2. NAME: [sector name] | THESIS: [one sentence] | CONVICTION: [strong/moderate/speculative]
+3. NAME: [sector name] | THESIS: [one sentence] | CONVICTION: [strong/moderate/speculative]
 
 No other text. No disclaimers."""
 
@@ -294,21 +303,29 @@ def parse_briefing_response(text: str) -> dict:
 
 
 def parse_watchlist_response(text: str) -> list:
+    _valid_convictions = {"strong", "moderate", "speculative"}
     items = []
     for line in text.split("\n"):
         line = line.strip()
         if not line or not line[0].isdigit():
             continue
         content = line.lstrip("0123456789. ")
-        if "NAME:" in content and "THESIS:" in content:
-            try:
-                name_part, thesis_part = content.split("|", 1)
-                items.append({
-                    "name": name_part.replace("NAME:", "").strip(),
-                    "thesis": thesis_part.replace("THESIS:", "").strip(),
-                })
-            except ValueError:
-                pass
+        if "NAME:" not in content or "THESIS:" not in content:
+            continue
+        try:
+            parts = [p.strip() for p in content.split("|")]
+            name = next(p.replace("NAME:", "").strip() for p in parts if p.startswith("NAME:"))
+            thesis_raw = next(p for p in parts if p.startswith("THESIS:"))
+            thesis = thesis_raw.replace("THESIS:", "").strip()
+            item: dict = {"name": name, "thesis": thesis}
+            conviction_part = next((p for p in parts if p.startswith("CONVICTION:")), None)
+            if conviction_part:
+                conviction_val = conviction_part.replace("CONVICTION:", "").strip().lower()
+                if conviction_val in _valid_convictions:
+                    item["conviction"] = conviction_val
+            items.append(item)
+        except (StopIteration, ValueError):
+            pass
     return items
 
 

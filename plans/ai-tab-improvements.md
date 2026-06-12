@@ -38,8 +38,8 @@ git status                                         # confirm clean working tree
   - [x] Item 7: One-tap native share
 - [x] Phase 2 — Item 1 (structured takeaways)
   - [x] Item 1: Key signals bullets + collapsible briefing
-- [ ] Phase 3 — Item 8 (conviction tags)
-  - [ ] Item 8: Conviction tags on watchlist items
+- [x] Phase 3 — Item 8 (conviction tags)
+  - [x] Item 8: Conviction tags on watchlist items
 - [ ] Phase 4 — Item 3 (industries structure)
   - [ ] Item 3: Industries watchlist + rotation micro-phase
 - [ ] Phase 5 — Item 2 (delta card)
