@@ -6,12 +6,50 @@
 
 ## Current Status
 
-**Status:** Complete ✅ — All 7 phases of AI tab improvements done, ready to push/PR
-**Safe to close:** Yes — all changes committed, tests passing (165), PR needs to be created
-**Waiting on:** PR creation (push + `mcp__github__create_pull_request` call)
-**Open threads:** None
+**Status:** In Progress — AI workflow 503 error troubleshooting + fix deployed
+**Safe to close:** No — waiting for queued workflow re-run to complete (should finish in ~5-10 min)
+**Waiting on:** Gemini API retry to complete missing fields in 2026-06-12 analysis
+**Open threads:** None; PR #41 open as draft with fixes
 
 ---
+
+## Session: 2026-06-12 — AI workflow 503 error troubleshooting
+
+### What was done
+
+**Diagnosis:**
+- Reviewed 2026-06-12 AI workflow run (ID: 27425327799) that showed "partial" completion
+- Found 3 failed fields: `sectors.briefing`, `industries.watchlist`, `sectors.daily_delta`
+- Root cause: Gemini API returned 503 UNAVAILABLE ("high demand") errors
+- Side effect: Responses that did come through were truncated/corrupted with text like `"Here is the JSON requested:\n\`\`\`json"`
+- The `_call_api()` function only retried on 429 quota errors, not 503 service unavailable
+
+**Fix deployed (PR #41):**
+1. **Handle 503 errors**: Extended `_call_api()` retryable error detection to include "503" and "unavailable" (previously only checked for "429", "quota", "resource_exhausted")
+2. **Detect truncated responses**: Added validation to reject responses starting with obvious preambles like "Here is the JSON requested:", treating them as API failures to retry
+3. **Leverage existing partial completion**: The code already had partial retry logic; these fixes allow it to properly retry transient API failures
+
+**Testing & Deployment:**
+- All 84 existing tests pass locally ✅
+- Queued workflow re-run (27425327799) to retry the 3 failed API calls
+- PR #41 created as draft; ready to merge once re-run completes
+
+### Expected outcome
+
+The re-run should:
+1. Load the existing partial `data/ai/2026-06-12.json` (status: incomplete)
+2. Skip already-generated fields (rotation_phase, daily_delta attempt)
+3. Retry the 3 failed fields with 503 resilience
+4. Update `data/ai/2026-06-12.json` with complete data
+5. The dashboard should display correct AI insights instead of "Unknown" phases and truncated briefings
+
+### Next steps
+
+1. Monitor the queued workflow run to completion (~5-10 min from 15:55 UTC)
+2. Verify `data/ai/2026-06-12.json` is now complete (all 6 fields present)
+3. Confirm dashboard AI Insights tab shows proper data (no "Unknown" phases)
+4. Merge PR #41
+5. Document this fix in WORK_LOG.md
 
 ---
 
