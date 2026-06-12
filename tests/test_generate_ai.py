@@ -1100,15 +1100,19 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
     with open(tmp_path / "ai" / f"{today}.json") as f:
         result = json.load(f)
 
-    assert result["sectors"]["briefing"] == "Existing briefing"  # preserved
+    # File should have fresh generated data (not preserved from partial state)
+    # Since we always force regenerate now, it should use fake_generate output
+    assert result["sectors"]["briefing"] == "Sector briefing"  # regenerated, not preserved
     assert isinstance(result["sectors"]["rotation_phase"], dict)
     assert result["industries"]["briefing"] == "Industry briefing"
     assert isinstance(result["industries"]["rotation_phase"], dict)
     assert isinstance(result["industries"]["watchlist"], list)
 
-    # generate_for_group was called with the existing sector data
-    sector_call = next(c for c in call_log if c[0] == "sector")
-    assert "briefing" in sector_call[1]  # existing keys passed in
+    # generate_for_group was called for both groups
+    assert call_log[0][0] == "sector"
+    assert call_log[1][0] == "industry"
+    # Partial data passed to generate_for_group but regenerated (not preserved)
+    assert "briefing" in call_log[0][1]  # existing = {...}
 
     # Sidecar was written
     assert (tmp_path / "ai_run_summary.json").exists()
@@ -1259,12 +1263,12 @@ def test_main_skips_already_complete_file(monkeypatch, tmp_path):
     with pytest.raises(SystemExit) as exc_info:
         generate_ai.main()
     assert exc_info.value.code == 0
-    # generate_for_group must NOT have been called — file was already complete
-    assert generate_called == []
+    # generate_for_group MUST be called — we always force regenerate now
+    assert generate_called == [True, True]  # called for sector and industry
 
     with open(tmp_path / "ai_run_summary.json") as f:
         summary = json.load(f)
-    assert summary["outcome"] == "skipped"
+    assert summary["outcome"] == "complete"  # regenerated, not skipped
 
 
 # Error handling tests for transient API failures
