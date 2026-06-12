@@ -535,6 +535,25 @@ def _missing_fields(data: dict) -> list:
 # API call helper
 # ---------------------------------------------------------------------------
 
+def _looks_like_preamble(text: str) -> bool:
+    """Detect if text is a preamble (e.g., 'Here is the JSON requested:')
+    rather than actual content. Catches LLM failures to follow JSON schema."""
+    preamble_patterns = [
+        "here is",
+        "below is",
+        "the json",
+        "json requested",
+        "json follows",
+        "json response",
+        "json output",
+        "```json",  # code fence without closing
+    ]
+    text_lower = text.lower()
+    return any(pattern in text_lower for pattern in preamble_patterns) and not text.startswith(
+        "{"
+    )
+
+
 def _call_api(client, prompt: str, max_retries: int = 3,
               generation_config: dict = None, response_schema: dict = None) -> str:
     """Call Gemini with rate-limit spacing and exponential-backoff retry."""
@@ -560,15 +579,23 @@ def _call_api(client, prompt: str, max_retries: int = 3,
             response = client.models.generate_content(
                 model=GEMINI_MODEL, contents=prompt, **extra
             )
-            # Handle None or empty response text (API returned success but empty content)
-            if not response.text:
+            # Handle None or whitespace-only response text (transient API error)
+            if not response.text or not response.text.strip():
                 raise ValueError("empty response (503-like transient error)")
-            return response.text.strip()
+
+            text = response.text.strip()
+            # Reject responses that are obvious preambles instead of content
+            # (catches LLM failures to follow JSON schema instructions)
+            if _looks_like_preamble(text):
+                raise ValueError(f"response is preamble, not content: {text[:60]}")
+
+            return text
         except Exception as e:
             err_str = str(e)
             is_retryable = (
                 "429" in err_str or "quota" in err_str.lower() or "resource_exhausted" in err_str.lower()
                 or "503" in err_str or "unavailable" in err_str.lower()
+                or "empty response" in err_str.lower() or "preamble" in err_str.lower()
             )
             if is_retryable and attempt < max_retries:
                 _rate_limit_hits += 1
@@ -615,9 +642,6 @@ def generate_for_group(client, group_type: str, date_str: str, existing=None) ->
                 response_schema=spec.get("response_schema"),
             )
             if spec["use_json_schema"]:
-                # Reject obviously truncated/malformed responses (preamble text instead of JSON)
-                if raw.startswith("Here is") or raw.startswith("Here are"):
-                    raise ValueError(f"Response appears to be truncated preamble: {raw[:50]}")
                 try:
                     parsed = json.loads(raw)
                 except json.JSONDecodeError:
