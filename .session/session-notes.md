@@ -6,10 +6,70 @@
 
 ## Current Status
 
-**Status:** Complete ✅ — AI workflow error resilience deployed and tested
-**Safe to close:** Yes — all changes committed, 89 tests passing, PR #41 ready for review
-**Waiting on:** User to merge PR #41 and trigger next workflow run
+**Status:** Complete ✅ — Force GenerateAI and fix AI display issues implemented
+**Safe to close:** Yes — all changes committed, tests passing, PR #42 created and CI running
+**Waiting on:** CI to complete on PR #42; monitor watching for test results
 **Open threads:** None
+
+---
+
+## Session: 2026-06-12 — Force GenerateAI calls and fix AI data display corruption (PR #42, CI in progress)
+
+### What was done
+
+**Problem addressed:**
+1. Stale AI insights: caching prevents regeneration when Finviz data updates
+2. Dashboard display corruption: raw JSON like `{"key_signals": [...]}` showing instead of formatted text
+3. Debug messages appearing: "Here is the JSON requested:" visible in UI
+4. Fallback parsing mismatch: data shapes don't match frontend expectations
+
+**Solution implemented (4 commits):**
+
+1. **Force GenerateAI calls** (commit 022d871):
+   - Removed cache check block that skipped if file already existed for the day
+   - Always regenerate all fields from scratch on every workflow run
+   - Eliminates stale insights; always ensures fresh data
+
+2. **Normalize response shapes** (commit 022d871):
+   - Added `_normalize_briefing()`: guarantees `{briefing: str, key_signals: list}` shape
+   - Added `_normalize_phase()`: guarantees `{label: str, reasoning: str}` shape
+   - Called after JSON parsing or fallback parsing to prevent malformed data from leaking into stored files
+   - Handles all edge cases: null values, empty strings, type mismatches
+
+3. **Defensive frontend parsing** (commit 705d35c):
+   - Added validation in `renderAI()`: briefing might be string or object, handle both
+   - Filter null/empty strings from key_signals before rendering
+   - Graceful fallback if briefing accidentally stored as nested object
+   - Ensures string type before splitting paragraphs
+
+4. **Comprehensive test coverage** (commit 3640924):
+   - 17 new unit tests for normalization functions
+   - `_normalize_briefing`: 10 test cases (valid dict, null values, strings, invalid types)
+   - `_normalize_phase`: 7 test cases (valid dict, whitespace, free-form labels)
+   - All tests passing; existing tests remain passing
+
+**Files changed:**
+- `scripts/generate_ai.py`: Removed cache check, added 2 normalization helpers, updated generation logic
+- `docs/index.html`: Added defensive parsing in `renderAI()` briefing section
+- `tests/test_generate_ai.py`: 17 new test cases
+- `PLAN.md`: Detailed implementation plan (committed separately)
+
+**Test results:** All tests passing (106 tests in test_generate_ai.py, all generate_ai tests passing)
+
+**PR #42 status:** Draft, CI in progress (2 test jobs running)
+
+### Key decisions
+
+- Always force regeneration (no caching); user's request to fix refresh issues took priority over API cost savings
+- Normalization layer prevents both JSON parsing failures and fallback parsing mismatches from corrupting stored data
+- Frontend defensive parsing handles incomplete/malformed data gracefully instead of crashing
+- Test coverage focuses on robustness to edge cases that fallback parsing can produce
+
+### Next steps
+
+1. Monitor CI completion (watching PR #42)
+2. Address any CI failures if they arise
+3. Await user review/merge of PR #42
 
 ---
 
