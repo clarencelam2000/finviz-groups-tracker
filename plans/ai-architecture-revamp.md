@@ -5,8 +5,8 @@
 | Phase | Status | Commit |
 |-------|--------|--------|
 | 0 | ✅ Done | `docs: add AI architecture revamp plan` |
-| 1 | ⬜ Pending | JSON schemas + `_call_api` update |
-| 2 | ⬜ Pending | Declarative `TASK_SPECS` pipeline |
+| 1 | ✅ Done | `feat: add JSON schema mode for phase and watchlist` |
+| 2 | ✅ Done | `refactor: replace hardcoded AI pipeline with TASK_SPECS` |
 | 3 | ⬜ Pending | `index.json` master manifest |
 | 4 | ⬜ Pending | Dashboard + PWA consume index |
 | 5 | ⬜ Pending | Model upgrade |

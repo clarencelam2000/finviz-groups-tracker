@@ -267,6 +267,120 @@ def test_watchlist_schema_has_picks_array():
     assert "name" in item_props and "thesis" in item_props
 
 
+# ---------------------------------------------------------------------------
+# TASK_SPECS and _expected_fields
+# ---------------------------------------------------------------------------
+
+def test_task_specs_has_expected_names():
+    names = {s["name"] for s in generate_ai.TASK_SPECS}
+    assert names == {"briefing", "rotation_phase", "watchlist"}
+
+
+def test_task_specs_briefing_covers_both_group_types():
+    spec = next(s for s in generate_ai.TASK_SPECS if s["name"] == "briefing")
+    assert "sector" in spec["group_types"]
+    assert "industry" in spec["group_types"]
+
+
+def test_task_specs_rotation_phase_sector_only():
+    spec = next(s for s in generate_ai.TASK_SPECS if s["name"] == "rotation_phase")
+    assert spec["group_types"] == ("sector",)
+    assert spec["use_json_schema"] is True
+    assert spec["response_schema"] is generate_ai.PHASE_SCHEMA
+
+
+def test_task_specs_watchlist_sector_only():
+    spec = next(s for s in generate_ai.TASK_SPECS if s["name"] == "watchlist")
+    assert spec["group_types"] == ("sector",)
+    assert spec["use_json_schema"] is True
+    assert spec["response_schema"] is generate_ai.WATCHLIST_SCHEMA
+
+
+def test_expected_fields_returns_all_four():
+    fields = set(generate_ai._expected_fields())
+    assert fields == {
+        "sectors.briefing",
+        "sectors.rotation_phase",
+        "sectors.watchlist",
+        "industries.briefing",
+    }
+
+
+def test_generate_for_group_industry_calls_api_once(monkeypatch):
+    """Industry group only runs briefing — 1 API call, not 3."""
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    generate_ai._reset_tracking()
+
+    snap = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Software"],
+        "perf_week": [1.0], "perf_month": [2.0], "perf_ytd": [3.0],
+    })
+    delta = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Software"],
+        "rank_ytd": [1.0], "rank_ytd_delta_7d": [1.0], "momentum_score": [0.7],
+    })
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
+
+    client = _make_client(["Industry briefing text"])
+    result = generate_ai.generate_for_group(client, "industry", "2026-06-11")
+
+    assert client.models.generate_content.call_count == 1
+    assert result.get("briefing") == "Industry briefing text"
+    assert "rotation_phase" not in result
+    assert "watchlist" not in result
+
+
+def test_generate_for_group_empty_snapshot_returns_existing(monkeypatch):
+    """Empty snapshot returns existing dict unchanged and records no_data/skipped."""
+    generate_ai._reset_tracking()
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: pd.DataFrame())
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: pd.DataFrame())
+
+    existing = {"briefing": "old briefing"}
+    client = _make_client([])
+    result = generate_ai.generate_for_group(client, "sector", "2026-06-11", existing=existing)
+
+    assert result == existing
+    assert client.models.generate_content.call_count == 0
+    assert generate_ai._field_log["sectors.briefing"]["status"] == "skipped"
+    assert generate_ai._field_log["sectors.rotation_phase"]["status"] == "no_data"
+
+
+def test_generate_for_group_json_parse_fallback(monkeypatch):
+    """If JSON parse fails for rotation_phase, fallback parser is used."""
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    generate_ai._reset_tracking()
+
+    snap = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "perf_week": [2.0], "perf_month": [3.0], "perf_ytd": [5.0],
+    })
+    delta = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "rank_ytd": [1.0], "rank_ytd_delta_7d": [2.0], "momentum_score": [0.8],
+    })
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
+
+    # API returns text format (JSON parse will fail → triggers fallback_parse)
+    client = _make_client([
+        "Market briefing text",
+        "PHASE: Late Cycle\nREASONING: Energy leads.",
+        "1. NAME: Energy | THESIS: Strong setup.\n2. NAME: Financials | THESIS: Rising.\n3. NAME: Tech | THESIS: Holding.",
+    ])
+    result = generate_ai.generate_for_group(client, "sector", "2026-06-11")
+
+    assert result["rotation_phase"]["label"] == "Late Cycle"
+    assert isinstance(result["watchlist"], list)
+
+
 def test_call_api_happy_path(monkeypatch):
     monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
     monkeypatch.setattr("time.sleep", lambda _: None)
