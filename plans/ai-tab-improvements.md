@@ -44,8 +44,8 @@ git status                                         # confirm clean working tree
   - [x] Item 3: Industries watchlist + rotation micro-phase
 - [x] Phase 5 — Item 2 (delta card)
   - [x] Item 2: "What changed since yesterday" delta card
-- [ ] Phase 6 — Item 5 (phase history strip)
-  - [ ] Item 5: Rotation phase history strip
+- [x] Phase 6 — Item 5 (phase history strip)
+  - [x] Item 5: Rotation phase history strip
 - [ ] Phase 7 — Item 4 (historical navigation)
   - [ ] Item 4: Historical briefing date navigation
 

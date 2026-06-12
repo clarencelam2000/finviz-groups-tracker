@@ -23,6 +23,8 @@
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     details > summary { list-style: none; cursor: pointer; }
     details > summary::-webkit-details-marker { display: none; }
+    .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+    .scrollbar-none::-webkit-scrollbar { display: none; }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen font-sans select-none">
@@ -438,6 +440,63 @@
       } catch (e) {
         state.fetchLog = [];
       }
+    }
+
+    async function fetchAIForDate(dateStr) {
+      const cacheKey = `ai_${dateStr}`;
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) { try { return JSON.parse(cached); } catch {} }
+      try {
+        const resp = await fetch(`${BASE}/ai/${dateStr}.json`);
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        try { sessionStorage.setItem(cacheKey, JSON.stringify(data)); } catch {}
+        return data;
+      } catch { return null; }
+    }
+
+    async function loadPhaseHistory(latestDateStr) {
+      const container = document.getElementById('ai-phase-history');
+      if (!container) return;
+
+      const dates = [];
+      const base = new Date(latestDateStr + 'T12:00:00Z');
+      for (let i = 0; i < 30; i++) {
+        const d = new Date(base);
+        d.setUTCDate(d.getUTCDate() - i);
+        dates.push(d.toISOString().slice(0, 10));
+      }
+
+      const settled = await Promise.allSettled(dates.map(d => fetchAIForDate(d)));
+
+      const pills = [];
+      for (let i = settled.length - 1; i >= 0; i--) {
+        if (settled[i].status !== 'fulfilled' || !settled[i].value) continue;
+        const label = settled[i].value?.sectors?.rotation_phase?.label;
+        if (label) pills.push({ date: dates[i], label, isToday: i === 0 });
+        if (pills.length >= 14) break;
+      }
+
+      if (pills.length < 2) { container.innerHTML = ''; return; }
+
+      const phaseMap = {
+        'Early Cycle': { icon: '🟢', short: 'Early' },
+        'Mid Cycle':   { icon: '🟡', short: 'Mid' },
+        'Late Cycle':  { icon: '🟠', short: 'Late' },
+        'Defensive':   { icon: '🔵', short: 'Def' },
+      };
+
+      container.innerHTML = `
+        <div class="text-xs text-slate-500 uppercase tracking-wider mb-2 px-0.5">Phase history</div>
+        <div class="flex gap-1.5 overflow-x-auto scrollbar-none pb-1">
+          ${pills.map(p => {
+            const pm = phaseMap[p.label] || { icon: '⚪', short: p.label.slice(0, 4) };
+            return `<div class="flex-shrink-0 flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg ${p.isToday ? 'bg-slate-600 ring-1 ring-slate-400' : 'bg-slate-800 border border-slate-700'} text-center min-w-[44px]" title="${p.date}">
+              <span class="text-sm leading-none">${pm.icon}</span>
+              <span class="text-xs text-slate-400 leading-none">${pm.short}</span>
+            </div>`;
+          }).join('')}
+        </div>`;
     }
 
     async function loadAI(fallbackDateStr, force = false) {
@@ -912,6 +971,9 @@
             <div class="text-sm font-bold ${pm.text} mb-1">${pm.icon} ${phaseTitle}: ${escapeHtml(phase.label)}</div>
             ${phase.reasoning ? `<div class="text-xs text-slate-300 italic leading-relaxed">${escapeHtml(phase.reasoning)}</div>` : ''}
           </div>`;
+        if (state.group === 'sectors') {
+          html += `<div id="ai-phase-history" class="mb-3"></div>`;
+        }
       }
 
       // Watchlist — group-toggle-aware
@@ -984,6 +1046,12 @@
       }
 
       container.innerHTML = html;
+
+      // Async phase history strip — load after DOM is updated, non-blocking
+      if (state.group === 'sectors' && data && data.sectors?.rotation_phase?.label) {
+        const histDate = data.date || new Date().toISOString().slice(0, 10);
+        loadPhaseHistory(histDate).catch(() => {});
+      }
     }
 
     // ── Master render ──────────────────────────────────────────────────────
