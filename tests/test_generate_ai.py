@@ -1224,7 +1224,8 @@ def test_main_skips_delta_when_no_prior_file(monkeypatch, tmp_path):
     assert "daily_delta" not in result.get("sectors", {})
 
 
-def test_main_skips_already_complete_file(monkeypatch, tmp_path):
+def test_main_force_regenerates_complete_file(monkeypatch, tmp_path):
+    '''Verify we force-regenerate even when file is complete. No caching ai insights. '''
     from unittest.mock import MagicMock
     monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
     monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
