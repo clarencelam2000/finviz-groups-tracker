@@ -560,6 +560,9 @@ def _call_api(client, prompt: str, max_retries: int = 3,
             response = client.models.generate_content(
                 model=GEMINI_MODEL, contents=prompt, **extra
             )
+            # Handle None or empty response text (API returned success but empty content)
+            if not response.text:
+                raise ValueError("empty response (503-like transient error)")
             return response.text.strip()
         except Exception as e:
             err_str = str(e)
