@@ -373,12 +373,12 @@ def _call_api(client, prompt: str, max_retries: int = 3,
         time.sleep(_INTER_CALL_DELAY - elapsed)
 
     extra = {}
-    if generation_config or response_schema:
-        from google.genai import types  # noqa: PLC0415 — lazy import; google-genai only required at runtime
+    if response_schema:  # only import google.genai when JSON mode is actually needed
+        from google.genai import types  # noqa: PLC0415 — lazy; google-genai only required at runtime
         extra["config"] = types.GenerateContentConfig(
             temperature=(generation_config or {}).get("temperature", 0.7),
             max_output_tokens=(generation_config or {}).get("max_output_tokens", 500),
-            response_mime_type="application/json" if response_schema else None,
+            response_mime_type="application/json",
             response_schema=response_schema,
         )
 

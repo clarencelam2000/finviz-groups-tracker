@@ -356,9 +356,13 @@ def test_generate_for_group_empty_snapshot_returns_existing(monkeypatch):
 
 def test_generate_for_group_json_parse_fallback(monkeypatch):
     """If JSON parse fails for rotation_phase, fallback parser is used."""
+    from unittest.mock import MagicMock
     monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
     monkeypatch.setattr("time.sleep", lambda _: None)
     generate_ai._reset_tracking()
+    # Phase/watchlist specs trigger the google.genai lazy import — mock it for CI.
+    mock_genai = MagicMock()
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
     snap = pd.DataFrame({
         "date": [pd.Timestamp("2026-06-11").date()],
@@ -475,6 +479,7 @@ def test_call_api_passes_generation_config_values(monkeypatch):
     generate_ai._call_api(
         client, "prompt",
         generation_config={"temperature": 0.2, "max_output_tokens": 300},
+        response_schema=generate_ai.PHASE_SCHEMA,  # schema required to trigger config build
     )
 
     ctor_kwargs = mock_types.GenerateContentConfig.call_args[1]
@@ -768,9 +773,13 @@ def test_missing_fields_complete_data():
 # ---------------------------------------------------------------------------
 
 def test_generate_for_group_skips_existing_briefing(monkeypatch):
+    from unittest.mock import MagicMock
     monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
     monkeypatch.setattr("time.sleep", lambda _: None)
     generate_ai._reset_tracking()
+    # Phase/watchlist specs trigger the google.genai lazy import — mock it for CI.
+    mock_genai = MagicMock()
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
     # Supply existing briefing so the API should NOT be called for it
     existing = {"briefing": "Already written briefing"}
