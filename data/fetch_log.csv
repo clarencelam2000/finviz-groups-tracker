@@ -10,3 +10,4 @@ timestamp,run_date,trigger,run_id,outcome,sectors_rows,industries_rows,step_fail
 2026-06-11T23:49:02Z,2026-06-11,schedule,27384763009,success,11,144,,skipped,
 2026-06-12T01:59:54Z,2026-06-11,schedule,27389568432,success,11,144,,skipped,
 2026-06-12T15:27:47Z,2026-06-12,workflow_dispatch,27425327799,success,11,144,,partial,"sectors.briefing,industries.watchlist,sectors.daily_delta"
+2026-06-12T16:46:02Z,2026-06-12,schedule,27429622234,success,11,144,,partial,sectors.daily_delta
