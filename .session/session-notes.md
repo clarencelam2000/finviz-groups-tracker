@@ -6,12 +6,58 @@
 
 ## Current Status
 
-**Status:** Complete ✅
-**Safe to close:** Yes — PR #35 merged, session notes committed, no open threads
-**Waiting on:** Tonight's cron will complete `data/ai/2026-06-11.json` (3 fields missing from today's partial run: `sectors.rotation_phase`, `sectors.watchlist`, `industries.briefing`). Check `data/ai_run_log.jsonl` afterward for the first real structured log entry.
+**Status:** Complete ✅ — AI architecture revamp done, PR open, needs review/merge
+**Safe to close:** Yes — all 6 phases committed and pushed, PR created
+**Waiting on:** PR review/merge. Tonight's cron will use the new `gemini-2.5-flash` model and write `data/ai/index.json` for the first time.
 **Open threads:** None
 
 ---
+
+---
+
+## Session: 2026-06-11 — AI server-side architecture revamp (PR open, pending merge)
+
+### What was done
+
+6-phase refactor of `scripts/generate_ai.py`, `dashboard/app.py`, `docs/index.html`. Plan committed to `plans/ai-architecture-revamp.md` before any code changes.
+
+**Phase 1 — JSON schema mode (`_call_api` update):**
+- Added `PHASE_SCHEMA` and `WATCHLIST_SCHEMA` module-level dicts
+- Extended `_call_api()` with `generation_config` and `response_schema` kwargs; lazily imports `google.genai.types` only when needed. Backward-compatible (no schema = no config kwarg sent).
+
+**Phase 2 — Declarative `TASK_SPECS` pipeline:**
+- Replaced the nested `if group_type == "sector"` if/else body of `generate_for_group()` with a loop over `TASK_SPECS` — a list of `{name, group_types, build_prompt, use_json_schema, response_schema, ...}` dicts.
+- Added `_build_prompt()` helper to handle the `build_briefing_prompt` signature difference (`pass_group_type: True`).
+- Added `_expected_fields()` so `_is_complete()` and `_missing_fields()` derive from `TASK_SPECS` — no hardcoded field names remain.
+- Fixed a pre-existing bug: empty-snapshot path referenced `result` before it was assigned.
+- New tasks (AI-1, AI-2, etc.) now require one dict entry in `TASK_SPECS` only; loop logic never changes.
+
+**Phase 3 — `data/ai/index.json` master manifest:**
+- `_update_index(date_str, status, output)` upserts an entry per run into `data/ai/index.json` (newest-first, capped at 90 entries, atomic write via `.tmp` swap).
+- Called from `main()` after `_write_run_artifacts()` for both the "skipped" and "complete/partial" paths.
+
+**Phase 4 — Dashboard + PWA consume index:**
+- Dashboard AI Insights tab: reads `index.json` first, picks first `status="complete"` entry whose `.json` file exists; falls back to glob scan.
+- PWA `loadAI()`: fetches `index.json` first, iterates entries; falls back to the snapshot-date URL if index is absent or empty.
+
+**Phase 5 — Model upgrade:**
+- `GEMINI_MODEL = "gemini-2.5-flash"` (was `"gemini-flash-latest"` unversioned alias).
+
+**146 tests passing** (was 122 before this session; 24 new tests added).
+
+### Next steps (prioritized)
+
+1. Merge the open PR
+2. **AI-1** (Anomaly Detection): now trivial to add — one `TASK_SPECS` entry + `build_anomaly_prompt()` + `ANOMALY_SCHEMA`. Gate on 14+ days of history.
+3. **~2026-06-16**: 7d deltas arrive → INS-4 (Momentum Velocity), INS-5 (Daily Brief card), INS-6 (Heatmap) all unblock
+4. **IDX-1**: 7-day rotation phase history strip in AI Insights tab using `index.json` entries (no need to load 7 full files). Effort: S.
+
+### Key decisions
+
+- `TASK_SPECS` is the single source of truth for "what to generate and for whom." `_expected_fields()` derives from it dynamically.
+- JSON schema mode (`use_json_schema: True`) is on for `rotation_phase` and `watchlist` — API enforces valid JSON structure. Old text parsers kept as fallback.
+- `index.json` uses status `"complete"` / `"partial"` / `"skipped"` — dashboard/PWA only load `"complete"` entries.
+- Dashboard import check via `python3 -c "import dashboard.app"` doesn't work for Streamlit (top-level code runs on import). Use `python3 -m py_compile dashboard/app.py` instead.
 
 ---
 

@@ -249,6 +249,146 @@ def _make_client(responses):
     return client
 
 
+# ---------------------------------------------------------------------------
+# PHASE_SCHEMA and WATCHLIST_SCHEMA constants
+# ---------------------------------------------------------------------------
+
+def test_gemini_model_is_pinned_version():
+    assert generate_ai.GEMINI_MODEL == "gemini-2.5-flash"
+
+
+def test_phase_schema_required_fields():
+    assert generate_ai.PHASE_SCHEMA["required"] == ["label", "reasoning", "confidence"]
+    enum_vals = generate_ai.PHASE_SCHEMA["properties"]["label"]["enum"]
+    assert set(enum_vals) == {"Early Cycle", "Mid Cycle", "Late Cycle", "Defensive"}
+
+
+def test_watchlist_schema_has_picks_array():
+    assert "picks" in generate_ai.WATCHLIST_SCHEMA["properties"]
+    assert generate_ai.WATCHLIST_SCHEMA["properties"]["picks"]["type"] == "array"
+    assert generate_ai.WATCHLIST_SCHEMA["required"] == ["picks"]
+    item_props = generate_ai.WATCHLIST_SCHEMA["properties"]["picks"]["items"]["properties"]
+    assert "name" in item_props and "thesis" in item_props
+
+
+# ---------------------------------------------------------------------------
+# TASK_SPECS and _expected_fields
+# ---------------------------------------------------------------------------
+
+def test_task_specs_has_expected_names():
+    names = {s["name"] for s in generate_ai.TASK_SPECS}
+    assert names == {"briefing", "rotation_phase", "watchlist"}
+
+
+def test_task_specs_briefing_covers_both_group_types():
+    spec = next(s for s in generate_ai.TASK_SPECS if s["name"] == "briefing")
+    assert "sector" in spec["group_types"]
+    assert "industry" in spec["group_types"]
+
+
+def test_task_specs_rotation_phase_sector_only():
+    spec = next(s for s in generate_ai.TASK_SPECS if s["name"] == "rotation_phase")
+    assert spec["group_types"] == ("sector",)
+    assert spec["use_json_schema"] is True
+    assert spec["response_schema"] is generate_ai.PHASE_SCHEMA
+
+
+def test_task_specs_watchlist_sector_only():
+    spec = next(s for s in generate_ai.TASK_SPECS if s["name"] == "watchlist")
+    assert spec["group_types"] == ("sector",)
+    assert spec["use_json_schema"] is True
+    assert spec["response_schema"] is generate_ai.WATCHLIST_SCHEMA
+
+
+def test_expected_fields_returns_all_four():
+    fields = set(generate_ai._expected_fields())
+    assert fields == {
+        "sectors.briefing",
+        "sectors.rotation_phase",
+        "sectors.watchlist",
+        "industries.briefing",
+    }
+
+
+def test_generate_for_group_industry_calls_api_once(monkeypatch):
+    """Industry group only runs briefing — 1 API call, not 3."""
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    generate_ai._reset_tracking()
+
+    snap = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Software"],
+        "perf_week": [1.0], "perf_month": [2.0], "perf_ytd": [3.0],
+    })
+    delta = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Software"],
+        "rank_ytd": [1.0], "rank_ytd_delta_7d": [1.0], "momentum_score": [0.7],
+    })
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
+
+    client = _make_client(["Industry briefing text"])
+    result = generate_ai.generate_for_group(client, "industry", "2026-06-11")
+
+    assert client.models.generate_content.call_count == 1
+    assert result.get("briefing") == "Industry briefing text"
+    assert "rotation_phase" not in result
+    assert "watchlist" not in result
+
+
+def test_generate_for_group_empty_snapshot_returns_existing(monkeypatch):
+    """Empty snapshot returns existing dict unchanged and records no_data/skipped."""
+    generate_ai._reset_tracking()
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: pd.DataFrame())
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: pd.DataFrame())
+
+    existing = {"briefing": "old briefing"}
+    client = _make_client([])
+    result = generate_ai.generate_for_group(client, "sector", "2026-06-11", existing=existing)
+
+    assert result == existing
+    assert client.models.generate_content.call_count == 0
+    assert generate_ai._field_log["sectors.briefing"]["status"] == "skipped"
+    assert generate_ai._field_log["sectors.rotation_phase"]["status"] == "no_data"
+
+
+def test_generate_for_group_json_parse_fallback(monkeypatch):
+    """If JSON parse fails for rotation_phase, fallback parser is used."""
+    from unittest.mock import MagicMock
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    generate_ai._reset_tracking()
+    # Phase/watchlist specs trigger the google.genai lazy import — mock it for CI.
+    mock_genai = MagicMock()
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    snap = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "perf_week": [2.0], "perf_month": [3.0], "perf_ytd": [5.0],
+    })
+    delta = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "rank_ytd": [1.0], "rank_ytd_delta_7d": [2.0], "momentum_score": [0.8],
+    })
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
+
+    # API returns text format (JSON parse will fail → triggers fallback_parse)
+    client = _make_client([
+        "Market briefing text",
+        "PHASE: Late Cycle\nREASONING: Energy leads.",
+        "1. NAME: Energy | THESIS: Strong setup.\n2. NAME: Financials | THESIS: Rising.\n3. NAME: Tech | THESIS: Holding.",
+    ])
+    result = generate_ai.generate_for_group(client, "sector", "2026-06-11")
+
+    assert result["rotation_phase"]["label"] == "Late Cycle"
+    assert isinstance(result["watchlist"], list)
+
+
 def test_call_api_happy_path(monkeypatch):
     monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
     monkeypatch.setattr("time.sleep", lambda _: None)
@@ -286,9 +426,142 @@ def test_call_api_reraises_after_max_retries(monkeypatch):
     assert client.models.generate_content.call_count == 4  # initial + 3 retries
 
 
+def test_call_api_no_schema_omits_config_kwarg(monkeypatch):
+    """Without schema kwargs, generate_content is called without a config kwarg."""
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    client = _make_client(["result"])
+    generate_ai._call_api(client, "prompt")
+    call_kwargs = client.models.generate_content.call_args[1]
+    assert "config" not in call_kwargs
+
+
+def test_call_api_passes_response_schema_as_config(monkeypatch):
+    """With response_schema, generate_content receives a config kwarg with response_mime_type=application/json."""
+    from unittest.mock import MagicMock
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    mock_config_instance = MagicMock()
+    mock_types = MagicMock()
+    mock_types.GenerateContentConfig.return_value = mock_config_instance
+    mock_genai_module = MagicMock()
+    mock_genai_module.types = mock_types
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai_module)
+
+    schema = generate_ai.PHASE_SCHEMA
+    client = _make_client(["result"])
+    result = generate_ai._call_api(client, "prompt", response_schema=schema)
+
+    assert result == "result"
+    mock_types.GenerateContentConfig.assert_called_once()
+    ctor_kwargs = mock_types.GenerateContentConfig.call_args[1]
+    assert ctor_kwargs["response_mime_type"] == "application/json"
+    assert ctor_kwargs["response_schema"] == schema
+
+    call_kwargs = client.models.generate_content.call_args[1]
+    assert "config" in call_kwargs
+    assert call_kwargs["config"] is mock_config_instance
+
+
+def test_call_api_passes_generation_config_values(monkeypatch):
+    """Custom temperature and max_output_tokens are forwarded to GenerateContentConfig."""
+    from unittest.mock import MagicMock
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    mock_types = MagicMock()
+    mock_genai_module = MagicMock()
+    mock_genai_module.types = mock_types
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai_module)
+
+    client = _make_client(["result"])
+    generate_ai._call_api(
+        client, "prompt",
+        generation_config={"temperature": 0.2, "max_output_tokens": 300},
+        response_schema=generate_ai.PHASE_SCHEMA,  # schema required to trigger config build
+    )
+
+    ctor_kwargs = mock_types.GenerateContentConfig.call_args[1]
+    assert ctor_kwargs["temperature"] == 0.2
+    assert ctor_kwargs["max_output_tokens"] == 300
+
+
 # ---------------------------------------------------------------------------
 # main exits gracefully without API key
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# _update_index
+# ---------------------------------------------------------------------------
+
+def test_update_index_creates_file_if_missing(tmp_path):
+    idx = _run_update_index(tmp_path, "2026-06-11", "complete", {"generated_at": "2026-06-11T22:00:00Z"})
+    assert len(idx["entries"]) == 1
+    assert idx["entries"][0]["date"] == "2026-06-11"
+    assert idx["entries"][0]["status"] == "complete"
+
+
+def _run_update_index(tmp_path, date_str, status, output):
+    orig = generate_ai.AI_DIR
+    generate_ai.AI_DIR = tmp_path
+    generate_ai._update_index(date_str, status, output)
+    generate_ai.AI_DIR = orig
+    return json.loads((tmp_path / "index.json").read_text())
+
+
+def test_update_index_upserts_same_date(tmp_path):
+    out = {"generated_at": "2026-06-11T22:00:00Z"}
+    _run_update_index(tmp_path, "2026-06-11", "partial", out)
+    idx = _run_update_index(tmp_path, "2026-06-11", "complete", out)
+    dates = [e["date"] for e in idx["entries"]]
+    assert dates.count("2026-06-11") == 1
+    assert idx["entries"][0]["status"] == "complete"
+
+
+def test_update_index_newest_first(tmp_path):
+    out = {"generated_at": ""}
+    for d in ["2026-06-09", "2026-06-11", "2026-06-10"]:
+        _run_update_index(tmp_path, d, "complete", out)
+    idx = json.loads((tmp_path / "index.json").read_text())
+    dates = [e["date"] for e in idx["entries"]]
+    assert dates == sorted(dates, reverse=True)
+
+
+def test_update_index_trims_to_90(tmp_path):
+    orig = generate_ai.AI_DIR
+    generate_ai.AI_DIR = tmp_path
+    # Seed with 90 existing entries
+    entries = [{"date": f"2025-{i:04d}", "status": "complete"} for i in range(90)]
+    (tmp_path / "index.json").write_text(json.dumps({"entries": entries}))
+    generate_ai._update_index("2026-06-11", "complete", {"generated_at": ""})
+    generate_ai.AI_DIR = orig
+    idx = json.loads((tmp_path / "index.json").read_text())
+    assert len(idx["entries"]) == 90
+
+
+def test_update_index_corrupt_file_fallback(tmp_path):
+    (tmp_path / "index.json").write_text("NOTJSON")
+    idx = _run_update_index(tmp_path, "2026-06-11", "complete", {"generated_at": ""})
+    assert len(idx["entries"]) == 1
+    assert idx["entries"][0]["date"] == "2026-06-11"
+
+
+def test_update_index_rotation_phase_extracted(tmp_path):
+    output = {
+        "generated_at": "2026-06-11T22:00:00Z",
+        "sectors": {
+            "rotation_phase": {"label": "Late Cycle", "reasoning": "Energy leads."}
+        },
+    }
+    idx = _run_update_index(tmp_path, "2026-06-11", "complete", output)
+    assert idx["entries"][0]["rotation_phase"] == "Late Cycle"
+
+
+def test_update_index_missing_rotation_phase(tmp_path):
+    idx = _run_update_index(tmp_path, "2026-06-11", "complete", {"generated_at": ""})
+    assert idx["entries"][0]["rotation_phase"] == ""
+
 
 def test_main_exits_zero_without_api_key(monkeypatch, tmp_path):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
@@ -500,9 +773,13 @@ def test_missing_fields_complete_data():
 # ---------------------------------------------------------------------------
 
 def test_generate_for_group_skips_existing_briefing(monkeypatch):
+    from unittest.mock import MagicMock
     monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
     monkeypatch.setattr("time.sleep", lambda _: None)
     generate_ai._reset_tracking()
+    # Phase/watchlist specs trigger the google.genai lazy import — mock it for CI.
+    mock_genai = MagicMock()
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
     # Supply existing briefing so the API should NOT be called for it
     existing = {"briefing": "Already written briefing"}

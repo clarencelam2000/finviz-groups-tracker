@@ -382,11 +382,25 @@
       }
     }
 
-    async function loadAI(dateStr, force = false) {
+    async function loadAI(fallbackDateStr, force = false) {
       if (!force && state.aiData !== null) return;
-      const url = `${BASE}/ai/${dateStr}.json${force ? `?_=${Date.now()}` : ''}`;
+      const bust = force ? `?_=${Date.now()}` : '';
+      // Try index.json first so we don't have to guess the latest file name.
       try {
-        const res = await fetch(url);
+        const idxRes = await fetch(`${BASE}/ai/index.json${bust}`);
+        if (idxRes.ok) {
+          const idx = await idxRes.json();
+          for (const entry of (idx.entries || [])) {
+            if (entry.status === 'complete') {
+              const fileRes = await fetch(`${BASE}/ai/${entry.date}.json${bust}`);
+              if (fileRes.ok) { state.aiData = await fileRes.json(); return; }
+            }
+          }
+        }
+      } catch (_) { /* fall through */ }
+      // Fallback: try the date derived from the latest snapshot CSV.
+      try {
+        const res = await fetch(`${BASE}/ai/${fallbackDateStr}.json${bust}`);
         state.aiData = res.ok ? await res.json() : {};
       } catch (e) {
         state.aiData = {};
