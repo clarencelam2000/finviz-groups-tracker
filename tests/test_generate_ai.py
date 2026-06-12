@@ -271,6 +271,96 @@ def test_watchlist_schema_has_picks_array():
     assert "name" in item_props and "thesis" in item_props
 
 
+def test_briefing_schema_has_key_signals_and_briefing():
+    schema = generate_ai.BRIEFING_SCHEMA
+    assert schema["required"] == ["key_signals", "briefing"]
+    assert schema["properties"]["key_signals"]["type"] == "array"
+    assert schema["properties"]["key_signals"]["items"]["type"] == "string"
+    assert schema["properties"]["briefing"]["type"] == "string"
+
+
+# ---------------------------------------------------------------------------
+# parse_briefing_response
+# ---------------------------------------------------------------------------
+
+def test_parse_briefing_response_plain_text():
+    result = generate_ai.parse_briefing_response("Some market analysis text.")
+    assert result["briefing"] == "Some market analysis text."
+    assert result["key_signals"] == []
+
+
+def test_parse_briefing_response_strips_whitespace():
+    result = generate_ai.parse_briefing_response("  text with spaces  \n")
+    assert result["briefing"] == "text with spaces"
+
+
+# ---------------------------------------------------------------------------
+# generate_for_group briefing JSON extraction
+# ---------------------------------------------------------------------------
+
+def test_generate_for_group_briefing_extracts_key_signals(monkeypatch):
+    """When briefing returns valid JSON, both briefing and key_signals are stored."""
+    from unittest.mock import MagicMock
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    generate_ai._reset_tracking()
+    mock_genai = MagicMock()
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    snap = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "perf_week": [2.0], "perf_month": [3.0], "perf_ytd": [5.0],
+    })
+    delta = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "rank_ytd": [1.0], "rank_ytd_delta_7d": [2.0], "momentum_score": [0.8],
+    })
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
+
+    signals = ["Energy +5% YTD, rank #1", "Momentum score 0.80", "7d rank gain +2 spots"]
+    briefing_json = json.dumps({"key_signals": signals, "briefing": "Energy is leading."})
+    client = _make_client([briefing_json, "PHASE: Late Cycle\nREASONING: Energy leads.",
+                           "1. NAME: Energy | THESIS: Strong.\n2. NAME: Fin | THESIS: Ok.\n3. NAME: Tech | THESIS: Watch."])
+    result = generate_ai.generate_for_group(client, "sector", "2026-06-11")
+
+    assert result["briefing"] == "Energy is leading."
+    assert result["key_signals"] == signals
+
+
+def test_generate_for_group_briefing_fallback_no_key_signals(monkeypatch):
+    """When briefing JSON parse fails, prose is stored without key_signals."""
+    from unittest.mock import MagicMock
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    generate_ai._reset_tracking()
+    mock_genai = MagicMock()
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    snap = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "perf_week": [2.0], "perf_month": [3.0], "perf_ytd": [5.0],
+    })
+    delta = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "rank_ytd": [1.0], "rank_ytd_delta_7d": [2.0], "momentum_score": [0.8],
+    })
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
+
+    client = _make_client(["Plain text briefing — not JSON.",
+                           "PHASE: Late Cycle\nREASONING: Energy leads.",
+                           "1. NAME: Energy | THESIS: Strong.\n2. NAME: Fin | THESIS: Ok.\n3. NAME: Tech | THESIS: Watch."])
+    result = generate_ai.generate_for_group(client, "sector", "2026-06-11")
+
+    assert result["briefing"] == "Plain text briefing — not JSON."
+    assert "key_signals" not in result
+
+
 # ---------------------------------------------------------------------------
 # TASK_SPECS and _expected_fields
 # ---------------------------------------------------------------------------
@@ -284,6 +374,8 @@ def test_task_specs_briefing_covers_both_group_types():
     spec = next(s for s in generate_ai.TASK_SPECS if s["name"] == "briefing")
     assert "sector" in spec["group_types"]
     assert "industry" in spec["group_types"]
+    assert spec["use_json_schema"] is True
+    assert spec["response_schema"] is generate_ai.BRIEFING_SCHEMA
 
 
 def test_task_specs_rotation_phase_sector_only():
@@ -312,9 +404,12 @@ def test_expected_fields_returns_all_four():
 
 def test_generate_for_group_industry_calls_api_once(monkeypatch):
     """Industry group only runs briefing — 1 API call, not 3."""
+    from unittest.mock import MagicMock
     monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
     monkeypatch.setattr("time.sleep", lambda _: None)
     generate_ai._reset_tracking()
+    mock_genai = MagicMock()
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
     snap = pd.DataFrame({
         "date": [pd.Timestamp("2026-06-11").date()],
@@ -329,11 +424,16 @@ def test_generate_for_group_industry_calls_api_once(monkeypatch):
     monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
     monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
 
-    client = _make_client(["Industry briefing text"])
+    briefing_json = json.dumps({
+        "key_signals": ["Software up 3% YTD", "Momentum score 0.70", "Rank stable week-over-week"],
+        "briefing": "Industry briefing text",
+    })
+    client = _make_client([briefing_json])
     result = generate_ai.generate_for_group(client, "industry", "2026-06-11")
 
     assert client.models.generate_content.call_count == 1
     assert result.get("briefing") == "Industry briefing text"
+    assert result.get("key_signals") == ["Software up 3% YTD", "Momentum score 0.70", "Rank stable week-over-week"]
     assert "rotation_phase" not in result
     assert "watchlist" not in result
 

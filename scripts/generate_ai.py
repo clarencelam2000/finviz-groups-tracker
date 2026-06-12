@@ -54,6 +54,20 @@ WATCHLIST_SCHEMA = {
     "required": ["picks"],
 }
 
+BRIEFING_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "key_signals": {
+            "type": "array",
+            "items": {"type": "string"},
+            "minItems": 3,
+            "maxItems": 5,
+        },
+        "briefing": {"type": "string"},
+    },
+    "required": ["key_signals", "briefing"],
+}
+
 # Free tier: 5 requests/minute. Enforce >=13s between calls to stay safely under.
 _INTER_CALL_DELAY = 13
 _last_api_call: float = 0.0
@@ -203,11 +217,11 @@ def build_briefing_prompt(group_type: str, snap_df: pd.DataFrame,
     snapshot = serialize_snapshot_summary(snap_df)
     movers = serialize_top_movers(delta_df)
     leaders = serialize_momentum_leaders(delta_df)
-    return f"""You are a quantitative market analyst. Based on the following Finviz {group_name} data for {date_str}, write a concise market briefing (3 short paragraphs, ~150 words total).
+    return f"""You are a quantitative market analyst. Based on the following Finviz {group_name} data for {date_str}, write a market analysis.
 
-Focus on: (1) what is rotating in / gaining momentum, (2) what is weakening or losing ground, (3) any notable divergence or pattern worth watching.
-
-Write in plain English, directly useful to an investor tracking sector rotation. Do not add generic risk disclaimers.
+Return JSON with exactly two fields:
+- "key_signals": array of 3-5 short strings, each a specific actionable observation (e.g. "Energy +8% YTD, rank improved 4 spots in 7 days" — not vague like "Energy is rising")
+- "briefing": 3 short paragraphs (~150 words total) covering rotation, weakness, and notable patterns
 
 DATA:
 {snapshot}
@@ -216,7 +230,7 @@ DATA:
 
 {leaders}
 
-Write 3 short paragraphs. No headings, no bullet points. Be specific — name the {group_name}."""
+Be specific — name the {group_name}. No generic risk disclaimers."""
 
 
 def build_phase_prompt(snap_df: pd.DataFrame, delta_df: pd.DataFrame, date_str: str) -> str:
@@ -274,6 +288,11 @@ def parse_phase_response(text: str) -> dict:
     return result
 
 
+def parse_briefing_response(text: str) -> dict:
+    """Fallback when JSON parse fails for briefing — treat entire response as prose."""
+    return {"briefing": text.strip(), "key_signals": []}
+
+
 def parse_watchlist_response(text: str) -> list:
     items = []
     for line in text.split("\n"):
@@ -310,8 +329,10 @@ TASK_SPECS = [
         "group_types": ("sector", "industry"),
         "build_prompt": build_briefing_prompt,
         "pass_group_type": True,
-        "use_json_schema": False,
-        "generation_config": {"temperature": 0.7, "max_output_tokens": 500},
+        "use_json_schema": True,
+        "response_schema": BRIEFING_SCHEMA,
+        "fallback_parse": parse_briefing_response,
+        "generation_config": {"temperature": 0.7, "max_output_tokens": 800},
     },
     {
         "name": "rotation_phase",
@@ -450,6 +471,13 @@ def generate_for_group(client, group_type: str, date_str: str, existing=None) ->
                     result["watchlist"] = (
                         parsed.get("picks", []) if isinstance(parsed, dict) else parsed
                     )
+                elif spec["name"] == "briefing":
+                    if isinstance(parsed, dict):
+                        result["briefing"] = parsed.get("briefing", "")
+                        if parsed.get("key_signals"):
+                            result["key_signals"] = parsed["key_signals"]
+                    else:
+                        result["briefing"] = str(parsed)
                 else:
                     result[spec["name"]] = parsed
             else:

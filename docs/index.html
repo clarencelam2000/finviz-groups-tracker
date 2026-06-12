@@ -21,6 +21,8 @@
     .tab-active { border-bottom: 2px solid #38bdf8; color: #38bdf8; }
     .spinning { animation: spin 1s linear infinite; }
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    details > summary { list-style: none; cursor: pointer; }
+    details > summary::-webkit-details-marker { display: none; }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen font-sans select-none">
@@ -911,12 +913,36 @@
       const groupLabel = state.group === 'sectors' ? 'Sectors' : 'Industries';
       const briefingGroup = state.group === 'sectors' ? sectors : industries;
       const briefing = briefingGroup.briefing || '';
+      const keySignals = Array.isArray(briefingGroup.key_signals) ? briefingGroup.key_signals : [];
 
       html += `<div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Daily Briefing — ${groupLabel}</div>`;
-      if (briefing) {
-        const paras = briefing.split(/\n\n+/).filter(Boolean);
-        html += `<div class="rounded-xl p-4 bg-slate-800 border border-slate-700 text-sm text-slate-200 leading-relaxed space-y-3">
-          ${paras.map(p => `<p>${escapeHtml(p).replace(/\n/g, ' ')}</p>`).join('')}
+      if (briefing || keySignals.length > 0) {
+        const signalBullets = keySignals.length > 0 ? `
+          <ul class="space-y-1.5 mb-3 pl-0">
+            ${keySignals.map(s => `
+              <li class="flex gap-2 text-sm text-slate-100">
+                <span class="text-sky-400 flex-shrink-0 select-none">▸</span>
+                <span>${escapeHtml(s)}</span>
+              </li>`).join('')}
+          </ul>` : '';
+
+        let briefingHtml = '';
+        if (briefing) {
+          const paras = briefing.split(/\n\n+/).filter(Boolean);
+          const parasHtml = `<div class="text-sm text-slate-300 leading-relaxed space-y-3">
+            ${paras.map(p => `<p>${escapeHtml(p).replace(/\n/g, ' ')}</p>`).join('')}
+          </div>`;
+          briefingHtml = keySignals.length > 0 ? `
+            <details>
+              <summary class="text-xs text-slate-500 hover:text-slate-300 transition-colors select-none">
+                ▶ Read full briefing
+              </summary>
+              <div class="mt-2">${parasHtml}</div>
+            </details>` : parasHtml;
+        }
+
+        html += `<div class="rounded-xl p-4 bg-slate-800 border border-slate-700">
+          ${signalBullets}${briefingHtml}
         </div>`;
       } else {
         html += `<div class="rounded-xl p-4 bg-slate-800 border border-slate-700 text-center">

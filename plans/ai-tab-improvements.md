@@ -36,8 +36,8 @@ git status                                         # confirm clean working tree
 - [x] Phase 1 — Items 6, 7 (pure frontend fast wins)
   - [x] Item 6: Relative timestamp
   - [x] Item 7: One-tap native share
-- [ ] Phase 2 — Item 1 (structured takeaways)
-  - [ ] Item 1: Key signals bullets + collapsible briefing
+- [x] Phase 2 — Item 1 (structured takeaways)
+  - [x] Item 1: Key signals bullets + collapsible briefing
 - [ ] Phase 3 — Item 8 (conviction tags)
   - [ ] Item 8: Conviction tags on watchlist items
 - [ ] Phase 4 — Item 3 (industries structure)
