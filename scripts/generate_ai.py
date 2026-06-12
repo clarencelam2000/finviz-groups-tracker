@@ -563,15 +563,14 @@ def _call_api(client, prompt: str, max_retries: int = 3,
             return response.text.strip()
         except Exception as e:
             err_str = str(e)
-            is_quota = (
-                "429" in err_str
-                or "quota" in err_str.lower()
-                or "resource_exhausted" in err_str.lower()
+            is_retryable = (
+                "429" in err_str or "quota" in err_str.lower() or "resource_exhausted" in err_str.lower()
+                or "503" in err_str or "unavailable" in err_str.lower()
             )
-            if is_quota and attempt < max_retries:
+            if is_retryable and attempt < max_retries:
                 _rate_limit_hits += 1
                 wait = 30 * (2 ** attempt)  # 30s, 60s, 120s
-                print(f"    Rate limited, waiting {wait}s (attempt {attempt + 1}/{max_retries + 1})...")
+                print(f"    Transient error, waiting {wait}s (attempt {attempt + 1}/{max_retries + 1})...")
                 time.sleep(wait)
                 continue
             raise
@@ -613,6 +612,9 @@ def generate_for_group(client, group_type: str, date_str: str, existing=None) ->
                 response_schema=spec.get("response_schema"),
             )
             if spec["use_json_schema"]:
+                # Reject obviously truncated/malformed responses (preamble text instead of JSON)
+                if raw.startswith("Here is") or raw.startswith("Here are"):
+                    raise ValueError(f"Response appears to be truncated preamble: {raw[:50]}")
                 try:
                     parsed = json.loads(raw)
                 except json.JSONDecodeError:
