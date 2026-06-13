@@ -56,4 +56,4 @@ jobs:
           git pull --rebase origin ${{ github.ref_name }}
           git add data/
           git diff --cached --quiet || git commit -m "data: AI analysis $(TZ=America/New_York date +%Y-%m-%d)"
-          git push
+          git push origin HEAD:${{ github.ref_name }}
