@@ -6,10 +6,40 @@
 
 ## Current Status
 
-**Status:** Complete ✅ — Force GenerateAI and fix AI display issues implemented
-**Safe to close:** Yes — all changes committed, tests passing, PR #42 created and CI running
-**Waiting on:** CI to complete on PR #42; monitor watching for test results
-**Open threads:** None
+**Status:** Complete ✅ — Plan review done; PRs #46 and #47 merged
+**Safe to close:** Yes — all changes committed and merged, no open threads
+**Waiting on:** Nothing
+**Next action:** New session to implement Phase 1 (smart regeneration + skip logic) per approved plan in `plan/PLAN_smart_regeneration_pydantic.md`
+
+---
+
+## Session: 2026-06-13 — Plan review: Smart Regeneration + Schema Enrichment (PRs #46, #47)
+
+### What was done
+
+**Reviewed PR #44 plan** (`plan/PLAN_smart_regeneration_pydantic.md`) before implementation.
+
+**PR #46 (merged):** Staff-engineer review pass on the plan. Key changes accepted:
+- Removed Pydantic migration — plain dicts + `description` fields achieve the same semantic compliance, no new dependency
+- Replaced status file inter-script coupling (`compute_deltas.py` → `data/deltas_run_status.json`) with direct delta CSV check in `generate_ai.py` (`_has_new_delta_data()`)
+- Corrected stale reference: Task 1.2 described incremental loading logic that was already removed (`existing_output = {}` hardcoded)
+- Caught pre-existing bug: `_normalize_phase()` drops `confidence` field despite `PHASE_SCHEMA` requiring it
+- Clarified syntactic (structured output mode) vs. semantic (few-shot examples) compliance
+
+**PR #47 (merged):** Two small follow-up fixes caught in review:
+- Task 1.1/1.2 split: skip gate code referenced `force` variable not defined until Task 1.2. Fixed: Task 1.1 = helper function only; Task 1.2 = argparse + force + skip gate together
+- Added WARNING print to `_has_new_delta_data`'s except branch so unexpected skips are visible in CI logs
+
+### Key decisions
+
+- Default-on-error for `_has_new_delta_data` → skip (not regenerate). Rationale: no delta data = nothing to analyze. generate_ai.py's job is not to diagnose compute_deltas failures. WARNING log gives visibility.
+- Phase 2 blocked until 2+ weeks of production data confirms Phase 1 skip logic working correctly (see SPRINT.md gate)
+- Recommend fresh session for Phase 1 implementation (context partially used; generate_ai.py is a large file requiring clean context)
+
+### Next steps
+
+1. **New session: implement Phase 1** — Tasks 1.1, 1.2, 1.3 per `plan/PLAN_smart_regeneration_pydantic.md`. All three tasks touch only `generate_ai.py`, `collect.yml`, and `README.md`.
+2. After Phase 1 ships and runs in production 2+ weeks → evaluate Phase 2 (schema descriptions + few-shot)
 
 ---
 
