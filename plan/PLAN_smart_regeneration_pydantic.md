@@ -42,10 +42,10 @@
 
 ## Phase 1: Smart Regeneration with Force Flag
 
-### Task 1.1: Add Skip Detection to generate_ai.py
+### Task 1.1: Add Skip Detection Helper to generate_ai.py
 
 **Purpose/Motivation:**  
-Enable `generate_ai.py` to detect whether today's delta data exists before spending API quota. Checked directly in `generate_ai.py` by reading the delta CSVs — no changes to `compute_deltas.py` needed.
+Add the `_has_new_delta_data()` helper to `generate_ai.py`. The helper is standalone and fully testable on its own. Wiring it into `main()` (with the `force` variable it depends on) happens in Task 1.2.
 
 **Detailed Task Description:**
 
@@ -62,19 +62,11 @@ Enable `generate_ai.py` to detect whether today's delta data exists before spend
                if (df["date"] == date_str).any():
                    return True
            except Exception:
-               pass
+               print(f"WARNING: could not read {path} while checking for delta data — will skip", flush=True)
        return False
    ```
 
-2. Call in `main()` after establishing `today` (before API key check):
-   ```python
-   if not force and not _has_new_delta_data(today):
-       print(f"No new delta data for {today} — skipping AI regeneration.")
-       _write_run_artifacts("skipped", False, time.monotonic() - run_start, today)
-       sys.exit(0)
-   ```
-
-3. Missing or unreadable delta CSV → function returns `False` → skip (safe default; no data means nothing to analyze)
+2. Missing or unreadable delta CSV → function returns `False` → skip (safe default; no data means nothing to analyze)
 
 **Acceptance Criteria:**
 - Returns `True` when today's date appears in sectors or industries delta CSV
@@ -98,7 +90,7 @@ Enable `generate_ai.py` to detect whether today's delta data exists before spend
 **Dependencies:** None (no changes to `compute_deltas.py`)
 
 **Error/Failure Cases:**
-- CSV missing columns or corrupt → caught by `except Exception` → returns `False` → skip
+- CSV missing columns or corrupt → caught by `except Exception` → prints WARNING, returns `False` → skip (warning visible in CI job output, distinguishable from a normal skip)
 
 **Follow-up Tasks:**
 - (Sprint) Add metric: track days skipped due to no changes
@@ -106,10 +98,10 @@ Enable `generate_ai.py` to detect whether today's delta data exists before spend
 
 ---
 
-### Task 1.2: Implement Force Flag + Wire Skip Logic
+### Task 1.2: Implement Force Flag + Wire Skip Logic into main()
 
 **Purpose/Motivation:**  
-Add `--force-ai` CLI flag and `FORCE_AI` env var override. Wire the skip check from Task 1.1 into `main()`.
+Add `--force-ai` CLI flag and `FORCE_AI` env var override, then wire Task 1.1's helper into `main()`. These three things are implemented together because the skip gate (`if not force and not _has_new_delta_data(today)`) requires `force` to be defined first.
 
 **Detailed Task Description:**
 
