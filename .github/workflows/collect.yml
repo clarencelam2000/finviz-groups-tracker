@@ -5,6 +5,11 @@ on:
     - cron: '11 22 * * 1-5'
     - cron: '35 23 * * *'
   workflow_dispatch:
+    inputs:
+      force_ai:
+        type: boolean
+        default: false
+        description: 'Force AI regeneration even if no new delta data detected'
 permissions:
   contents: write
 env:
@@ -92,7 +97,12 @@ jobs:
         if: steps.deltas.outcome == 'success'
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        run: python scripts/generate_ai.py
+        run: |
+          FLAGS=""
+          if [ "${{ github.event.inputs.force_ai }}" = "true" ]; then
+            FLAGS="--force-ai"
+          fi
+          python scripts/generate_ai.py $FLAGS
       - name: Log fetch result
         if: always()
         env:

@@ -6,10 +6,44 @@
 
 ## Current Status
 
-**Status:** Complete ✅ — Plan review done; PRs #46 and #47 merged
-**Safe to close:** Yes — all changes committed and merged, no open threads
-**Waiting on:** Nothing
-**Next action:** New session to implement Phase 1 (smart regeneration + skip logic) per approved plan in `plan/PLAN_smart_regeneration_pydantic.md`
+**Status:** In progress — Phase 1 implemented; PR #50 open, CI running
+**Safe to close:** Yes — all changes committed and pushed; CI pass expected (114/114 tests pass locally)
+**Waiting on:** PR #50 merge (user action); CI completing on `claude/smart-regeneration-phase-1-gxtvfj`
+**Next action:** Merge PR #50 → monitor 2+ weeks of production runs → evaluate Phase 2 (schema descriptions + few-shot)
+
+---
+
+## Session: 2026-06-13 — Phase 1 implementation: smart regeneration skip logic (PR #50)
+
+### What was done
+
+**Implemented Phase 1** per `plan/PLAN_smart_regeneration_pydantic.md` (Tasks 1.1, 1.2, 1.3).
+
+**Task 1.1 + 1.2 (commit 540f32e):** Smart skip logic in `generate_ai.py`
+- Added `_has_new_delta_data(date_str)` helper: reads `data/sectors/deltas.csv` and `data/industries/deltas.csv` with `dtype=str, usecols=["date"]`. Returns `True` if today's date appears in either; `False` if neither has data, CSVs are missing, or a read error occurs (prints WARNING on error).
+- Added `argparse` with `--force-ai` flag and `FORCE_AI` env var; uses `parse_known_args()` so pytest args don't cause parse failures.
+- Wired skip gate into `main()` after `today` is derived, before API key check: `if not force and not _has_new_delta_data(today): sys.exit(0)` with `outcome="skipped"` in artifacts.
+- 8 new tests; 9 existing `main()` tests patched to monkeypatch `_has_new_delta_data=True`.
+
+**Task 1.3 (commit ea874b0):** Workflow + README
+- Added `force_ai` boolean input to `workflow_dispatch` in `collect.yml`. The AI step passes `--force-ai` only when input is `"true"`; scheduled cron always goes through the skip check.
+- README updated with skip behaviour, `--force-ai` usage, and `FORCE_AI` env var.
+
+**Tests:** 114 passing (was 106, +8 new).
+
+**PR #50:** Draft, CI in progress. Base: `claude/elegant-babbage-hlxnfy`.
+
+### Key decisions
+
+- `parse_known_args()` instead of `parse_args()` — prevents pytest args from causing parse failures when tests call `main()` directly.
+- Skip gate fires before API key check — no side effects on skip (no log write until `_write_run_artifacts("skipped", ...)` which is cheap).
+- WARNING printed on corrupt CSV read (per plan spec from PR #47 correction).
+
+### Next steps
+
+1. **User: merge PR #50** after CI passes
+2. **2+ weeks of production runs** → confirm skip logic fires correctly on no-delta days; force_ai checkbox works for manual overrides
+3. **Phase 2** (schema descriptions + few-shot): unblocked after production stability confirmed
 
 ---
 

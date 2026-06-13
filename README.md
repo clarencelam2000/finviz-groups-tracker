@@ -43,7 +43,17 @@ Reads the snapshot CSVs and appends rank/delta rows to the deltas CSVs.
 GEMINI_API_KEY=your_key python scripts/generate_ai.py
 ```
 
-Calls Gemini to produce a daily briefing, rotation phase signal, and sector watchlist. Output is written to `data/ai/YYYY-MM-DD.json`. Re-running on the same day fills in any fields that failed in a previous partial run (incremental retry). Exits silently if no API key is set.
+Calls Gemini to produce a daily briefing, rotation phase signal, and sector watchlist. Output is written to `data/ai/YYYY-MM-DD.json`. Exits silently if no API key is set.
+
+**Smart skip:** By default, `generate_ai.py` checks whether today's date appears in the delta CSVs before making any API calls. If `compute_deltas.py` hasn't run yet for today (e.g. a mid-day re-run), it prints a skip message and exits 0 without consuming API quota.
+
+**Force regeneration:** Use `--force-ai` to bypass the skip check:
+
+```bash
+GEMINI_API_KEY=your_key python scripts/generate_ai.py --force-ai
+```
+
+Or set the `FORCE_AI=1` environment variable. The GitHub Actions manual trigger (`workflow_dispatch`) also exposes a **Force AI regeneration** checkbox.
 
 ### 5. Launch the dashboard
 

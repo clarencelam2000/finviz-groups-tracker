@@ -791,8 +791,10 @@ def test_update_index_missing_rotation_phase(tmp_path):
 
 def test_main_exits_zero_without_api_key(monkeypatch, tmp_path):
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("FORCE_AI", raising=False)
     monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
     monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
     with pytest.raises(SystemExit) as exc_info:
         generate_ai.main()
     assert exc_info.value.code == 0
@@ -820,8 +822,10 @@ def test_main_uses_snapshot_date_not_today(monkeypatch, tmp_path):
     _write_snap_csv(sectors_dir, snap_date)
 
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("FORCE_AI", raising=False)
     monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
     monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
 
     artifact_calls = []
     monkeypatch.setattr(generate_ai, "_write_run_artifacts",
@@ -839,10 +843,12 @@ def test_main_uses_snapshot_date_not_today(monkeypatch, tmp_path):
 def test_main_falls_back_to_today_when_no_snapshot(monkeypatch, tmp_path):
     """With no snapshot data, date falls back to date.today() — no crash."""
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("FORCE_AI", raising=False)
     monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
     monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
     # Simulate missing snapshot by returning empty DataFrame
     monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: pd.DataFrame())
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
 
     artifact_calls = []
     monkeypatch.setattr(generate_ai, "_write_run_artifacts",
@@ -860,10 +866,12 @@ def test_main_falls_back_to_today_when_no_snapshot(monkeypatch, tmp_path):
 def test_main_falls_back_to_today_when_snapshot_dates_all_invalid(monkeypatch, tmp_path):
     """Snapshot with all-unparseable dates → load_latest_snapshot returns empty → fallback, no crash."""
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("FORCE_AI", raising=False)
     monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
     monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
     # load_latest_snapshot returns empty when all dates are NaT (filters to latest == NaT → empty)
     monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: pd.DataFrame())
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
 
     artifact_calls = []
     monkeypatch.setattr(generate_ai, "_write_run_artifacts",
@@ -884,9 +892,11 @@ def test_main_does_not_write_file_when_all_calls_fail(monkeypatch, tmp_path):
     # Simulate a total API outage: generate_for_group returns {} for both groups.
     from unittest.mock import MagicMock
     monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("FORCE_AI", raising=False)
     monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
     monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
     monkeypatch.setattr(generate_ai, "generate_for_group", lambda *_, **__: {})
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
     # Inject a fake google.genai so the lazy import inside main() succeeds.
     mock_genai = MagicMock()
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
@@ -1053,8 +1063,10 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
     """Re-running with a partial file fills in missing fields without re-calling for existing ones."""
     from unittest.mock import MagicMock
     monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("FORCE_AI", raising=False)
     monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
     monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
 
     # Write the partial file (mirrors real 2026-06-11.json)
     import datetime as _dt
@@ -1126,8 +1138,10 @@ def test_main_generates_daily_delta_when_prior_file_exists(monkeypatch, tmp_path
     """When a prior day's AI file exists, main() generates sectors.daily_delta."""
     from unittest.mock import MagicMock
     monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("FORCE_AI", raising=False)
     monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
     monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
 
     import datetime as _dt
     today = _dt.date.today().isoformat()
@@ -1183,8 +1197,10 @@ def test_main_skips_delta_when_no_prior_file(monkeypatch, tmp_path):
     """When no prior AI file exists, daily_delta is absent from output."""
     from unittest.mock import MagicMock
     monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("FORCE_AI", raising=False)
     monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
     monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
 
     import datetime as _dt
     today = _dt.date.today().isoformat()
@@ -1228,8 +1244,10 @@ def test_main_force_regenerates_complete_file(monkeypatch, tmp_path):
     '''Verify we force-regenerate even when file is complete. No caching ai insights. '''
     from unittest.mock import MagicMock
     monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("FORCE_AI", raising=False)
     monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
     monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
 
     import datetime as _dt
     today = _dt.date.today().isoformat()
@@ -1517,3 +1535,156 @@ def test_normalize_phase_free_form_label():
         "label": "Market Micro-Phase: Transition",
         "reasoning": "Custom industry phase.",
     }
+
+
+# ---------------------------------------------------------------------------
+# _has_new_delta_data
+# ---------------------------------------------------------------------------
+
+def _write_delta_csv(delta_dir: Path, date_str: str) -> None:
+    delta_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = delta_dir / "deltas.csv"
+    csv_path.write_text(f"date,name,rank_week\n{date_str},Energy,1\n")
+
+
+def test_has_new_delta_data_true_when_sectors_has_date(monkeypatch, tmp_path):
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    _write_delta_csv(tmp_path / "sectors", "2026-06-13")
+    assert generate_ai._has_new_delta_data("2026-06-13") is True
+
+
+def test_has_new_delta_data_true_when_only_industries_has_date(monkeypatch, tmp_path):
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    # sectors CSV has older date; industries has today
+    _write_delta_csv(tmp_path / "sectors", "2026-06-12")
+    _write_delta_csv(tmp_path / "industries", "2026-06-13")
+    assert generate_ai._has_new_delta_data("2026-06-13") is True
+
+
+def test_has_new_delta_data_false_when_neither_has_date(monkeypatch, tmp_path):
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    _write_delta_csv(tmp_path / "sectors", "2026-06-12")
+    _write_delta_csv(tmp_path / "industries", "2026-06-12")
+    assert generate_ai._has_new_delta_data("2026-06-13") is False
+
+
+def test_has_new_delta_data_false_when_csvs_missing(monkeypatch, tmp_path):
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    # No CSVs at all
+    assert generate_ai._has_new_delta_data("2026-06-13") is False
+
+
+def test_has_new_delta_data_false_and_warns_on_corrupt_csv(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    sectors_dir = tmp_path / "sectors"
+    sectors_dir.mkdir(parents=True)
+    # Write a CSV without the "date" column — causes usecols KeyError
+    (sectors_dir / "deltas.csv").write_text("name,rank_week\nEnergy,1\n")
+    result = generate_ai._has_new_delta_data("2026-06-13")
+    assert result is False
+    captured = capsys.readouterr()
+    assert "WARNING" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# main() skip gate — force flag and env var
+# ---------------------------------------------------------------------------
+
+def test_main_skips_when_no_delta_data(monkeypatch, tmp_path):
+    """main() exits 0 with outcome=skipped when no delta data and force=False."""
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("FORCE_AI", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: False)
+
+    artifact_calls = []
+    monkeypatch.setattr(generate_ai, "_write_run_artifacts",
+                        lambda *args: artifact_calls.append(args))
+
+    with pytest.raises(SystemExit) as exc_info:
+        generate_ai.main()
+
+    assert exc_info.value.code == 0
+    assert artifact_calls, "expected _write_run_artifacts to be called"
+    assert artifact_calls[0][0] == "skipped"
+
+
+def test_main_force_flag_bypasses_skip(monkeypatch, tmp_path):
+    """--force-ai flag causes generation even when _has_new_delta_data returns False."""
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("FORCE_AI", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: False)
+
+    generate_called = []
+    def fake_generate(client, group_type, date_str, existing=None):
+        generate_called.append(group_type)
+        if group_type == "sector":
+            return {
+                "briefing": "text",
+                "rotation_phase": {"label": "Defensive", "reasoning": "test"},
+                "watchlist": [{"name": "Energy", "thesis": "ok"}],
+            }
+        return {
+            "briefing": "text",
+            "rotation_phase": {"label": "Tech", "reasoning": "test"},
+            "watchlist": [{"name": "Software", "thesis": "ok"}],
+        }
+
+    monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    import sys as _sys
+    orig_argv = _sys.argv
+    _sys.argv = [orig_argv[0], "--force-ai"]
+    try:
+        (tmp_path / "ai").mkdir(parents=True)
+        generate_ai.main()
+    finally:
+        _sys.argv = orig_argv
+
+    assert "sector" in generate_called
+
+
+def test_main_force_env_var_bypasses_skip(monkeypatch, tmp_path):
+    """FORCE_AI=1 env var causes generation even when _has_new_delta_data returns False."""
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.setenv("FORCE_AI", "1")
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: False)
+
+    generate_called = []
+    def fake_generate(client, group_type, date_str, existing=None):
+        generate_called.append(group_type)
+        if group_type == "sector":
+            return {
+                "briefing": "text",
+                "rotation_phase": {"label": "Defensive", "reasoning": "test"},
+                "watchlist": [{"name": "Energy", "thesis": "ok"}],
+            }
+        return {
+            "briefing": "text",
+            "rotation_phase": {"label": "Tech", "reasoning": "test"},
+            "watchlist": [{"name": "Software", "thesis": "ok"}],
+        }
+
+    monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    (tmp_path / "ai").mkdir(parents=True)
+    generate_ai.main()
+
+    assert "sector" in generate_called
