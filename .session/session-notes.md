@@ -6,10 +6,10 @@
 
 ## Current Status
 
-**Status:** In progress — Phase 1 implemented; PR #50 open, CI running
-**Safe to close:** Yes — all changes committed and pushed; CI pass expected (114/114 tests pass locally)
-**Waiting on:** PR #50 merge (user action); CI completing on `claude/smart-regeneration-phase-1-gxtvfj`
-**Next action:** Merge PR #50 → monitor 2+ weeks of production runs → evaluate Phase 2 (schema descriptions + few-shot)
+**Status:** Complete ✅ — Phase 1 shipped; PR #50 merged
+**Safe to close:** Yes — all changes merged, no open threads
+**Waiting on:** 2+ weeks of production runs to confirm skip logic working correctly before starting Phase 2
+**Next action:** Monitor `ai_outcome` in `data/fetch_log.csv` — expect `skipped` on days `compute_deltas.py` hasn't run, `complete` on normal days. Then Phase 2 (schema descriptions + few-shot).
 
 ---
 
@@ -31,7 +31,7 @@
 
 **Tests:** 114 passing (was 106, +8 new).
 
-**PR #50:** Draft, CI in progress. Base: `claude/elegant-babbage-hlxnfy`.
+**PR #50:** Merged (commit ff2be5b). All tests passing (114 tests).
 
 ### Key decisions
 
@@ -41,9 +41,8 @@
 
 ### Next steps
 
-1. **User: merge PR #50** after CI passes
-2. **2+ weeks of production runs** → confirm skip logic fires correctly on no-delta days; force_ai checkbox works for manual overrides
-3. **Phase 2** (schema descriptions + few-shot): unblocked after production stability confirmed
+1. **Monitor production** — 2+ weeks of data collection to confirm skip logic fires correctly on no-delta days; force_ai checkbox works for manual overrides
+2. **Phase 2** (schema descriptions + few-shot): unblock after production stability confirmed
 
 ---
 
