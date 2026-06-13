@@ -246,24 +246,24 @@ Merging both together eliminates the window where AI doesn't run at all. There i
 - [x] `plan/PLAN_decouple_ai_workflow.md` committed
 
 ### Phase 1 — Modify collect.yml
-- [ ] Remove "Generate AI analysis" step
-- [ ] Remove `force_ai` input from `on.workflow_dispatch.inputs`
-- [ ] Remove `AI_GEN_OUTCOME` from log step env
-- [ ] Replace `ai_run_summary.json` read block with `ai_outcome = ""; ai_fields_missing = ""`
-- [ ] Remove schema migration block from log step
-- [ ] `python -c "import yaml; yaml.safe_load(open('.github/workflows/collect.yml'))"` → no error
-- [ ] `grep -n "GEMINI_API_KEY" .github/workflows/collect.yml` → no output
-- [ ] `python3 -m pytest tests/ -q` → all pass
-- [ ] Commit: `chore: remove AI step from collect workflow`
+- [x] Remove "Generate AI analysis" step
+- [x] Remove `force_ai` input from `on.workflow_dispatch.inputs`
+- [x] Remove `AI_GEN_OUTCOME` from log step env
+- [x] Replace `ai_run_summary.json` read block with `ai_outcome = ""; ai_fields_missing = ""`
+- [x] Remove schema migration block from log step
+- [x] `python -c "import yaml; yaml.safe_load(open('.github/workflows/collect.yml'))"` → no error
+- [x] `grep -n "GEMINI_API_KEY" .github/workflows/collect.yml` → no output
+- [x] `python3 -m pytest tests/ -q` → all pass (195 passed)
+- [x] Commit: `chore: remove AI step from collect workflow`
 
 ### Phase 2 — Create generate_ai.yml
-- [ ] Create `.github/workflows/generate_ai.yml` per skeleton above
-- [ ] `python -c "import yaml; yaml.safe_load(open('.github/workflows/generate_ai.yml'))"` → no error
-- [ ] `grep "playwright install" .github/workflows/generate_ai.yml` → no output
-- [ ] `grep "head_branch" .github/workflows/generate_ai.yml` → no output
-- [ ] `python3 -m pytest tests/ -q` → all pass
-- [ ] Commit: `feat: add standalone generate_ai workflow`
-- [ ] Push both commits; open (or update) draft PR
+- [x] Create `.github/workflows/generate_ai.yml` per skeleton above
+- [x] `python -c "import yaml; yaml.safe_load(open('.github/workflows/generate_ai.yml'))"` → no error
+- [x] `grep "playwright install" .github/workflows/generate_ai.yml` → no output
+- [x] `grep "head_branch" .github/workflows/generate_ai.yml` → no output
+- [x] `python3 -m pytest tests/ -q` → all pass (195 passed)
+- [x] Commit: `feat: add standalone generate_ai workflow`
+- [x] Push both commits; open (or update) draft PR → PR #53
 
 ### Phase 3 — Verify in GitHub Actions (post-merge)
 - [ ] `workflow_dispatch` on `collect.yml` → no AI step in log, runtime ≤ 8 min
