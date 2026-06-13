@@ -1,0 +1,59 @@
+name: Generate AI Analysis
+on:
+  workflow_run:
+    workflows: ["Daily Snapshot"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      force_ai:
+        type: boolean
+        default: false
+        description: 'Force regeneration even if no new delta data detected'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: generate-ai
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  generate:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+        # Playwright is not needed — generate_ai.py never imports it
+
+      - name: Generate AI analysis
+        id: ai_gen
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FORCE_AI: ${{ github.event.inputs.force_ai == 'true' && '1' || '' }}
+        run: python scripts/generate_ai.py
+
+      - name: Commit and push
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git pull --rebase origin ${{ github.ref_name }}
+          git add data/
+          git diff --cached --quiet || git commit -m "data: AI analysis $(TZ=America/New_York date +%Y-%m-%d)"
+          git push origin HEAD:${{ github.ref_name }}
