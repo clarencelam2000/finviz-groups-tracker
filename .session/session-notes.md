@@ -6,10 +6,49 @@
 
 ## Current Status
 
-**Status:** Complete ✅ — Phase 1 shipped; PR #50 merged
-**Safe to close:** Yes — all changes merged, no open threads
-**Waiting on:** 2+ weeks of production runs to confirm skip logic working correctly before starting Phase 2
-**Next action:** Monitor `ai_outcome` in `data/fetch_log.csv` — expect `skipped` on days `compute_deltas.py` hasn't run, `complete` on normal days. Then Phase 2 (schema descriptions + few-shot).
+**Status:** In Progress 🔄 — PR #58 open (AI quota exhaustion fix); awaiting CI + merge
+**Safe to close:** No — PR #58 open, awaiting CI green and merge
+**Waiting on:** CI pass on PR #58, then merge into `claude/elegant-babbage-hlxnfy`
+**Next action:** After PR #58 merges — mark AI-3 done in SPRINT.md; monitor `data/ai_run_log.jsonl` for 2+ days to confirm `rate_limit_hits` ≤ 3 and no `quota_exhausted` outcomes on normal days
+
+---
+
+## Session: 2026-06-13 — AI quota exhaustion fix (PR #58)
+
+### What was done
+
+**Root cause analysis** of RESOURCE_EXHAUSTED failures in `generate_ai.py`.
+
+**Three compounding bugs identified and fixed:**
+
+**Bug 1 — Incremental loading removed (commit `022d871`):** `existing_output = {}` was hardcoded. Every run regenerated all 7 fields from scratch even when a partial file existed. The `generate_for_group` skip-if-present logic was intact but never fired.
+
+**Bug 2 — Retry loop retried daily quota exhaustion:** 429 with `GenerateRequestsPerDayPerProjectPerModel-FreeTier` was treated the same as per-minute rate limits. Each retry burned another quota unit and wasted 30+60+120s sleep per field. June 13 run: 7 first-attempts + 17 retries = 24 actual API requests, 20+ minutes elapsed.
+
+**Bug 3 — `_generate_daily_delta` swallowed exceptions silently:** Every failure logged `{"status":"error"}` with no error field. `[]` from API failure was indistinguishable from `[]` from "model found no changes."
+
+**Fixes committed (commit cb38d77):**
+1. Restored partial-file incremental loading in `main()` — loads existing partial file, passes it as `existing=` to `generate_for_group`. Complete files still regenerate fresh (deliberate design).
+2. Added `DailyQuotaExhaustedError` — detected in `_call_api` by `GenerateRequestsPerDayPerProjectPerModel` in error string, propagates to `main()` which saves partial output, logs `quota_exhausted`, exits 0.
+3. `_generate_daily_delta` returns `(list, str)` tuple — `ok_empty` vs `error` with message are now distinguishable in run log.
+
+**Tests:** 207 passing (was 126 in test_generate_ai.py, added 20 new tests covering all three fixes).
+
+**PR #58:** Open (draft), awaiting CI.
+
+**Plan file:** `plans/ai-quota-exhaustion-fix.md` committed and pushed.
+
+### Key decisions
+
+- Do NOT skip complete files (deliberate design from commit `022d871` + existing test `test_main_force_regenerates_complete_file`). Only partial files trigger incremental loading.
+- `DailyQuotaExhaustedError` is non-retryable — quota can't reset mid-run.
+- 20 RPD limit is real — Google cut from 250 → 20 for gemini-2.5-flash in late 2025. 7 calls/day is sufficient if not wasting calls on retries or full-regeneration of partial files.
+
+### Next steps
+
+1. Merge PR #58
+2. Mark AI-3 done in SPRINT.md (this PR fully implements it)
+3. Monitor `data/ai_run_log.jsonl` for 2+ days — expect `rate_limit_hits` ≤ 3, no `quota_exhausted` on normal days
 
 ---
 
