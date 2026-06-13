@@ -5,6 +5,7 @@ Writes data/ai/YYYY-MM-DD.json, which the dashboard reads and renders.
 Run after compute_deltas.py. Exits 0 silently if GEMINI_API_KEY is not set.
 """
 
+import argparse
 import json
 import os
 import sys
@@ -140,6 +141,24 @@ def load_latest_delta(group_type: str) -> pd.DataFrame:
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
     latest = df["date"].max()
     return df[df["date"] == latest].copy()
+
+
+def _has_new_delta_data(date_str: str) -> bool:
+    """Return True if today's date appears in at least one delta CSV."""
+    for subdir in ("sectors", "industries"):
+        path = DATA_DIR / subdir / "deltas.csv"
+        if not path.exists():
+            continue
+        try:
+            df = pd.read_csv(path, dtype=str, usecols=["date"])
+            if (df["date"] == date_str).any():
+                return True
+        except Exception:
+            print(
+                f"WARNING: could not read {path} while checking for delta data — will skip",
+                flush=True,
+            )
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -782,6 +801,15 @@ def main():
     _reset_tracking()
     run_start = time.monotonic()
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--force-ai",
+        action="store_true",
+        help="Force regeneration even if no new delta data",
+    )
+    args, _ = parser.parse_known_args()
+    force = args.force_ai or bool(os.getenv("FORCE_AI"))
+
     # Use the latest snapshot date as the AI file name so the PWA can match them.
     # The workflow starts at 22:00 UTC but the AI step can run past midnight UTC
     # (due to rate-limit retries), making date.today() return the next calendar
@@ -793,6 +821,11 @@ def main():
         if pd.notna(d):
             snap_date = d.isoformat()
     today = snap_date if snap_date else date.today().isoformat()
+
+    if not force and not _has_new_delta_data(today):
+        print(f"No new delta data for {today} — skipping AI regeneration.")
+        _write_run_artifacts("skipped", False, time.monotonic() - run_start, today)
+        sys.exit(0)
 
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
