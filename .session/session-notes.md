@@ -6,10 +6,71 @@
 
 ## Current Status
 
-**Status:** Complete ✅ — All 7 phases of AI tab improvements done, ready to push/PR
-**Safe to close:** Yes — all changes committed, tests passing (165), PR needs to be created
-**Waiting on:** PR creation (push + `mcp__github__create_pull_request` call)
+**Status:** Phase 1 complete ✅ — GitHub Actions scheduling reliability (heartbeat monitoring + timezone support)
+**Safe to close:** Yes — all changes committed and pushed, PR #55 created as draft
+**Waiting on:** User approval to proceed with Phase 2 (AWS EventBridge) if monitoring shows persistent delays
+**Next action:** Configure SCHEDULE_HEALTHCHECK_URL secret in repo (healthchecks.io setup — see PR description for steps)
 **Open threads:** None
+
+---
+
+## Session: 2026-06-13 — GitHub Actions scheduling reliability (Phase 1: Heartbeat monitoring + timezone)
+
+### What was done
+
+**Problem:** GitHub Actions scheduled workflows have no SLA. Actual execution delayed 5–150+ minutes unpredictably. Fetch log showed runs at 23:24 UTC (should be 22:05), 02:04 UTC (wildly late), etc. User had no alert if a scheduled run failed to fire.
+
+**Solution:** Two-part Phase 1 (quick-win):
+
+1. **Timezone support (Q1 2026 feature)**:
+   - Converted cron from UTC to `America/New_York` timezone for readability
+   - `0 9 * * 1-5` → 9 AM ET, Mon-Fri (market opening)
+   - `5 17 * * 1-5` → 5:05 PM ET, Mon-Fri (post-market close)
+   - `35 18 * * *` → 6:35 PM ET daily
+   - Easier to reason about intended collection times
+
+2. **Schedule-only heartbeat monitoring**:
+   - New `SCHEDULE_HEALTHCHECK_URL` secret pings only on scheduled runs (not manual `workflow_dispatch`)
+   - Separate from existing `HEALTHCHECK_URL` which confirms *successful execution*
+   - New healthcheck pings only for scheduled runs → detects missing executions
+   - Alert window: 25h period, 2h grace — catches missed runs within 1 day
+
+**Implementation:**
+- `.github/workflows/collect.yml` — added timezone fields to 3 cron schedules; added "Ping healthcheck (schedule only)" step
+- PR #55 created as draft; ready for user to configure `SCHEDULE_HEALTHCHECK_URL` in healthchecks.io
+
+**Testing ready:** Next scheduled run (9 AM ET Mon-Fri) will execute with new timezone; both healthchecks will ping on success.
+
+### What's deferred to Phase 2
+
+If heartbeat monitoring shows runs consistently >1 hour late:
+- Use AWS EventBridge (99.99% SLA, ±5s timing)
+- Estimated effort: 1–2 hours
+- Plan in `/root/.claude/plans/github-actions-scheduling.md`
+
+### User action needed
+
+1. Create new check in healthchecks.io:
+   - Name: "finviz-groups (scheduled runs)"
+   - Period: 25 hours
+   - Grace: 2 hours
+   - Copy URL
+
+2. Add to repo secrets:
+   - `Settings → Secrets and variables → Actions → New repository secret`
+   - Name: `SCHEDULE_HEALTHCHECK_URL`
+   - Value: (paste URL from healthchecks.io)
+
+3. Set alert in healthchecks.io:
+   - Alert triggers if ping missing for 2 runs (50-hour window catches missed days)
+
+### Key decisions
+
+- Heartbeat before EventBridge: validates whether delays are actually a problem vs. perception
+- 25h period (not 24h) accounts for extreme delays; 2h grace prevents false alerts on normal queueing
+- `github.event_name == 'schedule'` condition prevents this ping on manual runs (cleaner alerting)
+
+### No open threads; PR ready for review
 
 ---
 
