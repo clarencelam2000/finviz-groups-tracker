@@ -1,9 +1,12 @@
 name: Daily Snapshot
 on:
   schedule:
-    - cron: '0 14 * * 1-5'
-    - cron: '5 22 * * 1-5'
-    - cron: '35 23 * * *'
+    - cron: '0 9 * * 1-5'
+      timezone: America/New_York
+    - cron: '5 17 * * 1-5'
+      timezone: America/New_York
+    - cron: '35 18 * * *'
+      timezone: America/New_York
   workflow_dispatch:
 permissions:
   contents: write
@@ -203,3 +206,11 @@ jobs:
           # Silently skip if secret not configured; otherwise ping to confirm success.
           # Setup: healthchecks.io → New Check → period 26h → copy URL → repo Settings → Secrets → HEALTHCHECK_URL
           [ -z "$HEALTHCHECK_URL" ] || curl -fsS --retry 3 "$HEALTHCHECK_URL" > /dev/null
+      - name: Ping healthcheck (schedule only)
+        if: github.event_name == 'schedule' && steps.collect.outcome == 'success' && steps.verify.outcome == 'success' && steps.deltas.outcome == 'success'
+        env:
+          SCHEDULE_HEALTHCHECK_URL: ${{ secrets.SCHEDULE_HEALTHCHECK_URL }}
+        run: |
+          # Separate healthcheck for scheduled runs to detect missed executions.
+          # Setup: healthchecks.io → New Check → period 25h, grace 2h → copy URL → repo Settings → Secrets → SCHEDULE_HEALTHCHECK_URL
+          [ -z "$SCHEDULE_HEALTHCHECK_URL" ] || curl -fsS --retry 3 "$SCHEDULE_HEALTHCHECK_URL" > /dev/null
