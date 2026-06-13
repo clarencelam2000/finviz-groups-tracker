@@ -6,10 +6,10 @@
 
 ## Current Status
 
-**Status:** In progress — Phase 1 implemented; PR #50 open, CI running
-**Safe to close:** Yes — all changes committed and pushed; CI pass expected (114/114 tests pass locally)
-**Waiting on:** PR #50 merge (user action); CI completing on `claude/smart-regeneration-phase-1-gxtvfj`
-**Next action:** Merge PR #50 → monitor 2+ weeks of production runs → evaluate Phase 2 (schema descriptions + few-shot)
+**Status:** Complete ✅ — Phase 1 shipped; PR #50 merged
+**Safe to close:** Yes — all changes merged, no open threads
+**Waiting on:** 2+ weeks of production runs to confirm skip logic working correctly before starting Phase 2
+**Next action:** Monitor `ai_outcome` in `data/fetch_log.csv` — expect `skipped` on days `compute_deltas.py` hasn't run, `complete` on normal days. Then Phase 2 (schema descriptions + few-shot).
 
 ---
 
