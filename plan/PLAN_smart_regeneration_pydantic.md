@@ -1,4 +1,4 @@
-# Implementation Plan: Smart Regeneration + Pydantic Migration
+# Implementation Plan: Smart Regeneration + Schema Enrichment
 
 **Created:** 2026-06-12  
 **Status:** Approved for Implementation  
@@ -20,144 +20,142 @@
 ### Solution Approach
 
 **Phase 1: Smart Regeneration with Force Flag**
-- Detect if `compute_deltas.py` found new data (write status file)
+- Detect if today's date appears in delta CSVs (checked directly in `generate_ai.py`)
 - Skip AI regeneration if no changes detected (preserve API budget)
 - Add `--force-ai` CLI flag to force regeneration when needed (manual testing, debugging)
 - Maintain backward compatibility (default behavior safe)
 
-**Phase 2: Pydantic + Few-Shot Learning**
-- Migrate manual JSON schemas → Pydantic BaseModels (type safety, better IDE support)
-- Add 2-3 few-shot examples per prompt (research shows critical for format compliance)
-- Enhance field descriptions to guide LLM toward compliance
-- Add validation logging to track schema violations over time
+**Phase 2: Schema Enrichment + Few-Shot Learning**
+- Add `description` fields to all schemas and `additionalProperties: false` (guides LLM toward correct values, tightens contract)
+- Add 2-3 few-shot examples per prompt to improve semantic quality and data specificity
+- Add validation logging to track schema compliance over time
 - Defer fallback parser removal until proven (2-4 weeks of 95%+ compliance monitoring)
 
 ### Why This Matters
 
 - **API Cost:** Reduces unnecessary calls by ~40% on unchanged-data days (~2-3 days/week). On free tier, critical to avoid quota exhaustion.
-- **Reliability:** Pydantic + few-shot research shows 95%+ JSON compliance. Current fallback approach loses information (phase label becomes "Unknown").
-- **Maintainability:** Pydantic models are self-documenting, easier to evolve as schema requirements change.
+- **Reliability:** Schema descriptions guide LLM toward correct values; few-shot examples improve data specificity. Current fallback approach loses information (phase label becomes "Unknown").
+- **Maintainability:** Schema descriptions serve as inline documentation for the LLM and future implementers, easier to evolve than bare type constraints.
 - **Observability:** Validation logging enables monitoring compliance trends and early detection of LLM degradation.
 
 ---
 
 ## Phase 1: Smart Regeneration with Force Flag
 
-### Task 1.1: Write Delta Status File
+### Task 1.1: Add Skip Detection to generate_ai.py
 
 **Purpose/Motivation:**  
-Enable `generate_ai.py` to detect whether `compute_deltas.py` found new data. Skip regeneration on no-change days to conserve API quota.
+Enable `generate_ai.py` to detect whether today's delta data exists before spending API quota. Checked directly in `generate_ai.py` by reading the delta CSVs — no changes to `compute_deltas.py` needed.
 
 **Detailed Task Description:**
 
-1. Modify `scripts/compute_deltas.py` to write a status file after both group types are processed:
-   - File: `data/deltas_run_status.json` (ephemeral, not committed)
-   - Format (with timestamp for diagnostic purposes):
-     ```json
-     {
-       "date": "YYYY-MM-DD",
-       "completed_at": "2026-06-12T22:15:30.123456Z",
-       "has_changes": true|false,
-       "groups": {
-         "sector": {"new_rows": 8},
-         "industry": {"new_rows": 115}
-       }
-     }
-     ```
-   - `has_changes=true` if EITHER sector OR industry had new rows
-   - Always overwrite (last run wins)
+1. Add helper function to `scripts/generate_ai.py`:
+   ```python
+   def _has_new_delta_data(date_str: str) -> bool:
+       """Return True if today's date appears in at least one delta CSV."""
+       for subdir in ("sectors", "industries"):
+           path = DATA_DIR / subdir / "deltas.csv"
+           if not path.exists():
+               continue
+           try:
+               df = pd.read_csv(path, dtype=str, usecols=["date"])
+               if (df["date"] == date_str).any():
+                   return True
+           except Exception:
+               pass
+       return False
+   ```
 
-2. Write file at END of `main()`, after all `compute_for_group()` calls complete with `completed_at` timestamp
-3. Only write if at least one group had rows (safe: missing file treated as "changes found")
+2. Call in `main()` after establishing `today` (before API key check):
+   ```python
+   if not force and not _has_new_delta_data(today):
+       print(f"No new delta data for {today} — skipping AI regeneration.")
+       _write_run_artifacts("skipped", False, time.monotonic() - run_start, today)
+       sys.exit(0)
+   ```
+
+3. Missing or unreadable delta CSV → function returns `False` → skip (safe default; no data means nothing to analyze)
 
 **Acceptance Criteria:**
-- File created every run with valid JSON
-- Counts match actual delta rows appended
-- If both groups have 0 new rows → `has_changes: false`
-- File is readable and parseable
-- Timestamp in ISO 8601 format
+- Returns `True` when today's date appears in sectors or industries delta CSV
+- Returns `False` when neither CSV has today's date (including missing CSVs)
+- CSV parse error → returns `False` → skip gracefully
+- Function is unit-tested with `tmp_path` fixtures (no real file I/O)
 
 **Happy Path:**
 ```
-2026-06-12 run:
-- Finviz snapshots collected (8 sectors, 115 industries)
-- compute_deltas appends 8 sector + 115 industry rows
-- deltas_run_status.json written:
-  {"date": "2026-06-12", "completed_at": "2026-06-12T22:15:30Z", "has_changes": true, 
-   "groups": {"sector": {"new_rows": 8}, "industry": {"new_rows": 115}}}
+2026-06-12 run (post-close):
+- compute_deltas has appended rows for 2026-06-12
+- _has_new_delta_data("2026-06-12") → True
+- AI generation proceeds
 ```
 
 **Edge Cases:**
-- No snapshot data → 0 rows → has_changes=false
-- compute_deltas crashes → status file not written (generate_ai defaults to regenerate, safe)
-- Concurrent runs → last one wins (acceptable for daily cadence)
+- Delta CSVs don't exist yet (first run) → returns `False` → skip; use `--force-ai` for first run
+- CSV exists but only has prior-day rows → returns `False` → skip correctly
+- Midday run before compute_deltas has run → returns `False` → skip (no data to analyze yet)
 
-**Dependencies:** None
+**Dependencies:** None (no changes to `compute_deltas.py`)
 
 **Error/Failure Cases:**
-- File write fails → print warning, don't crash (let generate_ai handle missing file)
-- JSON corruption → log error, regenerate anyway
+- CSV missing columns or corrupt → caught by `except Exception` → returns `False` → skip
 
 **Follow-up Tasks:**
 - (Sprint) Add metric: track days skipped due to no changes
-- (Backlog) Add `--no-skip` flag to compute_deltas for forcing full recomputation
+- (Backlog) Surface skip count in fetch_log.csv for trend monitoring
 
 ---
 
-### Task 1.2: Implement Skip Logic + CLI Flag
+### Task 1.2: Implement Force Flag + Wire Skip Logic
 
 **Purpose/Motivation:**  
-Check delta status and skip regeneration if no changes detected. Allow manual override via `--force-ai` flag.
+Add `--force-ai` CLI flag and `FORCE_AI` env var override. Wire the skip check from Task 1.1 into `main()`.
 
 **Detailed Task Description:**
 
 1. Add argparse to `scripts/generate_ai.py` `main()`:
    ```python
    parser = argparse.ArgumentParser()
-   parser.add_argument("--force-ai", action="store_true", 
-                       help="Force regeneration even if no changes detected")
+   parser.add_argument("--force-ai", action="store_true",
+                       help="Force regeneration even if no new delta data")
    args = parser.parse_args()
+   force = args.force_ai or bool(os.getenv("FORCE_AI"))
    ```
 
-2. At start of `main()`, after API key check:
-   - Try to read `data/deltas_run_status.json`
-   - If file valid AND `has_changes==false` AND `not args.force_ai` AND `not os.getenv("FORCE_AI")`:
-     - Print: `"No changes detected in deltas — skipping AI regeneration."`
-     - Load most recent existing AI file (up to 5 days back)
-     - Write artifacts with `outcome: "skipped"`
-     - Exit with code 0
-   - If file missing/invalid → regenerate (safe default)
-   - If changes detected OR force flag set → proceed with full generation
+2. After establishing `today` (before API key check), add skip gate:
+   ```python
+   if not force and not _has_new_delta_data(today):
+       print(f"No new delta data for {today} — skipping AI regeneration.")
+       _write_run_artifacts("skipped", False, time.monotonic() - run_start, today)
+       sys.exit(0)
+   ```
+   Placed before the API key check so no side-effects occur on skip.
 
-3. Keep existing incremental logic:
-   - Load existing AI file for today if it exists
-   - Call `generate_for_group()` with existing data to fill partial fields
-   - Write complete artifacts
+3. When generating (force or changes present) → proceed with full generation from scratch (always regenerates; no partial-file loading).
 
 4. Preserve artifacts (ai_run_summary.json, ai_run_log.jsonl) structure:
-   - Add field: `was_skipped: true` when skipped
-   - Record which prior file was reused
+   - `outcome: "skipped"` when skip fires
+   - Existing `outcome: "complete"` / `"partial"` / `"failed"` paths unchanged
 
 **Acceptance Criteria:**
-- CLI flag `--force-ai` works
-- Environment variable `FORCE_AI=true` also works
-- No-change days: AI step skipped, prior file reused
+- CLI flag `--force-ai` bypasses skip
+- `FORCE_AI=1` env var also bypasses skip
+- No-change days: AI step exits 0 with `outcome: skipped`
 - Change days: full regeneration proceeds
 - Artifacts correctly show skip vs complete status
-- Missing status file does NOT prevent regeneration
 
 **Happy Path:**
 ```
-Day 1 (changes detected):
+Day 1 (new delta data for 2026-06-11):
   $ python scripts/generate_ai.py
   "Generating AI analysis for 2026-06-11..."
   [API calls made]
   outcome: complete
 
-Day 2 (no changes):
+Day 2 (no new delta data — midday run):
   $ python scripts/generate_ai.py
-  "No changes detected in deltas — skipping AI regeneration."
-  [No API calls; reuse 2026-06-11.json]
+  "No new delta data for 2026-06-12 — skipping AI regeneration."
+  [No API calls]
   outcome: skipped
 
 Day 2b (manual override):
@@ -168,16 +166,14 @@ Day 2b (manual override):
 ```
 
 **Edge Cases:**
-- No prior AI file on first run → regenerate (expected)
-- Prior file >5 days old → don't reuse (gap too large); generate new
-- Status file says changes but snapshot empty → regenerate (safe)
+- First run ever (no delta CSVs) → `_has_new_delta_data` returns False → skip; operator uses `--force-ai` for bootstrapping
+- Snapshot date mismatch (rate-limit retry pushes past midnight): `today` is derived from snapshot date, not `date.today()` — existing logic unchanged
 
 **Dependencies:** Task 1.1 must be complete
 
 **Error/Failure Cases:**
-- Status file corrupt → log warning, regenerate
-- No prior AI file available → generate new
-- CLI parse fails → standard argparse error
+- CSV unreadable → `_has_new_delta_data` returns False → skip (safe)
+- CLI parse error → standard argparse error message
 
 **Follow-up Tasks:**
 - (Sprint) Update workflow to pass --force-ai from workflow_dispatch input
@@ -241,65 +237,91 @@ Modify `.github/workflows/collect.yml`:
 
 ---
 
-## Phase 2: Pydantic + Few-Shot Learning
+## Phase 2: Schema Enrichment + Few-Shot Learning
 
-### Task 2.1: Convert Schemas to Pydantic
+### Task 2.1: Enrich Schema Descriptions + Add additionalProperties
 
 **Purpose/Motivation:**  
-Replace error-prone manual JSON schemas with Pydantic BaseModels for type safety, better IDE support, and automatic schema generation.
+All 5 schema dicts currently have zero `description` fields. Gemini uses `description` to understand what values are expected — adding them is the primary lever for improving semantic compliance (e.g., picking the right enum value, writing specific vs. vague content). `additionalProperties: false` tightens the contract and prevents silent extra fields. No new dependencies required.
+
+Also fixes a pre-existing bug: `PHASE_SCHEMA` requires `confidence` but `_normalize_phase()` silently drops it.
 
 **Detailed Task Description:**
 
-1. Add `pydantic>=2.0` to `requirements.txt`
+1. Add `"description"` at the object level and to every property across all 5 schemas (`PHASE_SCHEMA`, `INDUSTRY_PHASE_SCHEMA`, `WATCHLIST_SCHEMA`, `BRIEFING_SCHEMA`, `DAILY_DELTA_SCHEMA`). Example for `PHASE_SCHEMA`:
+   ```python
+   PHASE_SCHEMA = {
+       "type": "object",
+       "description": "Market rotation phase classification for a given date.",
+       "additionalProperties": False,
+       "properties": {
+           "label": {
+               "type": "string",
+               "description": "One of the four classic cycle phases. Choose based on which sector groups are leading.",
+               "enum": ["Early Cycle", "Mid Cycle", "Late Cycle", "Defensive"],
+           },
+           "reasoning": {
+               "type": "string",
+               "description": "One sentence: which specific sectors are leading and why they indicate this phase.",
+           },
+           "confidence": {
+               "type": "number",
+               "description": "Confidence from 0.0 (uncertain) to 1.0 (very confident).",
+           },
+       },
+       "required": ["label", "reasoning", "confidence"],
+   }
+   ```
 
-2. In `scripts/generate_ai.py`, replace lines 23-96 (manual JSON schemas) with Pydantic models:
-   - `PhaseLabel`: Sector rotation phase (enum labels)
-   - `IndustryPhaseLabel`: Industry micro-phase (free-form label)
-   - `WatchlistPick`: Single setup with conviction
-   - `WatchlistResponse`: Exactly 3 picks
-   - `BriefingResponse`: Key signals + briefing text
-   - `DailyDeltaResponse`: Changes vs yesterday
+2. Add `"additionalProperties": False` to all 5 schemas (supported by Gemini API as of Nov 2025).
 
-3. Update TASK_SPECS (lines 482-528) to reference Pydantic classes instead of dict schemas
+3. Fix `_normalize_phase()` to preserve `confidence` instead of dropping it:
+   ```python
+   def _normalize_phase(parsed) -> dict:
+       if isinstance(parsed, dict):
+           return {
+               "label": str(parsed.get("label") or "").strip(),
+               "reasoning": str(parsed.get("reasoning") or "").strip(),
+               "confidence": parsed.get("confidence"),  # None if absent; dashboard renders "N/A"
+           }
+   ```
 
-4. Update `_call_api()` to handle Pydantic models:
-   - Check if `response_schema` has `model_json_schema()` method
-   - Convert to JSON schema dict for Gemini API
+4. No changes to `_call_api()`, `TASK_SPECS`, or `requirements.txt`.
 
 **Acceptance Criteria:**
-- All 4 schema defs are Pydantic models
-- Fields have comprehensive descriptions
-- Pydantic validation works on sample responses
-- Existing tests pass (no functionality change)
-- No import errors
+- All 5 schemas have `"description"` at the object level and on every property
+- All 5 schemas have `"additionalProperties": False`
+- `_normalize_phase()` passes `confidence` through to output
+- Existing tests pass (no behavior change)
+- No new dependencies added
 
 **Happy Path:**
-```python
-response_json = '{"label": "Late Cycle", "reasoning": "Energy leads...", "confidence": 0.85}'
-phase = PhaseLabel.model_validate_json(response_json)
-assert phase.label == "Late Cycle"
+```
+LLM receives schema with property descriptions
+→ Selects correct enum label with high confidence
+→ Writes specific reasoning citing sector names and metrics
+→ JSON parsed successfully; confidence preserved in output
 ```
 
 **Edge Cases:**
-- Pydantic v1 vs v2 → lock to v2 in requirements.txt
-- Schema generation adds extra fields → Gemini ignores them
-- LLM returns partial model → validation fails, caught by fallback parser
+- `additionalProperties: false` rejected by a Gemini API version: remove only that field and log a warning; schemas still have descriptions
+- `confidence` absent from LLM response: `_normalize_phase` returns `None` for field
 
-**Dependencies:** Task 2.2 (prompts need updating in parallel)
+**Dependencies:** None (independent of Phase 1)
 
 **Error/Failure Cases:**
-- Pydantic import missing → error at import time (caught at top of file)
-- Validation fails → caught by existing try/except in `generate_for_group()`
+- Malformed schema dict (e.g., typo in key name) → caught at module import; existing tests catch this
+- Validation still fails after enrichment → caught by existing fallback parsers (not removed until Task 2.4)
 
 **Follow-up Tasks:**
-- (Backlog) Export Pydantic models to API output (type validation at write time)
+- (Backlog) Add schema descriptions to `DAILY_DELTA_SCHEMA` nested array items once Task 2.3 confirms compliance baseline
 
 ---
 
 ### Task 2.2: Add Few-Shot Examples
 
 **Purpose/Motivation:**  
-Few-shot examples significantly improve LLM compliance with structured output formats. Current prompts have minimal examples; adding 2-3 per prompt improves format consistency and field adherence.
+Few-shot examples improve the *semantic quality* of LLM responses — helping the model write data-specific signals and choose correct values rather than generic statements. Note: syntactic JSON format is already guaranteed by structured output mode (`response_mime_type=application/json` + `response_schema`); few-shot examples address a different problem — the difference between "Energy is rising" and "Energy +12% YTD, rank improved 4 spots in 7 days."
 
 **Detailed Task Description:**
 
@@ -336,7 +358,7 @@ LLM sees few-shot examples with format
 - Examples contain contradictions → align them
 - LLM copies example numbers → parser handles gracefully
 
-**Dependencies:** Task 2.1 (Pydantic models define expected structure)
+**Dependencies:** Task 2.1 (schema descriptions establish field guidance; examples build on that foundation)
 
 **Error/Failure Cases:**
 - Malformed examples → LLM learns incorrect format → fallback parser catches it
@@ -411,7 +433,7 @@ Summary written to ai_run_summary.json:
 ### Task 2.4: Remove Fallback Parsers (Deferred)
 
 **Purpose/Motivation:**  
-Once Pydantic validation is proven reliable (2-4 weeks at ≥95% compliance), remove legacy code for simplicity.
+Once schema enrichment + few-shot examples have proven reliable (2-4 weeks at ≥95% compliance), remove the fallback parsers for simplicity.
 
 **Detailed Task Description:**
 
@@ -422,29 +444,29 @@ This task is intentionally deferred until Phase 2.1-2.3 deployed and monitored i
 
 When confident:
 1. Remove `parse_briefing_response()`, `parse_watchlist_response()`, `parse_phase_response()` functions
-2. Replace try/except with direct Pydantic validation
+2. Replace try/except fallback path with direct `_normalize_*()` on parsed JSON
 3. Remove `fallback_parse` from TASK_SPECS
-4. Update error handling to be graceful
+4. Update error handling to be graceful (field marked as error on JSON parse failure)
 
 **Acceptance Criteria:**
 - Fallback parsers removed
-- Direct Pydantic validation in place
+- Direct parse + normalize in place
 - Tests updated (no fallback test cases)
 - Error handling graceful
 - No regressions after 1 week
 
 **Happy Path:**
 ```
-Response: Valid JSON or Gemini structured output
-→ Parse with Pydantic directly
-→ Field validation succeeds
+Response: Valid JSON (guaranteed by structured output mode)
+→ json.loads() succeeds
+→ _normalize_*() extracts fields
 → Stored in output file
 ```
 
 **Dependencies:** Task 2.1-2.3 must be deployed and stable for 2-4 weeks
 
 **Error/Failure Cases:**
-- Schema-invalid response → raises ValidationError → caught by outer try/except, field marked as error
+- Malformed JSON despite structured output → `json.loads()` raises → caught by outer try/except, field marked as error
 - No fallback parser to catch errors → errors logged, output file incomplete (acceptable; next run regenerates)
 
 **Follow-up Tasks:**
@@ -463,14 +485,14 @@ Response: Valid JSON or Gemini structured output
 ## Overall Execution Plan
 
 ### Week 1 (Phase 1)
-- Mon: Task 1.1 (compute_deltas status file) + testing
-- Tue: Task 1.2 (generate_ai skip logic + CLI flag) + testing
+- Mon: Task 1.1 (`_has_new_delta_data()` + skip in `main()`) + testing
+- Tue: Task 1.2 (argparse + force flag) + testing
 - Wed: Task 1.3 (workflow YAML + docs) + testing
 - Thu-Fri: Full workflow testing (no-change day, force_ai trigger, normal day)
 - Commit to branch, create PR
 
 ### Week 2-3 (Phase 2.1-2.3)
-- Phase 2.1: Pydantic model definitions
+- Phase 2.1: Schema descriptions + `additionalProperties` + confidence fix
 - Phase 2.2: Few-shot examples (parallel with 2.1)
 - Phase 2.3: Validation logging
 - Full testing and integration
@@ -486,23 +508,21 @@ Response: Valid JSON or Gemini structured output
 ## Files Modified
 
 ### Phase 1:
-- `scripts/compute_deltas.py` — Write status file
-- `scripts/generate_ai.py` — Read status, add CLI flag, skip logic
+- `scripts/generate_ai.py` — Add `_has_new_delta_data()`, argparse, skip logic in `main()`
 - `.github/workflows/collect.yml` — Add workflow input parameter
 - `README.md` — Document --force-ai flag
 
 ### Phase 2:
-- `requirements.txt` — Add pydantic
-- `scripts/generate_ai.py` — Major refactoring (schemas, prompts, logging)
-- `tests/test_generate_ai.py` — New tests
+- `scripts/generate_ai.py` — Schema descriptions, `additionalProperties`, `_normalize_phase` confidence fix, few-shot in prompts, validation logging
+- `tests/test_generate_ai.py` — New tests for skip logic, schema descriptions, compliance_rate
 
 ---
 
 ## Verification Strategy
 
 ### Unit Tests
-- Phase 1: status file creation, skip logic, CLI flag, env var
-- Phase 2: Pydantic validation, few-shot examples in prompts, validation logging
+- Phase 1: `_has_new_delta_data()` with CSV fixtures, skip path in `main()`, force flag, env var
+- Phase 2: schema descriptions present on all properties, `additionalProperties` constraints, `confidence` field preserved, few-shot examples in prompts, validation logging
 
 ### Integration Tests
 - Full workflow: collect → compute (no changes) → generate → skip
@@ -526,12 +546,13 @@ Response: Valid JSON or Gemini structured output
 ## Rollback Strategy
 
 **Phase 1 Rollback:**
-- If skip logic causes issues: remove status file check, always regenerate
-- If deltas status file not written: defaults to regenerate (safe)
+- If skip logic fires incorrectly: set `FORCE_AI=1` in workflow env vars as a kill-switch while diagnosing
+- If `_has_new_delta_data()` has a false-negative bug: remove the skip check from `main()` (2-line revert)
 - Cost: Only extra API calls on no-change days
 
 **Phase 2 Rollback:**
-- If Pydantic validation too strict: revert to manual JSON schemas
+- If schema descriptions cause unexpected Gemini API behavior: remove description fields (backward-compatible change; descriptions are optional in JSON Schema)
+- If `additionalProperties: false` causes API errors: remove that constraint only
 - If few-shot examples don't help: remove examples from prompts
 - Fallback parsers always in place (until Task 2.4 removes them)
 
@@ -540,19 +561,20 @@ Response: Valid JSON or Gemini structured output
 ## Success Criteria
 
 ### Phase 1 Complete When:
-- [ ] compute_deltas.py writes correct deltas_run_status.json with timestamp
-- [ ] generate_ai.py reads status and skips on no-change days
-- [ ] --force-ai flag forces regeneration
-- [ ] FORCE_AI env var also works
-- [ ] Workflow accepts force_ai input parameter
+- [ ] `_has_new_delta_data()` exists in `generate_ai.py` and is unit-tested with CSV fixtures
+- [ ] `generate_ai.py` skips when delta CSVs lack today's date
+- [ ] `--force-ai` flag forces regeneration
+- [ ] `FORCE_AI` env var also works
+- [ ] Workflow accepts `force_ai` input parameter
 - [ ] README updated
-- [ ] 5+ test runs confirm behavior
+- [ ] 5+ test runs confirm skip and generate paths behave correctly
 
 ### Phase 2 Complete When:
-- [ ] All schemas converted to Pydantic models
-- [ ] Few-shot examples present in all prompts
+- [ ] All 5 schemas have `"description"` on every property and `"additionalProperties": False`
+- [ ] `_normalize_phase()` preserves `confidence` field in output
+- [ ] Few-shot examples present in briefing and watchlist prompts
 - [ ] Validation logging tracks failures with verbose output
-- [ ] ai_run_summary.json includes validation metrics and compliance_rate
+- [ ] `ai_run_summary.json` includes `compliance_rate`
 - [ ] Tests updated and passing
 - [ ] 2+ weeks production data shows ≥95% compliance
 - [ ] Decision made on Task 2.4 (fallback parser removal)
@@ -567,8 +589,8 @@ Research on Gemini API capabilities was conducted via:
 - [Structured output | Gemini Enterprise Agent Platform](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/capabilities/control-generated-output)
 
 Key findings:
-- Gemini supports Pydantic BaseModel for schema definitions with automatic JSON schema generation
-- Few-shot examples with consistent formatting significantly improve LLM compliance
-- Clear field descriptions in schemas guide the model toward compliance
-- Structured output guarantees syntactic correctness but not semantic correctness (validation still needed)
-- As of November 2025, additionalProperties keyword is now supported in Gemini API
+- Gemini structured output (`response_mime_type=application/json` + `response_schema`) guarantees syntactic correctness but not semantic correctness
+- `description` fields in the schema are the primary lever for improving semantic compliance (correct enum values, specific content)
+- Few-shot examples improve semantic quality; they address a different problem than JSON format compliance
+- `additionalProperties: false` is supported in Gemini API as of November 2025
+- Gemini accepts both dict schemas and Pydantic BaseModels for `response_schema`; dict schemas require no new dependency
