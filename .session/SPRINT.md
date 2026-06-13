@@ -15,6 +15,8 @@
 | PLAN-2 | **Phase 2: Schema Enrichment + Few-Shot** | `scripts/generate_ai.py`, `tests/test_generate_ai.py` | M | Add `description` fields + `additionalProperties: false` to all 5 schemas; fix `_normalize_phase()` confidence bug; add few-shot examples to briefing/watchlist prompts; add validation logging. **BLOCKED** until Phase 1 is deployed and 2+ weeks of `fetch_log.csv` data shows skip logic firing correctly (`ai_outcome=skipped` on no-data days, `=complete` on data days). |
 | AI-1 | **Anomaly Detection + LLM Explanation** | `scripts/generate_ai.py`, `dashboard/app.py` | M | Flag rank deltas >2σ from a 14-day rolling window using pandas, then send each flagged group to Gemini for a 1-sentence contextual note. See full spec below. |
 | AI-2 | **Natural Language Q&A** | `dashboard/app.py` | M | Text input in AI Insights tab — user types a question, gets a plain-English answer backed by the actual data. Requires a real-time API call; needs an auth/cost-gate decision. See full spec below. |
+| AI-3 | **Restore per-field resumability in `generate_ai.py`** | `scripts/generate_ai.py`, `tests/test_generate_ai.py` | S | Partial-run resumability was removed in PR #42 (intentional — fixed stale data bug) but left orphaned skip logic. Re-implement correctly: load existing partial file for today, fill only missing fields. See full spec below. |
+| AI-4 | **AI Health widget in Streamlit dashboard** | `dashboard/app.py` | S | PR #53 decoupled AI generation, so `fetch_log.csv` no longer shows AI outcomes. Add a health widget to the AI Insights tab reading from `data/ai/index.json`. No pipeline changes needed. See full spec below. |
 
 **AI-1 spec — Anomaly Detection + LLM Explanation**
 
@@ -50,6 +52,56 @@ _Implementation (`dashboard/app.py`, tab 7, bottom of the file):_
 _Token budget:_ 30 rows × 5 columns ≈ ~500 tokens of data context. Well within Flash's 1M limit. Log `len(prompt)` on first run to confirm.
 
 _Test:_ mock `genai.GenerativeModel.generate_content`, verify prompt contains the question and data table, verify cache key includes the date.
+
+---
+
+**AI-3 spec — Restore per-field resumability in `generate_ai.py`**
+
+_Background:_ PR #35 (2026-06-11) implemented field-level resumability — load the existing partial JSON for today, regenerate only missing fields. PR #42 (2026-06-12) removed it entirely: the "if today's file exists, skip everything" idempotency check was causing stale insights on days when Finviz updated after the initial run. The fix in PR #42 swung too far — it removed resumability as collateral damage. PR #50 (2026-06-13) added a run-level skip gate (`_has_new_delta_data`). As of now:
+
+- `existing_output = {}` is hardcoded in `main()` — never populated from file
+- The per-field skip logic in `generate_for_group` (`if spec["name"] in result: continue`) is orphaned dead code that never fires
+- Every run makes all 7 API calls from scratch, even if 4 already succeeded before a rate-limit failure
+
+_What to implement:_ Before starting generation, if `output_path` (`data/ai/YYYY-MM-DD.json`) already exists for today, load it into `existing_output` and set `was_incremental = True`. If the file is already complete (per `_is_complete()`), skip the whole run — unless `--force-ai` is set. The existing per-field skip logic in `generate_for_group` then fires correctly for any already-present fields.
+
+_Critical constraint — don't restore the PR #42 stale data bug:_ The PR #42 bug was: file existed from an early cron run → second cron run (after Finviz updated) saw the file and skipped everything → stale data persisted all day. The fix: only load the existing file if it is **incomplete** (partial). A complete file skips the run (no stale risk since all fields are done). A partial file resumes only missing fields (correct). `--force-ai` always regenerates everything regardless.
+
+_Decision table:_
+| State | Behavior |
+|-------|----------|
+| No file for today | Generate all 7 fields |
+| Partial file for today | Load it; generate only missing fields |
+| Complete file for today | Skip (log `outcome=skipped`) |
+| Any state + `--force-ai` | Generate all 7 fields from scratch |
+
+_Files:_
+- `scripts/generate_ai.py`: modify `main()` — add file-load block before the generation loop (8–10 lines)
+- `tests/test_generate_ai.py`: add 2 tests — `test_main_resumes_partial_file` (partial file → only missing fields called), `test_main_skips_complete_file` (complete file, no force → zero API calls)
+
+_Effort:_ S — the scaffolding is already there. The only missing piece is the 8-line block that reads the file into `existing_output`.
+
+---
+
+**AI-4 spec — AI Health widget in Streamlit dashboard**
+
+_Motivation:_ PR #53 decoupled AI generation from `collect.yml` — `ai_outcome` in `fetch_log.csv` is now always `""` for snapshot rows. There is no single place to see "did AI run today, and did it succeed?" without digging into Actions logs or raw JSONL. This adds a lightweight visibility widget to the dashboard.
+
+_Data source:_ `data/ai/index.json` — already committed nightly by `_update_index()` in `generate_ai.py`. Structure: `{"updated_at": "...", "entries": [{"date": "YYYY-MM-DD", "status": "complete|partial|skipped|failed", "model": "...", "generated_at": "...", "rotation_phase": "..."}, ...]}`. Capped at 90 entries. File is ~5KB — fast to read.
+
+_Implementation (`dashboard/app.py`, AI Insights tab):_
+1. After the existing AI content renders, add `st.expander("AI Run Health", expanded=False)`.
+2. Inside: `index_path = DATA_DIR / "ai" / "index.json"`. If it doesn't exist, show `st.info("No AI run history yet.")`.
+3. Load the JSON, take the first 7–10 entries (last 7–10 days). Render as a table or `st.metric` row:
+   - Date | Status | Model | Generated at | Phase
+   - Color-code `status` with emoji: `complete` → ✓, `partial` → ~, `skipped` → ○, `failed` → ✗ (or use `st.success/warning/info/error` per row)
+4. For `partial` entries: the full field-level detail is in `data/ai_run_log.jsonl`. Optionally add a nested expander "Show field detail" that reads that entry from the JSONL (match on `date`). This is a nice-to-have — the outer widget is the priority.
+
+_No test required_ — dashboard-only change. Note it in the commit message.
+
+_Effort:_ S — `index.json` is already being written; this is a pure read.
+
+_Dependency:_ None. Works today.
 
 ---
 
