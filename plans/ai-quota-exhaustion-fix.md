@@ -105,30 +105,25 @@ In `main()`, between `existing_output = {}` and `print(f"Generating AI analysis 
 if output_path.exists():
     try:
         with open(output_path, encoding="utf-8") as f:
-            existing_output = json.load(f)
-        if _is_complete(existing_output):
-            print(f"AI analysis for {today} already complete — skipping.")
-            _write_run_artifacts("skipped", False, time.monotonic() - run_start, today)
-            _update_index(today, "skipped", existing_output)
-            sys.exit(0)
-        missing = _missing_fields(existing_output)
-        print(
-            f"Partial file found ({len(missing)} field(s) missing: {', '.join(missing)}) "
-            f"— resuming incrementally."
-        )
-        was_incremental = True
+            candidate = json.load(f)
+        if not _is_complete(candidate):
+            missing = _missing_fields(candidate)
+            print(
+                f"Partial file found ({len(missing)} field(s) missing: {', '.join(missing)})"
+                f" — resuming incrementally."
+            )
+            existing_output = candidate
+            was_incremental = True
+        # Complete file: fall through and regenerate fresh (always produce up-to-date insights)
     except Exception:
-        existing_output = {}
+        pass  # existing_output stays {}
 ```
 
-Also update the `print(f"Generating...")` line to show context:
-```python
-print(f"{'Completing' if was_incremental else 'Generating'} AI analysis for {today}...")
-```
+**Important constraint**: Do NOT skip when file is complete. Commit `022d871` deliberately removed skip-on-complete, and `test_main_force_regenerates_complete_file` captures this intent. Incremental loading only applies to *partial* (incomplete) files from a prior run cut short by quota or error.
 
 ### Acceptance criteria
-- [ ] If `data/ai/YYYY-MM-DD.json` exists and is complete: script logs "already complete" and exits 0 without any API calls (`api_calls=0` in run log)
-- [ ] If partial file exists with 3/6 fields: script only calls API for the 3 missing fields; run log shows `was_incremental: true` and skipped fields show `"status": "skipped", "was_new": false`
+- [ ] If `data/ai/YYYY-MM-DD.json` exists and is COMPLETE: script regenerates all fields fresh; `was_incremental: false` in run log
+- [ ] If partial file exists with 3/6 fields: script passes those 3 completed fields as `existing` to `generate_for_group`, only generates the 3 missing; run log shows `was_incremental: true` and skipped fields show `"status": "skipped", "was_new": false`
 - [ ] If no file exists: behavior unchanged from current (all 7 fields generated)
 - [ ] If file exists but is corrupt JSON: falls back to `existing_output = {}`, regenerates all fields
 

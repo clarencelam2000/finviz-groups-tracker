@@ -21,6 +21,10 @@ AI_DIR = DATA_DIR / "ai"
 
 GEMINI_MODEL = "gemini-2.5-flash"
 
+
+class DailyQuotaExhaustedError(Exception):
+    """Gemini daily free-tier RPD quota is fully consumed. Cannot retry until reset."""
+
 PHASE_SCHEMA = {
     "type": "object",
     "properties": {
@@ -359,8 +363,9 @@ Bad example: "Energy sector improved"
 No generic commentary."""
 
 
-def _generate_daily_delta(client, prior_briefing: str, date_str: str) -> list:
-    """Generate 2-3 change observations vs yesterday. Returns list or [] on failure."""
+def _generate_daily_delta(client, prior_briefing: str, date_str: str) -> "tuple[list, str]":
+    """Generate 2-3 change observations vs yesterday.
+    Returns (changes, error_msg). error_msg is '' on success, message string on failure."""
     snap_df = load_latest_snapshot("sector")
     delta_df = load_latest_delta("sector")
     prompt = build_daily_delta_prompt(prior_briefing, snap_df, delta_df, date_str)
@@ -369,10 +374,14 @@ def _generate_daily_delta(client, prior_briefing: str, date_str: str) -> list:
                         generation_config={"temperature": 0.4, "max_output_tokens": 300},
                         response_schema=DAILY_DELTA_SCHEMA)
         parsed = json.loads(raw)
-        return parsed.get("changes", []) if isinstance(parsed, dict) else []
+        changes = parsed.get("changes", []) if isinstance(parsed, dict) else []
+        return changes, ""
+    except DailyQuotaExhaustedError:
+        raise  # propagate to main() — do not swallow daily quota errors
     except Exception as e:
-        print(f"  [daily_delta] API call failed: {e}")
-        return []
+        msg = str(e)
+        print(f"  [daily_delta] API call failed: {msg}")
+        return [], msg
 
 
 def build_industry_phase_prompt(snap_df: pd.DataFrame, delta_df: pd.DataFrame, date_str: str) -> str:
@@ -635,6 +644,9 @@ def _call_api(client, prompt: str, max_retries: int = 3,
             return text
         except Exception as e:
             err_str = str(e)
+            # Daily quota is not recoverable by retrying — abort immediately.
+            if "GenerateRequestsPerDayPerProjectPerModel" in err_str:
+                raise DailyQuotaExhaustedError(err_str) from e
             is_retryable = (
                 "429" in err_str or "quota" in err_str.lower() or "resource_exhausted" in err_str.lower()
                 or "503" in err_str or "unavailable" in err_str.lower()
@@ -705,6 +717,9 @@ def generate_for_group(client, group_type: str, date_str: str, existing=None) ->
             else:
                 result[spec["name"]] = raw
             _record_field(fkey, "ok", was_new=True, elapsed=time.monotonic() - t0)
+        except DailyQuotaExhaustedError:
+            _record_field(fkey, "quota_exhausted", was_new=True, elapsed=time.monotonic() - t0)
+            raise  # propagate to main() — do not continue generating other fields
         except Exception as e:
             print(f"  [{group_type}] {spec['name']} failed: {e}")
             _record_field(fkey, "error", was_new=True, elapsed=time.monotonic() - t0, error=str(e))
@@ -848,7 +863,23 @@ def main():
     was_incremental = False
     existing_output = {}
 
-    print(f"Generating AI analysis for {today}...")
+    if output_path.exists():
+        try:
+            with open(output_path, encoding="utf-8") as f:
+                candidate = json.load(f)
+            if not _is_complete(candidate):
+                missing = _missing_fields(candidate)
+                print(
+                    f"Partial file found ({len(missing)} field(s) missing: {', '.join(missing)})"
+                    f" — resuming incrementally."
+                )
+                existing_output = candidate
+                was_incremental = True
+            # Complete file: regenerate fresh (always produce up-to-date insights)
+        except Exception:
+            pass  # existing_output stays {}
+
+    print(f"{'Completing' if was_incremental else 'Generating'} AI analysis for {today}...")
 
     output = {
         "date": today,
@@ -859,32 +890,54 @@ def main():
         "model": GEMINI_MODEL,
     }
 
-    for group_type in ("sector", "industry"):
-        key = "sectors" if group_type == "sector" else "industries"
-        output[key] = generate_for_group(
-            client, group_type, today, existing=existing_output.get(key, {})
-        )
+    try:
+        for group_type in ("sector", "industry"):
+            key = "sectors" if group_type == "sector" else "industries"
+            output[key] = generate_for_group(
+                client, group_type, today, existing=existing_output.get(key, {})
+            )
 
-    # Daily delta — compare today vs yesterday's sectors briefing
-    if not output.get("sectors", {}).get("daily_delta"):
-        prior_path = _find_prior_ai_file(today)
-        if prior_path:
-            try:
-                prior_data = json.loads(prior_path.read_text(encoding="utf-8"))
-                prior_briefing = prior_data.get("sectors", {}).get("briefing", "")
-                if prior_briefing:
-                    print(f"  [daily_delta] Generating from {prior_path.name}...")
-                    t0 = time.monotonic()
-                    changes = _generate_daily_delta(client, prior_briefing, today)
-                    if changes:
-                        output["sectors"]["daily_delta"] = changes
-                        _record_field("sectors.daily_delta", "ok", was_new=True,
-                                      elapsed=time.monotonic() - t0)
-                    else:
-                        _record_field("sectors.daily_delta", "error", was_new=True)
-            except Exception as e:
-                print(f"  [daily_delta] Failed to load prior file: {e}")
-                _record_field("sectors.daily_delta", "error", was_new=True, error=str(e))
+        # Daily delta — compare today vs yesterday's sectors briefing
+        if not output.get("sectors", {}).get("daily_delta"):
+            prior_path = _find_prior_ai_file(today)
+            if prior_path:
+                try:
+                    prior_data = json.loads(prior_path.read_text(encoding="utf-8"))
+                    prior_briefing = prior_data.get("sectors", {}).get("briefing", "")
+                    if prior_briefing:
+                        print(f"  [daily_delta] Generating from {prior_path.name}...")
+                        t0 = time.monotonic()
+                        changes, err_msg = _generate_daily_delta(client, prior_briefing, today)
+                        t_elapsed = time.monotonic() - t0
+                        if changes:
+                            output["sectors"]["daily_delta"] = changes
+                            _record_field("sectors.daily_delta", "ok", was_new=True,
+                                          elapsed=t_elapsed)
+                        elif err_msg:
+                            _record_field("sectors.daily_delta", "error", was_new=True,
+                                          elapsed=t_elapsed, error=err_msg)
+                        else:
+                            # Model returned empty list — valid, no notable changes today
+                            _record_field("sectors.daily_delta", "ok_empty", was_new=True,
+                                          elapsed=t_elapsed)
+                except DailyQuotaExhaustedError:
+                    raise  # propagate to outer handler
+                except Exception as e:
+                    print(f"  [daily_delta] Failed to load prior file: {e}")
+                    _record_field("sectors.daily_delta", "error", was_new=True, error=str(e))
+
+    except DailyQuotaExhaustedError as e:
+        print(
+            f"Daily free-tier quota exhausted — saving partial output and aborting.\n"
+            f"Next scheduled run will resume from this partial file."
+        )
+        has_partial = any(output.get(k) for k in ("sectors", "industries"))
+        if has_partial:
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(output, f, indent=2, ensure_ascii=False)
+            print(f"Partial output saved to {output_path}")
+        _write_run_artifacts("quota_exhausted", was_incremental, time.monotonic() - run_start, today)
+        sys.exit(0)
 
     has_content = any(output.get(k) for k in ("sectors", "industries"))
     if not was_incremental and not has_content:
