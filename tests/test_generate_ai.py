@@ -1724,6 +1724,9 @@ def test_main_regenerates_complete_file_fresh(monkeypatch, tmp_path):
 
     monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
     mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
     generate_ai.main()
@@ -1760,6 +1763,9 @@ def test_main_partial_file_corrupt_json_falls_back_to_full_generation(monkeypatc
 
     monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
     mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
     generate_ai.main()  # must not crash
@@ -1872,6 +1878,9 @@ def test_main_saves_partial_and_aborts_on_daily_quota(monkeypatch, tmp_path):
 
     monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
     mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
     with pytest.raises(SystemExit) as exc_info:
@@ -1910,6 +1919,9 @@ def test_main_no_partial_file_written_when_quota_hits_on_first_field(monkeypatch
 
     monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
     mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
     with pytest.raises(SystemExit) as exc_info:
@@ -2004,6 +2016,9 @@ def test_main_logs_daily_delta_error_message(monkeypatch, tmp_path):
     monkeypatch.setattr(generate_ai, "_generate_daily_delta",
                         lambda *a, **kw: ([], "503 API failed"))
     mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
     generate_ai.main()
@@ -2042,6 +2057,9 @@ def test_main_logs_ok_empty_when_delta_returns_empty_list(monkeypatch, tmp_path)
     monkeypatch.setattr(generate_ai, "_generate_daily_delta",
                         lambda *a, **kw: ([], ""))  # empty list, no error
     mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
     generate_ai.main()
