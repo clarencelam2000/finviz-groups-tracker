@@ -381,7 +381,7 @@ def _generate_daily_delta(client, prior_briefing: str, date_str: str) -> "tuple[
     prompt = build_daily_delta_prompt(prior_briefing, snap_df, delta_df, date_str)
     try:
         raw = _call_api(client, prompt,
-                        generation_config={"temperature": 0.4, "max_output_tokens": 300},
+                        generation_config={"temperature": 0.4, "max_output_tokens": 900},
                         response_schema=DAILY_DELTA_SCHEMA)
         parsed = json.loads(raw)
         changes = parsed.get("changes", []) if isinstance(parsed, dict) else []
@@ -646,6 +646,12 @@ def _call_api(client, prompt: str, max_retries: int = 3,
                 raise ValueError("empty response (503-like transient error)")
 
             text = response.text.strip()
+            # Strip markdown code fences (Vertex AI sometimes wraps JSON in ```json ... ```)
+            if text.startswith("```"):
+                lines = text.split("\n")
+                # Extract content between fences, handling both ```json\n...\n``` and ```\n...\n```
+                inner = "\n".join(lines[1:-1]) if lines and lines[-1].strip() == "```" else "\n".join(lines[1:])
+                text = inner.strip()
             # Reject responses that are obvious preambles instead of content
             # (catches LLM failures to follow JSON schema instructions)
             if _looks_like_preamble(text):
