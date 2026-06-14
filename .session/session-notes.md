@@ -6,10 +6,10 @@
 
 ## Current Status
 
-**Status:** Plan complete ✅ — Ticker lookup plan (#62) merged; AI quota fix (AI-3 / PR #58) complete per default branch history
-**Safe to close:** Yes — all changes merged, no open threads
-**Waiting on:** User to complete Phase 0 prerequisites (FMP API key, CF account + Wrangler + KV namespace)
-**Next action:** User completes Phase 0, then opens a new Claude session for TICKER-0 (taxonomy map) using `planning/PLAN_ticker_lookup.md` Phase 1 instructions
+**Status:** Plan complete + PR #67 merged ✅ — Ticker lookup plan (#62) merged; Vertex AI migration planning doc (#67) merged; AI quota fix (AI-3 / PR #58) complete
+**Safe to close:** Yes — all changes merged, no open threads or in-progress work
+**Waiting on:** User to complete Phase 0 ticker prerequisites (FMP API key, CF account + Wrangler + KV namespace) before TICKER-0 session
+**Next actions:** (1) User completes Phase 0; (2) New session for TICKER-0 (taxonomy map); (3) Phase 2 AI schema enrichment (PLAN-2), gated behind 2+ weeks of Phase 1 production data
 
 ---
 

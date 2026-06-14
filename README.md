@@ -106,7 +106,7 @@ data/
 {
   "date": "2026-06-11",
   "generated_at": "2026-06-11T22:05:00Z",
-  "model": "gemini-flash-latest",
+  "model": "gemini-2.5-flash",
   "sectors": {
     "briefing": "...",
     "rotation_phase": { "label": "Defensive", "reasoning": "..." },
