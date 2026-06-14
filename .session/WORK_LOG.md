@@ -13,6 +13,7 @@
 | | Confirmed Finviz update time | Probe intraday — TBD |
 | 2026-06-09 | GitHub Actions cron enabled | Runners confirmed working |
 | 2026-06-09 | Mobile PWA live on GitHub Pages | https://clarencelam2000.github.io/finviz-groups-tracker/ |
+| 2026-06-13 | AI quota exhaustion root-caused and fixed (PR #58) | Three bugs: incremental loading removed, retry on daily quota, silent delta errors. Fixed with DailyQuotaExhaustedError + restored partial-file resume. 207 tests passing. |
 | | First 7d deltas available | Need 7 days of data |
 | | First 30d deltas available | Need 30 days of data |
 | | First `notebooks/analysis.ipynb` | After 30+ days of data |

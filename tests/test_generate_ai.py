@@ -1060,7 +1060,7 @@ def test_generate_for_group_skips_existing_briefing(monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_main_completes_partial_file(monkeypatch, tmp_path):
-    """Re-running with a partial file fills in missing fields without re-calling for existing ones."""
+    """Re-running with a partial file passes existing fields to generate_for_group (incremental)."""
     from unittest.mock import MagicMock
     monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
     monkeypatch.delenv("FORCE_AI", raising=False)
@@ -1068,7 +1068,7 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
     monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
     monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
 
-    # Write the partial file (mirrors real 2026-06-11.json)
+    # Write the partial file (mirrors real 2026-06-11.json: only sectors.briefing present)
     import datetime as _dt
     today = _dt.date.today().isoformat()
     (tmp_path / "ai").mkdir(parents=True)
@@ -1082,13 +1082,12 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
     with open(tmp_path / "ai" / f"{today}.json", "w") as f:
         json.dump(partial, f)
 
-    # generate_for_group returns fresh content (force regeneration)
     call_log = []
     def fake_generate(client, group_type, date_str, existing=None):
         call_log.append((group_type, list(existing.keys()) if existing else []))
         if group_type == "sector":
             return {
-                "briefing": "Sector briefing",  # always regenerate, not preserve
+                "briefing": "Sector briefing",
                 "rotation_phase": {"label": "Defensive", "reasoning": "test"},
                 "watchlist": [{"name": "Energy", "thesis": "ok"}],
             }
@@ -1099,35 +1098,30 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
         }
 
     monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
-    # Mock both parent and child so import succeeds even without google-genai installed.
     mock_genai = MagicMock()
     mock_google = MagicMock()
     mock_google.genai = mock_genai
     monkeypatch.setitem(sys.modules, "google", mock_google)
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
-    generate_ai.main()  # completes normally (no sys.exit on success)
+    generate_ai.main()
 
-    # File should now be complete
     with open(tmp_path / "ai" / f"{today}.json") as f:
         result = json.load(f)
 
-    # File should have fresh generated data (not preserved from partial state)
-    # Since we always force regenerate now, it should use fake_generate output
-    assert result["sectors"]["briefing"] == "Sector briefing"  # regenerated, not preserved
+    assert result["sectors"]["briefing"] == "Sector briefing"
     assert isinstance(result["sectors"]["rotation_phase"], dict)
     assert result["industries"]["briefing"] == "Industry briefing"
     assert isinstance(result["industries"]["rotation_phase"], dict)
     assert isinstance(result["industries"]["watchlist"], list)
 
-    # generate_for_group was called for both groups
     assert call_log[0][0] == "sector"
     assert call_log[1][0] == "industry"
-    # existing is always empty now (force regeneration)
-    assert call_log[0][1] == []  # existing = {} for both groups
+    # With incremental loading: sectors existing has "briefing" key from partial file
+    assert "briefing" in call_log[0][1]
+    # industries existing is empty (no fields in partial industries)
     assert call_log[1][1] == []
 
-    # Sidecar was written
     assert (tmp_path / "ai_run_summary.json").exists()
     with open(tmp_path / "ai_run_summary.json") as f:
         summary = json.load(f)
@@ -1174,7 +1168,7 @@ def test_main_generates_daily_delta_when_prior_file_exists(monkeypatch, tmp_path
     delta_calls = []
     def fake_delta(client, prior_briefing, date_str):
         delta_calls.append(prior_briefing)
-        return ["Energy rank improved to #1", "Healthcare lost momentum"]
+        return ["Energy rank improved to #1", "Healthcare lost momentum"], ""  # (changes, error_msg)
 
     monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
     monkeypatch.setattr(generate_ai, "_generate_daily_delta", fake_delta)
@@ -1209,7 +1203,7 @@ def test_main_skips_delta_when_no_prior_file(monkeypatch, tmp_path):
     delta_calls = []
     def fake_delta(*args, **kwargs):
         delta_calls.append(True)
-        return ["change"]
+        return ["change"], ""  # (changes, error_msg)
 
     def fake_generate(client, group_type, date_str, existing=None):
         if group_type == "sector":
@@ -1688,3 +1682,389 @@ def test_main_force_env_var_bypasses_skip(monkeypatch, tmp_path):
     generate_ai.main()
 
     assert "sector" in generate_called
+
+
+# ---------------------------------------------------------------------------
+# Fix 1: Incremental loading — complete files are regenerated fresh
+# ---------------------------------------------------------------------------
+
+def test_main_regenerates_complete_file_fresh(monkeypatch, tmp_path):
+    """Complete file: main() regenerates all fields (no skip). was_incremental=False."""
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("FORCE_AI", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
+
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+    (tmp_path / "ai").mkdir(parents=True)
+    complete = {
+        "date": today,
+        "sectors": {
+            "briefing": "old", "rotation_phase": {"label": "Defensive", "reasoning": "x"},
+            "watchlist": [{"name": "Energy", "thesis": "ok"}],
+        },
+        "industries": {
+            "briefing": "old", "rotation_phase": {"label": "Tech", "reasoning": "x"},
+            "watchlist": [{"name": "Software", "thesis": "ok"}],
+        },
+    }
+    (tmp_path / "ai" / f"{today}.json").write_text(json.dumps(complete))
+
+    call_log = []
+    def fake_generate(client, group_type, date_str, existing=None):
+        call_log.append((group_type, dict(existing or {})))
+        if group_type == "sector":
+            return {"briefing": "fresh", "rotation_phase": {"label": "Early Cycle", "reasoning": "x"},
+                    "watchlist": [{"name": "Tech", "thesis": "ok"}]}
+        return {"briefing": "fresh-ind", "rotation_phase": {"label": "Growth", "reasoning": "x"},
+                "watchlist": [{"name": "Healthcare", "thesis": "ok"}]}
+
+    monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    generate_ai.main()
+
+    # Both groups regenerated (not skipped)
+    assert len(call_log) == 2
+    # existing passed to generate_for_group is empty (complete file not loaded as incremental)
+    assert call_log[0][1] == {}
+    assert call_log[1][1] == {}
+
+
+def test_main_partial_file_corrupt_json_falls_back_to_full_generation(monkeypatch, tmp_path):
+    """Corrupt partial file falls back to full generation, no crash."""
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("FORCE_AI", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
+
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+    (tmp_path / "ai").mkdir(parents=True)
+    (tmp_path / "ai" / f"{today}.json").write_text("NOT VALID JSON {{{")
+
+    call_log = []
+    def fake_generate(client, group_type, date_str, existing=None):
+        call_log.append((group_type, dict(existing or {})))
+        if group_type == "sector":
+            return {"briefing": "text", "rotation_phase": {"label": "Defensive", "reasoning": "x"},
+                    "watchlist": [{"name": "E", "thesis": "ok"}]}
+        return {"briefing": "text", "rotation_phase": {"label": "Tech", "reasoning": "x"},
+                "watchlist": [{"name": "S", "thesis": "ok"}]}
+
+    monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    generate_ai.main()  # must not crash
+
+    # Falls back to full generation with empty existing
+    assert len(call_log) == 2
+    assert call_log[0][1] == {}
+
+
+# ---------------------------------------------------------------------------
+# Fix 2: DailyQuotaExhaustedError — detection and abort
+# ---------------------------------------------------------------------------
+
+def test_call_api_raises_daily_quota_error_without_retrying(monkeypatch):
+    """When Gemini returns GenerateRequestsPerDayPerProjectPerModel error, raise immediately, no retry."""
+    daily_quota_err = Exception(
+        "429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': "
+        "'Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, "
+        "limit: 20, model: gemini-2.5-flash', 'status': 'RESOURCE_EXHAUSTED', 'details': [{"
+        "'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{"
+        "'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', "
+        "'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier'}]}]}}"
+    )
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    sleep_calls = []
+    monkeypatch.setattr("time.sleep", lambda s: sleep_calls.append(s))
+    generate_ai._reset_tracking()
+    client = _make_client([daily_quota_err])
+
+    with pytest.raises(generate_ai.DailyQuotaExhaustedError):
+        generate_ai._call_api(client, "prompt")
+
+    # Only ONE API call — no retries
+    assert client.models.generate_content.call_count == 1
+    # No sleep for retries
+    assert sleep_calls == []
+    # rate_limit_hits not incremented for daily quota errors
+    assert generate_ai._rate_limit_hits == 0
+
+
+def test_call_api_retries_per_minute_quota_not_daily(monkeypatch):
+    """Per-minute rate limit (no 'GenerateRequestsPerDayPerProjectPerModel') should still retry."""
+    per_minute_err = Exception(
+        "429 RESOURCE_EXHAUSTED. Quota exceeded for metric: "
+        "generativelanguage.googleapis.com/generate_content_requests_per_minute"
+    )
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    sleep_calls = []
+    monkeypatch.setattr("time.sleep", lambda s: sleep_calls.append(s))
+    generate_ai._reset_tracking()
+    client = _make_client([per_minute_err, "ok"])
+
+    result = generate_ai._call_api(client, "prompt")
+    assert result == "ok"
+    assert client.models.generate_content.call_count == 2
+    assert len(sleep_calls) >= 1
+    assert generate_ai._rate_limit_hits == 1
+
+
+def test_generate_for_group_propagates_daily_quota_error(monkeypatch):
+    """DailyQuotaExhaustedError raised inside generate_for_group propagates to caller."""
+    from unittest.mock import MagicMock
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    generate_ai._reset_tracking()
+    mock_genai = MagicMock()
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    snap = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-11").date()],
+        "name": ["Energy"],
+        "perf_week": [2.0], "perf_month": [3.0], "perf_ytd": [5.0],
+    })
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: pd.DataFrame())
+
+    def fail_with_daily_quota(client, prompt, **kwargs):
+        raise generate_ai.DailyQuotaExhaustedError("daily quota hit")
+
+    monkeypatch.setattr(generate_ai, "_call_api", fail_with_daily_quota)
+
+    with pytest.raises(generate_ai.DailyQuotaExhaustedError):
+        generate_ai.generate_for_group(_make_client([]), "sector", "2026-06-11")
+
+    # First field was logged as quota_exhausted
+    assert generate_ai._field_log["sectors.briefing"]["status"] == "quota_exhausted"
+
+
+def test_main_saves_partial_and_aborts_on_daily_quota(monkeypatch, tmp_path):
+    """When DailyQuotaExhaustedError raised during generation, partial output is saved and outcome=quota_exhausted."""
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("FORCE_AI", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
+
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+    (tmp_path / "ai").mkdir(parents=True)
+
+    call_count = {"n": 0}
+    def fake_generate(client, group_type, date_str, existing=None):
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            # First call (sector): succeeds partially
+            return {"briefing": "partial sector briefing"}
+        # Second call (industry): hits daily quota
+        raise generate_ai.DailyQuotaExhaustedError("daily quota exhausted")
+
+    monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    with pytest.raises(SystemExit) as exc_info:
+        generate_ai.main()
+    assert exc_info.value.code == 0
+
+    # Partial file should be written (sectors has content)
+    ai_file = tmp_path / "ai" / f"{today}.json"
+    assert ai_file.exists(), "Partial output file must be saved on quota exhaustion"
+    with open(ai_file) as f:
+        saved = json.load(f)
+    assert saved["sectors"]["briefing"] == "partial sector briefing"
+
+    # Run log shows quota_exhausted outcome
+    log_path = tmp_path / "ai_run_log.jsonl"
+    assert log_path.exists()
+    log_entry = json.loads(log_path.read_text().strip().split("\n")[-1])
+    assert log_entry["outcome"] == "quota_exhausted"
+
+
+def test_main_no_partial_file_written_when_quota_hits_on_first_field(monkeypatch, tmp_path):
+    """If quota hits on the very first field, no partial file is written."""
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("FORCE_AI", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
+
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+    (tmp_path / "ai").mkdir(parents=True)
+
+    def fake_generate(client, group_type, date_str, existing=None):
+        raise generate_ai.DailyQuotaExhaustedError("quota on first call")
+
+    monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    with pytest.raises(SystemExit) as exc_info:
+        generate_ai.main()
+    assert exc_info.value.code == 0
+
+    # No partial file written — nothing was generated
+    assert not (tmp_path / "ai" / f"{today}.json").exists()
+
+    log_entry = json.loads((tmp_path / "ai_run_log.jsonl").read_text().strip())
+    assert log_entry["outcome"] == "quota_exhausted"
+
+
+# ---------------------------------------------------------------------------
+# Fix 3: daily_delta error propagation
+# ---------------------------------------------------------------------------
+
+def test_generate_daily_delta_returns_error_message_on_api_failure(monkeypatch):
+    """_generate_daily_delta returns ([], error_msg) when _call_api raises a non-quota exception."""
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    generate_ai._reset_tracking()
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: pd.DataFrame())
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: pd.DataFrame())
+
+    def fail_api(client, prompt, **kwargs):
+        raise Exception("503 UNAVAILABLE server overload")
+
+    monkeypatch.setattr(generate_ai, "_call_api", fail_api)
+
+    changes, err_msg = generate_ai._generate_daily_delta(None, "prior briefing", "2026-06-13")
+    assert changes == []
+    assert "503" in err_msg
+
+
+def test_generate_daily_delta_propagates_daily_quota_error(monkeypatch):
+    """DailyQuotaExhaustedError from _call_api propagates through _generate_daily_delta."""
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: pd.DataFrame())
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: pd.DataFrame())
+
+    def fail_daily_quota(client, prompt, **kwargs):
+        raise generate_ai.DailyQuotaExhaustedError("daily quota in delta")
+
+    monkeypatch.setattr(generate_ai, "_call_api", fail_daily_quota)
+
+    with pytest.raises(generate_ai.DailyQuotaExhaustedError):
+        generate_ai._generate_daily_delta(None, "prior briefing", "2026-06-13")
+
+
+def test_generate_daily_delta_ok_empty_when_model_returns_no_changes(monkeypatch):
+    """Model returning empty changes list → ([], '') not treated as error."""
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    generate_ai._reset_tracking()
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: pd.DataFrame())
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: pd.DataFrame())
+
+    def return_empty(client, prompt, **kwargs):
+        return json.dumps({"changes": []})
+
+    monkeypatch.setattr(generate_ai, "_call_api", return_empty)
+
+    changes, err_msg = generate_ai._generate_daily_delta(None, "prior briefing", "2026-06-13")
+    assert changes == []
+    assert err_msg == ""  # empty list is valid, not an error
+
+
+def test_main_logs_daily_delta_error_message(monkeypatch, tmp_path):
+    """When _generate_daily_delta returns an error, the error message appears in the field log."""
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("FORCE_AI", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
+
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+    yesterday = (_dt.date.today() - _dt.timedelta(days=1)).isoformat()
+    (tmp_path / "ai").mkdir(parents=True)
+    prior = {"date": yesterday, "sectors": {"briefing": "yesterday briefing"}, "industries": {}}
+    (tmp_path / "ai" / f"{yesterday}.json").write_text(json.dumps(prior))
+
+    def fake_generate(client, group_type, date_str, existing=None):
+        if group_type == "sector":
+            return {"briefing": "text", "rotation_phase": {"label": "Defensive", "reasoning": "x"},
+                    "watchlist": [{"name": "E", "thesis": "ok"}]}
+        return {"briefing": "text", "rotation_phase": {"label": "Tech", "reasoning": "x"},
+                "watchlist": [{"name": "S", "thesis": "ok"}]}
+
+    monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
+    monkeypatch.setattr(generate_ai, "_generate_daily_delta",
+                        lambda *a, **kw: ([], "503 API failed"))
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    generate_ai.main()
+
+    log_path = tmp_path / "ai_run_log.jsonl"
+    log_entry = json.loads(log_path.read_text().strip())
+    delta_log = log_entry["fields"].get("sectors.daily_delta", {})
+    assert delta_log["status"] == "error"
+    assert "503" in delta_log.get("error", "")
+
+
+def test_main_logs_ok_empty_when_delta_returns_empty_list(monkeypatch, tmp_path):
+    """When _generate_daily_delta returns ([], ''), status is ok_empty not error."""
+    from unittest.mock import MagicMock
+    monkeypatch.setenv("GEMINI_API_KEY", "fake-key")
+    monkeypatch.delenv("FORCE_AI", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
+
+    import datetime as _dt
+    today = _dt.date.today().isoformat()
+    yesterday = (_dt.date.today() - _dt.timedelta(days=1)).isoformat()
+    (tmp_path / "ai").mkdir(parents=True)
+    prior = {"date": yesterday, "sectors": {"briefing": "yesterday briefing"}, "industries": {}}
+    (tmp_path / "ai" / f"{yesterday}.json").write_text(json.dumps(prior))
+
+    def fake_generate(client, group_type, date_str, existing=None):
+        if group_type == "sector":
+            return {"briefing": "text", "rotation_phase": {"label": "Defensive", "reasoning": "x"},
+                    "watchlist": [{"name": "E", "thesis": "ok"}]}
+        return {"briefing": "text", "rotation_phase": {"label": "Tech", "reasoning": "x"},
+                "watchlist": [{"name": "S", "thesis": "ok"}]}
+
+    monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
+    monkeypatch.setattr(generate_ai, "_generate_daily_delta",
+                        lambda *a, **kw: ([], ""))  # empty list, no error
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+
+    generate_ai.main()
+
+    log_path = tmp_path / "ai_run_log.jsonl"
+    log_entry = json.loads(log_path.read_text().strip())
+    delta_log = log_entry["fields"].get("sectors.daily_delta", {})
+    assert delta_log["status"] == "ok_empty"

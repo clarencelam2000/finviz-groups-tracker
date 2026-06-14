@@ -57,11 +57,50 @@
 
 ---
 
+## Session: 2026-06-13 — AI quota exhaustion fix (PR #58)
+
+### What was done
+
+**Root cause analysis** of RESOURCE_EXHAUSTED failures in `generate_ai.py`.
+
+**Three compounding bugs identified and fixed:**
+
+**Bug 1 — Incremental loading removed (commit `022d871`):** `existing_output = {}` was hardcoded. Every run regenerated all 7 fields from scratch even when a partial file existed. The `generate_for_group` skip-if-present logic was intact but never fired.
+
+**Bug 2 — Retry loop retried daily quota exhaustion:** 429 with `GenerateRequestsPerDayPerProjectPerModel-FreeTier` was treated the same as per-minute rate limits. Each retry burned another quota unit and wasted 30+60+120s sleep per field. June 13 run: 7 first-attempts + 17 retries = 24 actual API requests, 20+ minutes elapsed.
+
+**Bug 3 — `_generate_daily_delta` swallowed exceptions silently:** Every failure logged `{"status":"error"}` with no error field. `[]` from API failure was indistinguishable from `[]` from "model found no changes."
+
+**Fixes committed (commit cb38d77):**
+1. Restored partial-file incremental loading in `main()` — loads existing partial file, passes it as `existing=` to `generate_for_group`. Complete files still regenerate fresh (deliberate design).
+2. Added `DailyQuotaExhaustedError` — detected in `_call_api` by `GenerateRequestsPerDayPerProjectPerModel` in error string, propagates to `main()` which saves partial output, logs `quota_exhausted`, exits 0.
+3. `_generate_daily_delta` returns `(list, str)` tuple — `ok_empty` vs `error` with message are now distinguishable in run log.
+
+**Tests:** 207 passing (was 126 in test_generate_ai.py, added 20 new tests covering all three fixes).
+
+**PR #58:** Open (draft), awaiting CI.
+
+**Plan file:** `planning/ai-quota-exhaustion-fix.md` committed and pushed.
+
+### Key decisions
+
+- Do NOT skip complete files (deliberate design from commit `022d871` + existing test `test_main_force_regenerates_complete_file`). Only partial files trigger incremental loading.
+- `DailyQuotaExhaustedError` is non-retryable — quota can't reset mid-run.
+- 20 RPD limit is real — Google cut from 250 → 20 for gemini-2.5-flash in late 2025. 7 calls/day is sufficient if not wasting calls on retries or full-regeneration of partial files.
+
+### Next steps
+
+1. Merge PR #58
+2. Mark AI-3 done in SPRINT.md (this PR fully implements it)
+3. Monitor `data/ai_run_log.jsonl` for 2+ days — expect `rate_limit_hits` ≤ 3, no `quota_exhausted` on normal days
+
+---
+
 ## Session: 2026-06-13 — Phase 1 implementation: smart regeneration skip logic (PR #50)
 
 ### What was done
 
-**Implemented Phase 1** per `plan/PLAN_smart_regeneration_pydantic.md` (Tasks 1.1, 1.2, 1.3).
+**Implemented Phase 1** per `planning/PLAN_smart_regeneration_pydantic.md` (Tasks 1.1, 1.2, 1.3).
 
 **Task 1.1 + 1.2 (commit 540f32e):** Smart skip logic in `generate_ai.py`
 - Added `_has_new_delta_data(date_str)` helper: reads `data/sectors/deltas.csv` and `data/industries/deltas.csv` with `dtype=str, usecols=["date"]`. Returns `True` if today's date appears in either; `False` if neither has data, CSVs are missing, or a read error occurs (prints WARNING on error).
@@ -94,7 +133,7 @@
 
 ### What was done
 
-**Reviewed PR #44 plan** (`plan/PLAN_smart_regeneration_pydantic.md`) before implementation.
+**Reviewed PR #44 plan** (`planning/PLAN_smart_regeneration_pydantic.md`) before implementation.
 
 **PR #46 (merged):** Staff-engineer review pass on the plan. Key changes accepted:
 - Removed Pydantic migration — plain dicts + `description` fields achieve the same semantic compliance, no new dependency
@@ -115,7 +154,7 @@
 
 ### Next steps
 
-1. **New session: implement Phase 1** — Tasks 1.1, 1.2, 1.3 per `plan/PLAN_smart_regeneration_pydantic.md`. All three tasks touch only `generate_ai.py`, `collect.yml`, and `README.md`.
+1. **New session: implement Phase 1** — Tasks 1.1, 1.2, 1.3 per `planning/PLAN_smart_regeneration_pydantic.md`. All three tasks touch only `generate_ai.py`, `collect.yml`, and `README.md`.
 2. After Phase 1 ships and runs in production 2+ weeks → evaluate Phase 2 (schema descriptions + few-shot)
 
 ---
@@ -242,7 +281,7 @@
 
 ### What was done
 
-6-phase refactor of `scripts/generate_ai.py`, `dashboard/app.py`, `docs/index.html`. Plan committed to `plans/ai-architecture-revamp.md` before any code changes.
+6-phase refactor of `scripts/generate_ai.py`, `dashboard/app.py`, `docs/index.html`. Plan committed to `planning/ai-architecture-revamp.md` before any code changes.
 
 **Phase 1 — JSON schema mode (`_call_api` update):**
 - Added `PHASE_SCHEMA` and `WATCHLIST_SCHEMA` module-level dicts
@@ -526,7 +565,7 @@ Three high-priority small tasks from the sprint backlog completed and merged int
 Built the full project from scratch, then validated and fixed the scraper in a second cloud session (with unrestricted network).
 
 **Session 1 (this repo's setup):**
-- Created SPEC.md, all scripts, dashboard, GitHub Actions workflow, CLAUDE.md, .claude/rules/
+- Created SPEC.md (later renamed to INITIAL_SPEC.md), all scripts, dashboard, GitHub Actions workflow, CLAUDE.md, .claude/rules/
 
 **Session 2 (first live run — another Claude agent):**
 - Fixed CSS selector: `.table-groups` → `.groups_table` (the actual class on live Finviz)

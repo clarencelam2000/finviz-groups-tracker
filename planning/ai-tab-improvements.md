@@ -27,7 +27,7 @@ git status                                         # confirm clean working tree
 | `scripts/generate_ai.py` | Items 1, 2, 3, 8 — new prompts + JSON schema additions |
 | `tests/test_generate_ai.py` | Corresponding tests for every generation change |
 | `docs/index.html` | Items 1–8 — all PWA rendering |
-| `plans/ai-tab-improvements.md` | This plan file, committed to repo |
+| `planning/ai-tab-improvements.md` | This plan file, committed to repo |
 
 ---
 
