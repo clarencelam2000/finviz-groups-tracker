@@ -61,6 +61,7 @@
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="momentum">Momentum</button>
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="strength">Strength</button>
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="ai">AI</button>
+    <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="lookup">Lookup</button>
   </nav>
 
   <main>
@@ -180,6 +181,19 @@
       <div id="ai-content" class="space-y-3"></div>
     </section>
 
+    <!-- TAB: Ticker Lookup -->
+    <section id="tab-lookup" class="px-3 pt-3 pb-24 hidden">
+      <p class="text-xs text-slate-500 mb-3">Enter a ticker to see its Finviz sector/industry and how those groups are tracking right now.</p>
+      <div class="flex gap-2 mb-4">
+        <input id="ticker-input" type="text" inputmode="text" autocomplete="off"
+               autocapitalize="characters" spellcheck="false" maxlength="10"
+               placeholder="Ticker (e.g. AAPL)"
+               class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500">
+        <button id="ticker-submit" class="px-4 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-500 transition-colors">Look up</button>
+      </div>
+      <div id="lookup-result" class="space-y-3"></div>
+    </section>
+
   </main>
 
   <script>
@@ -193,6 +207,7 @@
       industries: { snap: `${BASE}/industries/snapshots.csv`, delta: `${BASE}/industries/deltas.csv` },
     };
     const FETCH_LOG_URL = `${BASE}/fetch_log.csv`;
+    const WORKER_URL = 'https://finviz-ticker-lookup.salmonbaby8.workers.dev';
 
     const state = {
       tab: 'today',
@@ -212,6 +227,7 @@
       currentAiDate: null,
       loading: false,
       expandedName: null,
+      lookup: { symbol: null, data: null, loading: false, error: null },
     };
 
     // ── Preferences (localStorage) ─────────────────────────────────────────
@@ -1148,12 +1164,175 @@
 
     // ── Master render ──────────────────────────────────────────────────────
 
+    // ── Render: Ticker Lookup ─────────────────────────────────────────────
+
+    async function lookupTicker(symbol) {
+      const key = `lk_${symbol}`;
+      try {
+        const cached = sessionStorage.getItem(key);
+        if (cached) return JSON.parse(cached);
+      } catch (e) {}
+      const resp = await fetch(`${WORKER_URL}/lookup?t=${encodeURIComponent(symbol)}`);
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      try { sessionStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
+      return data;
+    }
+
+    // Latest delta + snap row for a Finviz group name, plus group count n.
+    function findGroupData(name, groupKey) {
+      if (!name) return { delta: null, snap: null, n: 0 };
+      const deltas = state.data[groupKey] ? (state.data[groupKey].delta || []) : [];
+      const snaps  = state.data[groupKey] ? (state.data[groupKey].snap  || []) : [];
+      return {
+        delta: deltas.find(r => r.name === name) || null,
+        snap:  snaps.find(r => r.name === name) || null,
+        n: deltas.length,
+      };
+    }
+
+    function groupScore(delta, snap, hasRow) {
+      if (!hasRow) return 0.5; // no data → neutral
+      let s = 0;
+      if ((delta ? (pf(delta.rank_week_delta_7d) ?? 0) : 0) > 0)   s += 0.3;
+      if ((delta ? (pf(delta.momentum_score) ?? 0) : 0) > 0.6)     s += 0.5;
+      if ((snap  ? (pf(snap.perf_week) ?? 0) : 0) > 0)             s += 0.2;
+      return s;
+    }
+
+    function groupPerfCard(name, groupKey, label) {
+      const { delta, snap, n } = findGroupData(name, groupKey);
+      if (!delta && !snap) {
+        return `
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700">
+            <div class="text-[0.65rem] uppercase tracking-wider text-slate-500 mb-1">${label}</div>
+            <div class="text-sm font-medium text-white">${escapeHtml(name)}</div>
+            <p class="text-xs text-slate-500 mt-2">Not separately tracked in the Finviz data yet.</p>
+          </div>`;
+      }
+      const rank        = delta ? pf(delta.rank_week) : null;
+      const rankDelta7d = delta ? pf(delta.rank_week_delta_7d) : null;
+      const score       = delta ? pf(delta.momentum_score) : null;
+      const perfWeek    = snap ? pf(snap.perf_week) : null;
+      const perfMonth   = snap ? pf(snap.perf_month) : null;
+      const perfYtd     = snap ? pf(snap.perf_ytd) : null;
+
+      const rankStr = rank !== null ? `#${rank} of ${n}` : '—';
+      let deltaHtml = '';
+      if (rankDelta7d !== null && rankDelta7d > 0)  deltaHtml = `<span class="text-emerald-400 ml-1">▲ +${rankDelta7d} this wk</span>`;
+      else if (rankDelta7d !== null && rankDelta7d < 0) deltaHtml = `<span class="text-red-400 ml-1">▼ ${rankDelta7d} this wk</span>`;
+      else if (rankDelta7d === 0) deltaHtml = `<span class="text-slate-500 ml-1">= 0 this wk</span>`;
+
+      const momPct = score !== null ? (score * 100).toFixed(0) : null;
+      const momStyle = score !== null ? momentumStyle(score) : null;
+      const momHtml = score !== null
+        ? `<span class="font-bold ${momStyle.text}">${momPct}%</span>
+           <span class="inline-block align-middle h-1.5 w-16 rounded-full bg-slate-700 overflow-hidden ml-1">
+             <span class="block h-full rounded-full ${momStyle.bar}" style="width:${momPct}%"></span></span>`
+        : '<span class="text-slate-600">—</span>';
+
+      return `
+        <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 space-y-1.5">
+          <div class="text-[0.65rem] uppercase tracking-wider text-slate-500">${label}</div>
+          <div class="text-sm font-medium text-white">${escapeHtml(name)}</div>
+          <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Rank</span><span class="text-slate-200">${rankStr}${deltaHtml}</span></div>
+          <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Momentum</span><span>${momHtml}</span></div>
+          <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Perf</span><span class="text-slate-300">Wk ${fmtPct(perfWeek)} · Mo ${fmtPct(perfMonth)} · YTD ${fmtPct(perfYtd)}</span></div>
+        </div>`;
+    }
+
+    function contextSignalCard(indName, secName) {
+      const ind = findGroupData(indName, 'industries');
+      const sec = findGroupData(secName, 'sectors');
+      const i = groupScore(ind.delta, ind.snap, Boolean(ind.delta || ind.snap));
+      const s = groupScore(sec.delta, sec.snap, Boolean(sec.delta || sec.snap));
+      const avg = (i + s) / 2;
+      let label, cls, desc;
+      if (avg >= 0.6) {
+        label = 'FAVORABLE'; cls = 'bg-emerald-900/40 border-emerald-500 text-emerald-300';
+        desc = `${escapeHtml(indName || 'Industry')} and ${escapeHtml(secName || 'sector')} are tracking strong — favorable context for a long entry.`;
+      } else if (avg <= 0.3) {
+        label = 'CAUTION'; cls = 'bg-red-900/40 border-red-500 text-red-300';
+        desc = `${escapeHtml(indName || 'Industry')} and/or ${escapeHtml(secName || 'sector')} show weakness — review before entering a long.`;
+      } else {
+        label = 'MIXED'; cls = 'bg-amber-900/40 border-amber-500 text-amber-300';
+        desc = 'Sector and industry are diverging or neutral — check the individual group trends above.';
+      }
+      return `
+        <div class="rounded-xl p-3 border ${cls}">
+          <div class="text-sm font-bold">● SIGNAL: ${label}</div>
+          <div class="text-xs text-slate-300 mt-1">${desc}</div>
+        </div>`;
+    }
+
+    function renderLookup() {
+      const el = document.getElementById('lookup-result');
+      if (!el) return;
+      const { data, loading, error } = state.lookup;
+
+      if (loading) { el.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">Looking up…</p>'; return; }
+      if (!data && !error) { el.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">Enter a ticker above.</p>'; return; }
+      if (error || (data && data.error)) {
+        const code = error || data.error;
+        const msg = code === 'ticker_not_found' ? 'Ticker not found. Verify it is a US-listed symbol.'
+          : code === 'rate_limited' ? 'Lookup service is rate-limited. Try again in a moment.'
+          : (code === 'fmp_unavailable' || code === 'fmp_timeout') ? 'Lookup service unavailable. Try again shortly.'
+          : `Lookup failed (${escapeHtml(String(code))}).`;
+        el.innerHTML = `<div class="rounded-xl p-3 bg-red-900/40 border border-red-500 text-sm text-red-300">${msg}</div>`;
+        return;
+      }
+
+      const conf = pf(data.industry_confidence);
+      const mktCap = pf(data.market_cap_b);
+      const mktStr = mktCap !== null ? (mktCap >= 1000 ? `$${(mktCap/1000).toFixed(2)}T` : `$${mktCap.toFixed(0)}B`) : '';
+      const meta = [escapeHtml(data.exchange || ''), mktStr].filter(Boolean).join(' · ');
+      let confBadge = '';
+      if (data.finviz_industry && conf !== null) {
+        confBadge = conf < 0.5
+          ? `<span class="ml-2 text-[0.65rem] px-1.5 py-0.5 rounded bg-amber-800 text-amber-200">Low confidence match</span>`
+          : `<span class="ml-2 text-xs text-slate-500">${Math.round(conf*100)}% match</span>`;
+      }
+
+      let html = `
+        <div class="flex gap-3 items-start">
+          ${data.image ? `<img src="${escapeHtml(data.image)}" alt="" class="w-12 h-12 rounded-lg object-contain bg-white/5 flex-shrink-0" onerror="this.style.display='none'">` : ''}
+          <div class="min-w-0">
+            <div class="text-base font-semibold text-white">${escapeHtml(data.company_name || data.symbol)}
+              <span class="ml-1 text-xs px-1.5 py-0.5 rounded bg-slate-700 align-middle">${escapeHtml(data.symbol)}</span></div>
+            ${meta ? `<div class="text-xs text-slate-400 mt-0.5">${meta}</div>` : ''}
+            <div class="text-sm text-slate-200 mt-1">${escapeHtml(data.finviz_sector || '—')} › ${escapeHtml(data.finviz_industry || 'N/A')}${confBadge}</div>
+          </div>
+        </div>`;
+
+      if (data.finviz_industry) html += groupPerfCard(data.finviz_industry, 'industries', 'Industry');
+      if (data.finviz_sector)   html += groupPerfCard(data.finviz_sector, 'sectors', 'Sector');
+      html += contextSignalCard(data.finviz_industry, data.finviz_sector);
+
+      el.innerHTML = html;
+    }
+
+    async function doLookup() {
+      const input = document.getElementById('ticker-input');
+      const sym = (input.value || '').trim().toUpperCase();
+      if (!sym) return;
+      state.lookup = { symbol: sym, data: null, loading: true, error: null };
+      renderLookup();
+      try {
+        const data = await lookupTicker(sym);
+        state.lookup = { symbol: sym, data, loading: false, error: null };
+      } catch (e) {
+        state.lookup = { symbol: sym, data: null, loading: false, error: e.message || 'network_error' };
+      }
+      renderLookup();
+    }
+
     function render() {
       if (state.tab === 'today')    { renderToday(); renderPipeline(); }
       if (state.tab === 'movers')   renderMovers();
       if (state.tab === 'momentum') renderMomentum();
       if (state.tab === 'strength') renderStrength();
       if (state.tab === 'ai')       renderAI();
+      if (state.tab === 'lookup')   renderLookup();
     }
 
     function setLoading(on) {
@@ -1292,6 +1471,10 @@
 
     document.getElementById('refresh-btn').addEventListener('click', window.__refresh);
     document.getElementById('ai-share-btn').addEventListener('click', shareAI);
+    document.getElementById('ticker-submit').addEventListener('click', doLookup);
+    document.getElementById('ticker-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') doLookup();
+    });
     document.getElementById('ai-nav-prev').addEventListener('click', () => navigateAI('prev'));
     document.getElementById('ai-nav-next').addEventListener('click', () => navigateAI('next'));
 

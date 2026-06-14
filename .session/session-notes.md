@@ -8,7 +8,9 @@
 
 **Status:** TICKER-1 (CF Worker) **DEPLOYED LIVE** 2026-06-14 → `https://finviz-ticker-lookup.salmonbaby8.workers.dev`. Deployed headlessly via `CLOUDFLARE_API_TOKEN` env var from a Claude Code web session (no `wrangler login` popup needed — token auth fully replaces OAuth; see `knowledge/cloudflare-headless-deploy.md`). KV namespace `3ae4430be6dd40c3bb425b9f3e9edf3a` created; FMP key stored as a Worker secret. All acceptance checks pass live (health/AAPL/cache-hit/FAKEXYZ/XOM). 28 vitest tests green.
 **Safe to close:** Yes — Worker is live and verified; deployment config committed.
-**Next actions:** (1) **TICKER-2 (PWA Lookup tab)** — wire `WORKER_URL = 'https://finviz-ticker-lookup.salmonbaby8.workers.dev'` into `docs/index.html`, follow Phase 3 of the plan; (2) TICKER-3 (Streamlit, Phase 4); (3) TICKER-4 ops endpoints (`/stats`, `/cache` bust, FMP counter). Front-ends are the high-value next step now that the URL exists.
+**Next actions:** (1) ✅ TICKER-2 (PWA Lookup tab) — **done this session**, wired to live `WORKER_URL` in `docs/index.html` (new "Lookup" tab, joins to `state.data` by Finviz group name, sessionStorage cache, context signal). (2) **TICKER-3 (Streamlit, Phase 4)** — new `dashboard/worker_client.py` + tab 8 + `tests/test_worker_client.py`. (3) TICKER-4 ops endpoints (`/stats`, `/cache` bust, FMP counter).
+
+**PWA verification note:** join keys confirmed — worker's `finviz_sector`/`finviz_industry` (e.g. Technology / Consumer Electronics, Energy / Oil & Gas Integrated) exist verbatim in `data/{sectors,industries}/snapshots.csv`. The trade-context perf/rank/momentum cards render from already-loaded CSV data; the 7d rank-delta arrow stays blank until 7d deltas exist (~2026-06-16), which is expected.
 
 **Note on the CF API token in this env:** the provided `CLOUDFLARE_API_TOKEN` is an *account-scoped* token, so `/user/tokens/verify` returns 1000 "Invalid" but `/accounts/{id}/tokens/verify` confirms it's valid+active — and `wrangler whoami`/`deploy` work fine. That's expected for the "Edit Cloudflare Workers" template; not an error.
 
