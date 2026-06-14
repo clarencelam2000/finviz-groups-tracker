@@ -14,6 +14,7 @@
 | 2026-06-09 | GitHub Actions cron enabled | Runners confirmed working |
 | 2026-06-09 | Mobile PWA live on GitHub Pages | https://clarencelam2000.github.io/finviz-groups-tracker/ |
 | 2026-06-13 | AI quota exhaustion root-caused and fixed (PR #58) | Three bugs: incremental loading removed, retry on daily quota, silent delta errors. Fixed with DailyQuotaExhaustedError + restored partial-file resume. 207 tests passing. |
+| 2026-06-14 | TICKER-1: CF Worker code merged | PR #74 merged TICKER-1 worker to main branch. `/lookup` endpoint + KV cache complete, 28 vitest tests passing. Pending user deployment (`wrangler deploy`). |
 | 2026-06-14 | TICKER-0: FMP→Finviz taxonomy map built | `data/taxonomy_map.csv` (133 rows) from 242 live FMP profiles. All Finviz names validated; 132/144 reachable. Discovered FMP migrated to `/stable/` API — plan's v3 endpoint dead (see `knowledge/fmp-api-findings.md`). |
 | | First 7d deltas available | Need 7 days of data |
 | | First 30d deltas available | Need 30 days of data |
