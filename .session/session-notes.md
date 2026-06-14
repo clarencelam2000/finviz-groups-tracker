@@ -6,10 +6,11 @@
 
 ## Current Status
 
-**Status:** TICKER-1 (CF Worker) **merged** to `claude/elegant-babbage-hlxnfy` (PR #74, 2026-06-14). 28 vitest tests passing, Worker source in `worker/` directory. TICKER-0 taxonomy map exists in PR #66 (still open/draft, conflicts in session-notes.md — not merged yet).
-**Safe to close:** Yes for the merge — but two follow-ups are owner-gated (see below).
-**Waiting on:** (1) **User must deploy the Worker** — `wrangler login` / `kv namespace create` / `secret put FMP_API_KEY` / `npm run deploy` cannot run from a cloud session (interactive CF OAuth + FMP secret). See `worker/README.md`. (2) **PR #66 needs its session-notes.md conflict resolved** before TICKER-0 lands.
-**Next actions:** (1) Resolve PR #66 conflict + merge (TICKER-0); (2) User deploys Worker from merged code, records the `*.workers.dev` URL; (3) TICKER-2 (PWA Lookup tab) using that URL; (4) TICKER-3 (Streamlit); (5) TICKER-4 ops endpoints (`/stats`, `/cache` bust, FMP counter).
+**Status:** TICKER-1 (CF Worker) **DEPLOYED LIVE** 2026-06-14 → `https://finviz-ticker-lookup.salmonbaby8.workers.dev`. Deployed headlessly via `CLOUDFLARE_API_TOKEN` env var from a Claude Code web session (no `wrangler login` popup needed — token auth fully replaces OAuth; see `knowledge/cloudflare-headless-deploy.md`). KV namespace `3ae4430be6dd40c3bb425b9f3e9edf3a` created; FMP key stored as a Worker secret. All acceptance checks pass live (health/AAPL/cache-hit/FAKEXYZ/XOM). 28 vitest tests green.
+**Safe to close:** Yes — Worker is live and verified; deployment config committed.
+**Next actions:** (1) **TICKER-2 (PWA Lookup tab)** — wire `WORKER_URL = 'https://finviz-ticker-lookup.salmonbaby8.workers.dev'` into `docs/index.html`, follow Phase 3 of the plan; (2) TICKER-3 (Streamlit, Phase 4); (3) TICKER-4 ops endpoints (`/stats`, `/cache` bust, FMP counter). Front-ends are the high-value next step now that the URL exists.
+
+**Note on the CF API token in this env:** the provided `CLOUDFLARE_API_TOKEN` is an *account-scoped* token, so `/user/tokens/verify` returns 1000 "Invalid" but `/accounts/{id}/tokens/verify` confirms it's valid+active — and `wrangler whoami`/`deploy` work fine. That's expected for the "Edit Cloudflare Workers" template; not an error.
 
 ---
 
