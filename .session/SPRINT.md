@@ -8,6 +8,25 @@
 
 ### 🔴 Backlog
 
+#### Ticker Lookup Feature
+
+Full plan: `planning/PLAN_ticker_lookup.md`
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| TICKER-0 | **Taxonomy map: FMP → Finviz (Claude session)** | `data/taxonomy_map.csv` | S | Open new Claude session. Read `data/industries/snapshots.csv` + `data/sectors/snapshots.csv`. Fetch FMP profiles for ~10 diverse tickers (user provides API key). Claude maps FMP industry names → Finviz names. Human review + commit. See Phase 1 in plan. Prerequisite: FMP API key. |
+| TICKER-1 | **CF Worker: /lookup endpoint + KV cache** | `worker/src/index.js`, `worker/wrangler.toml`, `worker/src/taxonomy_map.json`, `worker/package.json`, `worker/README.md`, `worker/test/index.test.js` | M | Worker returns company + finviz_sector + finviz_industry + confidence + full profile metadata. KV cache TTL = 30 days. Structured logging per request. Health endpoint. See Phase 2 in plan. Prerequisite: TICKER-0, CF account, Wrangler CLI. |
+| TICKER-2 | **PWA Lookup tab** | `docs/index.html` | M | New "Lookup" tab. Text input → Worker call → trade context card: company header + industry perf card + sector perf card + FAVORABLE/MIXED/CAUTION signal. Joins to already-loaded state.data. See Phase 3 in plan. Prerequisite: TICKER-1 deployed. |
+| TICKER-3 | **Streamlit Lookup tab** | `dashboard/app.py`, NEW `dashboard/worker_client.py`, `requirements.txt`, `requirements-test.txt`, NEW `tests/test_worker_client.py` | M | Tab 8. Same result as PWA. Pure `lookup_ticker()` in worker_client.py for testability. `_render_group_card` helper reused. See Phase 4 in plan. Prerequisite: TICKER-1 deployed. |
+| TICKER-4 | **Operations setup** | `worker/src/index.js` (add /stats + cache-bust endpoints), `worker/README.md` | S | FMP call counter in KV, /stats endpoint, /health, /cache DELETE endpoint. Bookmark CF analytics dashboard. Monthly check task added to SPRINT.md. See Phase 5 in plan. |
+| TICKER-5 | **[FUTURE] Sector/Industry → Stocks screener** | `worker/src/index.js` (add /stocks endpoint), `docs/index.html`, `dashboard/app.py` | M | New Worker endpoint `/stocks?finviz_sector=&finviz_industry=` calls FMP screener, returns top 25 by market cap, KV cache 7d. Both front-ends add "Show stocks" toggle on group cards. Do NOT start until TICKER-0 through TICKER-4 are validated in production. See Phase 7 in plan. |
+
+> **Phase 0 (user actions before TICKER-0):** (1) Create FMP free account + get API key. (2) Create Cloudflare account + install Wrangler + create KV namespace. See plan Phase 0.
+
+> **Monthly recurring:** CF analytics check, FMP quota check, taxonomy validity spot-check. See plan Phase 5.
+
+---
+
 #### AI Integration
 
 | # | Task | File(s) | Effort | Notes |
