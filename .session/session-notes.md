@@ -6,9 +6,10 @@
 
 ## Current Status
 
-**Status:** TICKER-0 + AI migration planning complete ✅ — Taxonomy map committed; Vertex AI migration plan drafted and merged (PR #67)
+**Status:** TICKER-0 + AI migration planning complete ✅ — Taxonomy map committed; Vertex AI migration plan drafted and merged (PR #67); headless Cloudflare Worker deploy documented (PR #78)
 **Safe to close:** Yes — all work merged, no open threads, no in-progress changes
-**Waiting on:** (1) User Phase 0 for TICKER-1 (CF account + Wrangler + KV); (2) Owner decision: proceed with Vertex AI migration now or after TICKER tasks
+**Key update (2026-06-14):** PR #78 clarifies that Worker deployment CAN run from a Claude Code web session using `CLOUDFLARE_API_TOKEN` (not just locally via interactive `wrangler login`). See `knowledge/cloudflare-headless-deploy.md` for verified reachability and env setup.
+**Waiting on:** (1) User Phase 0 for TICKER-1 (CF account + Wrangler + KV namespace + scoped API token); (2) Owner decision: proceed with Vertex AI migration now or after TICKER tasks
 **Next actions:** (1) User completes Phase 0 ticker prerequisites, new session for TICKER-1; (2) Either: AI-MIGRATION (Phase 1–4 in `planning/vertex-ai-migration.md`), or continue with TICKER-1 first
 
 ---
