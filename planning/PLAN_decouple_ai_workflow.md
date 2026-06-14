@@ -4,7 +4,7 @@
 **Created:** 2026-06-13  
 **Branch:** `claude/decouple-ai-snapshot-workflow-7m75ex`  
 **Base:** `origin/claude/elegant-babbage-hlxnfy`  
-**Location:** `plan/PLAN_decouple_ai_workflow.md` (committed to repo)
+**Location:** `planning/PLAN_decouple_ai_workflow.md` (committed to repo)
 
 ---
 
@@ -21,7 +21,7 @@ The daily `collect.yml` workflow bundles four distinct concerns into a single jo
 
 ---
 
-## Interaction with PR46 Plan (`plan/PLAN_smart_regeneration_pydantic.md`)
+## Interaction with PR46 Plan (`planning/PLAN_smart_regeneration_pydantic.md`)
 
 PR46 (merged 2026-06-12) contains tasks that touch overlapping files:
 
@@ -48,7 +48,7 @@ PR46 (merged 2026-06-12) contains tasks that touch overlapping files:
 ## Phase 0: Pull Latest + Commit This Plan (done)
 
 1. `git fetch origin && git rebase origin/claude/elegant-babbage-hlxnfy`
-2. Write this file to `plan/PLAN_decouple_ai_workflow.md`
+2. Write this file to `planning/PLAN_decouple_ai_workflow.md`
 3. Commit, push, open draft PR
 
 ---
@@ -243,7 +243,7 @@ Merging both together eliminates the window where AI doesn't run at all. There i
 
 ### Phase 0 — done
 - [x] Branch at or ahead of `origin/claude/elegant-babbage-hlxnfy`
-- [x] `plan/PLAN_decouple_ai_workflow.md` committed
+- [x] `planning/PLAN_decouple_ai_workflow.md` committed
 
 ### Phase 1 — Modify collect.yml
 - [x] Remove "Generate AI analysis" step

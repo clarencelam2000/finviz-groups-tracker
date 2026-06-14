@@ -115,7 +115,7 @@ finviz-groups-tracker/
 ├── .github/
 │   └── workflows/
 │       └── collect.yml            # GitHub Actions daily cron
-├── SPEC.md
+├── INITIAL_SPEC.md
 ├── CLAUDE.md
 └── README.md
 ```

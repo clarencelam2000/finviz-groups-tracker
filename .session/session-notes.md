@@ -521,7 +521,7 @@ Three high-priority small tasks from the sprint backlog completed and merged int
 Built the full project from scratch, then validated and fixed the scraper in a second cloud session (with unrestricted network).
 
 **Session 1 (this repo's setup):**
-- Created SPEC.md, all scripts, dashboard, GitHub Actions workflow, CLAUDE.md, .claude/rules/
+- Created SPEC.md (later renamed to INITIAL_SPEC.md), all scripts, dashboard, GitHub Actions workflow, CLAUDE.md, .claude/rules/
 
 **Session 2 (first live run — another Claude agent):**
 - Fixed CSS selector: `.table-groups` → `.groups_table` (the actual class on live Finviz)

@@ -33,13 +33,13 @@ Secondary: `GEMINI_MODEL = "gemini-flash-latest"` is an unversioned alias.
 
 | Phase | Change | Files | Commit |
 |-------|--------|-------|--------|
-| 0 | Write PLAN.md to repo | `plans/ai-architecture-revamp.md` | `docs: add AI architecture revamp plan` |
+| 0 | Write PLAN.md to repo | `planning/ai-architecture-revamp.md` | `docs: add AI architecture revamp plan` |
 | 1 | JSON schemas + `_call_api` update | `scripts/generate_ai.py`, `tests/test_generate_ai.py` | `feat: add JSON schema mode for phase and watchlist` |
 | 2 | Declarative `TASK_SPECS` pipeline | `scripts/generate_ai.py`, `tests/test_generate_ai.py` | `refactor: replace hardcoded AI pipeline with TASK_SPECS` |
 | 3 | `index.json` master manifest | `scripts/generate_ai.py`, `tests/test_generate_ai.py` | `feat: add data/ai/index.json master manifest` |
 | 4 | Dashboard + PWA consume index | `dashboard/app.py`, `docs/index.html` | `feat: load AI data via index.json in dashboard and PWA` |
 | 5 | Model upgrade | `scripts/generate_ai.py` | `chore: pin Gemini model to gemini-2.5-flash` |
-| 6 | Update plan + session notes | `plans/ai-architecture-revamp.md`, `.session/` | `docs: mark AI architecture revamp complete` |
+| 6 | Update plan + session notes | `planning/ai-architecture-revamp.md`, `.session/` | `docs: mark AI architecture revamp complete` |
 
 Each phase is committed separately. If a phase's tests fail, the commit is not made — fix first.
 
@@ -538,7 +538,7 @@ Pinning to a specific version prevents silent behavior changes if the alias is u
 
 | File | Changes |
 |------|---------|
-| `plans/ai-architecture-revamp.md` | New — this plan file, committed to repo |
+| `planning/ai-architecture-revamp.md` | New — this plan file, committed to repo |
 | `scripts/generate_ai.py` | Schemas, `TASK_SPECS`, `generate_for_group()` refactor, `_is_complete()`/`_missing_fields()`, `_update_index()`, `_call_api()` params, model string |
 | `dashboard/app.py` | AI Insights tab: `index.json`-first file discovery, fallback to glob |
 | `docs/index.html` | PWA AI tab: fetch `index.json` first, then latest complete date file |
@@ -601,7 +601,7 @@ print('_is_complete/_missing_fields OK')
 If any phase causes regressions:
 1. `git revert <commit-sha>` for the offending phase commit
 2. Run `python3 -m pytest tests/ -q` to confirm green
-3. Update `plans/ai-architecture-revamp.md` to mark the phase as reverted with reason
+3. Update `planning/ai-architecture-revamp.md` to mark the phase as reverted with reason
 4. Commit the revert + plan update
 
 Each phase is committed independently so rollback is surgical.
