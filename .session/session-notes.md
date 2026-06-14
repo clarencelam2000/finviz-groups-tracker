@@ -6,10 +6,10 @@
 
 ## Current Status
 
-**Status:** TICKER-0 complete ✅ — `data/taxonomy_map.csv` built from 242 live FMP profiles, validated, draft PR open
-**Safe to close:** Yes once PR is opened — TICKER-0 is self-contained; no open threads
-**Waiting on:** User for TICKER-1 prerequisite — Cloudflare account + Wrangler + KV namespace (FMP key ✅ done)
-**Next action:** New session for TICKER-1 (CF Worker). ⚠️ MUST use `stable/profile?symbol=` endpoint, NOT the plan's `/api/v3/profile/` (dead for new keys) — full correction in `knowledge/fmp-api-findings.md`
+**Status:** TICKER-0 + AI migration planning complete ✅ — Taxonomy map committed; Vertex AI migration plan drafted and merged (PR #67)
+**Safe to close:** Yes — all work merged, no open threads, no in-progress changes
+**Waiting on:** (1) User Phase 0 for TICKER-1 (CF account + Wrangler + KV); (2) Owner decision: proceed with Vertex AI migration now or after TICKER tasks
+**Next actions:** (1) User completes Phase 0 ticker prerequisites, new session for TICKER-1; (2) Either: AI-MIGRATION (Phase 1–4 in `planning/vertex-ai-migration.md`), or continue with TICKER-1 first
 
 ---
 
