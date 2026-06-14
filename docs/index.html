@@ -208,6 +208,7 @@
       fetchLog: null,
       aiData: null,
       latestAiDate: null,
+      latestSnapshotDate: null,
       currentAiDate: null,
       loading: false,
       expandedName: null,
@@ -1108,8 +1109,9 @@
       dateLabel.textContent = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
       // Prev is always re-enabled after navigation (no lower bound tracked)
       prevBtn.disabled = false;
-      // Disable Next if there's no latest date or we're already at it
-      nextBtn.disabled = !state.latestAiDate || state.currentAiDate === state.latestAiDate;
+      // Disable Next if we're at or beyond the latest snapshot date
+      const navUpperBound = state.latestSnapshotDate || state.latestAiDate;
+      nextBtn.disabled = !navUpperBound || state.currentAiDate >= navUpperBound;
     }
 
     async function navigateAI(direction) {
@@ -1125,7 +1127,7 @@
         const candidate = new Date(base);
         candidate.setUTCDate(candidate.getUTCDate() + (direction === 'next' ? i : -i));
         const dateStr = candidate.toISOString().slice(0, 10);
-        if (direction === 'next' && dateStr > state.latestAiDate) break;
+        if (direction === 'next' && dateStr > (state.latestSnapshotDate || state.latestAiDate)) break;
         const data = await fetchAIForDate(dateStr);
         if (data && Object.keys(data).length > 0) {
           found = { dateStr, data };
@@ -1184,6 +1186,7 @@
       // Track latest and current date for historical navigation
       // Always set currentAiDate so nav bar appears (allows users to search backwards for data)
       state.currentAiDate = latestDate;
+      state.latestSnapshotDate = latestDate;
       if (state.aiData && !state.aiData._noData && Object.keys(state.aiData).length > 0) {
         const aiDate = state.aiData.date || latestDate;
         state.latestAiDate = aiDate;
@@ -1254,6 +1257,7 @@
       state.fetchLog = null;
       state.aiData = null;
       state.latestAiDate = null;
+      state.latestSnapshotDate = null;
       state.currentAiDate = null;
       const nav = document.getElementById('ai-date-nav');
       if (nav) nav.classList.add('hidden');
