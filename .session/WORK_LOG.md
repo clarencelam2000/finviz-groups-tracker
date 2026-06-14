@@ -15,6 +15,7 @@
 | 2026-06-09 | Mobile PWA live on GitHub Pages | https://clarencelam2000.github.io/finviz-groups-tracker/ |
 | 2026-06-13 | AI quota exhaustion root-caused and fixed (PR #58) | Three bugs: incremental loading removed, retry on daily quota, silent delta errors. Fixed with DailyQuotaExhaustedError + restored partial-file resume. 207 tests passing. |
 | 2026-06-14 | TICKER-0: FMP→Finviz taxonomy map built | `data/taxonomy_map.csv` (133 rows) from 242 live FMP profiles. All Finviz names validated; 132/144 reachable. Discovered FMP migrated to `/stable/` API — plan's v3 endpoint dead (see `knowledge/fmp-api-findings.md`). |
+| 2026-06-14 | PWA AI tab Next button bug fixed (PR #75) | `latestSnapshotDate` added to state as navigation upper bound. After pressing Prev, Next now correctly re-enables and navigates forward to snapshot dates. |
 | | First 7d deltas available | Need 7 days of data |
 | | First 30d deltas available | Need 30 days of data |
 | | First `notebooks/analysis.ipynb` | After 30+ days of data |

@@ -6,10 +6,28 @@
 
 ## Current Status
 
-**Status:** TICKER-0 + AI migration planning complete ✅ — Taxonomy map committed; Vertex AI migration plan drafted and merged (PR #67)
-**Safe to close:** Yes — all work merged, no open threads, no in-progress changes
+**Status:** PWA AI tab Next button bug fixed and merged ✅ (PR #75)
+**Safe to close:** Yes — all work merged, no open threads
 **Waiting on:** (1) User Phase 0 for TICKER-1 (CF account + Wrangler + KV); (2) Owner decision: proceed with Vertex AI migration now or after TICKER tasks
 **Next actions:** (1) User completes Phase 0 ticker prerequisites, new session for TICKER-1; (2) Either: AI-MIGRATION (Phase 1–4 in `planning/vertex-ai-migration.md`), or continue with TICKER-1 first
+
+---
+
+## Session: 2026-06-14 — PWA AI tab Next button bug (PR #75, merged)
+
+### What was done
+
+**Bug:** After pressing Prev on the AI tab, the Next button was permanently disabled and couldn't navigate back to newer dates.
+
+**Root cause:** `latestAiDate` is set to the date of the most recent AI JSON file (e.g., Jun 10), but `currentAiDate` starts at the latest snapshot date (e.g., Jun 13). When the user pressed Prev from Jun 13 to reach Jun 10, `currentAiDate === latestAiDate` triggered the disabled condition. The forward navigation loop also broke immediately because `dateStr > latestAiDate` on the first candidate.
+
+**Fix:** Added `latestSnapshotDate` to state (set once on load from the sectors CSV's most recent date). Used as the upper bound for both the Next button's disabled check and the forward navigation loop, independent of when the AI JSON was last generated. Four changes in `docs/index.html`:
+1. `latestSnapshotDate: null` added to state init
+2. `state.latestSnapshotDate = latestDate` set in `loadAndRender`
+3. `state.latestSnapshotDate = null` added to reset block in `window.__refresh`
+4. `updateAINavUI` and navigation loop use `latestSnapshotDate || latestAiDate` as upper bound
+
+**PR #75:** Merged. CI passed. No review comments.
 
 ---
 
