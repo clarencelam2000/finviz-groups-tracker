@@ -143,7 +143,7 @@ No server required — it fetches the latest CSVs directly from GitHub on every 
 
 **Strength** — Two sub-views: Sustained Strength (top-N across all three medium-term timeframes: month / quarter / half-year simultaneously) and All Green (all perf timeframes positive, shown as an emoji dot matrix). Uses `rank_agreement` to measure multi-timeframe consensus.
 
-**AI** — Nightly AI analysis from Gemini: rotation phase classification (Early / Mid / Late Cycle / Defensive), top-3 sector watchlist with thesis, and a 3-paragraph market briefing for both sectors and industries. Requires `GEMINI_API_KEY` in GitHub Actions secrets to generate. The dashboard reads pre-committed JSON — no LLM calls at runtime.
+**AI** — Nightly AI analysis from Gemini: rotation phase classification (Early / Mid / Late Cycle / Defensive), top-3 sector watchlist with thesis, and a 3-paragraph market briefing for both sectors and industries. Navigate to prior days using Prev/Next buttons to browse historical analyses. Requires `GEMINI_API_KEY` in GitHub Actions secrets to generate. The dashboard reads pre-committed JSON — no LLM calls at runtime.
 
 **Refresh button (top-right)** — Clears the in-memory cache and re-fetches all CSV data from GitHub. Use this after the daily Actions run (~22:00 UTC / 6pm ET) to see the latest data. The app does not auto-refresh.
 

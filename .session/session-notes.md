@@ -6,10 +6,44 @@
 
 ## Current Status
 
-**Status:** TICKER-0 complete ✅ — `data/taxonomy_map.csv` built from 242 live FMP profiles, validated, draft PR open
-**Safe to close:** Yes once PR is opened — TICKER-0 is self-contained; no open threads
-**Waiting on:** User for TICKER-1 prerequisite — Cloudflare account + Wrangler + KV namespace (FMP key ✅ done)
-**Next action:** New session for TICKER-1 (CF Worker). ⚠️ MUST use `stable/profile?symbol=` endpoint, NOT the plan's `/api/v3/profile/` (dead for new keys) — full correction in `knowledge/fmp-api-findings.md`
+**Status:** Multiple features stable; AI tab date navigation bugs fixed (PR #71, #72 merged); no work in progress
+**Safe to close:** Yes — all recent PRs merged, no open threads
+**Waiting on:** User for TICKER-1 prerequisite — Cloudflare account + Wrangler + KV namespace setup; OR waiting for 7d delta data (~2026-06-16) to unblock INS-4/5/6 features
+**Next action:** Either (1) new session for TICKER-1 (CF Worker) per Phase 2 in `planning/PLAN_ticker_lookup.md`, or (2) wait for 7d deltas to implement INS-4/5/6 (Momentum Velocity, Daily Brief card, Momentum Score Heatmap)
+
+---
+
+## Session: 2026-06-14 — AI tab date navigation bug fixes (PR #71, #72, merged)
+
+### What was done
+
+**Two bug fixes for the PWA AI tab's date picker:**
+
+**PR #71** (`claude/ai-tab-date-arrows-u5urpq`):
+- Added date navigation UI to the AI Insights tab: Prev/Next buttons to browse historical AI analyses
+- Shows date range selector so users can view market analysis from prior days
+- Required when AI data exists for multiple dates
+
+**PR #72** (`claude/ai-tab-date-nav-bug-0xp8fk`):
+- Fixed: Prev button remained disabled after clicking it (now re-enabled after each navigation)
+- Fixed: Date nav UI was hidden when no AI data available for today (now shown even with no data)
+- Both fixes in `docs/index.html` `updateDateNav()` function
+
+**Current state:**
+- Both PRs merged into `claude/elegant-babbage-hlxnfy`
+- AI Insights tab now has full date navigation capability
+- No breaking changes; users may need to refresh PWA to see button state fix
+
+### Key decisions
+
+- Historical AI data browser deferred to PR #71 but basic date nav already in place
+- Button state management simplified: Prev always enabled, Next disabled only when at latest date
+
+### Next steps
+
+1. Monitor PWA for any issues with date navigation
+2. Consider adding AI run history visualization (Phase IDX-1 in backlog)
+3. New session can focus on TICKER-1 or data-dependent features (INS-4/5/6)
 
 ---
 
