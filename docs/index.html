@@ -1106,7 +1106,8 @@
       nav.classList.remove('hidden');
       const d = new Date(state.currentAiDate + 'T12:00:00Z');
       dateLabel.textContent = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
-      nextBtn.disabled = state.currentAiDate === state.latestAiDate;
+      // Disable Next if there's no latest date or we're already at it
+      nextBtn.disabled = !state.latestAiDate || state.currentAiDate === state.latestAiDate;
     }
 
     async function navigateAI(direction) {
@@ -1179,10 +1180,11 @@
       const latestDate = snap.length > 0 ? snap[0].date : new Date().toISOString().slice(0, 10);
       await loadAI(latestDate, force);
       // Track latest and current date for historical navigation
+      // Always set currentAiDate so nav bar appears (allows users to search backwards for data)
+      state.currentAiDate = latestDate;
       if (state.aiData && !state.aiData._noData && Object.keys(state.aiData).length > 0) {
         const aiDate = state.aiData.date || latestDate;
         state.latestAiDate = aiDate;
-        state.currentAiDate = aiDate;
       }
       setLoading(false);
       render();
