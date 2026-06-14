@@ -5,10 +5,16 @@ Finviz Groups Tracker — Streamlit Dashboard
 import datetime
 import html as html_lib
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+
+try:
+    from dashboard.worker_client import lookup_ticker
+except ModuleNotFoundError:  # `streamlit run dashboard/app.py` puts dashboard/ on sys.path
+    from worker_client import lookup_ticker
 
 try:
     import plotly.graph_objects as go
@@ -170,10 +176,86 @@ else:
     latest_date = None
 
 # ---------------------------------------------------------------------------
+# Ticker lookup helpers (Worker join)
+# ---------------------------------------------------------------------------
+
+WORKER_URL = (
+    st.secrets.get("WORKER_URL", None) if hasattr(st, "secrets") else None
+) or os.getenv("WORKER_URL", "https://finviz-ticker-lookup.salmonbaby8.workers.dev")
+
+
+def _group_row(name: str, snap_df_g: pd.DataFrame, delta_df_g: pd.DataFrame):
+    """Merge the latest snapshot + delta row for a Finviz group ``name``.
+
+    Returns a dict of combined fields, or ``None`` if the name is in neither frame.
+    """
+    if not name:
+        return None
+    snap = snap_df_g[snap_df_g["name"] == name] if not snap_df_g.empty else snap_df_g
+    delta = delta_df_g[delta_df_g["name"] == name] if not delta_df_g.empty else delta_df_g
+    if (snap is None or snap.empty) and (delta is None or delta.empty):
+        return None
+    row: dict = {}
+    if snap is not None and not snap.empty:
+        row.update(snap.iloc[-1].to_dict())
+    if delta is not None and not delta.empty:
+        row.update(delta.iloc[-1].to_dict())
+    return row
+
+
+def _render_group_card(name: str, group_type: str, label: str):
+    """Render a rank / momentum / perf card for a Finviz group name."""
+    snap_full = load_snapshots(group_type)
+    delta_full = load_deltas(group_type)
+    # restrict to the latest available date so the join matches "now"
+    if not snap_full.empty and snap_full["date"].notna().any():
+        latest = snap_full["date"].dropna().max()
+        snap_full = snap_full[snap_full["date"] == latest]
+    if not delta_full.empty and "date" in delta_full.columns and delta_full["date"].notna().any():
+        dlatest = delta_full["date"].dropna().max()
+        delta_full = delta_full[delta_full["date"] == dlatest]
+
+    n = 11 if group_type == "Sectors" else len(delta_full)
+    row = _group_row(name, snap_full, delta_full)
+    st.markdown(f"**{label}: {name}**")
+    if row is None:
+        st.caption("Not separately tracked in the Finviz data yet.")
+        return
+
+    rank = row.get("rank_week")
+    delta7 = row.get("rank_week_delta_7d")
+    momentum = row.get("momentum_score")
+    perf_week, perf_month, perf_ytd = row.get("perf_week"), row.get("perf_month"), row.get("perf_ytd")
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        rank_str = f"#{int(rank)} of {n}" if pd.notna(rank) else "–"
+        if pd.notna(delta7) and delta7 > 0:
+            delta_str = f"▲ +{int(delta7)} this week"
+        elif pd.notna(delta7) and delta7 < 0:
+            delta_str = f"▼ {int(delta7)} this week"
+        else:
+            delta_str = None
+        st.metric("Rank (week)", rank_str, delta=delta_str)
+    with c2:
+        mom_str = f"{momentum:.2f}" if pd.notna(momentum) else "–"
+        pct = f"top {int((1 - momentum) * 100)}%" if pd.notna(momentum) else None
+        st.metric("Momentum", mom_str, delta=pct, delta_color="off")
+    with c3:
+        if all(pd.notna(v) for v in (perf_week, perf_month, perf_ytd)):
+            st.metric("Perf Wk / Mo / YTD", f"{perf_week:+.1f}%",
+                      delta=f"Mo {perf_month:+.1f}% · YTD {perf_ytd:+.1f}%", delta_color="off")
+        else:
+            st.metric("Perf (week)", f"{perf_week:+.1f}%" if pd.notna(perf_week) else "–")
+
+
+# ---------------------------------------------------------------------------
 # Tabs
 # ---------------------------------------------------------------------------
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["Snapshot", "Top Movers", "Time Series", "Momentum", "Heatmap", "Strength", "AI Insights"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
+    ["Snapshot", "Top Movers", "Time Series", "Momentum", "Heatmap", "Strength", "AI Insights", "Ticker Lookup"]
+)
 
 # ---- Tab 1: Snapshot -------------------------------------------------------
 
@@ -699,3 +781,60 @@ with tab7:
                 st.markdown(briefing)
             else:
                 st.info(f"No briefing available for {group_label.lower()} yet.")
+
+# ---- Tab 8: Ticker Lookup --------------------------------------------------
+
+with tab8:
+    st.subheader("Ticker Lookup")
+    st.caption(
+        "Enter a ticker to see its Finviz sector/industry and how those groups "
+        "are tracking right now."
+    )
+    symbol = st.text_input("Ticker symbol", placeholder="e.g. AAPL", max_chars=10).strip().upper()
+
+    if symbol:
+        with st.spinner(f"Looking up {symbol}…"):
+            result = lookup_ticker(symbol, f"{WORKER_URL.rstrip('/')}/lookup")
+
+        err = result.get("error")
+        if err:
+            if err == "ticker_not_found":
+                st.warning(f"'{symbol}' not found. Verify it is a US-listed symbol.")
+            elif err == "rate_limited":
+                st.warning("Lookup service is rate-limited. Try again in a moment.")
+            elif err in ("timeout", "fmp_timeout", "fmp_unavailable", "network_error"):
+                st.warning("Lookup service unavailable. Try again shortly.")
+            else:
+                st.warning(f"Lookup error: {err}")
+        else:
+            mktcap = result.get("market_cap_b")
+            mkt_str = ""
+            if isinstance(mktcap, (int, float)):
+                mkt_str = f"${mktcap / 1000:.2f}T" if mktcap >= 1000 else f"${mktcap:.0f}B"
+            header = result.get("company_name") or symbol
+            st.markdown(f"## {header} `{symbol}`")
+            meta = " · ".join(x for x in (result.get("exchange", ""), mkt_str) if x)
+            if meta:
+                st.caption(meta)
+            if result.get("description"):
+                with st.expander("Company description"):
+                    st.write(result["description"])
+
+            finviz_sector = result.get("finviz_sector")
+            finviz_industry = result.get("finviz_industry")
+            confidence = result.get("industry_confidence")
+
+            classified = f"**Finviz Classification:** {finviz_sector or '—'} › {finviz_industry or '(no industry match)'}"
+            st.markdown(classified)
+            if finviz_industry and isinstance(confidence, (int, float)):
+                if confidence < 0.5:
+                    st.caption(f"⚠️ Low confidence match ({confidence:.0%}) — verify manually")
+                else:
+                    st.caption(f"Industry match: {confidence:.0%} confidence")
+
+            if finviz_industry:
+                st.divider()
+                _render_group_card(finviz_industry, "Industries", "Industry")
+            if finviz_sector:
+                st.divider()
+                _render_group_card(finviz_sector, "Sectors", "Sector")
