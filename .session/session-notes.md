@@ -36,7 +36,7 @@
 
 **PR #58:** Open (draft), awaiting CI.
 
-**Plan file:** `plans/ai-quota-exhaustion-fix.md` committed and pushed.
+**Plan file:** `planning/ai-quota-exhaustion-fix.md` committed and pushed.
 
 ### Key decisions
 
@@ -56,7 +56,7 @@
 
 ### What was done
 
-**Implemented Phase 1** per `plan/PLAN_smart_regeneration_pydantic.md` (Tasks 1.1, 1.2, 1.3).
+**Implemented Phase 1** per `planning/PLAN_smart_regeneration_pydantic.md` (Tasks 1.1, 1.2, 1.3).
 
 **Task 1.1 + 1.2 (commit 540f32e):** Smart skip logic in `generate_ai.py`
 - Added `_has_new_delta_data(date_str)` helper: reads `data/sectors/deltas.csv` and `data/industries/deltas.csv` with `dtype=str, usecols=["date"]`. Returns `True` if today's date appears in either; `False` if neither has data, CSVs are missing, or a read error occurs (prints WARNING on error).
@@ -89,7 +89,7 @@
 
 ### What was done
 
-**Reviewed PR #44 plan** (`plan/PLAN_smart_regeneration_pydantic.md`) before implementation.
+**Reviewed PR #44 plan** (`planning/PLAN_smart_regeneration_pydantic.md`) before implementation.
 
 **PR #46 (merged):** Staff-engineer review pass on the plan. Key changes accepted:
 - Removed Pydantic migration — plain dicts + `description` fields achieve the same semantic compliance, no new dependency
@@ -110,7 +110,7 @@
 
 ### Next steps
 
-1. **New session: implement Phase 1** — Tasks 1.1, 1.2, 1.3 per `plan/PLAN_smart_regeneration_pydantic.md`. All three tasks touch only `generate_ai.py`, `collect.yml`, and `README.md`.
+1. **New session: implement Phase 1** — Tasks 1.1, 1.2, 1.3 per `planning/PLAN_smart_regeneration_pydantic.md`. All three tasks touch only `generate_ai.py`, `collect.yml`, and `README.md`.
 2. After Phase 1 ships and runs in production 2+ weeks → evaluate Phase 2 (schema descriptions + few-shot)
 
 ---
@@ -237,7 +237,7 @@
 
 ### What was done
 
-6-phase refactor of `scripts/generate_ai.py`, `dashboard/app.py`, `docs/index.html`. Plan committed to `plans/ai-architecture-revamp.md` before any code changes.
+6-phase refactor of `scripts/generate_ai.py`, `dashboard/app.py`, `docs/index.html`. Plan committed to `planning/ai-architecture-revamp.md` before any code changes.
 
 **Phase 1 — JSON schema mode (`_call_api` update):**
 - Added `PHASE_SCHEMA` and `WATCHLIST_SCHEMA` module-level dicts
