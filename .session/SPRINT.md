@@ -1,6 +1,6 @@
-# Sprint: Pre-Data Improvements
-**Branch:** `claude/explore-plan-next-steps-3jlhmh`  
-**Goal:** Build robustness, tests, and dashboard features while waiting for data to accumulate (7d deltas arrive ~2026-06-16; full 30d picture ~2026-07-09)
+# Sprint: Feature Development & Ticker Lookup
+**Branch:** `claude/elegant-babbage-hlxnfy` (default branch)  
+**Goal:** Complete Ticker Lookup feature (Phases 0–7) and continue AI enhancements. Data pipeline stable; 7d deltas live since ~2026-06-16.
 
 ---
 

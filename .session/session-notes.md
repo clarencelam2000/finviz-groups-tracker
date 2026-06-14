@@ -6,10 +6,31 @@
 
 ## Current Status
 
-**Status:** TICKER-0 complete ✅ — `data/taxonomy_map.csv` built from 242 live FMP profiles, validated, draft PR open
-**Safe to close:** Yes once PR is opened — TICKER-0 is self-contained; no open threads
-**Waiting on:** User for TICKER-1 prerequisite — Cloudflare account + Wrangler + KV namespace (FMP key ✅ done)
-**Next action:** New session for TICKER-1 (CF Worker). ⚠️ MUST use `stable/profile?symbol=` endpoint, NOT the plan's `/api/v3/profile/` (dead for new keys) — full correction in `knowledge/fmp-api-findings.md`
+**Status:** All recent PRs merged ✅ — AI quota fix (#58), AI architecture overhaul (#38), ticker design (#62), AI PWA improvements (#69), date nav fix (#71)
+**Safe to close:** Yes — no open PRs, no unresolved threads
+**Waiting on:** User action for TICKER-1 — Cloudflare account + Wrangler + KV namespace setup (FMP key ✅ done; taxonomy map ✅ done)
+**Next action:** New session for TICKER-1 (CF Worker). Use `stable/profile?symbol=` endpoint ⚠️ (NOT the plan's dead `/api/v3/profile/`). See `knowledge/fmp-api-findings.md` for API corrections and Phase 2 in `planning/PLAN_ticker_lookup.md`
+
+---
+
+## Session: 2026-06-14 — PWA date navigation fix (PR #71)
+
+### What was done
+
+**Fixed date navigation visibility in PWA AI tab** (merged PR #71, commit `bb6386b`).
+
+**Issue:** When no AI data existed yet (e.g., weekends before first generation), the date navigation buttons were hidden, leaving users unable to browse. The nav bar stayed hidden until fresh AI data generated.
+
+**Fix:** Always set `currentAiDate` on page load so nav bar appears regardless of data state. Also disabled Next button more defensively when `latestAiDate` is null.
+
+**Changes:** `docs/index.html` — 4 additions, 2 deletions.
+
+**Tests:** No test change needed (PWA-only fix).
+
+### Next steps
+
+1. Monitor PWA usage — confirm date nav now visible at all times
+2. Proceed to TICKER-1 (Cloudflare Worker) when user has prerequisites ready
 
 ---
 
