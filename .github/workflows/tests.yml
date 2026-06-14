@@ -24,3 +24,18 @@ jobs:
         run: pip install -r requirements-test.txt -r requirements-dev.txt
       - name: Run tests
         run: pytest tests/ -v
+
+  worker-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install worker dependencies
+        working-directory: worker
+        run: npm ci
+      - name: Run worker tests
+        working-directory: worker
+        run: npm test
