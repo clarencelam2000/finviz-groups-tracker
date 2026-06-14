@@ -1,0 +1,682 @@
+{
+  "industries": {
+    "Agricultural Inputs": {
+      "finviz_industry": "Agricultural Inputs",
+      "finviz_sector": "Basic Materials",
+      "confidence": 1
+    },
+    "Aluminum": {
+      "finviz_industry": "Aluminum",
+      "finviz_sector": "Basic Materials",
+      "confidence": 1
+    },
+    "Chemicals": {
+      "finviz_industry": "Chemicals",
+      "finviz_sector": "Basic Materials",
+      "confidence": 1
+    },
+    "Chemicals - Specialty": {
+      "finviz_industry": "Specialty Chemicals",
+      "finviz_sector": "Basic Materials",
+      "confidence": 0.95
+    },
+    "Construction Materials": {
+      "finviz_industry": "Building Materials",
+      "finviz_sector": "Basic Materials",
+      "confidence": 0.9
+    },
+    "Copper": {
+      "finviz_industry": "Copper",
+      "finviz_sector": "Basic Materials",
+      "confidence": 1
+    },
+    "Gold": {
+      "finviz_industry": "Gold",
+      "finviz_sector": "Basic Materials",
+      "confidence": 1
+    },
+    "Industrial Materials": {
+      "finviz_industry": "Other Industrial Metals & Mining",
+      "finviz_sector": "Basic Materials",
+      "confidence": 0.6
+    },
+    "Paper, Lumber & Forest Products": {
+      "finviz_industry": "Lumber & Wood Production",
+      "finviz_sector": "Basic Materials",
+      "confidence": 0.55
+    },
+    "Silver": {
+      "finviz_industry": "Silver",
+      "finviz_sector": "Basic Materials",
+      "confidence": 1
+    },
+    "Steel": {
+      "finviz_industry": "Steel",
+      "finviz_sector": "Basic Materials",
+      "confidence": 1
+    },
+    "Advertising Agencies": {
+      "finviz_industry": "Advertising Agencies",
+      "finviz_sector": "Communication Services",
+      "confidence": 1
+    },
+    "Electronic Gaming & Multimedia": {
+      "finviz_industry": "Electronic Gaming & Multimedia",
+      "finviz_sector": "Communication Services",
+      "confidence": 1
+    },
+    "Entertainment": {
+      "finviz_industry": "Entertainment",
+      "finviz_sector": "Communication Services",
+      "confidence": 1
+    },
+    "Internet Content & Information": {
+      "finviz_industry": "Internet Content & Information",
+      "finviz_sector": "Communication Services",
+      "confidence": 1
+    },
+    "Publishing": {
+      "finviz_industry": "Publishing",
+      "finviz_sector": "Communication Services",
+      "confidence": 1
+    },
+    "Telecommunications Services": {
+      "finviz_industry": "Telecom Services",
+      "finviz_sector": "Communication Services",
+      "confidence": 0.95
+    },
+    "Apparel - Footwear & Accessories": {
+      "finviz_industry": "Footwear & Accessories",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 0.95
+    },
+    "Apparel - Manufacturers": {
+      "finviz_industry": "Apparel Manufacturing",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 0.9
+    },
+    "Apparel - Retail": {
+      "finviz_industry": "Apparel Retail",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 0.95
+    },
+    "Auto - Dealerships": {
+      "finviz_industry": "Auto & Truck Dealerships",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 0.9
+    },
+    "Auto - Manufacturers": {
+      "finviz_industry": "Auto Manufacturers",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 0.95
+    },
+    "Auto - Parts": {
+      "finviz_industry": "Auto Parts",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 0.95
+    },
+    "Auto - Recreational Vehicles": {
+      "finviz_industry": "Recreational Vehicles",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 0.9
+    },
+    "Department Stores": {
+      "finviz_industry": "Department Stores",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 1
+    },
+    "Furnishings, Fixtures & Appliances": {
+      "finviz_industry": "Furnishings, Fixtures & Appliances",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 1
+    },
+    "Gambling, Resorts & Casinos": {
+      "finviz_industry": "Resorts & Casinos",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 0.8
+    },
+    "Home Improvement": {
+      "finviz_industry": "Home Improvement Retail",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 0.9
+    },
+    "Leisure": {
+      "finviz_industry": "Leisure",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 1
+    },
+    "Luxury Goods": {
+      "finviz_industry": "Luxury Goods",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 1
+    },
+    "Packaging & Containers": {
+      "finviz_industry": "Packaging & Containers",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 1
+    },
+    "Personal Products & Services": {
+      "finviz_industry": "Personal Services",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 0.8
+    },
+    "Residential Construction": {
+      "finviz_industry": "Residential Construction",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 1
+    },
+    "Restaurants": {
+      "finviz_industry": "Restaurants",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 1
+    },
+    "Specialty Retail": {
+      "finviz_industry": "Specialty Retail",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 1
+    },
+    "Travel Lodging": {
+      "finviz_industry": "Lodging",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 0.9
+    },
+    "Travel Services": {
+      "finviz_industry": "Travel Services",
+      "finviz_sector": "Consumer Cyclical",
+      "confidence": 1
+    },
+    "Agricultural Farm Products": {
+      "finviz_industry": "Farm Products",
+      "finviz_sector": "Consumer Defensive",
+      "confidence": 0.9
+    },
+    "Beverages - Alcoholic": {
+      "finviz_industry": "Beverages - Brewers",
+      "finviz_sector": "Consumer Defensive",
+      "confidence": 0.55
+    },
+    "Beverages - Non-Alcoholic": {
+      "finviz_industry": "Beverages - Non-Alcoholic",
+      "finviz_sector": "Consumer Defensive",
+      "confidence": 1
+    },
+    "Beverages - Wineries & Distilleries": {
+      "finviz_industry": "Beverages - Wineries & Distilleries",
+      "finviz_sector": "Consumer Defensive",
+      "confidence": 1
+    },
+    "Discount Stores": {
+      "finviz_industry": "Discount Stores",
+      "finviz_sector": "Consumer Defensive",
+      "confidence": 1
+    },
+    "Education & Training Services": {
+      "finviz_industry": "Education & Training Services",
+      "finviz_sector": "Consumer Defensive",
+      "confidence": 1
+    },
+    "Food Confectioners": {
+      "finviz_industry": "Confectioners",
+      "finviz_sector": "Consumer Defensive",
+      "confidence": 0.9
+    },
+    "Food Distribution": {
+      "finviz_industry": "Food Distribution",
+      "finviz_sector": "Consumer Defensive",
+      "confidence": 1
+    },
+    "Grocery Stores": {
+      "finviz_industry": "Grocery Stores",
+      "finviz_sector": "Consumer Defensive",
+      "confidence": 1
+    },
+    "Household & Personal Products": {
+      "finviz_industry": "Household & Personal Products",
+      "finviz_sector": "Consumer Defensive",
+      "confidence": 1
+    },
+    "Packaged Foods": {
+      "finviz_industry": "Packaged Foods",
+      "finviz_sector": "Consumer Defensive",
+      "confidence": 1
+    },
+    "Tobacco": {
+      "finviz_industry": "Tobacco",
+      "finviz_sector": "Consumer Defensive",
+      "confidence": 1
+    },
+    "Coal": {
+      "finviz_industry": "Thermal Coal",
+      "finviz_sector": "Energy",
+      "confidence": 0.55
+    },
+    "Oil & Gas Drilling": {
+      "finviz_industry": "Oil & Gas Drilling",
+      "finviz_sector": "Energy",
+      "confidence": 1
+    },
+    "Oil & Gas Equipment & Services": {
+      "finviz_industry": "Oil & Gas Equipment & Services",
+      "finviz_sector": "Energy",
+      "confidence": 1
+    },
+    "Oil & Gas Exploration & Production": {
+      "finviz_industry": "Oil & Gas E&P",
+      "finviz_sector": "Energy",
+      "confidence": 0.95
+    },
+    "Oil & Gas Integrated": {
+      "finviz_industry": "Oil & Gas Integrated",
+      "finviz_sector": "Energy",
+      "confidence": 1
+    },
+    "Oil & Gas Midstream": {
+      "finviz_industry": "Oil & Gas Midstream",
+      "finviz_sector": "Energy",
+      "confidence": 1
+    },
+    "Oil & Gas Refining & Marketing": {
+      "finviz_industry": "Oil & Gas Refining & Marketing",
+      "finviz_sector": "Energy",
+      "confidence": 1
+    },
+    "Solar": {
+      "finviz_industry": "Solar",
+      "finviz_sector": "Technology",
+      "confidence": 0.9
+    },
+    "Uranium": {
+      "finviz_industry": "Uranium",
+      "finviz_sector": "Energy",
+      "confidence": 1
+    },
+    "Asset Management": {
+      "finviz_industry": "Asset Management",
+      "finviz_sector": "Financial",
+      "confidence": 1
+    },
+    "Banks - Diversified": {
+      "finviz_industry": "Banks - Diversified",
+      "finviz_sector": "Financial",
+      "confidence": 1
+    },
+    "Banks - Regional": {
+      "finviz_industry": "Banks - Regional",
+      "finviz_sector": "Financial",
+      "confidence": 1
+    },
+    "Financial - Capital Markets": {
+      "finviz_industry": "Capital Markets",
+      "finviz_sector": "Financial",
+      "confidence": 0.9
+    },
+    "Financial - Credit Services": {
+      "finviz_industry": "Credit Services",
+      "finviz_sector": "Financial",
+      "confidence": 0.9
+    },
+    "Financial - Data & Stock Exchanges": {
+      "finviz_industry": "Financial Data & Stock Exchanges",
+      "finviz_sector": "Financial",
+      "confidence": 0.95
+    },
+    "Financial - Mortgages": {
+      "finviz_industry": "Mortgage Finance",
+      "finviz_sector": "Financial",
+      "confidence": 0.85
+    },
+    "Insurance - Brokers": {
+      "finviz_industry": "Insurance Brokers",
+      "finviz_sector": "Financial",
+      "confidence": 0.95
+    },
+    "Insurance - Diversified": {
+      "finviz_industry": "Insurance - Diversified",
+      "finviz_sector": "Financial",
+      "confidence": 1
+    },
+    "Insurance - Life": {
+      "finviz_industry": "Insurance - Life",
+      "finviz_sector": "Financial",
+      "confidence": 1
+    },
+    "Insurance - Property & Casualty": {
+      "finviz_industry": "Insurance - Property & Casualty",
+      "finviz_sector": "Financial",
+      "confidence": 1
+    },
+    "Insurance - Reinsurance": {
+      "finviz_industry": "Insurance - Reinsurance",
+      "finviz_sector": "Financial",
+      "confidence": 1
+    },
+    "Biotechnology": {
+      "finviz_industry": "Biotechnology",
+      "finviz_sector": "Healthcare",
+      "confidence": 1
+    },
+    "Drug Manufacturers - General": {
+      "finviz_industry": "Drug Manufacturers - General",
+      "finviz_sector": "Healthcare",
+      "confidence": 1
+    },
+    "Drug Manufacturers - Specialty & Generic": {
+      "finviz_industry": "Drug Manufacturers - Specialty & Generic",
+      "finviz_sector": "Healthcare",
+      "confidence": 1
+    },
+    "Medical - Care Facilities": {
+      "finviz_industry": "Medical Care Facilities",
+      "finviz_sector": "Healthcare",
+      "confidence": 0.95
+    },
+    "Medical - Devices": {
+      "finviz_industry": "Medical Devices",
+      "finviz_sector": "Healthcare",
+      "confidence": 0.95
+    },
+    "Medical - Diagnostics & Research": {
+      "finviz_industry": "Diagnostics & Research",
+      "finviz_sector": "Healthcare",
+      "confidence": 0.9
+    },
+    "Medical - Distribution": {
+      "finviz_industry": "Medical Distribution",
+      "finviz_sector": "Healthcare",
+      "confidence": 0.95
+    },
+    "Medical - Healthcare Information Services": {
+      "finviz_industry": "Health Information Services",
+      "finviz_sector": "Healthcare",
+      "confidence": 0.85
+    },
+    "Medical - Healthcare Plans": {
+      "finviz_industry": "Healthcare Plans",
+      "finviz_sector": "Healthcare",
+      "confidence": 0.9
+    },
+    "Medical - Instruments & Supplies": {
+      "finviz_industry": "Medical Instruments & Supplies",
+      "finviz_sector": "Healthcare",
+      "confidence": 0.95
+    },
+    "Medical - Pharmaceuticals": {
+      "finviz_industry": "Pharmaceutical Retailers",
+      "finviz_sector": "Healthcare",
+      "confidence": 0.55
+    },
+    "Aerospace & Defense": {
+      "finviz_industry": "Aerospace & Defense",
+      "finviz_sector": "Industrials",
+      "confidence": 1
+    },
+    "Agricultural - Machinery": {
+      "finviz_industry": "Farm & Heavy Construction Machinery",
+      "finviz_sector": "Industrials",
+      "confidence": 0.75
+    },
+    "Airlines, Airports & Air Services": {
+      "finviz_industry": "Airlines",
+      "finviz_sector": "Industrials",
+      "confidence": 0.7
+    },
+    "Conglomerates": {
+      "finviz_industry": "Conglomerates",
+      "finviz_sector": "Industrials",
+      "confidence": 1
+    },
+    "Construction": {
+      "finviz_industry": "Building Products & Equipment",
+      "finviz_sector": "Industrials",
+      "confidence": 0.65
+    },
+    "Consulting Services": {
+      "finviz_industry": "Consulting Services",
+      "finviz_sector": "Industrials",
+      "confidence": 1
+    },
+    "Electrical Equipment & Parts": {
+      "finviz_industry": "Electrical Equipment & Parts",
+      "finviz_sector": "Industrials",
+      "confidence": 1
+    },
+    "Engineering & Construction": {
+      "finviz_industry": "Engineering & Construction",
+      "finviz_sector": "Industrials",
+      "confidence": 1
+    },
+    "Industrial - Distribution": {
+      "finviz_industry": "Industrial Distribution",
+      "finviz_sector": "Industrials",
+      "confidence": 0.95
+    },
+    "Industrial - Machinery": {
+      "finviz_industry": "Specialty Industrial Machinery",
+      "finviz_sector": "Industrials",
+      "confidence": 0.85
+    },
+    "Integrated Freight & Logistics": {
+      "finviz_industry": "Integrated Freight & Logistics",
+      "finviz_sector": "Industrials",
+      "confidence": 1
+    },
+    "Manufacturing - Metal Fabrication": {
+      "finviz_industry": "Metal Fabrication",
+      "finviz_sector": "Industrials",
+      "confidence": 0.9
+    },
+    "Manufacturing - Tools & Accessories": {
+      "finviz_industry": "Tools & Accessories",
+      "finviz_sector": "Industrials",
+      "confidence": 0.9
+    },
+    "Marine Shipping": {
+      "finviz_industry": "Marine Shipping",
+      "finviz_sector": "Industrials",
+      "confidence": 1
+    },
+    "Railroads": {
+      "finviz_industry": "Railroads",
+      "finviz_sector": "Industrials",
+      "confidence": 1
+    },
+    "Rental & Leasing Services": {
+      "finviz_industry": "Rental & Leasing Services",
+      "finviz_sector": "Industrials",
+      "confidence": 1
+    },
+    "Security & Protection Services": {
+      "finviz_industry": "Security & Protection Services",
+      "finviz_sector": "Industrials",
+      "confidence": 1
+    },
+    "Specialty Business Services": {
+      "finviz_industry": "Specialty Business Services",
+      "finviz_sector": "Industrials",
+      "confidence": 1
+    },
+    "Staffing & Employment Services": {
+      "finviz_industry": "Staffing & Employment Services",
+      "finviz_sector": "Industrials",
+      "confidence": 1
+    },
+    "Trucking": {
+      "finviz_industry": "Trucking",
+      "finviz_sector": "Industrials",
+      "confidence": 1
+    },
+    "Waste Management": {
+      "finviz_industry": "Waste Management",
+      "finviz_sector": "Industrials",
+      "confidence": 1
+    },
+    "REIT - Diversified": {
+      "finviz_industry": "REIT - Diversified",
+      "finviz_sector": "Real Estate",
+      "confidence": 1
+    },
+    "REIT - Healthcare Facilities": {
+      "finviz_industry": "REIT - Healthcare Facilities",
+      "finviz_sector": "Real Estate",
+      "confidence": 1
+    },
+    "REIT - Hotel & Motel": {
+      "finviz_industry": "REIT - Hotel & Motel",
+      "finviz_sector": "Real Estate",
+      "confidence": 1
+    },
+    "REIT - Industrial": {
+      "finviz_industry": "REIT - Industrial",
+      "finviz_sector": "Real Estate",
+      "confidence": 1
+    },
+    "REIT - Mortgage": {
+      "finviz_industry": "REIT - Mortgage",
+      "finviz_sector": "Real Estate",
+      "confidence": 1
+    },
+    "REIT - Office": {
+      "finviz_industry": "REIT - Office",
+      "finviz_sector": "Real Estate",
+      "confidence": 1
+    },
+    "REIT - Residential": {
+      "finviz_industry": "REIT - Residential",
+      "finviz_sector": "Real Estate",
+      "confidence": 1
+    },
+    "REIT - Retail": {
+      "finviz_industry": "REIT - Retail",
+      "finviz_sector": "Real Estate",
+      "confidence": 1
+    },
+    "REIT - Specialty": {
+      "finviz_industry": "REIT - Specialty",
+      "finviz_sector": "Real Estate",
+      "confidence": 1
+    },
+    "Real Estate - Diversified": {
+      "finviz_industry": "Real Estate - Diversified",
+      "finviz_sector": "Real Estate",
+      "confidence": 1
+    },
+    "Real Estate - Services": {
+      "finviz_industry": "Real Estate Services",
+      "finviz_sector": "Real Estate",
+      "confidence": 0.95
+    },
+    "Communication Equipment": {
+      "finviz_industry": "Communication Equipment",
+      "finviz_sector": "Technology",
+      "confidence": 1
+    },
+    "Computer Hardware": {
+      "finviz_industry": "Computer Hardware",
+      "finviz_sector": "Technology",
+      "confidence": 1
+    },
+    "Consumer Electronics": {
+      "finviz_industry": "Consumer Electronics",
+      "finviz_sector": "Technology",
+      "confidence": 1
+    },
+    "Hardware, Equipment & Parts": {
+      "finviz_industry": "Electronic Components",
+      "finviz_sector": "Technology",
+      "confidence": 0.5
+    },
+    "Information Technology Services": {
+      "finviz_industry": "Information Technology Services",
+      "finviz_sector": "Technology",
+      "confidence": 1
+    },
+    "Semiconductors": {
+      "finviz_industry": "Semiconductors",
+      "finviz_sector": "Technology",
+      "confidence": 1
+    },
+    "Software - Application": {
+      "finviz_industry": "Software - Application",
+      "finviz_sector": "Technology",
+      "confidence": 1
+    },
+    "Software - Infrastructure": {
+      "finviz_industry": "Software - Infrastructure",
+      "finviz_sector": "Technology",
+      "confidence": 1
+    },
+    "Software - Services": {
+      "finviz_industry": "Information Technology Services",
+      "finviz_sector": "Technology",
+      "confidence": 0.55
+    },
+    "Technology Distributors": {
+      "finviz_industry": "Electronics & Computer Distribution",
+      "finviz_sector": "Technology",
+      "confidence": 0.8
+    },
+    "Diversified Utilities": {
+      "finviz_industry": "Utilities - Diversified",
+      "finviz_sector": "Utilities",
+      "confidence": 0.9
+    },
+    "Independent Power Producers": {
+      "finviz_industry": "Utilities - Independent Power Producers",
+      "finviz_sector": "Utilities",
+      "confidence": 0.95
+    },
+    "Regulated Electric": {
+      "finviz_industry": "Utilities - Regulated Electric",
+      "finviz_sector": "Utilities",
+      "confidence": 0.95
+    },
+    "Regulated Gas": {
+      "finviz_industry": "Utilities - Regulated Gas",
+      "finviz_sector": "Utilities",
+      "confidence": 0.95
+    },
+    "Regulated Water": {
+      "finviz_industry": "Utilities - Regulated Water",
+      "finviz_sector": "Utilities",
+      "confidence": 0.95
+    },
+    "Renewable Utilities": {
+      "finviz_industry": "Utilities - Renewable",
+      "finviz_sector": "Utilities",
+      "confidence": 0.9
+    },
+    "Financial - Conglomerates": {
+      "finviz_industry": "Financial Conglomerates",
+      "finviz_sector": "Financial",
+      "confidence": 0.7
+    },
+    "Insurance - Specialty": {
+      "finviz_industry": "Insurance - Specialty",
+      "finviz_sector": "Financial",
+      "confidence": 0.8
+    },
+    "Real Estate - Development": {
+      "finviz_industry": "Real Estate - Development",
+      "finviz_sector": "Real Estate",
+      "confidence": 0.8
+    },
+    "Shell Companies": {
+      "finviz_industry": "Shell Companies",
+      "finviz_sector": "Financial",
+      "confidence": 0.6
+    }
+  },
+  "sectors": {
+    "Basic Materials": "Basic Materials",
+    "Communication Services": "Communication Services",
+    "Consumer Cyclical": "Consumer Cyclical",
+    "Consumer Defensive": "Consumer Defensive",
+    "Energy": "Energy",
+    "Financial Services": "Financial",
+    "Healthcare": "Healthcare",
+    "Industrials": "Industrials",
+    "Real Estate": "Real Estate",
+    "Technology": "Technology",
+    "Utilities": "Utilities"
+  }
+}
