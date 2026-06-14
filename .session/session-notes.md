@@ -6,10 +6,54 @@
 
 ## Current Status
 
-**Status:** Complete ✅ — Phase 1 shipped; PR #50 merged
-**Safe to close:** Yes — all changes merged, no open threads
-**Waiting on:** 2+ weeks of production runs to confirm skip logic working correctly before starting Phase 2
-**Next action:** Monitor `ai_outcome` in `data/fetch_log.csv` — expect `skipped` on days `compute_deltas.py` hasn't run, `complete` on normal days. Then Phase 2 (schema descriptions + few-shot).
+**Status:** Plan complete ✅ — Ticker lookup plan written and merged; no code written yet
+**Safe to close:** Yes — plan committed, sprint updated, no open threads
+**Waiting on:** User to complete Phase 0 prerequisites (FMP API key, CF account + Wrangler + KV namespace). Then TICKER-0 (taxonomy map session) is the next code action.
+**Next action:** User completes Phase 0, then opens a new Claude session to do TICKER-0 (taxonomy map generation) using `plan/PLAN_ticker_lookup.md` Phase 1 instructions.
+
+---
+
+## Session: 2026-06-14 — Ticker lookup feature design (plan written)
+
+### What was done
+
+**Reviewed PR #57** (ticker → sector/industry lookup) and redesigned from scratch.
+
+**PR #57 approach rejected** (yfinance + hardcoded sector dict + runtime difflib matching + Streamlit-only) for three reasons:
+1. yfinance has a different taxonomy from Finviz; difflib is blind to semantic equivalence
+2. The static PWA (GitHub Pages) cannot call a keyed API or run Python — needs a shared backend
+3. Difflib is the wrong tool: the problem is a one-time 144-item semantic matching job, not a runtime problem
+
+**New architecture designed and documented in `plan/PLAN_ticker_lookup.md`:**
+- Source: FMP `/api/v3/profile` (GICS-based taxonomy ≈ Finviz's)
+- Taxonomy translation: static LLM-generated map (Claude session, one-time) → `data/taxonomy_map.csv` committed
+- Backend: Cloudflare Worker (free tier) — single normalization point, hides FMP key, serves both Streamlit + PWA
+- KV cache TTL: 30 days (sector classifications are near-permanent)
+- Cache full FMP profile payload (company name, description, logo, etc.)
+- End-user result: trade context card — rank, momentum, perf, context signal (FAVORABLE/MIXED/CAUTION)
+- PWA prioritized over Streamlit (used ~10× more)
+- Future Phase 7: `/stocks?finviz_sector=&finviz_industry=` using FMP screener (returns all stocks in a group — confirmed FMP behavior)
+
+**Files committed:**
+- `plan/PLAN_ticker_lookup.md` — full implementation plan (Phases 0–7, code-level detail)
+- `.session/SPRINT.md` — TICKER-0 through TICKER-5 added to backlog
+- `.session/session-notes.md` — this entry
+
+### Key decisions
+
+- FMP over yfinance: GICS-based taxonomy, single JSON call, reliable free tier
+- Claude session for taxonomy map (not a build script): ~144 rows, one-time semantic job
+- CF Worker required (not optional): PWA is static — it cannot hold an API key
+- 30-day KV TTL: sector classifications change at most once a year for most companies
+- Phase 7 (screener) explicitly designed but not started: same Worker infrastructure extends cleanly
+
+### Next steps
+
+1. **User action required first (Phase 0):** FMP API key + Cloudflare account + Wrangler + KV namespace. See `plan/PLAN_ticker_lookup.md` Phase 0.
+2. **TICKER-0:** New Claude session → taxonomy map generation. Follow Phase 1 in the plan exactly.
+3. **TICKER-1:** CF Worker. New session; follow Phase 2.
+4. **TICKER-2:** PWA Lookup tab. Follow Phase 3. (Do before TICKER-3.)
+5. **AI Phase 2 still blocked** — waiting on 2+ weeks production data for smart regeneration skip logic.
 
 ---
 
