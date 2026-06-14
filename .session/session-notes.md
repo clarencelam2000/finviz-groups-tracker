@@ -6,10 +6,10 @@
 
 ## Current Status
 
-**Status:** TICKER-1 (CF Worker) code-complete on `claude/bold-bardeen-d4517f` — 28 vitest tests pass, dry-run bundles clean. TICKER-0 taxonomy map exists in **PR #66 (still open/draft, conflicts in session-notes.md — not merged yet)**.
-**Safe to close:** Yes for this work — but two follow-ups are owner-gated (see below).
-**Waiting on:** (1) **User must deploy the Worker** — `wrangler login` / `kv namespace create` / `secret put FMP_API_KEY` / `npm run deploy` cannot run from a cloud session (interactive CF OAuth + FMP secret). See `worker/README.md`. (2) **PR #66 needs its session-notes.md conflict resolved** before TICKER-0 lands.
-**Next actions:** (1) Resolve PR #66 conflict + merge (TICKER-0); (2) User deploys Worker, records the `*.workers.dev` URL; (3) TICKER-2 (PWA Lookup tab) using that URL; (4) TICKER-3 (Streamlit); (5) TICKER-4 ops endpoints (`/stats`, `/cache` bust, FMP counter).
+**Status:** TICKER-1 (CF Worker) **merged and in CI** (PR #70 just merged — adds worker vitest tests to `tests.yml`). 28 vitest tests pass, bundles verified. TICKER-0 taxonomy map exists in **PR #66 (open/draft, session-notes.md conflict — needs resolution before merge)**.
+**Safe to close:** Yes — all code changes complete, but user action required.
+**Waiting on:** (1) **User must deploy the Worker manually** — `wrangler login` / `kv namespace create` / `secret put FMP_API_KEY` / `npm run deploy` cannot run from cloud (CF OAuth + secrets needed). See `worker/README.md`. (2) **PR #66 resolution** — merge TICKER-0 (taxonomy map) after conflict cleared.
+**Next actions:** (1) Merge PR #66 (TICKER-0); (2) User deploys Worker, records `*.workers.dev` URL; (3) TICKER-2 (PWA Lookup tab using that URL); (4) TICKER-3 (Streamlit); (5) TICKER-4 ops endpoints (`/stats`, `/cache`, FMP counter).
 
 ---
 
@@ -49,6 +49,29 @@
 1. Merge PR #58
 2. Mark AI-3 done in SPRINT.md (this PR fully implements it)
 3. Monitor `data/ai_run_log.jsonl` for 2+ days — expect `rate_limit_hits` ≤ 3, no `quota_exhausted` on normal days
+
+---
+
+## Session: 2026-06-14 — Post-merge documentation verification
+
+### What was done
+
+**Verified documentation after PR #70 merge** (TICKER-1 Cloudflare Worker code now in CI).
+
+**Updated files:**
+- `.session/session-notes.md` Current Status: TICKER-1 now marked as "merged and in CI"; noted that code is verified in tests but user must deploy manually.
+- `.session/SPRINT.md` TICKER-1 entry: changed from "⏳ Code complete on branch" to "✅ Code merged & in CI"; clarified the vitest integration.
+
+**Documentation accuracy verified:**
+- `README.md` is current (covers current state, no changes needed)
+- `CLAUDE.md` is current (covers project structure, no changes needed)
+- `.claude/rules/` is current (no changes needed)
+
+**Current blockers:**
+1. TICKER-0 (taxonomy map, PR #66): conflict in session-notes.md prevents merge. Needs resolution.
+2. User deployment of Worker: `wrangler` commands must be run locally (not in cloud session).
+
+**Safe to close:** Yes — documentation is current, all code merged, next steps are well-documented.
 
 ---
 
