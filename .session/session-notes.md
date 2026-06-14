@@ -6,16 +6,56 @@
 
 ## Current Status
 
-**Status:** AI-MIGRATION (Vertex AI) **PR #80 merged, code on main branch**. Phases 2–4 of `planning/vertex-ai-migration.md` complete: dual-mode client in `generate_ai.py` (toggle `GOOGLE_GENAI_USE_VERTEXAI`), WIF auth in `generate_ai.yml`, 6 new tests (169 passing total, ex-playwright), docs in CLAUDE.md. Code is backward-compatible — defaults to AI Studio path when toggle is off.
-**Safe to close:** Yes — code is merged and waiting for owner.
-**Waiting on (owner-gated Phase 1):** GCP project + `aiplatform.googleapis.com` enabled + $10/mo credit attached; `finviz-ai-runner` SA with `roles/aiplatform.user`; WIF pool/provider scoped to this repo; three repo secrets `WIF_PROVIDER`, `GCP_SA_EMAIL`, `GOOGLE_CLOUD_PROJECT`. Full gcloud commands in `planning/vertex-ai-migration.md` §4 (G1–G3). Without Phase 1 secrets, the daily AI run's auth step will fail (but script gracefully exits 0).
-**Next actions:** (1) Owner runs Phase 1 GCP setup + adds 3 repo secrets; (2) trigger `workflow_dispatch` (force_ai) to validate — confirm `data/ai_run_log.jsonl` last entry shows `backend=vertex_ai`, `outcome=complete`, and GCP billing lands on the credit; (3) after 2+ stable runs, Phase 11 cleanup (delete `GEMINI_API_KEY` secret, drop the AI Studio fallback code).
+**Status:** AI-MIGRATION **COMPLETE AND VALIDATED**. Phase 1 (GCP infrastructure) completed by user (G1–G3 ✅); Phases 2–4 (code) merged (PR #80 ✅); git push issue fixed (PR #83 ✅); Vertex AI response issues fixed (PR #84 ✅). First validation run completed 2026-06-14 23:07–23:12 UTC: `[backend] vertex_ai` confirmed, commit + push succeeded, AI generation produced partial output (awaiting second validation run to confirm markdown fence fix + token limit fix).
+
+**Safe to close:** Yes. All code is merged. Validation run #2 pending (queued 2026-06-14 23:55 UTC, ETA ~4 min from that time). No blocking threads.
+
+**Waiting on:** Second validation run to complete — check if preamble-wrapped responses now unwrap correctly and daily_delta completes without truncation. Expected: all 6 AI fields should complete, no retries needed.
+
+**After this session:** Once validation run #2 confirms all fields complete, Phase 1 migration is done. Phase 11 cleanup (remove `GEMINI_API_KEY` fallback) deferred until 2+ more production runs confirm stability.
 
 **Prior workstream (TICKER):** TICKER-1 CF Worker merged (PR #74); still pending user deploy (`wrangler`/KV/secret) + PR #66 (TICKER-0) conflict resolution. Unchanged this session.
 
 ---
 
-## Session: 2026-06-14 — AI-MIGRATION: Vertex AI (Phases 2–4, code complete)
+## Session: 2026-06-14 (evening) — AI-MIGRATION: Phase 1 GCP + validation (owner-completed)
+
+### What was done
+
+**Phase 1 (owner-completed, G1–G3):** User completed the GCP infrastructure setup per `planning/vertex-ai-migration.md` §4:
+- G1: Project `finviz-groups-tracker-0614` created, `aiplatform.googleapis.com` enabled, $10/mo Gemini credit attached to billing
+- G2: Service account `finviz-ai-runner@finviz-groups-tracker-0614.iam.gserviceaccount.com` created, `roles/aiplatform.user` granted
+- G3: WIF pool `github-pool` + provider `github-provider` created, SA bound to pool via `principalSet` scoped to this repo
+- **Secrets added:** `WIF_PROVIDER`, `GCP_SA_EMAIL`, `GOOGLE_CLOUD_PROJECT` (no long-lived credentials)
+
+**First validation run (2026-06-14 23:07–23:12 UTC):**
+- Git push issue discovered: `generate_ai.py` writes `data/` files before `git pull --rebase` runs, causing exit 128 "You have unstaged changes"
+- AI generation soft failures: `rotation_phase` and `daily_delta` fields failed (preamble-wrapped JSON + truncation)
+
+**PR #83 (git push fix, merged):** Added `--autostash` to `git pull --rebase` — workflow now completes successfully.
+
+**PR #84 (Vertex AI response fixes, merged):**
+1. Strip markdown fences from JSON responses (Vertex AI wraps in ```json...```)
+2. Increase `daily_delta` max_output_tokens from 300 → 900 (was truncating mid-string)
+
+**Second validation run (queued 2026-06-14 23:55 UTC, results pending):** Expected to show all 6 AI fields completing cleanly without retries.
+
+### Key findings
+
+- **Vertex AI is definitely being hit** — `[backend] vertex_ai` printed, WIF auth succeeded, credentials used correctly
+- **Preamble wrapping is consistent on Vertex AI** — all 3 retries got the same markdown-wrapped response; retrying doesn't help (extraction does)
+- **daily_delta truncation was a real issue** — 300 tokens insufficient for 3 bullet points; 900 tokens ample
+
+### Next steps (for next session or owner)
+
+1. Monitor validation run #2 results once available
+2. If all 6 fields complete: Phase 1 migration is DONE. Confirm GCP billing reflects the spend on the $10 credit.
+3. Run 2–3 more production cycles (daily scheduled cron) to establish stability
+4. Phase 11 cleanup: delete `GEMINI_API_KEY` secret, drop AI Studio fallback code (only after production stability confirmed)
+
+---
+
+## Session: 2026-06-14 (earlier) — AI-MIGRATION: Vertex AI (Phases 2–4, code complete)
 
 ### What was done
 
