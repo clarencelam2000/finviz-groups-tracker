@@ -6,10 +6,10 @@
 
 ## Current Status
 
-**Status:** Plan complete + PR #67 merged ✅ — Ticker lookup plan (#62) merged; Vertex AI migration planning doc (#67) merged; AI quota fix (AI-3 / PR #58) complete
-**Safe to close:** Yes — all changes merged, no open threads or in-progress work
-**Waiting on:** User to complete Phase 0 ticker prerequisites (FMP API key, CF account + Wrangler + KV namespace) before TICKER-0 session
-**Next actions:** (1) User completes Phase 0; (2) New session for TICKER-0 (taxonomy map); (3) Phase 2 AI schema enrichment (PLAN-2), gated behind 2+ weeks of Phase 1 production data
+**Status:** TICKER-0 complete ✅ — `data/taxonomy_map.csv` built from 242 live FMP profiles, validated, draft PR open
+**Safe to close:** Yes once PR is opened — TICKER-0 is self-contained; no open threads
+**Waiting on:** User for TICKER-1 prerequisite — Cloudflare account + Wrangler + KV namespace (FMP key ✅ done)
+**Next action:** New session for TICKER-1 (CF Worker). ⚠️ MUST use `stable/profile?symbol=` endpoint, NOT the plan's `/api/v3/profile/` (dead for new keys) — full correction in `knowledge/fmp-api-findings.md`
 
 ---
 
@@ -49,6 +49,51 @@
 1. Merge PR #58
 2. Mark AI-3 done in SPRINT.md (this PR fully implements it)
 3. Monitor `data/ai_run_log.jsonl` for 2+ days — expect `rate_limit_hits` ≤ 3, no `quota_exhausted` on normal days
+
+---
+
+## Session: 2026-06-14 — TICKER-0: FMP→Finviz taxonomy map built
+
+### What was done
+
+**Built `data/taxonomy_map.csv`** (133 rows) — the FMP→Finviz industry/sector translation
+table that the Phase 2 Worker will use for O(1) runtime lookup.
+
+- Sampled **242 live FMP profiles** (user provided free-tier API key, used at build-time only,
+  not committed) across all 11 sectors → **129 unique FMP industries** observed. Evidence saved
+  to `data/fmp_sample_profiles.json` (committed as audit trail / refresh basis).
+- Generated the map against verified FMP strings + domain knowledge. A build/validate script
+  checked every `finviz_industry` and `finviz_sector` against the live Finviz universe
+  (`data/{industries,sectors}/snapshots.csv`) — **zero hallucinated names**.
+- **132/144 Finviz industries reachable.** The 12 unreachable are where FMP is *coarser*
+  (FMP `Coal`→Coking+Thermal; `Semiconductors`→+equipment; `Entertainment`→+Broadcasting;
+  `Specialty Retail`→+Internet Retail). Expected for an FMP→Finviz map, not a defect.
+- 12 low-confidence rows (<0.8) flagged in the `note` column for spot-check; 4 supplemental
+  `not_in_sample` rows added from knowledge (harmless if FMP never emits them).
+
+### ⚠️ Critical discovery for TICKER-1 (Phase 2 Worker)
+
+The plan's `GET /api/v3/profile/{symbol}` is **dead** for newer free keys (401). FMP migrated to
+`/stable/`. The Worker MUST use **`stable/profile?symbol={SYM}&apikey={KEY}`** (verified 200).
+Field renames: `mktCap`→`marketCap` (raw int, divide by 1e9), `exchangeShortName`→`exchange`,
+`image` host changed, new `isAdr`/`isFund` flags. `available-sectors`/`available-industries`/
+`profile-bulk` are paid-only (402). Free tier 429s after ~240 calls/session.
+**Full writeup: `knowledge/fmp-api-findings.md`.**
+
+### Key decisions
+
+- Map keyed by FMP's exact `industry` string (the Worker's lookup key). Sector handled in-row:
+  FMP `Financial Services`→Finviz `Financial`; FMP files `Solar` under Energy but the map uses
+  Finviz's `Technology` so the sector perf card joins correctly.
+- Committed `fmp_sample_profiles.json` as the human-review evidence base and future-refresh seed
+  (since `available-industries` is paid-only, refresh = re-sample profiles).
+
+### Next steps
+
+1. **TICKER-1 (CF Worker)** — new session. Use the corrected endpoint/fields above. Prereq:
+   user creates Cloudflare account + Wrangler + KV namespace (Phase 0 item 2, still pending).
+2. The Worker's `scripts/build_taxonomy.js` reads `data/taxonomy_map.csv` → `src/taxonomy_map.json`
+   keyed by `fmp_industry` — already designed in Phase 2; no map-format changes needed.
 
 ---
 

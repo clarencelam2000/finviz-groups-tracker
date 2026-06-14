@@ -1,0 +1,134 @@
+fmp_industry,fmp_sector,finviz_industry,finviz_sector,confidence,note
+Agricultural Inputs,Basic Materials,Agricultural Inputs,Basic Materials,1.0,exact
+Aluminum,Basic Materials,Aluminum,Basic Materials,1.0,exact
+Chemicals,Basic Materials,Chemicals,Basic Materials,1.0,exact
+Chemicals - Specialty,Basic Materials,Specialty Chemicals,Basic Materials,0.95,reorder
+Construction Materials,Basic Materials,Building Materials,Basic Materials,0.9,name_variant
+Copper,Basic Materials,Copper,Basic Materials,1.0,exact
+Gold,Basic Materials,Gold,Basic Materials,1.0,exact
+Industrial Materials,Basic Materials,Other Industrial Metals & Mining,Basic Materials,0.6,broadened
+"Paper, Lumber & Forest Products",Basic Materials,Lumber & Wood Production,Basic Materials,0.55,combined
+Silver,Basic Materials,Silver,Basic Materials,1.0,exact
+Steel,Basic Materials,Steel,Basic Materials,1.0,exact
+Advertising Agencies,Communication Services,Advertising Agencies,Communication Services,1.0,exact
+Electronic Gaming & Multimedia,Communication Services,Electronic Gaming & Multimedia,Communication Services,1.0,exact
+Entertainment,Communication Services,Entertainment,Communication Services,1.0,exact
+Internet Content & Information,Communication Services,Internet Content & Information,Communication Services,1.0,exact
+Publishing,Communication Services,Publishing,Communication Services,1.0,exact
+Telecommunications Services,Communication Services,Telecom Services,Communication Services,0.95,name_variant
+Apparel - Footwear & Accessories,Consumer Cyclical,Footwear & Accessories,Consumer Cyclical,0.95,reorder
+Apparel - Manufacturers,Consumer Cyclical,Apparel Manufacturing,Consumer Cyclical,0.9,name_variant
+Apparel - Retail,Consumer Cyclical,Apparel Retail,Consumer Cyclical,0.95,reorder
+Auto - Dealerships,Consumer Cyclical,Auto & Truck Dealerships,Consumer Cyclical,0.9,name_variant
+Auto - Manufacturers,Consumer Cyclical,Auto Manufacturers,Consumer Cyclical,0.95,reorder
+Auto - Parts,Consumer Cyclical,Auto Parts,Consumer Cyclical,0.95,reorder
+Auto - Recreational Vehicles,Consumer Cyclical,Recreational Vehicles,Consumer Cyclical,0.9,name_variant
+Department Stores,Consumer Cyclical,Department Stores,Consumer Cyclical,1.0,exact
+"Furnishings, Fixtures & Appliances",Consumer Cyclical,"Furnishings, Fixtures & Appliances",Consumer Cyclical,1.0,exact
+"Gambling, Resorts & Casinos",Consumer Cyclical,Resorts & Casinos,Consumer Cyclical,0.8,combined
+Home Improvement,Consumer Cyclical,Home Improvement Retail,Consumer Cyclical,0.9,name_variant
+Leisure,Consumer Cyclical,Leisure,Consumer Cyclical,1.0,exact
+Luxury Goods,Consumer Cyclical,Luxury Goods,Consumer Cyclical,1.0,exact
+Packaging & Containers,Consumer Cyclical,Packaging & Containers,Consumer Cyclical,1.0,exact
+Personal Products & Services,Consumer Cyclical,Personal Services,Consumer Cyclical,0.8,name_variant
+Residential Construction,Consumer Cyclical,Residential Construction,Consumer Cyclical,1.0,exact
+Restaurants,Consumer Cyclical,Restaurants,Consumer Cyclical,1.0,exact
+Specialty Retail,Consumer Cyclical,Specialty Retail,Consumer Cyclical,1.0,exact
+Travel Lodging,Consumer Cyclical,Lodging,Consumer Cyclical,0.9,name_variant
+Travel Services,Consumer Cyclical,Travel Services,Consumer Cyclical,1.0,exact
+Agricultural Farm Products,Consumer Defensive,Farm Products,Consumer Defensive,0.9,name_variant
+Beverages - Alcoholic,Consumer Defensive,Beverages - Brewers,Consumer Defensive,0.55,ambiguous
+Beverages - Non-Alcoholic,Consumer Defensive,Beverages - Non-Alcoholic,Consumer Defensive,1.0,exact
+Beverages - Wineries & Distilleries,Consumer Defensive,Beverages - Wineries & Distilleries,Consumer Defensive,1.0,exact
+Discount Stores,Consumer Defensive,Discount Stores,Consumer Defensive,1.0,exact
+Education & Training Services,Consumer Defensive,Education & Training Services,Consumer Defensive,1.0,exact
+Food Confectioners,Consumer Defensive,Confectioners,Consumer Defensive,0.9,name_variant
+Food Distribution,Consumer Defensive,Food Distribution,Consumer Defensive,1.0,exact
+Grocery Stores,Consumer Defensive,Grocery Stores,Consumer Defensive,1.0,exact
+Household & Personal Products,Consumer Defensive,Household & Personal Products,Consumer Defensive,1.0,exact
+Packaged Foods,Consumer Defensive,Packaged Foods,Consumer Defensive,1.0,exact
+Tobacco,Consumer Defensive,Tobacco,Consumer Defensive,1.0,exact
+Coal,Energy,Thermal Coal,Energy,0.55,combined
+Oil & Gas Drilling,Energy,Oil & Gas Drilling,Energy,1.0,exact
+Oil & Gas Equipment & Services,Energy,Oil & Gas Equipment & Services,Energy,1.0,exact
+Oil & Gas Exploration & Production,Energy,Oil & Gas E&P,Energy,0.95,abbrev
+Oil & Gas Integrated,Energy,Oil & Gas Integrated,Energy,1.0,exact
+Oil & Gas Midstream,Energy,Oil & Gas Midstream,Energy,1.0,exact
+Oil & Gas Refining & Marketing,Energy,Oil & Gas Refining & Marketing,Energy,1.0,exact
+Solar,Energy,Solar,Technology,0.9,sector_diff
+Uranium,Energy,Uranium,Energy,1.0,exact
+Asset Management,Financial Services,Asset Management,Financial,1.0,exact
+Banks - Diversified,Financial Services,Banks - Diversified,Financial,1.0,exact
+Banks - Regional,Financial Services,Banks - Regional,Financial,1.0,exact
+Financial - Capital Markets,Financial Services,Capital Markets,Financial,0.9,name_variant
+Financial - Credit Services,Financial Services,Credit Services,Financial,0.9,name_variant
+Financial - Data & Stock Exchanges,Financial Services,Financial Data & Stock Exchanges,Financial,0.95,name_variant
+Financial - Mortgages,Financial Services,Mortgage Finance,Financial,0.85,name_variant
+Insurance - Brokers,Financial Services,Insurance Brokers,Financial,0.95,name_variant
+Insurance - Diversified,Financial Services,Insurance - Diversified,Financial,1.0,exact
+Insurance - Life,Financial Services,Insurance - Life,Financial,1.0,exact
+Insurance - Property & Casualty,Financial Services,Insurance - Property & Casualty,Financial,1.0,exact
+Insurance - Reinsurance,Financial Services,Insurance - Reinsurance,Financial,1.0,exact
+Biotechnology,Healthcare,Biotechnology,Healthcare,1.0,exact
+Drug Manufacturers - General,Healthcare,Drug Manufacturers - General,Healthcare,1.0,exact
+Drug Manufacturers - Specialty & Generic,Healthcare,Drug Manufacturers - Specialty & Generic,Healthcare,1.0,exact
+Medical - Care Facilities,Healthcare,Medical Care Facilities,Healthcare,0.95,name_variant
+Medical - Devices,Healthcare,Medical Devices,Healthcare,0.95,name_variant
+Medical - Diagnostics & Research,Healthcare,Diagnostics & Research,Healthcare,0.9,name_variant
+Medical - Distribution,Healthcare,Medical Distribution,Healthcare,0.95,name_variant
+Medical - Healthcare Information Services,Healthcare,Health Information Services,Healthcare,0.85,name_variant
+Medical - Healthcare Plans,Healthcare,Healthcare Plans,Healthcare,0.9,name_variant
+Medical - Instruments & Supplies,Healthcare,Medical Instruments & Supplies,Healthcare,0.95,name_variant
+Medical - Pharmaceuticals,Healthcare,Pharmaceutical Retailers,Healthcare,0.55,ambiguous
+Aerospace & Defense,Industrials,Aerospace & Defense,Industrials,1.0,exact
+Agricultural - Machinery,Industrials,Farm & Heavy Construction Machinery,Industrials,0.75,name_variant
+"Airlines, Airports & Air Services",Industrials,Airlines,Industrials,0.7,combined
+Conglomerates,Industrials,Conglomerates,Industrials,1.0,exact
+Construction,Industrials,Building Products & Equipment,Industrials,0.65,name_variant
+Consulting Services,Industrials,Consulting Services,Industrials,1.0,exact
+Electrical Equipment & Parts,Industrials,Electrical Equipment & Parts,Industrials,1.0,exact
+Engineering & Construction,Industrials,Engineering & Construction,Industrials,1.0,exact
+Industrial - Distribution,Industrials,Industrial Distribution,Industrials,0.95,name_variant
+Industrial - Machinery,Industrials,Specialty Industrial Machinery,Industrials,0.85,name_variant
+Integrated Freight & Logistics,Industrials,Integrated Freight & Logistics,Industrials,1.0,exact
+Manufacturing - Metal Fabrication,Industrials,Metal Fabrication,Industrials,0.9,name_variant
+Manufacturing - Tools & Accessories,Industrials,Tools & Accessories,Industrials,0.9,name_variant
+Marine Shipping,Industrials,Marine Shipping,Industrials,1.0,exact
+Railroads,Industrials,Railroads,Industrials,1.0,exact
+Rental & Leasing Services,Industrials,Rental & Leasing Services,Industrials,1.0,exact
+Security & Protection Services,Industrials,Security & Protection Services,Industrials,1.0,exact
+Specialty Business Services,Industrials,Specialty Business Services,Industrials,1.0,exact
+Staffing & Employment Services,Industrials,Staffing & Employment Services,Industrials,1.0,exact
+Trucking,Industrials,Trucking,Industrials,1.0,exact
+Waste Management,Industrials,Waste Management,Industrials,1.0,exact
+REIT - Diversified,Real Estate,REIT - Diversified,Real Estate,1.0,exact
+REIT - Healthcare Facilities,Real Estate,REIT - Healthcare Facilities,Real Estate,1.0,exact
+REIT - Hotel & Motel,Real Estate,REIT - Hotel & Motel,Real Estate,1.0,exact
+REIT - Industrial,Real Estate,REIT - Industrial,Real Estate,1.0,exact
+REIT - Mortgage,Real Estate,REIT - Mortgage,Real Estate,1.0,exact
+REIT - Office,Real Estate,REIT - Office,Real Estate,1.0,exact
+REIT - Residential,Real Estate,REIT - Residential,Real Estate,1.0,exact
+REIT - Retail,Real Estate,REIT - Retail,Real Estate,1.0,exact
+REIT - Specialty,Real Estate,REIT - Specialty,Real Estate,1.0,exact
+Real Estate - Diversified,Real Estate,Real Estate - Diversified,Real Estate,1.0,exact
+Real Estate - Services,Real Estate,Real Estate Services,Real Estate,0.95,name_variant
+Communication Equipment,Technology,Communication Equipment,Technology,1.0,exact
+Computer Hardware,Technology,Computer Hardware,Technology,1.0,exact
+Consumer Electronics,Technology,Consumer Electronics,Technology,1.0,exact
+"Hardware, Equipment & Parts",Technology,Electronic Components,Technology,0.5,ambiguous
+Information Technology Services,Technology,Information Technology Services,Technology,1.0,exact
+Semiconductors,Technology,Semiconductors,Technology,1.0,exact
+Software - Application,Technology,Software - Application,Technology,1.0,exact
+Software - Infrastructure,Technology,Software - Infrastructure,Technology,1.0,exact
+Software - Services,Technology,Information Technology Services,Technology,0.55,ambiguous
+Technology Distributors,Technology,Electronics & Computer Distribution,Technology,0.8,name_variant
+Diversified Utilities,Utilities,Utilities - Diversified,Utilities,0.9,reorder
+Independent Power Producers,Utilities,Utilities - Independent Power Producers,Utilities,0.95,name_variant
+Regulated Electric,Utilities,Utilities - Regulated Electric,Utilities,0.95,name_variant
+Regulated Gas,Utilities,Utilities - Regulated Gas,Utilities,0.95,name_variant
+Regulated Water,Utilities,Utilities - Regulated Water,Utilities,0.95,name_variant
+Renewable Utilities,Utilities,Utilities - Renewable,Utilities,0.9,name_variant
+Financial - Conglomerates,Financial Services,Financial Conglomerates,Financial,0.7,not_in_sample
+Insurance - Specialty,Financial Services,Insurance - Specialty,Financial,0.8,not_in_sample
+Real Estate - Development,Real Estate,Real Estate - Development,Real Estate,0.8,not_in_sample
+Shell Companies,Financial Services,Shell Companies,Financial,0.6,not_in_sample
