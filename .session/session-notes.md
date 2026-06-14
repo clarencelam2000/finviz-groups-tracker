@@ -6,10 +6,10 @@
 
 ## Current Status
 
-**Status:** TICKER-0 + AI migration planning complete ✅ — Taxonomy map committed; Vertex AI migration plan drafted and merged (PR #67)
-**Safe to close:** Yes — all work merged, no open threads, no in-progress changes
-**Waiting on:** (1) User Phase 0 for TICKER-1 (CF account + Wrangler + KV); (2) Owner decision: proceed with Vertex AI migration now or after TICKER tasks
-**Next actions:** (1) User completes Phase 0 ticker prerequisites, new session for TICKER-1; (2) Either: AI-MIGRATION (Phase 1–4 in `planning/vertex-ai-migration.md`), or continue with TICKER-1 first
+**Status:** TICKER-1 (CF Worker) code-complete on `claude/bold-bardeen-d4517f` — 28 vitest tests pass, dry-run bundles clean. TICKER-0 taxonomy map exists in **PR #66 (still open/draft, conflicts in session-notes.md — not merged yet)**.
+**Safe to close:** Yes for this work — but two follow-ups are owner-gated (see below).
+**Waiting on:** (1) **User must deploy the Worker** — `wrangler login` / `kv namespace create` / `secret put FMP_API_KEY` / `npm run deploy` cannot run from a cloud session (interactive CF OAuth + FMP secret). See `worker/README.md`. (2) **PR #66 needs its session-notes.md conflict resolved** before TICKER-0 lands.
+**Next actions:** (1) Resolve PR #66 conflict + merge (TICKER-0); (2) User deploys Worker, records the `*.workers.dev` URL; (3) TICKER-2 (PWA Lookup tab) using that URL; (4) TICKER-3 (Streamlit); (5) TICKER-4 ops endpoints (`/stats`, `/cache` bust, FMP counter).
 
 ---
 

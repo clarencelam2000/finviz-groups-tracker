@@ -1,0 +1,18 @@
+{
+  "name": "finviz-ticker-lookup",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker: ticker → Finviz sector/industry lookup with KV cache",
+  "scripts": {
+    "build:taxonomy": "node scripts/build_taxonomy.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "deploy": "npm run build:taxonomy && wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8",
+    "wrangler": "^3.99.0"
+  }
+}
