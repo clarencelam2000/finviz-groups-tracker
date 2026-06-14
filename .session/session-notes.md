@@ -6,10 +6,54 @@
 
 ## Current Status
 
-**Status:** TICKER-1 (CF Worker) **merged** to `claude/elegant-babbage-hlxnfy` (PR #74, 2026-06-14). 28 vitest tests passing, Worker source in `worker/` directory. TICKER-0 taxonomy map exists in PR #66 (still open/draft, conflicts in session-notes.md — not merged yet).
-**Safe to close:** Yes for the merge — but two follow-ups are owner-gated (see below).
-**Waiting on:** (1) **User must deploy the Worker** — `wrangler login` / `kv namespace create` / `secret put FMP_API_KEY` / `npm run deploy` cannot run from a cloud session (interactive CF OAuth + FMP secret). See `worker/README.md`. (2) **PR #66 needs its session-notes.md conflict resolved** before TICKER-0 lands.
-**Next actions:** (1) Resolve PR #66 conflict + merge (TICKER-0); (2) User deploys Worker from merged code, records the `*.workers.dev` URL; (3) TICKER-2 (PWA Lookup tab) using that URL; (4) TICKER-3 (Streamlit); (5) TICKER-4 ops endpoints (`/stats`, `/cache` bust, FMP counter).
+**Status:** AI-MIGRATION (Vertex AI) **code complete** on `claude/magical-ptolemy-c6vogg` (draft PR pending). Phases 2–4 of `planning/vertex-ai-migration.md` implemented: dual-mode client in `generate_ai.py` (toggle `GOOGLE_GENAI_USE_VERTEXAI`), WIF auth in `generate_ai.yml`, 6 new tests (169 passing total, ex-playwright), docs in CLAUDE.md. Code is backward-compatible — defaults to AI Studio path when toggle is off.
+**Safe to close:** Yes for the code — but **DO NOT MERGE until Phase 1 GCP infra is done** (workflow C5 switches CI to Vertex; without WIF secrets the daily AI run's auth step fails).
+**Waiting on (owner-gated Phase 1):** GCP project + `aiplatform.googleapis.com` enabled + $10/mo credit attached; `finviz-ai-runner` SA with `roles/aiplatform.user`; WIF pool/provider scoped to this repo; three repo secrets `WIF_PROVIDER`, `GCP_SA_EMAIL`, `GOOGLE_CLOUD_PROJECT`. Full gcloud commands in `planning/vertex-ai-migration.md` §4 (G1–G3).
+**Next actions:** (1) Owner runs Phase 1 GCP setup + adds 3 secrets; (2) merge the draft PR; (3) trigger `workflow_dispatch` (force_ai) to validate — confirm `data/ai_run_log.jsonl` last entry shows `backend=vertex_ai`, `outcome=complete`, and GCP billing lands on the credit; (4) after 2+ stable runs, Phase 11 cleanup (delete `GEMINI_API_KEY` secret, drop the AI Studio branch).
+
+**Prior workstream (TICKER):** TICKER-1 CF Worker merged (PR #74); still pending user deploy (`wrangler`/KV/secret) + PR #66 (TICKER-0) conflict resolution. Unchanged this session.
+
+---
+
+## Session: 2026-06-14 — AI-MIGRATION: Vertex AI (Phases 2–4, code complete)
+
+### What was done
+
+Executed Phases 2–4 of `planning/vertex-ai-migration.md` (PR #67 plan, merged). Phase 1
+(GCP infra) is owner-gated and **not done** — see Current Status.
+
+**Phase 2 (script, commit `bbda136`):** Dual-mode client init in `generate_ai.py`. New env
+toggle `GOOGLE_GENAI_USE_VERTEXAI`: when on → `genai.Client(vertexai=True, project=..., location=...)`
+using ADC; when off → existing `genai.Client(api_key=...)`. Graceful exit 0 when the selected
+backend is unconfigured. Added `_backend` module global ("vertex_ai"|"google_ai_studio"|"unset"),
+reset in `_reset_tracking()`, written into `ai_run_log.jsonl`. Corrected the wrong
+"5 requests/minute" comment (real limit was 20/DAY) and lowered `_INTER_CALL_DELAY` 13→2 (safe on
+paid quota). `DailyQuotaExhaustedError` + incremental resume preserved untouched.
+
+**Phase 2 (workflow, commit `ac5b65c`):** `generate_ai.yml` — added `id-token: write`, a
+`google-github-actions/auth@v2` step, swapped `GEMINI_API_KEY` env for `GOOGLE_GENAI_USE_VERTEXAI=true`
++ `GOOGLE_CLOUD_PROJECT` secret + `GOOGLE_CLOUD_LOCATION`. No more `GEMINI_API_KEY` in the workflow.
+
+**Phase 3 (tests, commit `bf4688f`):** 6 new tests — Vertex client kwargs, AI Studio backward-compat,
+both graceful-exit paths, run-log `backend` field. 169 passing (ex-`test_collect_parsing.py`, which
+needs Playwright — blocked in cloud per CLAUDE.md).
+
+**Phase 4 (docs, commit `01b9117`):** CLAUDE.md Automation section — three new secrets, WIF, local
+dev (Vertex ADC vs AI Studio fallback). Script docstring updated to dual-mode.
+
+**C6 (requirements) skipped:** `google-genai>=2.8.0` already exposes the `vertexai` param; no bump
+needed. (Couldn't run the runtime assert here — `google` not installed in this cloud env — but the
+param has shipped since the unified SDK's early releases.)
+
+### Key decisions / notes for next session
+
+- **Merge ordering trap:** the workflow change (C5) makes CI auth via WIF. Merging before Phase 1 +
+  the 3 secrets exist will make the daily AI run's auth step fail. Draft PR stays unmergeable until
+  the owner finishes Phase 1.
+- Toggle defaults off → script/tests are safe to merge in isolation, but they ship together with C5
+  in this branch, so treat the whole PR as Phase-1-gated.
+- Rollback is cheap (dual-mode): revert workflow and/or unset the toggle. `GEMINI_API_KEY` secret
+  should stay until 2+ stable Vertex runs (Phase 11 cleanup).
 
 ---
 
