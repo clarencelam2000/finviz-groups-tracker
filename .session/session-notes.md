@@ -6,7 +6,7 @@
 
 ## Current Status
 
-**Status:** Plan complete ✅ — Ticker lookup plan (#62) merged; AI quota fix (AI-3 / PR #58) complete per default branch history
+**Status:** Plan complete ✅ — Ticker lookup plan (PR #63) merged; AI quota fix (AI-3 / PR #58) complete
 **Safe to close:** Yes — all changes merged, no open threads
 **Waiting on:** User to complete Phase 0 prerequisites (FMP API key, CF account + Wrangler + KV namespace)
 **Next action:** User completes Phase 0, then opens a new Claude session for TICKER-0 (taxonomy map) using `planning/PLAN_ticker_lookup.md` Phase 1 instructions
