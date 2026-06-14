@@ -6,12 +6,35 @@
 
 ## Current Status
 
-**Status:** AI-MIGRATION (Vertex AI) **PR #80 merged, code on main branch**. Phases 2–4 of `planning/vertex-ai-migration.md` complete: dual-mode client in `generate_ai.py` (toggle `GOOGLE_GENAI_USE_VERTEXAI`), WIF auth in `generate_ai.yml`, 6 new tests (169 passing total, ex-playwright), docs in CLAUDE.md. Code is backward-compatible — defaults to AI Studio path when toggle is off.
-**Safe to close:** Yes — code is merged and waiting for owner.
+**Status:** AI-MIGRATION (Vertex AI) **complete with follow-up fixes**. PR #80 (Phases 2–4) merged with dual-mode client, WIF workflow, tests, and docs. **Follow-up fixes landed** (PRs #82–#84): workflow `--autostash` retry logic + Vertex AI markdown-fence stripping + token limit increase (300→900 for daily_delta). Backward-compatible; defaults to AI Studio when toggle is off.
+**Safe to close:** Yes — all code merged and ready for production.
 **Waiting on (owner-gated Phase 1):** GCP project + `aiplatform.googleapis.com` enabled + $10/mo credit attached; `finviz-ai-runner` SA with `roles/aiplatform.user`; WIF pool/provider scoped to this repo; three repo secrets `WIF_PROVIDER`, `GCP_SA_EMAIL`, `GOOGLE_CLOUD_PROJECT`. Full gcloud commands in `planning/vertex-ai-migration.md` §4 (G1–G3). Without Phase 1 secrets, the daily AI run's auth step will fail (but script gracefully exits 0).
 **Next actions:** (1) Owner runs Phase 1 GCP setup + adds 3 repo secrets; (2) trigger `workflow_dispatch` (force_ai) to validate — confirm `data/ai_run_log.jsonl` last entry shows `backend=vertex_ai`, `outcome=complete`, and GCP billing lands on the credit; (3) after 2+ stable runs, Phase 11 cleanup (delete `GEMINI_API_KEY` secret, drop the AI Studio fallback code).
 
 **Prior workstream (TICKER):** TICKER-1 CF Worker merged (PR #74); still pending user deploy (`wrangler`/KV/secret) + PR #66 (TICKER-0) conflict resolution. Unchanged this session.
+
+---
+
+## Session: 2026-06-14 — Vertex AI follow-up fixes (PRs #82–#84 merged)
+
+### What was done
+
+Two follow-up PRs merged to fix issues discovered after the initial Vertex AI migration (PR #80):
+
+**PR #82 (commit 2f4b04c):** Added `--autostash` flag to `git pull --rebase` in `generate_ai.yml` workflow. This ensures uncommitted session files (`.session/session-notes.md` etc.) don't block the pull operation. Improves CI robustness when workflow encounters merge scenarios.
+
+**PR #84 (commit ff959d0):** Fixed two Vertex AI-specific issues:
+1. **Markdown fence stripping:** Vertex AI wraps JSON responses in \`\`\`json...\`\`\` code blocks. Added `_call_api()` logic to detect and extract the inner JSON, eliminating spurious "empty response" retries.
+2. **Token limit increase:** `_generate_daily_delta()` was truncating the third bullet point mid-string with `max_output_tokens: 300`. Increased to 900 to capture the full response. This fixes JSON parse errors on output_tokens shortage.
+
+**Status:** Both PRs merged to default branch. No new tests added (fixes to existing code paths). All changes are backward-compatible.
+
+### Key insights
+
+- Vertex AI's SDK wraps structured output in markdown fences by default; Google's Python SDK docs could be clearer on this.
+- The 300-token limit was empirically insufficient for 3 concurrent bullet-point objects + JSON overhead. 900 is conservative and safe.
+
+### No open threads
 
 ---
 
