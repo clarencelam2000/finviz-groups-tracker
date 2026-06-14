@@ -139,6 +139,25 @@ python scripts/export_db.py
 - **Cannot run collect.py here**: The Claude Code cloud environment blocks Playwright's CDN and outbound access to finviz.com. `collect.py` must run **locally** on the user's machine or via **GitHub Actions**. Do not attempt `playwright install` or `python scripts/collect.py` in a cloud session — it will fail.
 - **Subagents for analysis**: Use subagents (Agent tool) for exploratory pandas/data work to avoid bloating the main context window.
 - **Context pressure**: Use `/compact` when nearing limits. Prioritize keeping SPEC.md decisions and script logic in context; data rows are expendable.
+- **Save research before it's lost**: If a session involved substantial research (API evaluation, debugging a non-obvious root cause, evaluating architectural trade-offs), write a summary to `knowledge/` before ending. A future Claude — or a human reading the code — should not have to rediscover it. Research logs go in `knowledge/` as free-form `.md` files; architectural decisions (and the alternatives rejected) go in `knowledge/decisions/` as ADRs. See `knowledge/README.md` for templates.
+
+---
+
+## Repository structure
+
+| Directory | Purpose |
+|-----------|---------|
+| `scripts/` | Data collection and processing scripts |
+| `dashboard/` | Streamlit dashboard |
+| `docs/` | PWA (GitHub Pages) — `index.html`, `sw.js`, `manifest.json` |
+| `data/` | Append-only CSVs (sectors, industries) |
+| `planning/` | Implementation plans and feature designs |
+| `knowledge/` | Research logs, ADRs, debugging post-mortems |
+| `.session/` | Session notes, sprint board, work log (committed, not gitignored) |
+| `.claude/rules/` | Project rules files (branch discipline, data pipeline) |
+| `.github/workflows/` | CI/CD — daily collect + compute_deltas |
+
+> `docs/` is named per GitHub Pages convention: "Deploy from branch → /docs" only supports `/` or `/docs` as source. Do not rename it without switching to GitHub Actions deployment first.
 
 ---
 
