@@ -111,6 +111,14 @@ Three interrelated problems solved in one PR:
 
 ---
 
+## 2026-06-14 — Ticker lookup CF Worker built (TICKER-1, draft PR)
+
+`worker/` Cloudflare Worker: `/lookup?t=SYM` → Finviz sector/industry + profile, 30d
+KV cache, `/health`, CORS, structured logging. Corrected the plan's dead FMP endpoint
+to `stable/profile` with migrated field names. 28 vitest tests pass; `wrangler deploy
+--dry-run` bundles clean. Deploy is owner-gated (interactive `wrangler login` + FMP
+secret) — code is ready, awaiting `npm run deploy`.
+
 ## Open Questions / Future Ideas
 
 - [ ] Confirm Finviz data finalization time (probe intraday)
