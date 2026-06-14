@@ -6,10 +6,10 @@
 
 ## Current Status
 
-**Status:** AI-MIGRATION (Vertex AI) **code complete** on `claude/magical-ptolemy-c6vogg` (draft PR pending). Phases 2–4 of `planning/vertex-ai-migration.md` implemented: dual-mode client in `generate_ai.py` (toggle `GOOGLE_GENAI_USE_VERTEXAI`), WIF auth in `generate_ai.yml`, 6 new tests (169 passing total, ex-playwright), docs in CLAUDE.md. Code is backward-compatible — defaults to AI Studio path when toggle is off.
-**Safe to close:** Yes for the code — but **DO NOT MERGE until Phase 1 GCP infra is done** (workflow C5 switches CI to Vertex; without WIF secrets the daily AI run's auth step fails).
-**Waiting on (owner-gated Phase 1):** GCP project + `aiplatform.googleapis.com` enabled + $10/mo credit attached; `finviz-ai-runner` SA with `roles/aiplatform.user`; WIF pool/provider scoped to this repo; three repo secrets `WIF_PROVIDER`, `GCP_SA_EMAIL`, `GOOGLE_CLOUD_PROJECT`. Full gcloud commands in `planning/vertex-ai-migration.md` §4 (G1–G3).
-**Next actions:** (1) Owner runs Phase 1 GCP setup + adds 3 secrets; (2) merge the draft PR; (3) trigger `workflow_dispatch` (force_ai) to validate — confirm `data/ai_run_log.jsonl` last entry shows `backend=vertex_ai`, `outcome=complete`, and GCP billing lands on the credit; (4) after 2+ stable runs, Phase 11 cleanup (delete `GEMINI_API_KEY` secret, drop the AI Studio branch).
+**Status:** AI-MIGRATION (Vertex AI) **PR #80 merged, code on main branch**. Phases 2–4 of `planning/vertex-ai-migration.md` complete: dual-mode client in `generate_ai.py` (toggle `GOOGLE_GENAI_USE_VERTEXAI`), WIF auth in `generate_ai.yml`, 6 new tests (169 passing total, ex-playwright), docs in CLAUDE.md. Code is backward-compatible — defaults to AI Studio path when toggle is off.
+**Safe to close:** Yes — code is merged and waiting for owner.
+**Waiting on (owner-gated Phase 1):** GCP project + `aiplatform.googleapis.com` enabled + $10/mo credit attached; `finviz-ai-runner` SA with `roles/aiplatform.user`; WIF pool/provider scoped to this repo; three repo secrets `WIF_PROVIDER`, `GCP_SA_EMAIL`, `GOOGLE_CLOUD_PROJECT`. Full gcloud commands in `planning/vertex-ai-migration.md` §4 (G1–G3). Without Phase 1 secrets, the daily AI run's auth step will fail (but script gracefully exits 0).
+**Next actions:** (1) Owner runs Phase 1 GCP setup + adds 3 repo secrets; (2) trigger `workflow_dispatch` (force_ai) to validate — confirm `data/ai_run_log.jsonl` last entry shows `backend=vertex_ai`, `outcome=complete`, and GCP billing lands on the credit; (3) after 2+ stable runs, Phase 11 cleanup (delete `GEMINI_API_KEY` secret, drop the AI Studio fallback code).
 
 **Prior workstream (TICKER):** TICKER-1 CF Worker merged (PR #74); still pending user deploy (`wrangler`/KV/secret) + PR #66 (TICKER-0) conflict resolution. Unchanged this session.
 

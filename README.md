@@ -39,18 +39,24 @@ Reads the snapshot CSVs and appends rank/delta rows to the deltas CSVs.
 
 ### 4. Generate AI analysis (optional)
 
+AI analysis can run on either **Vertex AI** (preferred for scale) or **Gemini AI Studio** (free tier). See **CLAUDE.md** § "AI generation auth (Vertex AI)" for detailed setup instructions including local development and CI authentication.
+
+**Vertex AI (via Workload Identity Federation — GCP + GitHub):**
+Requires GCP project setup and three repo secrets. See CLAUDE.md for full instructions.
+
+**Gemini AI Studio (free tier fallback):**
 ```bash
 GEMINI_API_KEY=your_key python scripts/generate_ai.py
 ```
 
-Calls Gemini to produce a daily briefing, rotation phase signal, and sector watchlist. Output is written to `data/ai/YYYY-MM-DD.json`. Exits silently if no API key is set.
+Calls Gemini to produce a daily briefing, rotation phase signal, and sector watchlist. Output is written to `data/ai/YYYY-MM-DD.json`. Exits silently (graceful skip) if no API key is set.
 
-**Smart skip:** By default, `generate_ai.py` checks whether today's date appears in the delta CSVs before making any API calls. If `compute_deltas.py` hasn't run yet for today (e.g. a mid-day re-run), it prints a skip message and exits 0 without consuming API quota.
+**Smart skip:** By default, `generate_ai.py` checks whether today's date appears in the delta CSVs before making any API calls. If `compute_deltas.py` hasn't run yet for today (e.g. a mid-day re-run), it exits 0 without consuming API quota.
 
 **Force regeneration:** Use `--force-ai` to bypass the skip check:
 
 ```bash
-GEMINI_API_KEY=your_key python scripts/generate_ai.py --force-ai
+python scripts/generate_ai.py --force-ai
 ```
 
 Or set the `FORCE_AI=1` environment variable. The GitHub Actions manual trigger (`workflow_dispatch`) also exposes a **Force AI regeneration** checkbox.
@@ -207,7 +213,13 @@ If a run is interrupted (e.g., 429 rate-limit) after generating some but not all
 
 ### Setting up AI generation
 
+See **CLAUDE.md** § "AI generation auth (Vertex AI)" for comprehensive setup instructions for both backends.
+
+**Quick start (Gemini AI Studio):**
 1. Go to repo **Settings → Secrets and variables → Actions → New repository secret**
 2. Name: `GEMINI_API_KEY`, Value: your Gemini API key (free tier works — 5 req/min)
 3. The next scheduled cron will generate `data/ai/YYYY-MM-DD.json` automatically
+
+**Production setup (Vertex AI with Workload Identity Federation):**
+Requires GCP project creation, service account, WIF pool/provider, and three repo secrets. Full gcloud commands in CLAUDE.md.
 
