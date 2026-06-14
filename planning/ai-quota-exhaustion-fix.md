@@ -30,7 +30,7 @@
 ## Phased Checklist
 
 ### Phase 0 — Commit and push this plan file *(do first, before any code)*
-- [ ] Write plan to `plans/ai-quota-exhaustion-fix.md`
+- [ ] Write plan to `planning/ai-quota-exhaustion-fix.md`
 - [ ] Commit: `docs: add AI quota exhaustion fix plan`
 - [ ] Push to `claude/ai-analysis-resource-exhausted-k5yjmo`
 
@@ -362,7 +362,7 @@ else:
 |---|---|
 | `scripts/generate_ai.py` | Fixes 1, 2, 3 (incremental loading, quota abort, delta error) |
 | `tests/test_generate_ai.py` | New/updated tests for all three fixes |
-| `plans/ai-quota-exhaustion-fix.md` | This file (phase checkboxes updated as work completes) |
+| `planning/ai-quota-exhaustion-fix.md` | This file (phase checkboxes updated as work completes) |
 | `.session/session-notes.md` | Updated at end of session |
 | `.session/WORK_LOG.md` | Milestone entry when fixes land |
 | `.session/SPRINT.md` | AI-3 marked done; follow-up tasks added |
