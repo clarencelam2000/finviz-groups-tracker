@@ -1106,6 +1106,8 @@
       nav.classList.remove('hidden');
       const d = new Date(state.currentAiDate + 'T12:00:00Z');
       dateLabel.textContent = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+      // Prev is always re-enabled after navigation (no lower bound tracked)
+      prevBtn.disabled = false;
       // Disable Next if there's no latest date or we're already at it
       nextBtn.disabled = !state.latestAiDate || state.currentAiDate === state.latestAiDate;
     }
