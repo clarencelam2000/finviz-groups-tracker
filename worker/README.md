@@ -9,6 +9,8 @@ Streamlit dashboard can join it to the performance CSVs.
 GET /lookup?t=AAPL → { symbol, company_name, finviz_sector, finviz_industry,
                        industry_confidence, market_cap_b, exchange, image, ... }
 GET /health        → { status, timestamp, kv_ok }
+GET /stats         → { date, fmp_calls_today }
+DELETE /cache?t=TICKER → { deleted }
 OPTIONS *          → 204 + CORS headers
 ```
 
@@ -86,7 +88,7 @@ echo "$FMP_API_KEY" | npx wrangler secret put FMP_API_KEY   # headless; or omit 
 ## Build, test, deploy
 
 ```bash
-npm test                 # 28 unit tests, all offline
+npm test                 # 34 unit tests, all offline
 npm run build:taxonomy   # regenerate src/taxonomy_map.json from the CSV
 npm run deploy           # builds taxonomy, then `wrangler deploy`
 ```
@@ -144,5 +146,58 @@ npx wrangler dev
 
 `finviz_industry` is `""` (empty string, not null) when the industry isn't in the map;
 in that case `finviz_sector` still resolves via the sector fallback so the sector card
-renders. Next operational endpoints (`/stats`, `/cache` bust, FMP call counter) are
-TICKER-4 / Phase 5.
+renders.
+
+---
+
+## Operational endpoints (TICKER-4 / Phase 5)
+
+### `GET /stats` — FMP call counter
+
+Returns today's FMP API call count and the current date. Used to monitor cache hit rates and detect when the cache is bypassed unexpectedly.
+
+**Request:**
+```bash
+curl https://finviz-ticker-lookup.salmonbaby8.workers.dev/stats
+```
+
+**Response:**
+```json
+{
+  "date": "2026-06-15",
+  "fmp_calls_today": 42
+}
+```
+
+**Counter details:**
+- Incremented on every FMP cache-miss (not on cache hits).
+- Stored in KV as `fmp_calls_YYYY-MM-DD` with a 7-day TTL (older keys auto-expire).
+- Best-effort: counter failures never propagate to `/lookup` callers.
+
+### `DELETE /cache?t=TICKER` — Manual cache bust
+
+Manually delete a cached ticker entry to force a fresh FMP fetch on the next lookup.
+
+**Request:**
+```bash
+curl -X DELETE "https://finviz-ticker-lookup.salmonbaby8.workers.dev/cache?t=AAPL"
+```
+
+**Response (success):**
+```json
+{
+  "deleted": "AAPL"
+}
+```
+
+**Response (missing ticker param):**
+```json
+{
+  "error": "missing_symbol"
+}
+```
+
+**Behavior:**
+- Ticker is normalized to uppercase before deletion (e.g., `t=aapl` → deletes `AAPL`).
+- Next `/lookup?t=AAPL` call will fetch fresh data from FMP and re-cache it.
+- No auth needed for personal deployments; add auth middleware if exposed publicly.
