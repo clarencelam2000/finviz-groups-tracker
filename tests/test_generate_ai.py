@@ -168,6 +168,33 @@ def test_phase_prompt_lists_phases(snap_df, delta_df):
         assert phase in prompt
 
 
+def test_phase_prompt_is_json_native(snap_df, delta_df):
+    """Prompt must request the schema fields, not a contradictory PHASE:/REASONING: text format."""
+    prompt = generate_ai.build_phase_prompt(snap_df, delta_df, "2026-06-10")
+    for field in ['"label"', '"reasoning"', '"confidence"']:
+        assert field in prompt
+    assert "PHASE:" not in prompt
+    assert "REASONING:" not in prompt
+
+
+def test_industry_phase_prompt_is_json_native(snap_df, delta_df):
+    prompt = generate_ai.build_industry_phase_prompt(snap_df, delta_df, "2026-06-10")
+    for field in ['"label"', '"reasoning"', '"confidence"']:
+        assert field in prompt
+    assert "PHASE:" not in prompt
+
+
+def test_watchlist_prompts_are_json_native(snap_df, delta_df):
+    """Watchlist prompts request the picks schema, not a 'NAME: | THESIS: | CONVICTION:' list."""
+    for builder in (generate_ai.build_watchlist_prompt,
+                    generate_ai.build_industry_watchlist_prompt):
+        prompt = builder(snap_df, delta_df, "2026-06-10")
+        for field in ['"picks"', '"name"', '"thesis"', '"conviction"']:
+            assert field in prompt
+        assert "NAME:" not in prompt
+        assert "THESIS:" not in prompt
+
+
 # ---------------------------------------------------------------------------
 # parse_phase_response
 # ---------------------------------------------------------------------------

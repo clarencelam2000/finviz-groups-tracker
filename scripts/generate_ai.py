@@ -314,9 +314,10 @@ DATA:
 
 {leaders}
 
-Respond with EXACTLY this format (no other text):
-PHASE: [one of: Early Cycle / Mid Cycle / Late Cycle / Defensive]
-REASONING: [One sentence explaining which sectors are leading and why this suggests the stated phase]"""
+Return a JSON object with these fields:
+- "label": exactly one of "Early Cycle", "Mid Cycle", "Late Cycle", "Defensive"
+- "reasoning": one sentence naming which sectors are leading and why this suggests the chosen phase
+- "confidence": a number from 0.0 to 1.0 reflecting how clearly the data fits the chosen phase"""
 
 
 def build_watchlist_prompt(snap_df: pd.DataFrame, delta_df: pd.DataFrame, date_str: str) -> str:
@@ -328,17 +329,16 @@ def build_watchlist_prompt(snap_df: pd.DataFrame, delta_df: pd.DataFrame, date_s
 
 {movers}
 
-For each pick include a conviction rating:
-- "strong": momentum_score >0.65 AND rank improving across multiple timeframes (week, month, ytd aligned)
-- "moderate": improving in 1-2 timeframes, mixed signals elsewhere
-- "speculative": single-timeframe signal or very early trend, needs confirmation
+Return a JSON object with a "picks" array of exactly 3 objects. Each object has:
+- "name": the sector name
+- "thesis": one sentence on why its momentum/rank trajectory makes it interesting
+- "conviction": exactly one of "strong", "moderate", "speculative", chosen as:
+    - "strong": momentum_score >0.65 AND rank improving across multiple timeframes (week, month, ytd aligned)
+    - "moderate": improving in 1-2 timeframes, mixed signals elsewhere
+    - "speculative": single-timeframe signal or very early trend, needs confirmation
+- "confidence": a number from 0.0 to 1.0
 
-For each pick, respond with EXACTLY:
-1. NAME: [sector name] | THESIS: [one sentence — why momentum/rank trajectory makes this interesting] | CONVICTION: [strong/moderate/speculative]
-2. NAME: [sector name] | THESIS: [one sentence] | CONVICTION: [strong/moderate/speculative]
-3. NAME: [sector name] | THESIS: [one sentence] | CONVICTION: [strong/moderate/speculative]
-
-No other text. No disclaimers."""
+No disclaimers."""
 
 
 def _find_prior_ai_file(date_str: str) -> "Path | None":
@@ -384,7 +384,7 @@ def _generate_daily_delta(client, prior_briefing: str, date_str: str) -> "tuple[
     prompt = build_daily_delta_prompt(prior_briefing, snap_df, delta_df, date_str)
     try:
         raw = _call_api(client, prompt,
-                        generation_config={"temperature": 0.4, "max_output_tokens": 900},
+                        generation_config={"temperature": 0.4, "max_output_tokens": 2500},
                         response_schema=DAILY_DELTA_SCHEMA)
         parsed = json.loads(raw)
         changes = parsed.get("changes", []) if isinstance(parsed, dict) else []
@@ -411,9 +411,10 @@ DATA:
 
 {leaders}
 
-Respond with EXACTLY this format (no other text):
-PHASE: [1-3 word micro-phase label]
-REASONING: [One sentence: which specific industries are leading and why this suggests the stated micro-phase]"""
+Return a JSON object with these fields:
+- "label": a 1-3 word micro-phase label
+- "reasoning": one sentence naming which specific industries are leading and why this suggests the label
+- "confidence": a number from 0.0 to 1.0 reflecting how clearly the data fits the label"""
 
 
 def build_industry_watchlist_prompt(snap_df: pd.DataFrame, delta_df: pd.DataFrame, date_str: str) -> str:
@@ -425,17 +426,16 @@ def build_industry_watchlist_prompt(snap_df: pd.DataFrame, delta_df: pd.DataFram
 
 {movers}
 
-For each pick include a conviction rating:
-- "strong": momentum_score >0.65 AND rank improving across multiple timeframes
-- "moderate": improving in 1-2 timeframes, mixed signals elsewhere
-- "speculative": single-timeframe signal or very early trend
+Return a JSON object with a "picks" array of exactly 3 objects. Each object has:
+- "name": the industry name
+- "thesis": one sentence on why its momentum/rank trajectory makes it interesting
+- "conviction": exactly one of "strong", "moderate", "speculative", chosen as:
+    - "strong": momentum_score >0.65 AND rank improving across multiple timeframes
+    - "moderate": improving in 1-2 timeframes, mixed signals elsewhere
+    - "speculative": single-timeframe signal or very early trend
+- "confidence": a number from 0.0 to 1.0
 
-For each pick, respond with EXACTLY:
-1. NAME: [industry name] | THESIS: [one sentence — why momentum/rank trajectory makes this interesting] | CONVICTION: [strong/moderate/speculative]
-2. NAME: [industry name] | THESIS: [one sentence] | CONVICTION: [strong/moderate/speculative]
-3. NAME: [industry name] | THESIS: [one sentence] | CONVICTION: [strong/moderate/speculative]
-
-No other text. No disclaimers."""
+No disclaimers."""
 
 
 # ---------------------------------------------------------------------------
@@ -529,7 +529,7 @@ TASK_SPECS = [
         "use_json_schema": True,
         "response_schema": BRIEFING_SCHEMA,
         "fallback_parse": parse_briefing_response,
-        "generation_config": {"temperature": 0.7, "max_output_tokens": 800},
+        "generation_config": {"temperature": 0.7, "max_output_tokens": 1200},
     },
     {
         "name": "rotation_phase",
@@ -538,7 +538,7 @@ TASK_SPECS = [
         "use_json_schema": True,
         "response_schema": PHASE_SCHEMA,
         "fallback_parse": parse_phase_response,
-        "generation_config": {"temperature": 0.2, "max_output_tokens": 300},
+        "generation_config": {"temperature": 0.2, "max_output_tokens": 1000},
     },
     {
         "name": "watchlist",
@@ -547,7 +547,7 @@ TASK_SPECS = [
         "use_json_schema": True,
         "response_schema": WATCHLIST_SCHEMA,
         "fallback_parse": parse_watchlist_response,
-        "generation_config": {"temperature": 0.5, "max_output_tokens": 400},
+        "generation_config": {"temperature": 0.5, "max_output_tokens": 1200},
     },
     {
         "name": "rotation_phase",
@@ -556,7 +556,7 @@ TASK_SPECS = [
         "use_json_schema": True,
         "response_schema": INDUSTRY_PHASE_SCHEMA,
         "fallback_parse": parse_phase_response,
-        "generation_config": {"temperature": 0.2, "max_output_tokens": 300},
+        "generation_config": {"temperature": 0.2, "max_output_tokens": 1000},
     },
     {
         "name": "watchlist",
@@ -565,7 +565,7 @@ TASK_SPECS = [
         "use_json_schema": True,
         "response_schema": WATCHLIST_SCHEMA,
         "fallback_parse": parse_watchlist_response,
-        "generation_config": {"temperature": 0.5, "max_output_tokens": 400},
+        "generation_config": {"temperature": 0.5, "max_output_tokens": 1200},
     },
 ]
 
