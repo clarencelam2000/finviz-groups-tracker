@@ -381,7 +381,7 @@ def _generate_daily_delta(client, prior_briefing: str, date_str: str) -> "tuple[
     prompt = build_daily_delta_prompt(prior_briefing, snap_df, delta_df, date_str)
     try:
         raw = _call_api(client, prompt,
-                        generation_config={"temperature": 0.4, "max_output_tokens": 900},
+                        generation_config={"temperature": 0.4, "max_output_tokens": 2500},
                         response_schema=DAILY_DELTA_SCHEMA)
         parsed = json.loads(raw)
         changes = parsed.get("changes", []) if isinstance(parsed, dict) else []
@@ -526,7 +526,7 @@ TASK_SPECS = [
         "use_json_schema": True,
         "response_schema": BRIEFING_SCHEMA,
         "fallback_parse": parse_briefing_response,
-        "generation_config": {"temperature": 0.7, "max_output_tokens": 800},
+        "generation_config": {"temperature": 0.7, "max_output_tokens": 1200},
     },
     {
         "name": "rotation_phase",
@@ -535,7 +535,7 @@ TASK_SPECS = [
         "use_json_schema": True,
         "response_schema": PHASE_SCHEMA,
         "fallback_parse": parse_phase_response,
-        "generation_config": {"temperature": 0.2, "max_output_tokens": 300},
+        "generation_config": {"temperature": 0.2, "max_output_tokens": 1000},
     },
     {
         "name": "watchlist",
@@ -544,7 +544,7 @@ TASK_SPECS = [
         "use_json_schema": True,
         "response_schema": WATCHLIST_SCHEMA,
         "fallback_parse": parse_watchlist_response,
-        "generation_config": {"temperature": 0.5, "max_output_tokens": 400},
+        "generation_config": {"temperature": 0.5, "max_output_tokens": 1200},
     },
     {
         "name": "rotation_phase",
@@ -553,7 +553,7 @@ TASK_SPECS = [
         "use_json_schema": True,
         "response_schema": INDUSTRY_PHASE_SCHEMA,
         "fallback_parse": parse_phase_response,
-        "generation_config": {"temperature": 0.2, "max_output_tokens": 300},
+        "generation_config": {"temperature": 0.2, "max_output_tokens": 1000},
     },
     {
         "name": "watchlist",
@@ -562,7 +562,7 @@ TASK_SPECS = [
         "use_json_schema": True,
         "response_schema": WATCHLIST_SCHEMA,
         "fallback_parse": parse_watchlist_response,
-        "generation_config": {"temperature": 0.5, "max_output_tokens": 400},
+        "generation_config": {"temperature": 0.5, "max_output_tokens": 1200},
     },
 ]
 
@@ -632,12 +632,6 @@ def _call_api(client, prompt: str, max_retries: int = 3,
             max_output_tokens=(generation_config or {}).get("max_output_tokens", 500),
             response_mime_type="application/json",
             response_schema=response_schema,
-            # gemini-2.5-flash enables "thinking" by default, and those thinking
-            # tokens are billed against max_output_tokens. For small structured
-            # outputs that silently starved the JSON body, yielding empty or
-            # truncated responses ("Unterminated string ..."). Disable thinking so
-            # the whole budget goes to the JSON we asked for.
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
         )
 
     _api_call_count += 1

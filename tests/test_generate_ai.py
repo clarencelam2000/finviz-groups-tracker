@@ -694,29 +694,6 @@ def test_call_api_passes_generation_config_values(monkeypatch):
     assert ctor_kwargs["max_output_tokens"] == 300
 
 
-def test_call_api_disables_thinking(monkeypatch):
-    """Thinking is disabled (budget 0) so structured-output tokens aren't starved.
-
-    gemini-2.5-flash bills thinking tokens against max_output_tokens; leaving it
-    on truncated/emptied the JSON body. Regression guard for that fix.
-    """
-    from unittest.mock import MagicMock
-    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
-    monkeypatch.setattr("time.sleep", lambda _: None)
-
-    mock_types = MagicMock()
-    mock_genai_module = MagicMock()
-    mock_genai_module.types = mock_types
-    monkeypatch.setitem(sys.modules, "google.genai", mock_genai_module)
-
-    client = _make_client(["result"])
-    generate_ai._call_api(client, "prompt", response_schema=generate_ai.PHASE_SCHEMA)
-
-    mock_types.ThinkingConfig.assert_called_once_with(thinking_budget=0)
-    ctor_kwargs = mock_types.GenerateContentConfig.call_args[1]
-    assert ctor_kwargs["thinking_config"] is mock_types.ThinkingConfig.return_value
-
-
 # ---------------------------------------------------------------------------
 # main exits gracefully without API key
 # ---------------------------------------------------------------------------
