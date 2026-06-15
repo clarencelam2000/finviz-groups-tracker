@@ -147,6 +147,18 @@ def test_strength_signals_empty():
     assert "Not enough data" in result
 
 
+def test_strength_signals_all_nan_perf_not_all_green():
+    # NaN perf values should not be treated as positive → no all-green groups
+    snap = pd.DataFrame({
+        "name": ["A", "B"],
+        "perf_week": [float("nan"), float("nan")],
+        "perf_month": [float("nan"), float("nan")],
+        "perf_ytd": [float("nan"), float("nan")],
+    })
+    result = generate_ai.serialize_strength_signals(snap, pd.DataFrame())
+    assert "0 of 2" in result or "Not enough data" in result
+
+
 def test_strength_signals_sustained_strong():
     snap = pd.DataFrame({
         "name": ["A", "B", "C", "D"],
@@ -239,6 +251,24 @@ def test_divergences_fragile_all_green():
     result = generate_ai.serialize_divergences(snap, delta)
     assert "Fragile all-green" in result
     assert "Frag" in result
+
+
+def test_divergences_fragile_all_green_formats_coerced_agreement():
+    # rank_agreement is numeric; ensure the output uses the coerced _a column
+    # (not the raw r['rank_agreement'] which could be a string in a malformed CSV)
+    snap = pd.DataFrame({
+        "name": ["Frag"],
+        "perf_week": [1.0], "perf_month": [1.0], "perf_ytd": [1.0],
+    })
+    delta = pd.DataFrame({
+        "name": ["Frag"],
+        "momentum_score": [0.55],
+        "rank_ytd_delta_7d": [0.0],
+        "rank_agreement": [0.33],
+    })
+    result = generate_ai.serialize_divergences(snap, delta)
+    assert "Fragile all-green" in result
+    assert "0.33" in result
 
 
 def test_divergences_none_found(delta_df):
@@ -836,6 +866,33 @@ def test_missing_fields_complete_data():
         "industries": {"note": "text"},
     }
     assert generate_ai._missing_fields(data) == []
+
+
+def test_is_complete_returns_false_for_empty_rotation_phase_label():
+    # parse_phase_response returns {"label": "", "reasoning": ""} on blank model output;
+    # a non-empty dict is truthy in Python so _is_complete must check the label explicitly
+    data = {
+        "sectors": {
+            "note": "Some note",
+            "rotation_phase": {"label": "", "reasoning": ""},
+        },
+        "industries": {"note": "Industry note"},
+    }
+    assert generate_ai._is_complete(data) is False
+
+
+def test_missing_fields_includes_empty_rotation_phase_label():
+    data = {
+        "sectors": {
+            "note": "Some note",
+            "rotation_phase": {"label": "", "reasoning": ""},
+        },
+        "industries": {"note": "Industry note"},
+    }
+    missing = generate_ai._missing_fields(data)
+    assert "sectors.rotation_phase" in missing
+    assert "sectors.note" not in missing
+    assert "industries.note" not in missing
 
 
 # ---------------------------------------------------------------------------
