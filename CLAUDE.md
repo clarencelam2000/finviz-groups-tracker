@@ -139,7 +139,7 @@ wall, routes spend through $10/mo Vertex-only credits).
 - **Local AI development** — pick one backend:
   - Vertex: `gcloud auth application-default login` then
     `export GOOGLE_GENAI_USE_VERTEXAI=true GOOGLE_CLOUD_PROJECT=<id>` (optional
-    `GOOGLE_CLOUD_LOCATION`, default `us-central1`).
+    `GOOGLE_CLOUD_LOCATION`, default `global` — Gemini 3.x models require the global endpoint, not regional ones like us-central1).
   - AI Studio fallback: `export GEMINI_API_KEY=<key>` and leave the toggle unset.
 - The script exits 0 (graceful skip) when the selected backend is unconfigured. Spend is covered
   by the $10/mo Gemini credits attached to the project's billing account.

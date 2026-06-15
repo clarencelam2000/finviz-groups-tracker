@@ -53,7 +53,7 @@ jobs:
         env:
           GOOGLE_GENAI_USE_VERTEXAI: 'true'
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
-          GOOGLE_CLOUD_LOCATION: us-central1
+          GOOGLE_CLOUD_LOCATION: global
           FORCE_AI: ${{ github.event.inputs.force_ai == 'true' && '1' || '' }}
         run: python scripts/generate_ai.py
 
