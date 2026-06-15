@@ -36,6 +36,12 @@ git diff origin/claude/elegant-babbage-hlxnfy -- scripts/   # empty diff = alrea
 
 ---
 
+## PR readiness
+
+Mark every PR as ready for review immediately after opening it. Only leave it as a draft if you're explicitly mid-task with more commits coming, or waiting on user input before proceeding.
+
+---
+
 ## Keep commits small and focused
 
 Each commit is one logical, self-contained change. A reader must understand what changed and why from the diff alone — no surrounding context needed.
