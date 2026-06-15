@@ -175,6 +175,67 @@ describe('FMP field mapping (stable/profile schema)', () => {
   });
 });
 
+describe('/stats', () => {
+  it('returns date and fmp_calls_today=0 when no counter key exists', async () => {
+    const res = await handleRequest(req('/stats'), makeEnv());
+    const body = await res.json();
+    expect(body.fmp_calls_today).toBe(0);
+    expect(body.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('reflects fmp_calls_today incremented by a cache-miss lookup', async () => {
+    mockFetch(200, [fmpRecord()]);
+    const kv = makeKV();
+    const env = makeEnv(kv);
+    await handleRequest(req('/lookup?t=AAPL'), env);
+    const res = await handleRequest(req('/stats'), env);
+    const body = await res.json();
+    expect(body.fmp_calls_today).toBe(1);
+  });
+
+  it('does not increment counter on cache hit', async () => {
+    global.fetch = vi.fn();
+    const cached = { symbol: 'AAPL', finviz_industry: 'Consumer Electronics', cached_at: 'X' };
+    const kv = makeKV({ AAPL: JSON.stringify(cached) });
+    const env = makeEnv(kv);
+    await handleRequest(req('/lookup?t=AAPL'), env);
+    const res = await handleRequest(req('/stats'), env);
+    expect((await res.json()).fmp_calls_today).toBe(0);
+  });
+});
+
+describe('DELETE /cache', () => {
+  it('deletes the KV entry for the given ticker', async () => {
+    const cached = { symbol: 'AAPL', finviz_industry: 'Consumer Electronics' };
+    const kv = makeKV({ AAPL: JSON.stringify(cached) });
+    const env = makeEnv(kv);
+    const res = await handleRequest(
+      new Request('https://worker.example.dev/cache?t=AAPL', { method: 'DELETE' }),
+      env,
+    );
+    const body = await res.json();
+    expect(body.deleted).toBe('AAPL');
+    expect(kv.delete).toHaveBeenCalledWith('AAPL');
+  });
+
+  it('returns missing_symbol when t param is absent', async () => {
+    const res = await handleRequest(
+      new Request('https://worker.example.dev/cache', { method: 'DELETE' }),
+      makeEnv(),
+    );
+    expect((await res.json()).error).toBe('missing_symbol');
+  });
+
+  it('uppercases the ticker before deleting', async () => {
+    const kv = makeKV();
+    await handleRequest(
+      new Request('https://worker.example.dev/cache?t=tsla', { method: 'DELETE' }),
+      makeEnv(kv),
+    );
+    expect(kv.delete).toHaveBeenCalledWith('TSLA');
+  });
+});
+
 describe('FMP error handling', () => {
   it('unknown ticker (empty array) → ticker_not_found', async () => {
     mockFetch(200, []);
