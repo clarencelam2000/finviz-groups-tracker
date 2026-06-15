@@ -197,6 +197,18 @@ git log --oneline origin/claude/elegant-babbage-hlxnfy..HEAD
 ```
 An empty result = nothing stranded. Any output = open a PR.
 
+### Session notes MUST land on the default branch — not just your working branch
+
+**Pushing session notes to `claude/blissful-brahmagupta-*` (or any feature branch) without merging them is the same as never writing them.** The next Claude reads from `claude/elegant-babbage-hlxnfy`. Notes stranded on a feature branch are invisible.
+
+The mandatory sequence at session end:
+1. Commit session notes to your working branch
+2. Open a PR targeting `claude/elegant-babbage-hlxnfy` (or reuse the last open one)
+3. **Merge that PR** — "pushed" is not enough
+4. Verify: `git log --oneline origin/claude/elegant-babbage-hlxnfy | head -3` must show your notes commit
+
+The session-end checklist item "PR open for every commit on the branch" already covers this — but the specific failure mode to avoid is thinking the work is done after `git push` without creating and merging the PR.
+
 ---
 
 ## Session length — when to close vs. continue
