@@ -111,6 +111,9 @@ DAILY_DELTA_SCHEMA = {
 # Daily-quota exhaustion is handled separately (DailyQuotaExhaustedError, abort-no-retry).
 _INTER_CALL_DELAY = 2
 _last_api_call: float = 0.0
+# Base delay (seconds) for exponential retry backoff: 30s, 60s, 120s.
+# Tests set this to 0 via monkeypatch to avoid real sleeps.
+_RETRY_BASE_DELAY = 30
 
 # Run-level tracking (reset by main() at start of each run).
 _api_call_count: int = 0
@@ -670,7 +673,7 @@ def _call_api(client, prompt: str, max_retries: int = 3,
             )
             if is_retryable and attempt < max_retries:
                 _rate_limit_hits += 1
-                wait = 30 * (2 ** attempt)  # 30s, 60s, 120s
+                wait = _RETRY_BASE_DELAY * (2 ** attempt)  # 30s, 60s, 120s
                 print(f"    Transient error, waiting {wait}s (attempt {attempt + 1}/{max_retries + 1})...")
                 time.sleep(wait)
                 continue

@@ -1327,7 +1327,8 @@ def test_call_api_retries_on_empty_response(monkeypatch):
     response_ok.text = '{"result": "ok"}'
 
     client.models.generate_content.side_effect = [response_empty, response_empty, response_ok]
-    monkeypatch.setattr(generate_ai, "_INTER_CALL_DELAY", 0)  # skip sleep in tests
+    monkeypatch.setattr(generate_ai, "_INTER_CALL_DELAY", 0)
+    monkeypatch.setattr(generate_ai, "_RETRY_BASE_DELAY", 0)
 
     result = generate_ai._call_api(
         client, "prompt", max_retries=3,
@@ -1349,6 +1350,7 @@ def test_call_api_retries_on_whitespace_response(monkeypatch):
 
     client.models.generate_content.side_effect = [response_ws, response_ok]
     monkeypatch.setattr(generate_ai, "_INTER_CALL_DELAY", 0)
+    monkeypatch.setattr(generate_ai, "_RETRY_BASE_DELAY", 0)
 
     result = generate_ai._call_api(
         client, "prompt", max_retries=3,
@@ -1369,6 +1371,7 @@ def test_call_api_retries_on_preamble_response(monkeypatch):
 
     client.models.generate_content.side_effect = [response_preamble, response_ok]
     monkeypatch.setattr(generate_ai, "_INTER_CALL_DELAY", 0)
+    monkeypatch.setattr(generate_ai, "_RETRY_BASE_DELAY", 0)
 
     result = generate_ai._call_api(
         client, "prompt", max_retries=3,
