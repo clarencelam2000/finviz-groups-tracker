@@ -130,6 +130,124 @@ def test_momentum_leaders_respects_n(delta_df):
 
 
 # ---------------------------------------------------------------------------
+# serialize_strength_signals
+# ---------------------------------------------------------------------------
+
+def test_strength_signals_all_green_breadth(snap_df, delta_df):
+    # Energy (2.5/5.0/12.0) and Healthcare (0.8/1.5/4.0) are all-green; Tech is not.
+    result = generate_ai.serialize_strength_signals(snap_df, delta_df)
+    assert "STRENGTH SIGNALS" in result
+    assert "2 of 3" in result
+    assert "Energy" in result
+    assert "Technology" not in result.split("Sustained")[0].split("All-green:")[-1]
+
+
+def test_strength_signals_empty():
+    result = generate_ai.serialize_strength_signals(pd.DataFrame(), pd.DataFrame())
+    assert "Not enough data" in result
+
+
+def test_strength_signals_sustained_strong():
+    snap = pd.DataFrame({
+        "name": ["A", "B", "C", "D"],
+        "perf_week": [1.0, 1.0, -1.0, 1.0],
+        "perf_month": [1.0, 1.0, 1.0, 1.0],
+        "perf_ytd": [1.0, 1.0, 1.0, 1.0],
+    })
+    delta = pd.DataFrame({
+        "name": ["A", "B", "C", "D"],
+        "rank_month": [1.0, 2.0, 3.0, 10.0],
+        "rank_quarter": [1.0, 2.0, 3.0, 10.0],
+        "rank_half": [1.0, 2.0, 3.0, 10.0],
+        "momentum_score": [0.9, 0.8, 0.7, 0.2],
+    })
+    result = generate_ai.serialize_strength_signals(snap, delta, top_n=3)
+    assert "Sustained strong" in result
+    assert "A" in result and "B" in result and "C" in result
+    # D is rank 10 — outside top 3, should not be in the sustained line
+    sustained_line = [ln for ln in result.splitlines() if "Sustained strong" in ln][0]
+    assert "D" not in sustained_line
+
+
+# ---------------------------------------------------------------------------
+# serialize_momentum_laggards
+# ---------------------------------------------------------------------------
+
+def test_momentum_laggards_basic(delta_df):
+    result = generate_ai.serialize_momentum_laggards(delta_df)
+    assert "MOMENTUM LAGGARDS" in result
+    assert "Technology" in result   # lowest momentum (0.30)
+    assert "0.300" in result
+
+
+def test_momentum_laggards_empty():
+    result = generate_ai.serialize_momentum_laggards(pd.DataFrame())
+    assert "No momentum data" in result
+
+
+def test_momentum_laggards_orders_weakest_first(delta_df):
+    result = generate_ai.serialize_momentum_laggards(delta_df, n=1)
+    assert "Technology" in result
+    assert "Energy" not in result   # strongest, excluded when n=1
+
+
+# ---------------------------------------------------------------------------
+# serialize_divergences
+# ---------------------------------------------------------------------------
+
+def test_divergences_not_enough_history():
+    df = pd.DataFrame({"name": ["A"], "momentum_score": [0.5]})  # no rank_ytd_delta_7d
+    result = generate_ai.serialize_divergences(pd.DataFrame(), df)
+    assert "Not enough history" in result
+
+
+def test_divergences_fading():
+    # strong momentum (>=0.60) but rank slipping (delta < 0)
+    delta = pd.DataFrame({
+        "name": ["Tech"],
+        "momentum_score": [0.72],
+        "rank_ytd_delta_7d": [-4.0],
+    })
+    result = generate_ai.serialize_divergences(pd.DataFrame(), delta)
+    assert "Fading" in result
+    assert "Tech" in result
+
+
+def test_divergences_emerging():
+    # rank jumping (>=3) but momentum below median
+    delta = pd.DataFrame({
+        "name": ["Up", "Strong"],
+        "momentum_score": [0.20, 0.90],
+        "rank_ytd_delta_7d": [6.0, 0.0],
+    })
+    result = generate_ai.serialize_divergences(pd.DataFrame(), delta)
+    assert "Emerging" in result
+    assert "Up" in result
+
+
+def test_divergences_fragile_all_green():
+    snap = pd.DataFrame({
+        "name": ["Frag"],
+        "perf_week": [1.0], "perf_month": [1.0], "perf_ytd": [1.0],
+    })
+    delta = pd.DataFrame({
+        "name": ["Frag"],
+        "momentum_score": [0.55],
+        "rank_ytd_delta_7d": [0.0],
+        "rank_agreement": [0.40],   # below 0.50 threshold
+    })
+    result = generate_ai.serialize_divergences(snap, delta)
+    assert "Fragile all-green" in result
+    assert "Frag" in result
+
+
+def test_divergences_none_found(delta_df):
+    # default fixture: Energy momentum high but delta positive; no divergences
+    result = generate_ai.serialize_divergences(pd.DataFrame(), delta_df)
+    assert "No notable divergences" in result
+
+
+# ---------------------------------------------------------------------------
 # build_briefing_prompt
 # ---------------------------------------------------------------------------
 

@@ -274,6 +274,160 @@ def serialize_momentum_leaders(delta_df: pd.DataFrame, n: int = 5) -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Computed-signal serializers — the analytical "moat" fed to the model.
+# These narrate metrics the plain Finviz groups page can't: all-green breadth,
+# sustained strength, momentum laggards, and rank/momentum divergences.
+# ---------------------------------------------------------------------------
+
+PERF_TIMEFRAMES = ["perf_week", "perf_month", "perf_quarter", "perf_half", "perf_ytd"]
+SUSTAINED_RANK_COLS = ["rank_month", "rank_quarter", "rank_half"]
+
+# Divergence thresholds
+_STRONG_MOMENTUM = 0.60   # "strong" momentum_score
+_RANK_JUMP_7D = 3.0       # spots improved in 7d to count as "emerging"
+_LOW_AGREEMENT = 0.50     # rank_agreement below this is "fragile"
+
+
+def _all_green_mask(df: pd.DataFrame):
+    """Boolean Series (True where every available perf timeframe is > 0) plus the
+    list of timeframes actually checked. Returns (None, []) if no perf columns."""
+    available = [c for c in PERF_TIMEFRAMES if c in df.columns]
+    if not available:
+        return None, []
+    mask = pd.Series(True, index=df.index)
+    for tf in available:
+        mask = mask & (pd.to_numeric(df[tf], errors="coerce").fillna(0) > 0)
+    return mask, available
+
+
+def _strength_frame(snap_df: pd.DataFrame, delta_df: pd.DataFrame) -> pd.DataFrame:
+    """Snapshot perf rows joined with momentum/agreement/sustained-rank columns."""
+    merged = snap_df.copy()
+    if delta_df is not None and not delta_df.empty and "name" in delta_df.columns \
+            and "name" in merged.columns:
+        keep = ["name"] + [
+            c for c in ["momentum_score", "rank_agreement"] + SUSTAINED_RANK_COLS
+            if c in delta_df.columns
+        ]
+        merged = merged.merge(delta_df[keep].drop_duplicates("name"), on="name", how="left")
+    return merged
+
+
+def serialize_strength_signals(snap_df: pd.DataFrame, delta_df: pd.DataFrame,
+                               top_n: int = None) -> str:
+    """All-green breadth, the all-green names, and sustained-strength leaders."""
+    if snap_df.empty or "name" not in snap_df.columns:
+        return "STRENGTH SIGNALS:\n  Not enough data yet."
+    merged = _strength_frame(snap_df, delta_df)
+    mask, available = _all_green_mask(merged)
+    if mask is None:
+        return "STRENGTH SIGNALS:\n  No performance columns available."
+
+    n_total = len(merged)
+    all_green = merged[mask].copy()
+    lines = [
+        "STRENGTH SIGNALS:",
+        f"  Breadth: {len(all_green)} of {n_total} groups are all-green "
+        f"(positive across {', '.join(tf.replace('perf_', '') for tf in available)}).",
+    ]
+    if not all_green.empty:
+        if "momentum_score" in all_green.columns:
+            all_green = all_green.sort_values("momentum_score", ascending=False)
+        names = []
+        for _, r in all_green.head(8).iterrows():
+            ms = r.get("momentum_score")
+            names.append(str(r["name"]) + (f" (momentum {ms:.2f})" if pd.notna(ms) else ""))
+        lines.append("  All-green: " + "; ".join(names))
+
+    if all(c in merged.columns for c in SUSTAINED_RANK_COLS):
+        if top_n is None:
+            top_n = max(3, n_total // 4)
+        sustained = merged[
+            (merged["rank_month"] <= top_n)
+            & (merged["rank_quarter"] <= top_n)
+            & (merged["rank_half"] <= top_n)
+        ].copy()
+        if not sustained.empty:
+            if "momentum_score" in sustained.columns:
+                sustained = sustained.sort_values("momentum_score", ascending=False)
+            lines.append(
+                f"  Sustained strong (top {top_n} across 1/3/6-month rank): "
+                + ", ".join(str(nm) for nm in sustained["name"].head(8))
+            )
+    return "\n".join(lines)
+
+
+def serialize_momentum_laggards(delta_df: pd.DataFrame, n: int = 5) -> str:
+    if delta_df.empty or "momentum_score" not in delta_df.columns:
+        return "No momentum data available."
+    valid = delta_df.dropna(subset=["momentum_score"]).sort_values(
+        "momentum_score", ascending=True
+    )
+    if valid.empty:
+        return "No momentum data available."
+    lines = ["MOMENTUM LAGGARDS (score 0=weakest, 1=strongest):"]
+    for _, r in valid.head(n).iterrows():
+        rank_ytd = r.get("rank_ytd")
+        rank_str = f"{rank_ytd:.0f}" if pd.notna(rank_ytd) else "N/A"
+        lines.append(f"  {r['name']}: {r['momentum_score']:.3f} (rank_ytd={rank_str})")
+    return "\n".join(lines)
+
+
+def serialize_divergences(snap_df: pd.DataFrame, delta_df: pd.DataFrame) -> str:
+    """Rank/momentum conflicts — the early-warning signal no other tab shows."""
+    if delta_df.empty or "momentum_score" not in delta_df.columns \
+            or "rank_ytd_delta_7d" not in delta_df.columns:
+        return "DIVERGENCES:\n  Not enough history for divergence signals yet."
+    d = delta_df.dropna(subset=["momentum_score"]).copy()
+    if d.empty:
+        return "DIVERGENCES:\n  Not enough history for divergence signals yet."
+    d["rank_ytd_delta_7d"] = pd.to_numeric(d["rank_ytd_delta_7d"], errors="coerce")
+    median_mom = d["momentum_score"].median()
+
+    lines = ["DIVERGENCES (early-warning):"]
+    found = False
+
+    fading = d[(d["momentum_score"] >= _STRONG_MOMENTUM) & (d["rank_ytd_delta_7d"] < 0)]
+    fading = fading.sort_values("rank_ytd_delta_7d")  # most negative first
+    if not fading.empty:
+        found = True
+        items = [
+            f"{r['name']} (momentum {r['momentum_score']:.2f}, rank {r['rank_ytd_delta_7d']:+.0f} in 7d)"
+            for _, r in fading.head(5).iterrows()
+        ]
+        lines.append("  Fading (strong momentum, rank slipping): " + "; ".join(items))
+
+    emerging = d[(d["rank_ytd_delta_7d"] >= _RANK_JUMP_7D) & (d["momentum_score"] < median_mom)]
+    emerging = emerging.sort_values("rank_ytd_delta_7d", ascending=False)
+    if not emerging.empty:
+        found = True
+        items = [
+            f"{r['name']} (rank {r['rank_ytd_delta_7d']:+.0f} in 7d, momentum {r['momentum_score']:.2f})"
+            for _, r in emerging.head(5).iterrows()
+        ]
+        lines.append("  Emerging (rank jumping, momentum still low): " + "; ".join(items))
+
+    if "rank_agreement" in d.columns and not snap_df.empty and "name" in snap_df.columns:
+        mask, _ = _all_green_mask(snap_df)
+        if mask is not None:
+            green_names = set(snap_df[mask]["name"])
+            agree = pd.to_numeric(d["rank_agreement"], errors="coerce")
+            fragile = d[d["name"].isin(green_names) & (agree < _LOW_AGREEMENT)]
+            fragile = fragile.assign(_a=agree).sort_values("_a")
+            if not fragile.empty:
+                found = True
+                items = [
+                    f"{r['name']} (agreement {r['rank_agreement']:.2f})"
+                    for _, r in fragile.head(5).iterrows()
+                ]
+                lines.append("  Fragile all-green (green but unstable rank): " + "; ".join(items))
+
+    if not found:
+        lines.append("  No notable divergences today.")
+    return "\n".join(lines)
+
+
 def build_briefing_prompt(group_type: str, snap_df: pd.DataFrame,
                           delta_df: pd.DataFrame, date_str: str) -> str:
     group_name = "sectors" if group_type == "sector" else "industries"
