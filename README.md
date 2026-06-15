@@ -124,6 +124,25 @@ data/
 }
 ```
 
+## Cloudflare Worker API
+
+The ticker lookup feature uses a Cloudflare Worker (`worker/`) as a shared backend. It's live at:
+
+```
+https://finviz-ticker-lookup.salmonbaby8.workers.dev
+```
+
+### Endpoints
+
+- **`GET /health`** — Health check. Returns `{"status": "ok"}`.
+- **`GET /lookup?t=TICKER`** — Look up a single ticker symbol. Returns the company's Finviz sector and industry classification with confidence score and company details. Uses KV cache (30-day TTL). Example: `/lookup?t=AAPL` → `{finviz_sector: "Technology", finviz_industry: "Consumer Electronics", confidence: 0.95, ...}`.
+- **`GET /stats`** — Daily FMP API call counter. Returns `{date: "YYYY-MM-DD", fmp_calls_today: <count>}`. Useful for monitoring free-tier quota usage.
+- **`DELETE /cache?t=TICKER`** — Manual cache bust for a single ticker. Deletes the cached profile from KV. Use when taxonomy updates are deployed.
+
+The Worker is called by both the PWA (Lookup tab in `docs/index.html`) and the Streamlit dashboard (Tab 8, "Ticker Lookup").
+
+---
+
 ## Mobile app (iPhone)
 
 A lightweight Progressive Web App lives at `docs/` and is served via GitHub Pages at:

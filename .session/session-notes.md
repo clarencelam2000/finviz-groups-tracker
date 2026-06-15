@@ -6,19 +6,29 @@
 
 ## Current Status
 
-**Status:** AI-MIGRATION **PHASE 1 MERGED, VALIDATION INCOMPLETE**. Phase 1 (GCP infrastructure) completed by user (G1–G3 ✅); Phases 2–4 (code) merged in PR #79; PR #83 (git push fix ✅) and PR #84 (markdown fence strip, daily_delta tokens 300→900 ✅) also merged.
+**Status:** TICKER-4 COMPLETE. PR #90 (operations setup) merged 2026-06-15 02:57 UTC — FMP call counter in KV, `/stats` endpoint, `/cache` DELETE endpoint all working. All TICKER tasks 0–4 complete; Worker live at `https://finviz-ticker-lookup.salmonbaby8.workers.dev`.
 
-**Validation results (2026-06-14):** Two runs completed but PARTIAL:
-- Run #1 (23:07–23:12 UTC): Vertex AI backend confirmed; 5 fields OK; `sectors.daily_delta` failed (preamble-wrapped JSON).
-- Run #2 (23:56 UTC): 6 fields OK except `sectors.daily_delta` — JSON parse error "Unterminated string" at column 99, suggesting response still truncated/malformed despite token increase to 900.
+**AI-MIGRATION status:** Phase 1 (GCP infra) complete; Phases 2–4 (code) merged in PR #79. Validation blocker: `sectors.daily_delta` JSON parse error ("Unterminated string" at column 99) after PR #84's token increase to 900. Either 900 tokens insufficient or response wrapped in additional format. Phase 2 (schema enrichment) blocked until daily_delta working.
 
-**Blocker:** `sectors.daily_delta` field still broken after PR #84. Either 900 tokens is insufficient, or response is wrapped in additional formatting. Requires investigation.
+**Safe to close:** Yes. TICKER fully shipped and operational. AI blocker is unrelated to TICKER.
 
-**Safe to close:** No. Daily_delta blocker must be resolved before Phase 1 is considered complete.
+---
 
-**After fix:** Investigate actual Vertex AI response format, increase tokens further or reduce daily_delta scope. Phase 2 (schema enrichment) blocked until daily_delta working cleanly.
+## Session: 2026-06-15 (routine) — Documentation update: TICKER-4 complete
 
-**Prior workstream (TICKER):** TICKER-1 CF Worker merged (PR #74); still pending user deploy (`wrangler`/KV/secret) + PR #66 (TICKER-0) conflict resolution. Unchanged this session.
+**What happened:** PR #90 (TICKER-4: operations setup) merged 2026-06-15 02:57 UTC. Added:
+- FMP call counter to Cloudflare Worker KV with daily key `fmp_calls_YYYY-MM-DD` (7d TTL)
+- `GET /stats` endpoint returning `{date, fmp_calls_today}`
+- `DELETE /cache?t=TICKER` endpoint for manual ticker-specific cache busting
+- Counter incremented only on FMP cache misses (actual API calls), never on errors
+- 34 vitest tests passing
+
+**Documentation updated:**
+- `.session/SPRINT.md`: moved TICKER-4 from 🔴 Backlog to ✅ Done (2026-06-15)
+- `README.md`: added new "Cloudflare Worker API" section documenting all four endpoints
+- `.session/session-notes.md` Current Status: updated to reflect TICKER complete, Worker live
+
+**Next:** TICKER-5 (sector/industry → stocks screener) is explicitly blocked until TICKER-0–4 validated in production (per plan Phase 7).
 
 ---
 
