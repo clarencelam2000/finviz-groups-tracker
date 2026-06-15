@@ -737,7 +737,7 @@ def main():
         client = genai.Client(
             vertexai=True,
             project=gcp_project,
-            location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+            location=os.getenv("GOOGLE_CLOUD_LOCATION", "global"),
         )
     else:
         client = genai.Client(api_key=api_key)

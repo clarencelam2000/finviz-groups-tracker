@@ -364,7 +364,7 @@ def _make_client(responses):
 
 
 def test_gemini_model_is_pinned_version():
-    assert generate_ai.GEMINI_MODEL == "gemini-2.5-flash"
+    assert generate_ai.GEMINI_MODEL == "gemini-3.5-flash"
 
 
 # ---------------------------------------------------------------------------
