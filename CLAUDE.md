@@ -167,6 +167,7 @@ wall, routes spend through $10/mo Vertex-only credits).
 |-----------|---------|
 | `scripts/` | Data collection and processing scripts |
 | `dashboard/` | Streamlit dashboard |
+| `worker/` | Cloudflare Worker (ticker lookup + cache ops) — see `worker/README.md` |
 | `docs/` | PWA (GitHub Pages) — `index.html`, `sw.js`, `manifest.json` |
 | `data/` | Append-only CSVs (sectors, industries) |
 | `planning/` | Implementation plans and feature designs |
