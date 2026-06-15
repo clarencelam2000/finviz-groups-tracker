@@ -6,11 +6,25 @@
 
 ## Current Status
 
-**Status:** TICKER-4 COMPLETE. PR #90 (operations setup) merged 2026-06-15 02:57 UTC — FMP call counter in KV, `/stats` endpoint, `/cache` DELETE endpoint all working. All TICKER tasks 0–4 complete; Worker live at `https://finviz-ticker-lookup.salmonbaby8.workers.dev`.
+**Status:** AI TAB REBUILD in progress on branch `claude/exciting-brown-1pc93v` (PR pending). The forced-JSON pipeline that produced unusable output (JSON-in-JSON, truncation, "Rotation Phase: Unknown", apology-text daily-delta) is replaced with a **freeform markdown daily note** built from our computed signals. Plan landed via merged PR #93 (`planning/ai-tab-daily-note.md`).
 
-**AI-MIGRATION status:** Phase 1 (GCP infra) complete; Phases 2–4 (code) merged in PR #79. Validation blocker: `sectors.daily_delta` JSON parse error ("Unterminated string" at column 99) after PR #84's token increase to 900. Either 900 tokens insufficient or response wrapped in additional format. Phase 2 (schema enrichment) blocked until daily_delta working.
+**What changed:**
+- `scripts/generate_ai.py`: deleted all 5 JSON schemas, fallback parsers, normalizers, preamble detection, and the entire daily-delta feature. New `build_note_prompt` → one freeform markdown note per group (TL;DR + narrative + `## Strength` / `## Movers & Momentum` / `## Divergences`). New computed-signal serializers: `serialize_strength_signals` (all-green + sustained-strength + breadth), `serialize_momentum_laggards`, `serialize_divergences` (fading / emerging / fragile all-green via `rank_agreement`). One combined Gemini call per group + a lightweight plain-text phase call (sectors). `_call_api` no longer sets `response_schema`/`response_mime_type`/`max_output_tokens` (cap removed). New fields: `sectors.note`, `sectors.rotation_phase`, `industries.note`.
+- `docs/index.html`: added `renderMarkdown()`; AI tab renders the note as markdown; removed What-changed + watchlist cards + key_signals; phase strip skips "Unknown". SW cache → v3.
+- Deleted broken artifacts `data/ai/2026-06-12/13/14.json` + pruned `index.json` (Jun 11 is now the latest good note).
+- Tests: `tests/test_generate_ai.py` rewritten — 93 passing.
 
-**Safe to close:** Yes. TICKER fully shipped and operational. AI blocker is unrelated to TICKER.
+**AI-MIGRATION status:** Vertex AI backend + WIF auth unchanged. daily-delta feature removed entirely (it was the apology-text source).
+
+**Safe to close:** Not yet — AI-rebuild PR still needs to be opened/merged. End-to-end eyeball of real generated output needs a live Gemini backend (`python scripts/generate_ai.py --force-ai` locally or via the `generate_ai.yml` Action; blocked in the cloud env). Tests + static markdown rendering verified here.
+
+---
+
+## Session: 2026-06-15 — AI tab rebuild: freeform note over forced JSON
+
+**What happened:** Diagnosed the unusable AI tab (screenshots showed raw JSON leaking into the UI, mid-word truncation, "Unknown" phase, apology-text "What changed" card). Root cause: forced JSON-schema mode on gemini-2.5-flash + 1200-token cap. Rebuilt the pipeline around a single freeform markdown note per group, fed only our computed signals (the moat over plain Finviz). Commits: serializers → backend rewrite → PWA markdown render → broken-artifact cleanup. 93 tests green.
+
+**Next steps:** Open + merge the AI-rebuild PR. Then trigger `generate_ai.yml` (or run locally) to produce the first real freeform note and eyeball it in the PWA. If freeform quality on 2.5-flash disappoints, the June-11 favorite used `gemini-flash-latest` — one-line pin swap in `GEMINI_MODEL`.
 
 ---
 
