@@ -168,6 +168,33 @@ def test_phase_prompt_lists_phases(snap_df, delta_df):
         assert phase in prompt
 
 
+def test_phase_prompt_is_json_native(snap_df, delta_df):
+    """Prompt must request the schema fields, not a contradictory PHASE:/REASONING: text format."""
+    prompt = generate_ai.build_phase_prompt(snap_df, delta_df, "2026-06-10")
+    for field in ['"label"', '"reasoning"', '"confidence"']:
+        assert field in prompt
+    assert "PHASE:" not in prompt
+    assert "REASONING:" not in prompt
+
+
+def test_industry_phase_prompt_is_json_native(snap_df, delta_df):
+    prompt = generate_ai.build_industry_phase_prompt(snap_df, delta_df, "2026-06-10")
+    for field in ['"label"', '"reasoning"', '"confidence"']:
+        assert field in prompt
+    assert "PHASE:" not in prompt
+
+
+def test_watchlist_prompts_are_json_native(snap_df, delta_df):
+    """Watchlist prompts request the picks schema, not a 'NAME: | THESIS: | CONVICTION:' list."""
+    for builder in (generate_ai.build_watchlist_prompt,
+                    generate_ai.build_industry_watchlist_prompt):
+        prompt = builder(snap_df, delta_df, "2026-06-10")
+        for field in ['"picks"', '"name"', '"thesis"', '"conviction"']:
+            assert field in prompt
+        assert "NAME:" not in prompt
+        assert "THESIS:" not in prompt
+
+
 # ---------------------------------------------------------------------------
 # parse_phase_response
 # ---------------------------------------------------------------------------
@@ -665,6 +692,29 @@ def test_call_api_passes_generation_config_values(monkeypatch):
     ctor_kwargs = mock_types.GenerateContentConfig.call_args[1]
     assert ctor_kwargs["temperature"] == 0.2
     assert ctor_kwargs["max_output_tokens"] == 300
+
+
+def test_call_api_disables_thinking(monkeypatch):
+    """Thinking is disabled (budget 0) so structured-output tokens aren't starved.
+
+    gemini-2.5-flash bills thinking tokens against max_output_tokens; leaving it
+    on truncated/emptied the JSON body. Regression guard for that fix.
+    """
+    from unittest.mock import MagicMock
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+
+    mock_types = MagicMock()
+    mock_genai_module = MagicMock()
+    mock_genai_module.types = mock_types
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai_module)
+
+    client = _make_client(["result"])
+    generate_ai._call_api(client, "prompt", response_schema=generate_ai.PHASE_SCHEMA)
+
+    mock_types.ThinkingConfig.assert_called_once_with(thinking_budget=0)
+    ctor_kwargs = mock_types.GenerateContentConfig.call_args[1]
+    assert ctor_kwargs["thinking_config"] is mock_types.ThinkingConfig.return_value
 
 
 # ---------------------------------------------------------------------------
