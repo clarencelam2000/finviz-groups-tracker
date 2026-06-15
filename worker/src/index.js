@@ -50,6 +50,12 @@ export async function handleRequest(request, env) {
   if (url.pathname === '/lookup') {
     return handleLookup(url, env);
   }
+  if (url.pathname === '/stats') {
+    return handleStats(env);
+  }
+  if (url.pathname === '/cache' && request.method === 'DELETE') {
+    return handleCacheBust(url, env);
+  }
   return jsonResponse({ error: 'not_found' }, 404);
 }
 
@@ -90,6 +96,7 @@ async function handleLookup(url, env) {
         response = result.data;
         const ttl = parseInt(env.CACHE_TTL_SECONDS, 10) || DEFAULT_TTL_SECONDS;
         await env.LOOKUP_CACHE.put(symbol, JSON.stringify(response), { expirationTtl: ttl });
+        await incrementFmpCallCount(env);
       }
     }
   } catch (e) {
@@ -184,6 +191,34 @@ async function fetchProfile(symbol, env) {
       error: null,
     },
   };
+}
+
+/** Increment today's FMP API call counter in KV (best-effort; never throws). */
+async function incrementFmpCallCount(env) {
+  try {
+    const day = new Date().toISOString().slice(0, 10);
+    const key = `fmp_calls_${day}`;
+    const prev = parseInt((await env.LOOKUP_CACHE.get(key)) || '0', 10);
+    await env.LOOKUP_CACHE.put(key, String(prev + 1), { expirationTtl: 86400 * 7 });
+  } catch (_) {
+    // counter failure must never fail a lookup request
+  }
+}
+
+async function handleStats(env) {
+  const day = new Date().toISOString().slice(0, 10);
+  const key = `fmp_calls_${day}`;
+  const fmpCallsToday = parseInt((await env.LOOKUP_CACHE.get(key)) || '0', 10);
+  return jsonResponse({ date: day, fmp_calls_today: fmpCallsToday });
+}
+
+async function handleCacheBust(url, env) {
+  const sym = (url.searchParams.get('t') || '').trim().toUpperCase();
+  if (!sym) {
+    return jsonResponse({ error: 'missing_symbol' });
+  }
+  await env.LOOKUP_CACHE.delete(sym);
+  return jsonResponse({ deleted: sym });
 }
 
 export default {
