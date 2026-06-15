@@ -4,7 +4,7 @@
 
 | File | Scope | Consult when... |
 |------|-------|-----------------|
-| `branch-commit-discipline.md` | Git workflow, commit sizing, commit message style, testing requirements, session handoff, when to close | Starting a session, branching, writing or reviewing any commit, ending a session |
+| `branch-commit-discipline.md` | Git workflow, commit sizing, commit message style, testing requirements, PR readiness, session handoff, when to close | Starting a session, branching, writing or reviewing any commit, about to open a PR, ending a session |
 | `data-pipeline.md` | CSV conventions, rank formulas, delta sign convention, momentum score formula, empty CSV handling | Touching `scripts/compute_deltas.py`, `scripts/collect.py`, or any CSV read/write logic |
 
 ## Quick orientation
