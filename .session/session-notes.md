@@ -6,6 +6,56 @@
 
 ## Current Status
 
+**Status:** AI-MIGRATION **COMPLETE AND VALIDATED**. Phase 1 (GCP infrastructure) completed by user (G1–G3 ✅); Phases 2–4 (code) merged (PR #80 ✅); git push issue fixed (PR #83 ✅); Vertex AI response issues fixed (PR #84 ✅). First validation run completed 2026-06-14 23:07–23:12 UTC: `[backend] vertex_ai` confirmed, commit + push succeeded, AI generation produced partial output (awaiting second validation run to confirm markdown fence fix + token limit fix).
+
+**Safe to close:** Yes. All code is merged. Validation run #2 pending (queued 2026-06-14 23:55 UTC, ETA ~4 min from that time). No blocking threads.
+
+**Waiting on:** Second validation run to complete — check if preamble-wrapped responses now unwrap correctly and daily_delta completes without truncation. Expected: all 6 AI fields should complete, no retries needed.
+
+**After this session:** Once validation run #2 confirms all fields complete, Phase 1 migration is done. Phase 11 cleanup (remove `GEMINI_API_KEY` fallback) deferred until 2+ more production runs confirm stability.
+
+**Prior workstream (TICKER):** TICKER-1 CF Worker merged (PR #74); still pending user deploy (`wrangler`/KV/secret) + PR #66 (TICKER-0) conflict resolution. Unchanged this session.
+
+---
+
+## Session: 2026-06-14 (evening) — AI-MIGRATION: Phase 1 GCP + validation (owner-completed)
+
+### What was done
+
+**Phase 1 (owner-completed, G1–G3):** User completed the GCP infrastructure setup per `planning/vertex-ai-migration.md` §4:
+- G1: Project `finviz-groups-tracker-0614` created, `aiplatform.googleapis.com` enabled, $10/mo Gemini credit attached to billing
+- G2: Service account `finviz-ai-runner@finviz-groups-tracker-0614.iam.gserviceaccount.com` created, `roles/aiplatform.user` granted
+- G3: WIF pool `github-pool` + provider `github-provider` created, SA bound to pool via `principalSet` scoped to this repo
+- **Secrets added:** `WIF_PROVIDER`, `GCP_SA_EMAIL`, `GOOGLE_CLOUD_PROJECT` (no long-lived credentials)
+
+**First validation run (2026-06-14 23:07–23:12 UTC):**
+- Git push issue discovered: `generate_ai.py` writes `data/` files before `git pull --rebase` runs, causing exit 128 "You have unstaged changes"
+- AI generation soft failures: `rotation_phase` and `daily_delta` fields failed (preamble-wrapped JSON + truncation)
+
+**PR #83 (git push fix, merged):** Added `--autostash` to `git pull --rebase` — workflow now completes successfully.
+
+**PR #84 (Vertex AI response fixes, merged):**
+1. Strip markdown fences from JSON responses (Vertex AI wraps in ```json...```)
+2. Increase `daily_delta` max_output_tokens from 300 → 900 (was truncating mid-string)
+
+**Second validation run (queued 2026-06-14 23:55 UTC, results pending):** Expected to show all 6 AI fields completing cleanly without retries.
+
+### Key findings
+
+- **Vertex AI is definitely being hit** — `[backend] vertex_ai` printed, WIF auth succeeded, credentials used correctly
+- **Preamble wrapping is consistent on Vertex AI** — all 3 retries got the same markdown-wrapped response; retrying doesn't help (extraction does)
+- **daily_delta truncation was a real issue** — 300 tokens insufficient for 3 bullet points; 900 tokens ample
+
+### Next steps (for next session or owner)
+
+1. Monitor validation run #2 results once available
+2. If all 6 fields complete: Phase 1 migration is DONE. Confirm GCP billing reflects the spend on the $10 credit.
+3. Run 2–3 more production cycles (daily scheduled cron) to establish stability
+4. Phase 11 cleanup: delete `GEMINI_API_KEY` secret, drop AI Studio fallback code (only after production stability confirmed)
+
+---
+## Session: 2026-06-14 (earlier) - CF Worker 
+
 **Status:** TICKER-1 (CF Worker) **DEPLOYED LIVE** 2026-06-14 → `https://finviz-ticker-lookup.salmonbaby8.workers.dev`. Deployed headlessly via `CLOUDFLARE_API_TOKEN` env var from a Claude Code web session (no `wrangler login` popup needed — token auth fully replaces OAuth; see `knowledge/cloudflare-headless-deploy.md`). KV namespace `3ae4430be6dd40c3bb425b9f3e9edf3a` created; FMP key stored as a Worker secret. All acceptance checks pass live (health/AAPL/cache-hit/FAKEXYZ/XOM). 28 vitest tests green.
 **Safe to close:** Yes — Worker is live and verified; deployment config committed.
 **Next actions:** (1) ✅ TICKER-2 (PWA Lookup tab) — **done this session**, wired to live `WORKER_URL` in `docs/index.html` (new "Lookup" tab, joins to `state.data` by Finviz group name, sessionStorage cache, context signal). (2) ✅ TICKER-3 (Streamlit, Phase 4) — **done this session**: `dashboard/worker_client.py` (pure, testable), tab 8 "Ticker Lookup", `_group_row`/`_render_group_card` helpers, `requests` pinned, 4 tests. (3) **TICKER-4 (ops endpoints)** — add `/stats`, `/cache` DELETE bust, daily FMP call counter in KV to `worker/src/index.js`; redeploy. Front-end parity (PWA + Streamlit) is complete.
@@ -13,6 +63,48 @@
 **PWA verification note:** join keys confirmed — worker's `finviz_sector`/`finviz_industry` (e.g. Technology / Consumer Electronics, Energy / Oil & Gas Integrated) exist verbatim in `data/{sectors,industries}/snapshots.csv`. The trade-context perf/rank/momentum cards render from already-loaded CSV data; the 7d rank-delta arrow stays blank until 7d deltas exist (~2026-06-16), which is expected.
 
 **Note on the CF API token in this env:** the provided `CLOUDFLARE_API_TOKEN` is an *account-scoped* token, so `/user/tokens/verify` returns 1000 "Invalid" but `/accounts/{id}/tokens/verify` confirms it's valid+active — and `wrangler whoami`/`deploy` work fine. That's expected for the "Edit Cloudflare Workers" template; not an error.
+
+---
+
+## Session: 2026-06-14 (earlier) — AI-MIGRATION: Vertex AI (Phases 2–4, code complete)
+
+### What was done
+
+Executed Phases 2–4 of `planning/vertex-ai-migration.md` (PR #67 plan, merged). Phase 1
+(GCP infra) is owner-gated and **not done** — see Current Status.
+
+**Phase 2 (script, commit `bbda136`):** Dual-mode client init in `generate_ai.py`. New env
+toggle `GOOGLE_GENAI_USE_VERTEXAI`: when on → `genai.Client(vertexai=True, project=..., location=...)`
+using ADC; when off → existing `genai.Client(api_key=...)`. Graceful exit 0 when the selected
+backend is unconfigured. Added `_backend` module global ("vertex_ai"|"google_ai_studio"|"unset"),
+reset in `_reset_tracking()`, written into `ai_run_log.jsonl`. Corrected the wrong
+"5 requests/minute" comment (real limit was 20/DAY) and lowered `_INTER_CALL_DELAY` 13→2 (safe on
+paid quota). `DailyQuotaExhaustedError` + incremental resume preserved untouched.
+
+**Phase 2 (workflow, commit `ac5b65c`):** `generate_ai.yml` — added `id-token: write`, a
+`google-github-actions/auth@v2` step, swapped `GEMINI_API_KEY` env for `GOOGLE_GENAI_USE_VERTEXAI=true`
++ `GOOGLE_CLOUD_PROJECT` secret + `GOOGLE_CLOUD_LOCATION`. No more `GEMINI_API_KEY` in the workflow.
+
+**Phase 3 (tests, commit `bf4688f`):** 6 new tests — Vertex client kwargs, AI Studio backward-compat,
+both graceful-exit paths, run-log `backend` field. 169 passing (ex-`test_collect_parsing.py`, which
+needs Playwright — blocked in cloud per CLAUDE.md).
+
+**Phase 4 (docs, commit `01b9117`):** CLAUDE.md Automation section — three new secrets, WIF, local
+dev (Vertex ADC vs AI Studio fallback). Script docstring updated to dual-mode.
+
+**C6 (requirements) skipped:** `google-genai>=2.8.0` already exposes the `vertexai` param; no bump
+needed. (Couldn't run the runtime assert here — `google` not installed in this cloud env — but the
+param has shipped since the unified SDK's early releases.)
+
+### Key decisions / notes for next session
+
+- **Merge ordering trap:** the workflow change (C5) makes CI auth via WIF. Merging before Phase 1 +
+  the 3 secrets exist will make the daily AI run's auth step fail. Draft PR stays unmergeable until
+  the owner finishes Phase 1.
+- Toggle defaults off → script/tests are safe to merge in isolation, but they ship together with C5
+  in this branch, so treat the whole PR as Phase-1-gated.
+- Rollback is cheap (dual-mode): revert workflow and/or unset the toggle. `GEMINI_API_KEY` secret
+  should stay until 2+ stable Vertex runs (Phase 11 cleanup).
 
 ---
 

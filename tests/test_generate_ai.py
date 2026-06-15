@@ -1327,7 +1327,8 @@ def test_call_api_retries_on_empty_response(monkeypatch):
     response_ok.text = '{"result": "ok"}'
 
     client.models.generate_content.side_effect = [response_empty, response_empty, response_ok]
-    monkeypatch.setattr(generate_ai, "_INTER_CALL_DELAY", 0)  # skip sleep in tests
+    monkeypatch.setattr(generate_ai, "_INTER_CALL_DELAY", 0)
+    monkeypatch.setattr(generate_ai, "_RETRY_BASE_DELAY", 0)
 
     result = generate_ai._call_api(
         client, "prompt", max_retries=3,
@@ -1349,6 +1350,7 @@ def test_call_api_retries_on_whitespace_response(monkeypatch):
 
     client.models.generate_content.side_effect = [response_ws, response_ok]
     monkeypatch.setattr(generate_ai, "_INTER_CALL_DELAY", 0)
+    monkeypatch.setattr(generate_ai, "_RETRY_BASE_DELAY", 0)
 
     result = generate_ai._call_api(
         client, "prompt", max_retries=3,
@@ -1369,6 +1371,7 @@ def test_call_api_retries_on_preamble_response(monkeypatch):
 
     client.models.generate_content.side_effect = [response_preamble, response_ok]
     monkeypatch.setattr(generate_ai, "_INTER_CALL_DELAY", 0)
+    monkeypatch.setattr(generate_ai, "_RETRY_BASE_DELAY", 0)
 
     result = generate_ai._call_api(
         client, "prompt", max_retries=3,
@@ -2068,3 +2071,100 @@ def test_main_logs_ok_empty_when_delta_returns_empty_list(monkeypatch, tmp_path)
     log_entry = json.loads(log_path.read_text().strip())
     delta_log = log_entry["fields"].get("sectors.daily_delta", {})
     assert delta_log["status"] == "ok_empty"
+
+
+# ---------------------------------------------------------------------------
+# Vertex AI dual-mode client init (migration)
+# ---------------------------------------------------------------------------
+
+def _run_main_capture_client(monkeypatch, tmp_path):
+    """Run main() far enough to init the client, then short-circuit generation.
+
+    generate_for_group returns {} so main() hits the skip-trap and exits 0
+    without writing a dated file. Returns the injected mock genai module so the
+    caller can assert on the genai.Client(...) call kwargs.
+    """
+    from unittest.mock import MagicMock
+    monkeypatch.delenv("FORCE_AI", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
+    monkeypatch.setattr(generate_ai, "generate_for_group", lambda *_, **__: {})
+    monkeypatch.setattr(generate_ai, "_backend", "unset")
+    mock_genai = MagicMock()
+    mock_google = MagicMock()
+    mock_google.genai = mock_genai
+    monkeypatch.setitem(sys.modules, "google", mock_google)
+    monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
+    with pytest.raises(SystemExit) as exc_info:
+        generate_ai.main()
+    assert exc_info.value.code == 0
+    return mock_genai
+
+
+def test_main_uses_vertex_client_when_flag_set(monkeypatch, tmp_path):
+    """GOOGLE_GENAI_USE_VERTEXAI=true → genai.Client(vertexai=True, project, location)."""
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
+    monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-east1")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    mock_genai = _run_main_capture_client(monkeypatch, tmp_path)
+
+    kwargs = mock_genai.Client.call_args.kwargs
+    assert kwargs.get("vertexai") is True
+    assert kwargs.get("project") == "test-project"
+    assert kwargs.get("location") == "us-east1"
+    assert "api_key" not in kwargs
+    assert generate_ai._backend == "vertex_ai"
+
+
+def test_main_uses_ai_studio_client_when_flag_absent(monkeypatch, tmp_path):
+    """No toggle + GEMINI_API_KEY set → genai.Client(api_key=...), backward compatible."""
+    monkeypatch.delenv("GOOGLE_GENAI_USE_VERTEXAI", raising=False)
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+
+    mock_genai = _run_main_capture_client(monkeypatch, tmp_path)
+
+    kwargs = mock_genai.Client.call_args.kwargs
+    assert kwargs.get("api_key") == "test-key"
+    assert "vertexai" not in kwargs
+    assert generate_ai._backend == "google_ai_studio"
+
+
+def test_main_exits_zero_when_vertex_flag_set_but_no_project(monkeypatch, tmp_path):
+    """Toggle on but GOOGLE_CLOUD_PROJECT unset → graceful skip (exit 0)."""
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("FORCE_AI", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
+    with pytest.raises(SystemExit) as exc_info:
+        generate_ai.main()
+    assert exc_info.value.code == 0
+
+
+def test_main_exits_zero_when_no_flag_and_no_key(monkeypatch, tmp_path):
+    """No toggle and no GEMINI_API_KEY → graceful skip (existing behavior preserved)."""
+    monkeypatch.delenv("GOOGLE_GENAI_USE_VERTEXAI", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("FORCE_AI", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
+    with pytest.raises(SystemExit) as exc_info:
+        generate_ai.main()
+    assert exc_info.value.code == 0
+
+
+def test_run_log_includes_backend_field(monkeypatch, tmp_path):
+    """_write_run_artifacts records the active backend in ai_run_log.jsonl."""
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    generate_ai._reset_tracking()
+    monkeypatch.setattr(generate_ai, "_backend", "vertex_ai")
+    generate_ai._write_run_artifacts("complete", False, 1.0, "2026-06-14")
+    log_entry = json.loads((tmp_path / "ai_run_log.jsonl").read_text().strip())
+    assert log_entry["backend"] == "vertex_ai"

@@ -2,7 +2,13 @@
 generate_ai.py — Generate AI analysis from latest Finviz data using Gemini.
 Writes data/ai/YYYY-MM-DD.json, which the dashboard reads and renders.
 
-Run after compute_deltas.py. Exits 0 silently if GEMINI_API_KEY is not set.
+Run after compute_deltas.py.
+
+Dual-mode auth, selected by the GOOGLE_GENAI_USE_VERTEXAI env toggle:
+  - Vertex AI (toggle on):  identity from ADC; requires GOOGLE_CLOUD_PROJECT
+    (and optionally GOOGLE_CLOUD_LOCATION, default us-central1). No API key.
+  - AI Studio (toggle off): requires GEMINI_API_KEY.
+Exits 0 silently when the selected backend is not configured.
 """
 
 import argparse
@@ -100,14 +106,20 @@ DAILY_DELTA_SCHEMA = {
     "required": ["changes"],
 }
 
-# Free tier: 5 requests/minute. Enforce >=13s between calls to stay safely under.
-_INTER_CALL_DELAY = 13
+# Courtesy spacing between calls. The binding free-tier limit was 20 requests/DAY
+# (RPD), not per-minute; on Vertex AI paid tier per-minute limits are high.
+# Daily-quota exhaustion is handled separately (DailyQuotaExhaustedError, abort-no-retry).
+_INTER_CALL_DELAY = 2
 _last_api_call: float = 0.0
+# Base delay (seconds) for exponential retry backoff: 3s, 6s, 12s.
+# Tests set this to 0 via monkeypatch to avoid real sleeps.
+_RETRY_BASE_DELAY = 3
 
 # Run-level tracking (reset by main() at start of each run).
 _api_call_count: int = 0
 _rate_limit_hits: int = 0
 _field_log: dict = {}  # "sectors.briefing" -> {status, was_new, elapsed_seconds?, error?}
+_backend: str = "unset"  # "vertex_ai" | "google_ai_studio" | "unset"; set during client init
 
 
 # ---------------------------------------------------------------------------
@@ -170,10 +182,11 @@ def _has_new_delta_data(date_str: str) -> bool:
 # ---------------------------------------------------------------------------
 
 def _reset_tracking() -> None:
-    global _api_call_count, _rate_limit_hits, _field_log
+    global _api_call_count, _rate_limit_hits, _field_log, _backend
     _api_call_count = 0
     _rate_limit_hits = 0
     _field_log = {}
+    _backend = "unset"
 
 
 def _record_field(key: str, status: str, *, was_new: bool = True,
@@ -371,7 +384,7 @@ def _generate_daily_delta(client, prior_briefing: str, date_str: str) -> "tuple[
     prompt = build_daily_delta_prompt(prior_briefing, snap_df, delta_df, date_str)
     try:
         raw = _call_api(client, prompt,
-                        generation_config={"temperature": 0.4, "max_output_tokens": 300},
+                        generation_config={"temperature": 0.4, "max_output_tokens": 900},
                         response_schema=DAILY_DELTA_SCHEMA)
         parsed = json.loads(raw)
         changes = parsed.get("changes", []) if isinstance(parsed, dict) else []
@@ -636,6 +649,12 @@ def _call_api(client, prompt: str, max_retries: int = 3,
                 raise ValueError("empty response (503-like transient error)")
 
             text = response.text.strip()
+            # Strip markdown code fences (Vertex AI sometimes wraps JSON in ```json ... ```)
+            if text.startswith("```"):
+                lines = text.split("\n")
+                # Extract content between fences, handling both ```json\n...\n``` and ```\n...\n```
+                inner = "\n".join(lines[1:-1]) if lines and lines[-1].strip() == "```" else "\n".join(lines[1:])
+                text = inner.strip()
             # Reject responses that are obvious preambles instead of content
             # (catches LLM failures to follow JSON schema instructions)
             if _looks_like_preamble(text):
@@ -654,7 +673,7 @@ def _call_api(client, prompt: str, max_retries: int = 3,
             )
             if is_retryable and attempt < max_retries:
                 _rate_limit_hits += 1
-                wait = 30 * (2 ** attempt)  # 30s, 60s, 120s
+                wait = _RETRY_BASE_DELAY * (2 ** attempt)  # 30s, 60s, 120s
                 print(f"    Transient error, waiting {wait}s (attempt {attempt + 1}/{max_retries + 1})...")
                 time.sleep(wait)
                 continue
@@ -741,6 +760,7 @@ def _write_run_artifacts(outcome: str, was_incremental: bool,
         "trigger": os.environ.get("GITHUB_EVENT_NAME", ""),
         "date": date_str,
         "model": GEMINI_MODEL,
+        "backend": _backend,
         "outcome": outcome,
         "was_incremental": was_incremental,
         "elapsed_seconds": round(run_elapsed, 1),
@@ -842,8 +862,16 @@ def main():
         _write_run_artifacts("skipped", False, time.monotonic() - run_start, today)
         sys.exit(0)
 
+    use_vertexai = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower() in ("1", "true", "yes")
     api_key = os.getenv("GEMINI_API_KEY")
-    if not api_key:
+    gcp_project = os.getenv("GOOGLE_CLOUD_PROJECT")
+
+    # Graceful skip when the selected backend is not configured (exit 0, not error).
+    if use_vertexai and not gcp_project:
+        print("GOOGLE_GENAI_USE_VERTEXAI=true but GOOGLE_CLOUD_PROJECT not set — skipping AI generation.")
+        _write_run_artifacts("no_key", False, time.monotonic() - run_start, today)
+        sys.exit(0)
+    if not use_vertexai and not api_key:
         print("GEMINI_API_KEY not set — skipping AI generation.")
         _write_run_artifacts("no_key", False, time.monotonic() - run_start, today)
         sys.exit(0)
@@ -855,7 +883,20 @@ def main():
         _write_run_artifacts("no_key", False, time.monotonic() - run_start, today)
         sys.exit(0)
 
-    client = genai.Client(api_key=api_key)
+    if use_vertexai:
+        # Vertex AI: identity comes from ADC (CI: google-github-actions/auth; local: gcloud ADC).
+        # If both the toggle and GEMINI_API_KEY are set, the toggle wins.
+        client = genai.Client(
+            vertexai=True,
+            project=gcp_project,
+            location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1"),
+        )
+    else:
+        client = genai.Client(api_key=api_key)
+
+    global _backend
+    _backend = "vertex_ai" if use_vertexai else "google_ai_studio"
+    print(f"  [backend] {_backend}")
 
     AI_DIR.mkdir(parents=True, exist_ok=True)
     output_path = AI_DIR / f"{today}.json"

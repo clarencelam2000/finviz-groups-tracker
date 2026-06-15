@@ -126,6 +126,24 @@ python scripts/export_db.py
 - On failure: GitHub emails automatically. Retry 3x before failing.
 - Gaps in data: compute_deltas.py uses nearest available date for lookbacks, so one missed day doesn't break 7d/14d/30d deltas.
 
+### AI generation auth (Vertex AI)
+
+`scripts/generate_ai.py` runs on **Vertex AI**, selected by the `GOOGLE_GENAI_USE_VERTEXAI` toggle.
+See `planning/vertex-ai-migration.md` for the full design (motivation: removes the 20 RPD free-tier
+wall, routes spend through $10/mo Vertex-only credits).
+
+- **CI auth (keyless):** `.github/workflows/generate_ai.yml` authenticates via Workload Identity
+  Federation (`google-github-actions/auth@v2`) — no long-lived key. Requires three repo secrets:
+  `WIF_PROVIDER`, `GCP_SA_EMAIL`, `GOOGLE_CLOUD_PROJECT`. Service account: `finviz-ai-runner@<project>`
+  with `roles/aiplatform.user`.
+- **Local AI development** — pick one backend:
+  - Vertex: `gcloud auth application-default login` then
+    `export GOOGLE_GENAI_USE_VERTEXAI=true GOOGLE_CLOUD_PROJECT=<id>` (optional
+    `GOOGLE_CLOUD_LOCATION`, default `us-central1`).
+  - AI Studio fallback: `export GEMINI_API_KEY=<key>` and leave the toggle unset.
+- The script exits 0 (graceful skip) when the selected backend is unconfigured. Spend is covered
+  by the $10/mo Gemini credits attached to the project's billing account.
+
 ---
 
 ## Session continuity (Claude Code web)
