@@ -111,9 +111,9 @@ DAILY_DELTA_SCHEMA = {
 # Daily-quota exhaustion is handled separately (DailyQuotaExhaustedError, abort-no-retry).
 _INTER_CALL_DELAY = 2
 _last_api_call: float = 0.0
-# Base delay (seconds) for exponential retry backoff: 30s, 60s, 120s.
+# Base delay (seconds) for exponential retry backoff: 3s, 6s, 12s.
 # Tests set this to 0 via monkeypatch to avoid real sleeps.
-_RETRY_BASE_DELAY = 30
+_RETRY_BASE_DELAY = 3
 
 # Run-level tracking (reset by main() at start of each run).
 _api_call_count: int = 0
