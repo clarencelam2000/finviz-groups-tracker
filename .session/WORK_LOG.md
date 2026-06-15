@@ -123,6 +123,18 @@ to `stable/profile` with migrated field names. 28 vitest tests pass; `wrangler d
 --dry-run` bundles clean. Deploy is owner-gated (interactive `wrangler login` + FMP
 secret) — code is ready, awaiting `npm run deploy`.
 
+## 2026-06-15 — Lookup tab improvements Phase 0 (knowledge + plan)
+
+Scoped and documented a client-side uplift to the PWA Lookup tab to surface our
+derived "moaty" metrics for a ticker's sector/industry. Landed the pickup-able
+plan (`planning/lookup-tab-improvements.md`), a full metric inventory
+(`knowledge/moaty-metrics.md`), three ADRs (client-side-first, Rank Floor,
+breadth-excludes-week), a CF edge roadmap, and a README "What makes this
+different" section. Phase 1 (6 client-side slices in `docs/index.html`) seeded in
+SPRINT; no app behavior change yet.
+
+---
+
 ## Open Questions / Future Ideas
 
 - [ ] Confirm Finviz data finalization time (probe intraday)

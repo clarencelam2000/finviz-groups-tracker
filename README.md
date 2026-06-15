@@ -12,6 +12,27 @@ Daily tracker for Finviz sector and industry group performance. Scrapes the Finv
 - Exports to SQLite and Parquet via `scripts/export_db.py`
 - Provides a Streamlit dashboard for local browsing and visualization
 
+## What makes this different
+
+Finviz shows you today's numbers. This project tracks how those numbers *change*
+and how *consistent* the strength is — a daily derived layer that's the real
+moat. Every metric is documented in
+[`knowledge/moaty-metrics.md`](knowledge/moaty-metrics.md).
+
+- **Momentum score** — broad strength across all 7 timeframes at once (0–100%).
+- **Rank trajectory** — `rank_*_delta_Nd`: how many spots a group moved up/down
+  over 7/14/30 days. Spots rotation before the headline numbers do.
+- **Rank agreement** — how tightly the 1-, 3-, and 6-month rankings cluster:
+  high means a confirmed trend, not a one-week pop.
+- **Sustained Strength** — top-N across 1, 3, AND 6 months simultaneously.
+- **Rank Floor** — the worst a group's ranking has dropped to across 1/3/6
+  months: a conservative conviction read.
+- **All Green / breadth** — positive across the major timeframes at a glance.
+
+The PWA Lookup tab surfaces these for any ticker's sector/industry — answering
+"is this stock's group a tailwind or a headwind?" See
+[`planning/lookup-tab-improvements.md`](planning/lookup-tab-improvements.md).
+
 ## How to run locally
 
 ### 1. Install dependencies

@@ -27,6 +27,29 @@ Full plan: `planning/PLAN_ticker_lookup.md`
 
 ---
 
+#### Lookup Tab Improvements
+
+Full plan: `planning/lookup-tab-improvements.md`. ADRs: `knowledge/decisions/ADR-001..003`. Metric inventory: `knowledge/moaty-metrics.md`. Develop on `claude/lookup-tab-improvements-h7nw9b`. All Phase 1 slices are client-side in `docs/index.html` (no pipeline change, HTML-only — note in commits).
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| ~~LOOK-0~~ | ~~**Phase 0: knowledge + plan + README moat**~~ | `planning/lookup-tab-improvements.md`, `knowledge/moaty-metrics.md`, `knowledge/decisions/ADR-001..003`, `knowledge/cloudflare-edge-roadmap.md`, `README.md`, `.session/SPRINT.md` | S | Pickup-able plan, metric inventory, 3 ADRs, CF roadmap, README "What makes this different" section. No behavior change. |
+| LOOK-1 | **Slice 1: retain history + weekly-rank sparkline** | `docs/index.html` | M | Stop discarding CSV history in lookup path; inline SVG polyline of `rank_week` over ~30d, y inverted (up = improving), labeled. Short series until history grows. |
+| LOOK-2 | **Slice 2: conviction chip + Rank Floor** | `docs/index.html` | M | Chip from `rank_agreement` + sustained rule. Rank Floor = max(rank_month, rank_quarter, rank_half) → "Top {floor} across 1/3/6mo". Client-side. |
+| LOOK-3 | **Slice 3: breadth dot strip** | `docs/index.html` | S | Day·Wk·Mo·Qtr·6M·YTD dots; green/All-Green verdict gates on mo/qtr/half/ytd only (ADR-003). Week & day render, don't gate. |
+| LOOK-4 | **Slice 4: evidence-backed SIGNAL copy** | `docs/index.html` | S | Rewrite `contextSignalCard` to cite 2–3 strongest concrete reasons. Same scoring spine. |
+| LOOK-5 | **Slice 5: clarity wins** | `docs/index.html` | S | Rank basis label ("Rank (wk) #41 of 144"), 30d rank-delta context (`rank_week_delta_30d`), loading skeleton. |
+| LOOK-6 | **Slice 6: QoL — glossary + info affordance + deeplinks** | `docs/index.html` | M | "Why this matters" collapsible (copy from `knowledge/moaty-metrics.md`), breadth/momentum info affordance, subtle Finviz + Deepvue deeplinks (verify Deepvue URL). |
+| LOOK-B1 | Sparkline rank-timeframe toggle (wk/mo/3mo/6mo) | `docs/index.html` | S | Deferred (Proposal A). |
+| LOOK-B2 | Acceleration hint from `perf_*_delta_*` (▲▲/▼) | `docs/index.html` | S | Deferred (Proposal B7). |
+| LOOK-B3 | Empty-state recent searches + example chips | `docs/index.html` | S | Deferred (Proposal D9). |
+| LOOK-B4 | Tap group card → jump to group in Today/Momentum | `docs/index.html` | M | Deferred (Proposal D10). |
+| LOOK-B5 | AI rotation-phase line on sector card | `docs/index.html` | S | Deferred. |
+| LOOK-B6 | Promote Rank Floor to `compute_deltas.py` column (+ dashboard + tests) | `scripts/compute_deltas.py`, `dashboard/app.py`, `tests/` | M | Deferred. Product-wide consistency. |
+| LOOK-B7 | Revisit All-Green week gating; align dashboard | `docs/index.html`, `dashboard/app.py` | S | Deferred. See ADR-003. |
+
+---
+
 #### AI Integration
 
 | # | Task | File(s) | Effort | Notes |

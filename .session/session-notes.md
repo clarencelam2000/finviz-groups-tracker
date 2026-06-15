@@ -6,7 +6,11 @@
 
 ## Current Status
 
-**Status:** AI TAB REBUILD in progress on branch `claude/exciting-brown-1pc93v` (PR pending). The forced-JSON pipeline that produced unusable output (JSON-in-JSON, truncation, "Rotation Phase: Unknown", apology-text daily-delta) is replaced with a **freeform markdown daily note** built from our computed signals. Plan landed via merged PR #93 (`planning/ai-tab-daily-note.md`).
+**Status:** LOOKUP TAB IMPROVEMENTS — Phase 0 (knowledge + plan) complete on branch `claude/lookup-tab-improvements-h7nw9b`. Wrote the pickup-able plan (`planning/lookup-tab-improvements.md`), moaty-metric inventory (`knowledge/moaty-metrics.md`), 3 ADRs (client-side-first, Rank Floor, breadth-excludes-week), CF edge roadmap, README "What makes this different" section, and seeded SPRINT with all Phase 1 slices (LOOK-1..6) + deferred backlog (LOOK-B1..7). No app behavior change yet. Phase 1 is all client-side in `docs/index.html`.
+
+**Safe to close:** Phase 0 is committed/pushable on its own; Phase 1 slices not yet started. Next: implement LOOK-1 (retain history + sparkline).
+
+**Prior open thread (separate branch):** AI TAB REBUILD on `claude/exciting-brown-1pc93v` still needs its PR opened/merged + a live-backend eyeball — unaffected by this session.
 
 **What changed:**
 - `scripts/generate_ai.py`: deleted all 5 JSON schemas, fallback parsers, normalizers, preamble detection, and the entire daily-delta feature. New `build_note_prompt` → one freeform markdown note per group (TL;DR + narrative + `## Strength` / `## Movers & Momentum` / `## Divergences`). New computed-signal serializers: `serialize_strength_signals` (all-green + sustained-strength + breadth), `serialize_momentum_laggards`, `serialize_divergences` (fading / emerging / fragile all-green via `rank_agreement`). One combined Gemini call per group + a lightweight plain-text phase call (sectors). `_call_api` no longer sets `response_schema`/`response_mime_type`/`max_output_tokens` (cap removed). New fields: `sectors.note`, `sectors.rotation_phase`, `industries.note`.
@@ -17,6 +21,25 @@
 **AI-MIGRATION status:** Vertex AI backend + WIF auth unchanged. daily-delta feature removed entirely (it was the apology-text source).
 
 **Safe to close:** Not yet — AI-rebuild PR still needs to be opened/merged. End-to-end eyeball of real generated output needs a live Gemini backend (`python scripts/generate_ai.py --force-ai` locally or via the `generate_ai.yml` Action; blocked in the cloud env). Tests + static markdown rendering verified here.
+
+---
+
+## Session: 2026-06-15 — Lookup tab improvements: Phase 0 (knowledge + plan)
+
+**What happened:** Scoped a Lookup-tab uplift to surface our moaty derived
+metrics for a looked-up ticker's sector/industry. Confirmed two design forks with
+the owner: Rank Floor brackets month/quarter/half, and the breadth/All-Green
+verdict drops week from gating (week dot still renders). Decided Phase 1 is fully
+client-side (data + metrics already on the client; sparkline just needs us to
+stop discarding history in `getLatest`). Shipped Phase 0 artifacts: pickup-able
+plan, metric inventory, ADR-001/002/003, CF roadmap, README moat section, SPRINT
+seeding. Grounded all definitions against `compute_deltas.py` and `dashboard/app.py`.
+
+**Next steps:** Implement Phase 1 slices in order — LOOK-1 (retain history +
+weekly-rank sparkline) first, then conviction chip + Rank Floor, breadth dots,
+evidence copy, clarity wins, QoL. Each commit pairs code + docs + SPRINT update;
+HTML-only so note that in commit messages (no pytest). Verify Deepvue URL pattern
+during LOOK-6.
 
 ---
 
