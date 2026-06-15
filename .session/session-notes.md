@@ -6,15 +6,27 @@
 
 ## Current Status
 
-**Status:** AI-MIGRATION **COMPLETE AND VALIDATED**. Phase 1 (GCP infrastructure) completed by user (G1–G3 ✅); Phases 2–4 (code) merged (PR #80 ✅); git push issue fixed (PR #83 ✅); Vertex AI response issues fixed (PR #84 ✅). First validation run completed 2026-06-14 23:07–23:12 UTC: `[backend] vertex_ai` confirmed, commit + push succeeded, AI generation produced partial output (awaiting second validation run to confirm markdown fence fix + token limit fix).
+**Status:** AI-MIGRATION **PHASE 1 MERGED, VALIDATION INCOMPLETE**. Phase 1 (GCP infrastructure) completed by user (G1–G3 ✅); Phases 2–4 (code) merged in PR #79; PR #83 (git push fix ✅) and PR #84 (markdown fence strip, daily_delta tokens 300→900 ✅) also merged.
 
-**Safe to close:** Yes. All code is merged. Validation run #2 pending (queued 2026-06-14 23:55 UTC, ETA ~4 min from that time). No blocking threads.
+**Validation results (2026-06-14):** Two runs completed but PARTIAL:
+- Run #1 (23:07–23:12 UTC): Vertex AI backend confirmed; 5 fields OK; `sectors.daily_delta` failed (preamble-wrapped JSON).
+- Run #2 (23:56 UTC): 6 fields OK except `sectors.daily_delta` — JSON parse error "Unterminated string" at column 99, suggesting response still truncated/malformed despite token increase to 900.
 
-**Waiting on:** Second validation run to complete — check if preamble-wrapped responses now unwrap correctly and daily_delta completes without truncation. Expected: all 6 AI fields should complete, no retries needed.
+**Blocker:** `sectors.daily_delta` field still broken after PR #84. Either 900 tokens is insufficient, or response is wrapped in additional formatting. Requires investigation.
 
-**After this session:** Once validation run #2 confirms all fields complete, Phase 1 migration is done. Phase 11 cleanup (remove `GEMINI_API_KEY` fallback) deferred until 2+ more production runs confirm stability.
+**Safe to close:** No. Daily_delta blocker must be resolved before Phase 1 is considered complete.
+
+**After fix:** Investigate actual Vertex AI response format, increase tokens further or reduce daily_delta scope. Phase 2 (schema enrichment) blocked until daily_delta working cleanly.
 
 **Prior workstream (TICKER):** TICKER-1 CF Worker merged (PR #74); still pending user deploy (`wrangler`/KV/secret) + PR #66 (TICKER-0) conflict resolution. Unchanged this session.
+
+---
+
+## Session: 2026-06-15 (routine) — Post-merge documentation update: daily_delta blocker identified
+
+**What happened:** PR #79 merged to default branch (2026-06-14 17:56). Second validation run executed at 23:56 UTC same day, showing Vertex AI backend working but `sectors.daily_delta` JSON parsing still fails ("Unterminated string" at column 99). PR #84's 900-token increase was insufficient. Documentation updated to reflect incomplete validation status and identify blocker.
+
+**Next steps:** Investigate actual response from Vertex AI for daily_delta — check if (1) response is truncated beyond 900 tokens, or (2) wrapped in additional formatting layer. Consider reducing scope (fewer bullet points) or increasing tokens further (1200+).
 
 ---
 
