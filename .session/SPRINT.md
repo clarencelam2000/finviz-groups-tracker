@@ -31,12 +31,13 @@ Full plan: `planning/PLAN_ticker_lookup.md`
 
 | # | Task | File(s) | Effort | Notes |
 |---|------|---------|--------|-------|
-| AI-MIGRATION | **Migrate from Gemini AI Studio to Vertex AI (Phases 1–4)** | `scripts/generate_ai.py`, `.github/workflows/generate_ai.yml`, `tests/test_generate_ai.py`, `CLAUDE.md` | L | Plan in `planning/vertex-ai-migration.md` (PR #67). **Phases 2–4 merged in PR #79** (2026-06-14): dual-mode client, WIF workflow, PR #83+#84 fixes. **Phase 1 (GCP infra) = owner, done** — 3 secrets added; script confirmed on Vertex AI backend. **⚠️ BLOCKER: `sectors.daily_delta` field fails JSON parse** ("Unterminated string" error, column 99). PR #84's 900-token increase insufficient; response appears truncated or wrapped. 6/7 fields generating cleanly. **Next:** Debug actual response format from Vertex AI, increase tokens further or reduce daily_delta scope. |
-| PLAN-2 | **Phase 2: Schema Enrichment + Few-Shot** | `scripts/generate_ai.py`, `tests/test_generate_ai.py` | M | Add `description` fields + `additionalProperties: false` to all 5 schemas; fix `_normalize_phase()` confidence bug; add few-shot examples to briefing/watchlist prompts; add validation logging. **BLOCKED** until Phase 1 is deployed and 2+ weeks of `fetch_log.csv` data shows skip logic firing correctly (`ai_outcome=skipped` on no-data days, `=complete` on data days). |
-| AI-1 | **Anomaly Detection + LLM Explanation** | `scripts/generate_ai.py`, `dashboard/app.py` | M | Flag rank deltas >2σ from a 14-day rolling window using pandas, then send each flagged group to Gemini for a 1-sentence contextual note. See full spec below. |
-| AI-2 | **Natural Language Q&A** | `dashboard/app.py` | M | Text input in AI Insights tab — user types a question, gets a plain-English answer backed by the actual data. Requires a real-time API call; needs an auth/cost-gate decision. See full spec below. |
+| **AI-REBUILD** | **Rebuild AI tab: freeform markdown daily notes from computed signals** | `scripts/generate_ai.py`, `docs/index.html`, `tests/test_generate_ai.py` | M | **Plan approved in PR #93** (2026-06-15). See `planning/ai-tab-daily-note.md` for full design. Replaces JSON schema mode + tables with 2 simple prompts (note, phase) generating markdown daily notes grounded in strength/movers/divergences signals. Removes `daily_delta` feature (resolves validation blocker). Implementation: 4 commits (schemas → signals, prompt, UI render, tests). Ready to execute whenever a session is available. |
+| AI-MIGRATION | **Migrate from Gemini AI Studio to Vertex AI (Phases 1–4)** | `scripts/generate_ai.py`, `.github/workflows/generate_ai.yml`, `tests/test_generate_ai.py`, `CLAUDE.md` | L | Plan in `planning/vertex-ai-migration.md` (PR #67). **Phases 2–4 merged in PR #79** (2026-06-14): dual-mode client, WIF workflow, PR #83+#84 fixes. **Phase 1 (GCP infra) = owner, done** — 3 secrets added; script confirmed on Vertex AI backend. **✅ BLOCKER RESOLVED:** AI-REBUILD plan removes `daily_delta` entirely, eliminating the JSON parse error. Proceed with AI-REBUILD; AI-MIGRATION remains stable. |
+| PLAN-2 | **Phase 2: Schema Enrichment + Few-Shot** | `scripts/generate_ai.py`, `tests/test_generate_ai.py` | M | **SUPERSEDED by AI-REBUILD** — this was contingent on fixing the daily_delta blocker. AI-REBUILD removes schemas and dynamic enrichment entirely, simplifying to plain-text prompts and markdown output. No longer needed. |
+| AI-1 | **Anomaly Detection + LLM Explanation** | `scripts/generate_ai.py`, `dashboard/app.py` | M | Flag rank deltas >2σ from a 14-day rolling window using pandas, then send each flagged group to Gemini for a 1-sentence contextual note. See full spec below. **Defer until after AI-REBUILD lands.** |
+| AI-2 | **Natural Language Q&A** | `dashboard/app.py` | M | Text input in AI Insights tab — user types a question, gets a plain-English answer backed by the actual data. Requires a real-time API call; needs an auth/cost-gate decision. See full spec below. **Defer until after AI-REBUILD lands.** |
 | ~~AI-3~~ | ~~**Restore per-field resumability in `generate_ai.py`**~~ | — | — | **Done in PR #58** (2026-06-13). Restored incremental partial-file loading. Also fixed daily quota abort (`DailyQuotaExhaustedError`) and delta error tracking. |
-| AI-4 | **AI Health widget in Streamlit dashboard** | `dashboard/app.py` | S | PR #53 decoupled AI generation, so `fetch_log.csv` no longer shows AI outcomes. Add a health widget to the AI Insights tab reading from `data/ai/index.json`. No pipeline changes needed. See full spec below. |
+| AI-4 | **AI Health widget in Streamlit dashboard** | `dashboard/app.py` | S | PR #53 decoupled AI generation, so `fetch_log.csv` no longer shows AI outcomes. Add a health widget to the AI Insights tab reading from `data/ai/index.json`. No pipeline changes needed. See full spec below. **Defer until after AI-REBUILD lands.** |
 
 **AI-1 spec — Anomaly Detection + LLM Explanation**
 
@@ -147,7 +148,8 @@ _Dependency:_ None. Works today.
 
 | # | Task | File(s) | Effort | Notes |
 |---|------|---------|--------|-------|
-| PLAN-1 | **Phase 1: Smart Regeneration + Force Flag** | `scripts/generate_ai.py`, `.github/workflows/collect.yml`, `README.md` | M | Add `_has_new_delta_data()` helper (Task 1.1), argparse + force flag + skip gate in `main()` (Task 1.2), workflow input param (Task 1.3). Full spec in `planning/PLAN_smart_regeneration_pydantic.md`. Start new session; generate_ai.py is large. |
+| **AI-REBUILD** | **Rebuild AI tab: freeform markdown daily notes** | `scripts/generate_ai.py`, `docs/index.html`, `tests/test_generate_ai.py` | M | **PRIORITY.** Plan in `planning/ai-tab-daily-note.md` (PR #93, merged). 4 commits; no blockers; ready to start immediately. |
+| PLAN-1 | **Phase 1: Smart Regeneration + Force Flag** | `scripts/generate_ai.py`, `.github/workflows/collect.yml`, `README.md` | M | **DONE** — merged in PR #50 (2026-06-13). All three tasks complete (skip gate working in production). |
 
 ---
 
@@ -161,6 +163,7 @@ _(nothing)_
 
 | # | Task | Date |
 |---|------|------|
+| PLAN-1 | Phase 1: Smart Regeneration + Force Flag (`_has_new_delta_data` helper, skip gate, workflow input) | 2026-06-13 |
 | AI-PWA | AI tab improvements (Items 1–8): key signals, delta card, conviction tags, industries structure, relative timestamp, native share, phase history strip, historical date navigation | 2026-06-12 |
 | AI-ARCH | AI architecture revamp: `TASK_SPECS`, `index.json` manifest, `gemini-2.5-flash`, incremental completion (PR #38) | 2026-06-11 |
 | MON-1 | Workflow logging + monitoring: AI partial completion fix, `ai_run_log.jsonl`, `fetch_log.csv` AI columns, PWA pipeline diamond (PR #35) | 2026-06-11 |

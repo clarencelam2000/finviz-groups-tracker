@@ -6,11 +6,30 @@
 
 ## Current Status
 
-**Status:** TICKER-4 COMPLETE. PR #90 (operations setup) merged 2026-06-15 02:57 UTC — FMP call counter in KV, `/stats` endpoint, `/cache` DELETE endpoint all working. All TICKER tasks 0–4 complete; Worker live at `https://finviz-ticker-lookup.salmonbaby8.workers.dev`.
+**Status:** TICKER-4 COMPLETE; AI TAB REBUILD PLAN APPROVED. PR #90 (TICKER operations) merged 2026-06-15 02:57 UTC. PR #93 (AI tab daily-note rebuild plan) merged 2026-06-15 07:53 UTC — approved implementation plan for rebuilding AI tab to show freeform daily notes grounded in computed signals (strength, movers, divergences) instead of JSON tables. Begins when next session is ready (no blocker).
 
-**AI-MIGRATION status:** Phase 1 (GCP infra) complete; Phases 2–4 (code) merged in PR #79. Validation blocker: `sectors.daily_delta` JSON parse error ("Unterminated string" at column 99) after PR #84's token increase to 900. Either 900 tokens insufficient or response wrapped in additional format. Phase 2 (schema enrichment) blocked until daily_delta working.
+**AI-MIGRATION status:** Phase 1 (GCP infra) complete; Phases 2–4 (code) merged in PR #79. Validation blocker: `sectors.daily_delta` JSON parse error ("Unterminated string" at column 99) after PR #84's token increase to 900. Either 900 tokens insufficient or response wrapped in additional format. This blocker is resolved by the AI tab rebuild plan (Phase 2 of the plan: daily_delta is being removed as a feature; only `note` and `rotation_phase` remain).
 
-**Safe to close:** Yes. TICKER fully shipped and operational. AI blocker is unrelated to TICKER.
+**Safe to close:** Yes. TICKER fully shipped and operational. AI tab rebuild plan approved and committed; no blocking issues.
+
+---
+
+## Session: 2026-06-15 (routine, post-merge) — Documentation update after PR #93 (AI tab rebuild plan) merged
+
+**What happened:** PR #93 merged to default branch 2026-06-15 07:53 UTC. Added `planning/ai-tab-daily-note.md` — a comprehensive implementation plan to rebuild the AI generation system and UI. 
+
+**Plan summary:**
+- **Root cause:** Current AI tab shows raw JSON and truncation failures. Forced JSON schema mode + 1200-token cap caused JSON-in-JSON wrapping and truncation.
+- **Solution:** Rebuild around **freeform markdown daily notes** generated from computed signals (all-green, sustained strength, movers, momentum, divergences) instead of re-tabulating raw perf percentages. Removes JSON schema enforcement entirely.
+- **Scope:** 2 prompt calls (sectors + industries) instead of 7; phases ~0.6 (note) / 0.2 (rotation); no `max_output_tokens` or `response_schema`.
+- **Implementation:** 4 commits (delete schemas, add signal serializers, generate markdown, render in UI). Tests rewritten; `daily_delta` feature removed (resolving the validation blocker).
+- **Frontend:** Light markdown renderer; backward-compatible with June 11 output via fallback parsing.
+
+**Documentation updates:**
+- `.session/session-notes.md` Current Status: updated to reflect plan approval and that AI blocker is resolved by this approach
+- Plan committed to `planning/ai-tab-daily-note.md` for next session to follow
+
+**Next:** Ready for a new session when the team is ready to implement. No prerequisites or blockers; plan is fully designed and ready to execute.
 
 ---
 
