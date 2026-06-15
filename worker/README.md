@@ -44,25 +44,43 @@ The source of truth for the taxonomy is **`data/taxonomy_map.csv`** at the repo 
 
 ---
 
-## One-time setup (you, on your machine)
+## Deployed instance
 
-These require an interactive login to **your** Cloudflare account and your FMP key, so
-they can't be run from a CI/cloud session. Run them from this `worker/` directory.
+**Live:** `https://finviz-ticker-lookup.salmonbaby8.workers.dev` (deployed 2026-06-14).
+This is the `WORKER_URL` that TICKER-2 (PWA) and TICKER-3 (Streamlit) wire into their
+front-ends.
+
+```bash
+curl "https://finviz-ticker-lookup.salmonbaby8.workers.dev/health"        # {"status":"ok",...}
+curl "https://finviz-ticker-lookup.salmonbaby8.workers.dev/lookup?t=AAPL" # Technology / Consumer Electronics
+```
+
+## One-time setup
+
+You do **not** need the interactive `wrangler login` browser popup. Wrangler reads a
+scoped **`CLOUDFLARE_API_TOKEN`** (plus `CLOUDFLARE_ACCOUNT_ID`) from the environment and
+runs fully headless — this is how the live instance above was deployed, from a Claude Code
+web session. Full writeup, including the least-privilege token scopes, is in
+`knowledge/cloudflare-headless-deploy.md`.
+
+Two ways to authenticate:
 
 ```bash
 cd worker
 npm install                              # dev deps (vitest, wrangler)
 
-# 1. Authenticate Wrangler to your Cloudflare account (opens a browser)
-npx wrangler login
+# Option A — headless (CI or Claude Code web): set these in the environment first
+#   CLOUDFLARE_API_TOKEN  — "Edit Cloudflare Workers" template (Workers Scripts:Edit,
+#                           Workers KV Storage:Edit, Account Settings:Read)
+#   CLOUDFLARE_ACCOUNT_ID — from the CF dashboard sidebar
+# Option B — local interactive: `npx wrangler login` (opens a browser)
 
-# 2. Create the KV namespace; copy the printed id
+# 1. Create the KV namespace; copy the printed id (already done for the live instance)
 npx wrangler kv namespace create LOOKUP_CACHE
 #   → put the id into wrangler.toml, replacing REPLACE_WITH_KV_NAMESPACE_ID
 
-# 3. Store your FMP key as a secret (NOT in any file)
-npx wrangler secret put FMP_API_KEY
-#   → paste your free-tier key from financialmodelingprep.com when prompted
+# 2. Store your FMP key as a Worker secret (NOT in any file)
+echo "$FMP_API_KEY" | npx wrangler secret put FMP_API_KEY   # headless; or omit the pipe to be prompted
 ```
 
 ## Build, test, deploy

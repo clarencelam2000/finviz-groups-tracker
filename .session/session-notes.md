@@ -54,6 +54,17 @@
 4. Phase 11 cleanup: delete `GEMINI_API_KEY` secret, drop AI Studio fallback code (only after production stability confirmed)
 
 ---
+## Session: 2026-06-14 (earlier) - CF Worker 
+
+**Status:** TICKER-1 (CF Worker) **DEPLOYED LIVE** 2026-06-14 → `https://finviz-ticker-lookup.salmonbaby8.workers.dev`. Deployed headlessly via `CLOUDFLARE_API_TOKEN` env var from a Claude Code web session (no `wrangler login` popup needed — token auth fully replaces OAuth; see `knowledge/cloudflare-headless-deploy.md`). KV namespace `3ae4430be6dd40c3bb425b9f3e9edf3a` created; FMP key stored as a Worker secret. All acceptance checks pass live (health/AAPL/cache-hit/FAKEXYZ/XOM). 28 vitest tests green.
+**Safe to close:** Yes — Worker is live and verified; deployment config committed.
+**Next actions:** (1) ✅ TICKER-2 (PWA Lookup tab) — **done this session**, wired to live `WORKER_URL` in `docs/index.html` (new "Lookup" tab, joins to `state.data` by Finviz group name, sessionStorage cache, context signal). (2) ✅ TICKER-3 (Streamlit, Phase 4) — **done this session**: `dashboard/worker_client.py` (pure, testable), tab 8 "Ticker Lookup", `_group_row`/`_render_group_card` helpers, `requests` pinned, 4 tests. (3) **TICKER-4 (ops endpoints)** — add `/stats`, `/cache` DELETE bust, daily FMP call counter in KV to `worker/src/index.js`; redeploy. Front-end parity (PWA + Streamlit) is complete.
+
+**PWA verification note:** join keys confirmed — worker's `finviz_sector`/`finviz_industry` (e.g. Technology / Consumer Electronics, Energy / Oil & Gas Integrated) exist verbatim in `data/{sectors,industries}/snapshots.csv`. The trade-context perf/rank/momentum cards render from already-loaded CSV data; the 7d rank-delta arrow stays blank until 7d deltas exist (~2026-06-16), which is expected.
+
+**Note on the CF API token in this env:** the provided `CLOUDFLARE_API_TOKEN` is an *account-scoped* token, so `/user/tokens/verify` returns 1000 "Invalid" but `/accounts/{id}/tokens/verify` confirms it's valid+active — and `wrangler whoami`/`deploy` work fine. That's expected for the "Edit Cloudflare Workers" template; not an error.
+
+---
 
 ## Session: 2026-06-14 (earlier) — AI-MIGRATION: Vertex AI (Phases 2–4, code complete)
 

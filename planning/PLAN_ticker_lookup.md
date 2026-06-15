@@ -190,9 +190,15 @@ These must be done by the user before implementation can be verified:
 
 2. **Cloudflare account** — free at cloudflare.com. Need:
    - Account created
-   - Wrangler CLI installed locally: `npm install -g wrangler` then `wrangler login`
+   - Wrangler authenticated — either `wrangler login` (interactive, opens a browser) **or**, for
+     headless/CI/Claude-Code-web deploys, a scoped `CLOUDFLARE_API_TOKEN` env var (no popup). See
+     `knowledge/cloudflare-headless-deploy.md`.
    - A KV namespace created: `wrangler kv namespace create LOOKUP_CACHE` → note the namespace ID
    - FMP key set as Wrangler secret: `wrangler secret put FMP_API_KEY`
+
+   > **Deployed 2026-06-14** via the headless token path from a Claude Code web session:
+   > `https://finviz-ticker-lookup.salmonbaby8.workers.dev`. The "cannot run from a cloud session"
+   > caveat below applies only to `collect.py`/Playwright, **not** to the Worker deploy.
 
 3. **FMP industry/sector list** — to build the taxonomy map (Phase 1), fetch FMP's taxonomy by running profiles on a representative set of stocks:
    ```bash
