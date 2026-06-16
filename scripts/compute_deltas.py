@@ -271,6 +271,12 @@ def compute_for_group(group_type: str, target_date_str: str = None,
     for _, row in df_today.iterrows():
         key = (str(target_date), row["name"])
         if key in existing_keys:
+            # TODO(stale-delta): once a (date, name) key is written, subsequent collect.py
+            # runs that day cannot update it — even though collect.py replaces the snapshot
+            # rows (last-write-wins via evict_today_rows). The first daily collection's ranks
+            # are locked in. Fix: call _evict_date_rows(delta_path, target_date) before this
+            # loop to force recompute, or accept that the PWA reads live ranks from snapshots
+            # (see computeRankFromSnap in docs/index.html, added in PR #99).
             continue
 
         out = {
