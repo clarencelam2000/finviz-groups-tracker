@@ -6,7 +6,13 @@
 
 ## Current Status
 
-**Status:** AI TAB REBUILD in progress on branch `claude/exciting-brown-1pc93v` (PR pending). The forced-JSON pipeline that produced unusable output (JSON-in-JSON, truncation, "Rotation Phase: Unknown", apology-text daily-delta) is replaced with a **freeform markdown daily note** built from our computed signals. Plan landed via merged PR #93 (`planning/ai-tab-daily-note.md`).
+**Status:** LOOKUP TAB IMPROVEMENTS — **Phase 0 + all six Phase 1 slices complete** on branch `claude/lookup-tab-improvements-h7nw9b` (PR #97). Every Phase 1 change is client-side in `docs/index.html`: weekly-rank sparkline (LOOK-1), conviction chip + Rank Floor (LOOK-2), breadth dot strip (LOOK-3), evidence-backed SIGNAL copy (LOOK-4), clarity wins — rank-basis label / 30d delta / loading skeleton (LOOK-5), and QoL — "Why this matters" glossary + Finviz/TradingView deeplinks (LOOK-6). SW cache → v4. Each commit is HTML-only (no pytest), paired with SPRINT + plan-doc updates. JS syntax verified after every slice via `new Function()` check.
+
+**Verification still pending:** I cannot run Playwright/serve in this cloud env to eyeball the live PWA. Recommend the owner open the Lookup tab (after GitHub Pages picks up the branch, or locally) and check a strong+sustained ticker (e.g. semis), a weak group, a low-confidence match, an untracked industry, and `ticker_not_found`. Deepvue was dropped (no public per-ticker URL); owner chose TradingView.
+
+**Safe to close:** Yes for the code — all committed/pushed on PR #97. Phase 1 functionally complete; remaining work is deferred backlog (LOOK-B1..7) + a live visual pass.
+
+**Prior open thread (separate branch):** AI TAB REBUILD on `claude/exciting-brown-1pc93v` still needs its PR opened/merged + a live-backend eyeball — unaffected by this session.
 
 **What changed:**
 - `scripts/generate_ai.py`: deleted all 5 JSON schemas, fallback parsers, normalizers, preamble detection, and the entire daily-delta feature. New `build_note_prompt` → one freeform markdown note per group (TL;DR + narrative + `## Strength` / `## Movers & Momentum` / `## Divergences`). New computed-signal serializers: `serialize_strength_signals` (all-green + sustained-strength + breadth), `serialize_momentum_laggards`, `serialize_divergences` (fading / emerging / fragile all-green via `rank_agreement`). One combined Gemini call per group + a lightweight plain-text phase call (sectors). `_call_api` no longer sets `response_schema`/`response_mime_type`/`max_output_tokens` (cap removed). New fields: `sectors.note`, `sectors.rotation_phase`, `industries.note`.
@@ -17,6 +23,45 @@
 **AI-MIGRATION status:** Vertex AI backend + WIF auth unchanged. daily-delta feature removed entirely (it was the apology-text source).
 
 **Safe to close:** Not yet — AI-rebuild PR still needs to be opened/merged. End-to-end eyeball of real generated output needs a live Gemini backend (`python scripts/generate_ai.py --force-ai` locally or via the `generate_ai.yml` Action; blocked in the cloud env). Tests + static markdown rendering verified here.
+
+---
+
+## Session: 2026-06-16 — Lookup tab improvements: Phase 1 (six client-side slices)
+
+**What happened:** Implemented all six Phase 1 slices in `docs/index.html`, each
+its own commit with paired SPRINT + plan-doc updates. (1) `loadGroup` now retains
+full delta history in `state.data[group].deltaAll`; `groupRankHistory()` +
+`rankSparkline()` draw an inverted-Y weekly-rank SVG per card. (2)
+`convictionInfo()` adds Rank Floor (max of month/quarter/half) + Sustained/
+Consistent chip. (3) `breadthStrip()` D·W·M·Q·6M·Y dots, gating on mo/qtr/half/ytd
+only (ADR-003). (4) `groupReasons()` feeds evidence into `contextSignalCard`. (5)
+"Rank (wk)" label + 30d delta chip + `lookupSkeleton()`. (6) `lookupGlossary()`
+collapsible + Finviz/TradingView deeplinks. SW cache → v4. JS syntax-checked after
+each slice.
+
+**Next steps:** Live visual pass on the PWA (blocked in cloud — owner to verify).
+Then deferred backlog LOOK-B1..7 (sparkline timeframe toggle, acceleration hint,
+recent-searches, jump-to-group, rotation-phase line, promote Rank Floor to the
+pipeline, revisit All-Green week gating). PR #97 is ready to merge once eyeballed.
+
+---
+
+## Session: 2026-06-15 — Lookup tab improvements: Phase 0 (knowledge + plan)
+
+**What happened:** Scoped a Lookup-tab uplift to surface our moaty derived
+metrics for a looked-up ticker's sector/industry. Confirmed two design forks with
+the owner: Rank Floor brackets month/quarter/half, and the breadth/All-Green
+verdict drops week from gating (week dot still renders). Decided Phase 1 is fully
+client-side (data + metrics already on the client; sparkline just needs us to
+stop discarding history in `getLatest`). Shipped Phase 0 artifacts: pickup-able
+plan, metric inventory, ADR-001/002/003, CF roadmap, README moat section, SPRINT
+seeding. Grounded all definitions against `compute_deltas.py` and `dashboard/app.py`.
+
+**Next steps:** Implement Phase 1 slices in order — LOOK-1 (retain history +
+weekly-rank sparkline) first, then conviction chip + Rank Floor, breadth dots,
+evidence copy, clarity wins, QoL. Each commit pairs code + docs + SPRINT update;
+HTML-only so note that in commit messages (no pytest). Verify Deepvue URL pattern
+during LOOK-6.
 
 ---
 

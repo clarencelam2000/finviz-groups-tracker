@@ -123,6 +123,30 @@ to `stable/profile` with migrated field names. 28 vitest tests pass; `wrangler d
 --dry-run` bundles clean. Deploy is owner-gated (interactive `wrangler login` + FMP
 secret) — code is ready, awaiting `npm run deploy`.
 
+## 2026-06-16 — Lookup tab improvements Phase 1 shipped (6 client-side slices)
+
+The PWA Lookup tab now surfaces the derived "moaty" layer per ticker: a
+weekly-rank sparkline, Rank Floor + Sustained/Consistent conviction chip, a
+breadth dot strip (gating on mo/qtr/half/ytd), evidence-backed SIGNAL copy,
+clarity touches (rank-basis label, 30d delta, loading skeleton), and a "Why this
+matters" glossary + Finviz/TradingView deeplinks. All client-side in
+`docs/index.html`, no pipeline change; SW cache → v4. Live visual pass pending
+(Playwright blocked in cloud). PR #97.
+
+---
+
+## 2026-06-15 — Lookup tab improvements Phase 0 (knowledge + plan)
+
+Scoped and documented a client-side uplift to the PWA Lookup tab to surface our
+derived "moaty" metrics for a ticker's sector/industry. Landed the pickup-able
+plan (`planning/lookup-tab-improvements.md`), a full metric inventory
+(`knowledge/moaty-metrics.md`), three ADRs (client-side-first, Rank Floor,
+breadth-excludes-week), a CF edge roadmap, and a README "What makes this
+different" section. Phase 1 (6 client-side slices in `docs/index.html`) seeded in
+SPRINT; no app behavior change yet.
+
+---
+
 ## Open Questions / Future Ideas
 
 - [ ] Confirm Finviz data finalization time (probe intraday)

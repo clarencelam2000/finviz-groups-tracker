@@ -217,8 +217,8 @@
       strengthView: 'sustained',
       topN: 20,
       data: {
-        sectors:    { snap: null, delta: null },
-        industries: { snap: null, delta: null },
+        sectors:    { snap: null, delta: null, deltaAll: null },
+        industries: { snap: null, delta: null, deltaAll: null },
       },
       fetchLog: null,
       aiData: null,
@@ -463,6 +463,29 @@
         </div>`).join('');
     }
 
+    // Loading placeholder for the Lookup tab: a company-header row + two group
+    // cards, matching the real result layout so there's no jump on load.
+    function lookupSkeleton() {
+      const card = `
+        <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 animate-pulse space-y-2">
+          <div class="h-3 bg-slate-700 rounded w-1/4"></div>
+          <div class="h-4 bg-slate-700 rounded w-2/3"></div>
+          <div class="h-3 bg-slate-700 rounded w-1/2"></div>
+          <div class="h-3 bg-slate-700 rounded w-3/5"></div>
+        </div>`;
+      return `
+        <div class="space-y-3">
+          <div class="flex gap-3 items-center animate-pulse">
+            <div class="w-12 h-12 rounded-lg bg-slate-700 flex-shrink-0"></div>
+            <div class="flex-1 space-y-2">
+              <div class="h-4 bg-slate-700 rounded w-1/2"></div>
+              <div class="h-3 bg-slate-700 rounded w-1/3"></div>
+            </div>
+          </div>
+          ${card}${card}
+        </div>`;
+    }
+
     // ── Data loading ───────────────────────────────────────────────────────
 
     function fetchCSV(url, cacheBust = false) {
@@ -484,6 +507,9 @@
         ]);
         state.data[group].snap  = getLatest(snapRes.data);
         state.data[group].delta = getLatest(deltaRes.data);
+        // Retain full delta history for the lookup-tab rank sparkline. Other
+        // tabs read latest-only via .snap/.delta; this is consumed only there.
+        state.data[group].deltaAll = deltaRes.data || [];
 
         if (state.data[group].snap.length > 0) {
           const d = state.data[group].snap[0].date;
@@ -1156,6 +1182,108 @@
       return s;
     }
 
+    // Weekly-rank history for one group, oldest→newest, capped at the last
+    // `cap` trading days. Reads the retained full delta history (deltaAll).
+    function groupRankHistory(name, groupKey, cap = 30) {
+      if (!name) return [];
+      const all = (state.data[groupKey] && state.data[groupKey].deltaAll) || [];
+      const pts = all
+        .filter(r => r.name === name && r.date)
+        .map(r => ({ date: r.date, rank: pf(r.rank_week) }))
+        .filter(p => p.rank !== null)
+        .sort((a, b) => a.date.localeCompare(b.date));
+      return pts.slice(-cap);
+    }
+
+    // Inline SVG sparkline of weekly rank over time. Y is inverted so a rising
+    // line = improving rank (rank 1 is best). Returns '' when too few points.
+    function rankSparkline(points, n) {
+      if (!points || points.length < 2) return '';
+      const W = 168, H = 32, padX = 2, padY = 4;
+      const ranks = points.map(p => p.rank);
+      let lo = Math.min(...ranks), hi = Math.max(...ranks);
+      if (hi === lo) { hi += 1; lo -= 1; } // flat series → centered line
+      const x = i => padX + (i * (W - 2 * padX)) / (points.length - 1);
+      // invert: best rank (low number) → top of the chart
+      const y = r => padY + ((r - lo) / (hi - lo)) * (H - 2 * padY);
+      const coords = points.map((p, i) => `${x(i).toFixed(1)},${y(p.rank).toFixed(1)}`);
+      const last = points[points.length - 1];
+      const first = points[0];
+      const improving = last.rank <= first.rank; // lower (better) or equal
+      const stroke = improving ? '#34d399' : '#f87171';
+      const span = `last ${points.length}d`;
+      return `
+        <div class="pt-0.5">
+          <div class="flex justify-between items-baseline mb-0.5">
+            <span class="text-[0.6rem] uppercase tracking-wider text-slate-500">Weekly rank · ${span}</span>
+            <span class="text-[0.6rem] text-slate-500">best #${lo}${n ? ` of ${n}` : ''}</span>
+          </div>
+          <svg viewBox="0 0 ${W} ${H}" class="w-full h-8" preserveAspectRatio="none" aria-hidden="true">
+            <polyline fill="none" stroke="${stroke}" stroke-width="1.5"
+              stroke-linejoin="round" stroke-linecap="round" points="${coords.join(' ')}" />
+            <circle cx="${x(points.length - 1).toFixed(1)}" cy="${y(last.rank).toFixed(1)}" r="2" fill="${stroke}" />
+          </svg>
+        </div>`;
+    }
+
+    // Rank Floor + conviction chip from the medium-term ranks (month/quarter/
+    // half) and rank_agreement. Floor = worst (max) of the three → "never worse
+    // than #N over 1/3/6mo". See knowledge/decisions/ADR-002-rank-floor-metric.md.
+    function convictionInfo(delta, n) {
+      if (!delta) return { floor: null, best: null, chip: null };
+      const ranks = ['rank_month', 'rank_quarter', 'rank_half']
+        .map(k => pf(delta[k])).filter(v => v !== null);
+      if (ranks.length < 3) return { floor: null, best: null, chip: null };
+      const floor = Math.max(...ranks);   // worst standing across the three
+      const best  = Math.min(...ranks);   // best standing across the three
+      const agree = pf(delta.rank_agreement);
+      let chip = null;
+      if (n > 0) {
+        const topQuartile = Math.ceil(n / 4);
+        const topHalf = Math.ceil(n / 2);
+        if (floor <= topQuartile) {
+          chip = { text: 'Sustained', cls: 'bg-emerald-900/50 text-emerald-300 border-emerald-700' };
+        } else if (agree !== null && agree >= 0.85 && floor <= topHalf) {
+          chip = { text: 'Consistent', cls: 'bg-sky-900/50 text-sky-300 border-sky-700' };
+        }
+      }
+      return { floor, best, chip };
+    }
+
+    // Breadth dot strip across timeframes. The green/"All green" verdict gates
+    // on month/quarter/half/ytd only — day and week dots render but do not gate.
+    // See knowledge/decisions/ADR-003-breadth-excludes-week.md.
+    const BREADTH_TFS = [
+      { k: 'perf_day',     lbl: 'D',  gate: false },
+      { k: 'perf_week',    lbl: 'W',  gate: false },
+      { k: 'perf_month',   lbl: 'M',  gate: true  },
+      { k: 'perf_quarter', lbl: 'Q',  gate: true  },
+      { k: 'perf_half',    lbl: '6M', gate: true  },
+      { k: 'perf_ytd',     lbl: 'Y',  gate: true  },
+    ];
+    function breadthStrip(snap) {
+      if (!snap) return '';
+      let gateTotal = 0, gateGreen = 0;
+      const dots = BREADTH_TFS.map(tf => {
+        const v = pf(snap[tf.k]);
+        if (tf.gate) { gateTotal++; if (v !== null && v > 0) gateGreen++; }
+        const color = v === null ? 'bg-slate-600' : v > 0 ? 'bg-emerald-500' : v < 0 ? 'bg-red-500' : 'bg-slate-500';
+        return `<span class="flex flex-col items-center gap-0.5">
+            <span class="w-2.5 h-2.5 rounded-full ${color}"></span>
+            <span class="text-[0.55rem] text-slate-500 leading-none">${tf.lbl}</span>
+          </span>`;
+      }).join('');
+      const allGreen = gateTotal > 0 && gateGreen === gateTotal;
+      const badge = allGreen
+        ? `<span class="text-[0.6rem] px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-300 border border-emerald-700">All green</span>`
+        : `<span class="text-[0.6rem] text-slate-500">${gateGreen}/${gateTotal} green</span>`;
+      return `
+        <div class="flex justify-between items-center pt-0.5">
+          <span class="flex gap-2 items-start">${dots}</span>
+          ${badge}
+        </div>`;
+    }
+
     function groupPerfCard(name, groupKey, label) {
       const { delta, snap, n } = findGroupData(name, groupKey);
       if (!delta && !snap) {
@@ -1168,6 +1296,7 @@
       }
       const rank        = delta ? pf(delta.rank_week) : null;
       const rankDelta7d = delta ? pf(delta.rank_week_delta_7d) : null;
+      const rankDelta30d = delta ? pf(delta.rank_week_delta_30d) : null;
       const score       = delta ? pf(delta.momentum_score) : null;
       const perfWeek    = snap ? pf(snap.perf_week) : null;
       const perfMonth   = snap ? pf(snap.perf_month) : null;
@@ -1178,6 +1307,11 @@
       if (rankDelta7d !== null && rankDelta7d > 0)  deltaHtml = `<span class="text-emerald-400 ml-1">▲ +${rankDelta7d} this wk</span>`;
       else if (rankDelta7d !== null && rankDelta7d < 0) deltaHtml = `<span class="text-red-400 ml-1">▼ ${rankDelta7d} this wk</span>`;
       else if (rankDelta7d === 0) deltaHtml = `<span class="text-slate-500 ml-1">= 0 this wk</span>`;
+      let delta30Html = '';
+      if (rankDelta30d !== null && rankDelta30d !== 0) {
+        const cls30 = rankDelta30d > 0 ? 'text-emerald-400' : 'text-red-400';
+        delta30Html = `<span class="${cls30} ml-1">${rankDelta30d > 0 ? '▲' : '▼'}${Math.abs(rankDelta30d)} over 30d</span>`;
+      }
 
       const momPct = score !== null ? (score * 100).toFixed(0) : null;
       const momStyle = score !== null ? momentumStyle(score) : null;
@@ -1187,14 +1321,49 @@
              <span class="block h-full rounded-full ${momStyle.bar}" style="width:${momPct}%"></span></span>`
         : '<span class="text-slate-600">—</span>';
 
+      const spark = rankSparkline(groupRankHistory(name, groupKey), n);
+      const { floor, chip } = convictionInfo(delta, n);
+      const chipHtml = chip
+        ? `<span class="text-[0.6rem] px-1.5 py-0.5 rounded border ${chip.cls}">${chip.text}</span>`
+        : '';
+      const floorHtml = floor !== null
+        ? `<div class="flex justify-between items-center text-xs"><span class="text-slate-400">Rank floor</span><span class="text-slate-200">Top #${floor} across 1/3/6mo</span></div>`
+        : '';
+
       return `
         <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 space-y-1.5">
-          <div class="text-[0.65rem] uppercase tracking-wider text-slate-500">${label}</div>
+          <div class="flex justify-between items-center"><span class="text-[0.65rem] uppercase tracking-wider text-slate-500">${label}</span>${chipHtml}</div>
           <div class="text-sm font-medium text-white">${escapeHtml(name)}</div>
-          <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Rank</span><span class="text-slate-200">${rankStr}${deltaHtml}</span></div>
+          <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Rank (wk)</span><span class="text-slate-200">${rankStr}${deltaHtml}${delta30Html}</span></div>
+          ${floorHtml}
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Momentum</span><span>${momHtml}</span></div>
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Perf</span><span class="text-slate-300">Wk ${fmtPct(perfWeek)} · Mo ${fmtPct(perfMonth)} · YTD ${fmtPct(perfYtd)}</span></div>
+          ${breadthStrip(snap)}
+          ${spark}
         </div>`;
+    }
+
+    // Concrete evidence behind a group's standing: rank trajectory, conviction/
+    // Rank Floor, momentum, and breadth. Returns short phrases (strongest first).
+    function groupReasons(name, gd, n) {
+      const { delta, snap } = gd;
+      const out = [];
+      if (delta) {
+        const d30 = pf(delta.rank_week_delta_30d);
+        const d7  = pf(delta.rank_week_delta_7d);
+        if (d30 !== null && Math.abs(d30) >= 3)      out.push(`${name} ${d30 > 0 ? '▲' : '▼'}${Math.abs(d30)} rank over 30d`);
+        else if (d7 !== null && Math.abs(d7) >= 3)   out.push(`${name} ${d7 > 0 ? '▲' : '▼'}${Math.abs(d7)} rank this wk`);
+        const { floor, chip } = convictionInfo(delta, n);
+        if (chip) out.push(`${chip.text.toLowerCase()} across 1/3/6mo (floor #${floor})`);
+        const mom = pf(delta.momentum_score);
+        if (mom !== null && (mom >= 0.7 || mom <= 0.3)) out.push(`momentum ${(mom * 100).toFixed(0)}%`);
+      }
+      if (snap) {
+        let g = 0, t = 0;
+        for (const tf of BREADTH_TFS) { if (!tf.gate) continue; t++; const v = pf(snap[tf.k]); if (v !== null && v > 0) g++; }
+        if (t > 0 && (g === t || g === 0)) out.push(`breadth ${g}/${t} green`);
+      }
+      return out;
     }
 
     function contextSignalCard(indName, secName) {
@@ -1214,11 +1383,40 @@
         label = 'MIXED'; cls = 'bg-amber-900/40 border-amber-500 text-amber-300';
         desc = 'Sector and industry are diverging or neutral — check the individual group trends above.';
       }
+      // Cite the 2–3 strongest concrete reasons (industry first, then sector).
+      const reasons = [
+        ...groupReasons(indName, ind, ind.n),
+        ...groupReasons(secName, sec, sec.n),
+      ].slice(0, 3);
+      const evidence = reasons.length
+        ? `<div class="text-[0.7rem] text-slate-400 mt-1.5">${escapeHtml(reasons.join(' · '))}</div>`
+        : '';
       return `
         <div class="rounded-xl p-3 border ${cls}">
           <div class="text-sm font-bold">● SIGNAL: ${label}</div>
           <div class="text-xs text-slate-300 mt-1">${desc}</div>
+          ${evidence}
         </div>`;
+    }
+
+    // "Why this matters" — collapsed glossary of the derived metrics shown above.
+    // Copy mirrors knowledge/moaty-metrics.md. Native <details> = no JS needed.
+    function lookupGlossary() {
+      const rows = [
+        ['Rank (wk)', 'Where this group places among all groups on weekly performance — #1 is the best performer. The sparkline tracks it over time (a rising line = improving).'],
+        ['Rank floor', 'The lowest its ranking has dropped to across 1, 3, and 6 months — a conservative read of how reliably strong it is.'],
+        ['Sustained / Consistent', 'Sustained = top-quartile across 1/3/6mo at once (not a recent flash). Consistent = the three timeframes agree and it’s at least top-half.'],
+        ['Momentum', 'Strength across every timeframe at once, 0–100% (a percentile across the seven perf windows).'],
+        ['Breadth', 'Whether the group is positive across the major timeframes. "All green" gates on month/quarter/half/YTD; the day & week dots show context but don’t gate.'],
+      ];
+      const items = rows.map(([t, d]) =>
+        `<div><span class="text-slate-200 font-medium">${t}</span> — <span class="text-slate-400">${d}</span></div>`
+      ).join('');
+      return `
+        <details class="rounded-xl bg-slate-800/60 border border-slate-700 mt-1">
+          <summary class="text-xs text-slate-400 px-3 py-2 cursor-pointer select-none">Why this matters</summary>
+          <div class="px-3 pb-3 space-y-1.5 text-xs">${items}</div>
+        </details>`;
     }
 
     function renderLookup() {
@@ -1226,7 +1424,7 @@
       if (!el) return;
       const { data, loading, error } = state.lookup;
 
-      if (loading) { el.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">Looking up…</p>'; return; }
+      if (loading) { el.innerHTML = lookupSkeleton(); return; }
       if (!data && !error) { el.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">Enter a ticker above.</p>'; return; }
       if (error || (data && data.error)) {
         const code = error || data.error;
@@ -1249,6 +1447,15 @@
           : `<span class="ml-2 text-xs text-slate-500">${Math.round(conf*100)}% match</span>`;
       }
 
+      const symEnc = encodeURIComponent(data.symbol);
+      const links = `
+        <div class="flex gap-2 mt-1.5">
+          <a href="https://finviz.com/quote.ashx?t=${symEnc}" target="_blank" rel="noopener noreferrer"
+            class="text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">Finviz ↗</a>
+          <a href="https://www.tradingview.com/symbols/${symEnc}/" target="_blank" rel="noopener noreferrer"
+            class="text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">TradingView ↗</a>
+        </div>`;
+
       let html = `
         <div class="flex gap-3 items-start">
           ${data.image ? `<img src="${escapeHtml(data.image)}" alt="" class="w-12 h-12 rounded-lg object-contain bg-white/5 flex-shrink-0" onerror="this.style.display='none'">` : ''}
@@ -1257,12 +1464,14 @@
               <span class="ml-1 text-xs px-1.5 py-0.5 rounded bg-slate-700 align-middle">${escapeHtml(data.symbol)}</span></div>
             ${meta ? `<div class="text-xs text-slate-400 mt-0.5">${meta}</div>` : ''}
             <div class="text-sm text-slate-200 mt-1">${escapeHtml(data.finviz_sector || '—')} › ${escapeHtml(data.finviz_industry || 'N/A')}${confBadge}</div>
+            ${links}
           </div>
         </div>`;
 
       if (data.finviz_industry) html += groupPerfCard(data.finviz_industry, 'industries', 'Industry');
       if (data.finviz_sector)   html += groupPerfCard(data.finviz_sector, 'sectors', 'Sector');
       html += contextSignalCard(data.finviz_industry, data.finviz_sector);
+      html += lookupGlossary();
 
       el.innerHTML = html;
     }
@@ -1387,8 +1596,8 @@
     // Expose refresh globally for the retry button
     window.__refresh = function() {
       if (state.loading) return;
-      state.data.sectors    = { snap: null, delta: null };
-      state.data.industries = { snap: null, delta: null };
+      state.data.sectors    = { snap: null, delta: null, deltaAll: null };
+      state.data.industries = { snap: null, delta: null, deltaAll: null };
       state.fetchLog = null;
       state.aiData = null;
       state.latestAiDate = null;
