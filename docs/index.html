@@ -1227,6 +1227,40 @@
       return { floor, best, chip };
     }
 
+    // Breadth dot strip across timeframes. The green/"All green" verdict gates
+    // on month/quarter/half/ytd only — day and week dots render but do not gate.
+    // See knowledge/decisions/ADR-003-breadth-excludes-week.md.
+    const BREADTH_TFS = [
+      { k: 'perf_day',     lbl: 'D',  gate: false },
+      { k: 'perf_week',    lbl: 'W',  gate: false },
+      { k: 'perf_month',   lbl: 'M',  gate: true  },
+      { k: 'perf_quarter', lbl: 'Q',  gate: true  },
+      { k: 'perf_half',    lbl: '6M', gate: true  },
+      { k: 'perf_ytd',     lbl: 'Y',  gate: true  },
+    ];
+    function breadthStrip(snap) {
+      if (!snap) return '';
+      let gateTotal = 0, gateGreen = 0;
+      const dots = BREADTH_TFS.map(tf => {
+        const v = pf(snap[tf.k]);
+        if (tf.gate) { gateTotal++; if (v !== null && v > 0) gateGreen++; }
+        const color = v === null ? 'bg-slate-600' : v > 0 ? 'bg-emerald-500' : v < 0 ? 'bg-red-500' : 'bg-slate-500';
+        return `<span class="flex flex-col items-center gap-0.5">
+            <span class="w-2.5 h-2.5 rounded-full ${color}"></span>
+            <span class="text-[0.55rem] text-slate-500 leading-none">${tf.lbl}</span>
+          </span>`;
+      }).join('');
+      const allGreen = gateTotal > 0 && gateGreen === gateTotal;
+      const badge = allGreen
+        ? `<span class="text-[0.6rem] px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-300 border border-emerald-700">All green</span>`
+        : `<span class="text-[0.6rem] text-slate-500">${gateGreen}/${gateTotal} green</span>`;
+      return `
+        <div class="flex justify-between items-center pt-0.5">
+          <span class="flex gap-2 items-start">${dots}</span>
+          ${badge}
+        </div>`;
+    }
+
     function groupPerfCard(name, groupKey, label) {
       const { delta, snap, n } = findGroupData(name, groupKey);
       if (!delta && !snap) {
@@ -1275,6 +1309,7 @@
           ${floorHtml}
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Momentum</span><span>${momHtml}</span></div>
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Perf</span><span class="text-slate-300">Wk ${fmtPct(perfWeek)} · Mo ${fmtPct(perfMonth)} · YTD ${fmtPct(perfYtd)}</span></div>
+          ${breadthStrip(snap)}
           ${spark}
         </div>`;
     }

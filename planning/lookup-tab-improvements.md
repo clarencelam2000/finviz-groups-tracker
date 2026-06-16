@@ -59,10 +59,11 @@ Each slice = code + docs + tracking.
       "Top #{floor} across 1/3/6mo" row, plus a chip: "Sustained" (floor ≤ top
       quartile) / "Consistent" (rank_agreement ≥ 0.85 AND floor ≤ top half) /
       hidden. Graceful null when the three ranks aren't all present.
-- [ ] **Slice 3 — Breadth dot strip.** Day·Wk·Mo·Qtr·6M·YTD dots (green/red per
-      `perf_*` sign, grey if NaN). Green/All-Green signal gates on
-      **month/quarter/half/YTD only** — week & day render but don't gate
-      (ADR-003).
+- [x] **Slice 3 — Breadth dot strip.** Done. `breadthStrip(snap)` renders
+      Day·Wk·Mo·Qtr·6M·YTD dots (green/red/grey per `perf_*` sign) and an
+      "All green" badge / "k/4 green" count. Verdict gates on
+      month/quarter/half/YTD only (`BREADTH_TFS[].gate`); day & week render but
+      don't gate (ADR-003).
 - [ ] **Slice 4 — Evidence-backed SIGNAL copy.** Rewrite `contextSignalCard` to
       cite the 2–3 strongest concrete reasons. Same scoring spine.
 - [ ] **Slice 5 — Clarity wins.** Label rank basis ("Rank (wk) #41 of 144"),
