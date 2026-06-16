@@ -1177,8 +1177,12 @@
 
     function findGroupData(name, groupKey) {
       if (!name) return { delta: null, snap: null, allSnaps: [], n: 0 };
-      const deltas   = state.data[groupKey] ? (state.data[groupKey].delta || []) : [];
-      const allSnaps = state.data[groupKey] ? (state.data[groupKey].snap  || []) : [];
+      const deltas    = state.data[groupKey] ? (state.data[groupKey].delta || []) : [];
+      const rawSnaps  = state.data[groupKey] ? (state.data[groupKey].snap  || []) : [];
+      // Deduplicate by name (keep last = most recent collected_at in append order)
+      const seenNames = new Map();
+      for (const r of rawSnaps) seenNames.set(r.name, r);
+      const allSnaps  = [...seenNames.values()];
       return {
         delta:    deltas.find(r => r.name === name) || null,
         snap:     allSnaps.find(r => r.name === name) || null,
