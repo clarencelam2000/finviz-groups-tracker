@@ -104,9 +104,11 @@ python scripts/export_db.py
 
 ## Playwright / Finviz notes
 
-> Verified against live Finviz on 2026-06-09.
+> Verified against live Finviz on 2026-06-16.
 
-- **Cannot run in Claude Code cloud** — Playwright CDN is blocked. Run `collect.py` locally or via GitHub Actions only. Use an environment with unrestricted outbound network for cloud testing.
+- **Playwright CDN works in Claude Code cloud** — Chromium downloads fine (~175MB). `playwright install chromium --with-deps` succeeds in the cloud container (verified 2026-06-16).
+- **collect.py still cannot scrape Finviz from Claude Code cloud** — but the reason is Cloudflare bot detection, NOT a network block. Our outbound IP is on Google Cloud (AS396982, `136.113.40.206`); Cloudflare returns HTTP 403 with `cf-mitigated: challenge` and serves a Turnstile JS challenge that headless Chromium fails because `navigator.webdriver=true` is detectable. GitHub Actions runs on Microsoft Azure IPs which Cloudflare treats differently (lower bot-score baseline). Run `collect.py` locally or via GitHub Actions.
+- **compute_deltas.py, export_db.py, dashboard, and tests all run fine in cloud** — no Finviz network dependency.
 - Finviz blocks plain HTTP — Playwright (headless Chromium) is required.
 - CSS selector: **`.groups_table`** (not `.table-groups` — verified live).
 - `wait_until="domcontentloaded"` — analytics scripts block the `load` event; domcontentloaded works fine.
@@ -154,7 +156,7 @@ wall, routes spend through $10/mo Vertex-only credits).
 - **Sync first**: Run `git fetch origin && git log --oneline origin/claude/elegant-babbage-hlxnfy -5` before doing anything else — GitHub Actions may have pushed data overnight, and you need the latest base before branching or editing. See `.claude/rules/branch-commit-discipline.md` for the full session-start checklist.
 - **Ending a session**: Before the user closes, update `.session/session-notes.md` with: what was done, what was discovered, any blockers, and the prioritized next steps. Be specific — vague notes are useless next session.
 - **Work log**: Update `.session/WORK_LOG.md` with any milestones hit (first successful scrape, first week of data, dashboard features added).
-- **Cannot run collect.py here**: The Claude Code cloud environment blocks Playwright's CDN and outbound access to finviz.com. `collect.py` must run **locally** on the user's machine or via **GitHub Actions**. Do not attempt `playwright install` or `python scripts/collect.py` in a cloud session — it will fail.
+- **Cannot run collect.py here**: Playwright CDN works fine, but Cloudflare blocks headless Chromium on Google Cloud IPs (our outbound IP is in AS396982). `collect.py` must run **locally** or via **GitHub Actions** (Azure IPs pass Cloudflare). `compute_deltas.py`, tests, and dashboard all run fine in cloud.
 - **Subagents for analysis**: Use subagents (Agent tool) for exploratory pandas/data work to avoid bloating the main context window.
 - **Context pressure**: Use `/compact` when nearing limits. Prioritize keeping INITIAL_SPEC.md decisions and script logic in context; data rows are expendable.
 - **Save research before it's lost**: If a session involved substantial research (API evaluation, debugging a non-obvious root cause, evaluating architectural trade-offs), write a summary to `knowledge/` before ending. A future Claude — or a human reading the code — should not have to rediscover it. Research logs go in `knowledge/` as free-form `.md` files; architectural decisions (and the alternatives rejected) go in `knowledge/decisions/` as ADRs. See `knowledge/README.md` for templates.
