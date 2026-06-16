@@ -320,13 +320,26 @@ def append_records(csv_path: Path, records: list, existing_keys: set):
 def trading_date(now_et: datetime) -> str:
     """Return the trading date for a given ET datetime.
 
-    Collections before 9 AM ET reflect the previous session's data — Finviz
-    hasn't updated yet and the market hasn't opened. Use the prior calendar day
-    so the CSV date matches the data actually shown.
+    Two adjustments keep the stored date aligned with the session whose data
+    Finviz is actually showing:
+
+    1. Before 9 AM ET the market hasn't opened and Finviz still shows the prior
+       session's close, so step back one calendar day.
+    2. Markets are closed on weekends, so roll Saturday/Sunday (and a Monday
+       pre-open run, which step 1 lands on Sunday) back to the preceding Friday.
+       This guarantees we never stamp a row with a weekend date — whatever a
+       weekend or early-Monday run scrapes is still Friday's close.
+
+    Note: U.S. market holidays are not handled (no trading calendar here). A run
+    on a holiday will resolve to that weekday and store the prior session's data
+    under the holiday's date. Acceptable for now; revisit if it causes drift.
     """
+    d = now_et.date()
     if now_et.hour < 9:
-        return (now_et - timedelta(days=1)).strftime("%Y-%m-%d")
-    return now_et.strftime("%Y-%m-%d")
+        d = d - timedelta(days=1)
+    while d.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+        d = d - timedelta(days=1)
+    return d.strftime("%Y-%m-%d")
 
 
 def collect(group_type: str):

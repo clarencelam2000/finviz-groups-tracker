@@ -26,6 +26,41 @@
 
 ---
 
+## Session: 2026-06-16 — Date/timezone hardening + stale-delta fix (branch claude/dreamy-clarke-juv8su)
+
+**What happened:** Investigated prev-session observations about UTC/ET dates, weekend
+data, three crons, and the compute_deltas stale-delta TODO.
+
+**Findings:**
+- `trading_date()` UTC→ET conversion was *correct* (the "where does June 15 come from"
+  was a non-bug — 2026-06-16 02:12 UTC = Jun 15 10:12pm ET → correctly Jun 15).
+- **Real bug found:** the daily `35 23 * * *` cron fired Sat/Sun, re-scraping Friday's
+  stale close and stamping phantom weekend trading days. Verified Jun 12/13/14 snapshots
+  were byte-identical. Also `trading_date()` rolled a Monday-pre-9am run to *Sunday*.
+- **Stale-delta TODO confirmed real:** the `existing_keys` guard locked in the first
+  daily run's ranks; later EOD runs replaced the snapshot but not the delta row.
+
+**Changes (this branch):**
+- `scripts/compute_deltas.py`: removed `existing_keys` guard + dead `load_existing_keys`;
+  now calls `_evict_date_rows()` unconditionally (after the empty-data check) →
+  last-write-wins. Removed redundant migration-evict.
+- `scripts/collect.py` `trading_date()`: rolls weekends + Monday-pre-open back to the
+  preceding Friday. Guarantees no weekend-dated rows from cron drift OR manual dispatch.
+- `.github/workflows/collect.yml`: crons → three weekday-only runs (13:49/14:51/19:48 UTC
+  ≈ 9:49/10:51/3:48 ET); verify step mirrors the weekend rollback.
+- Purged existing phantom weekend rows (Jun 13/14): −22 sector, −288 industry rows from
+  snapshots + deltas. No weekday delta referenced a weekend lookback, so no recompute needed.
+- Tests: +4 trading_date weekend cases, +2 last-write-wins cases. 137 pass (test_collect_parsing
+  still Playwright-blocked in cloud; trading_date logic verified standalone).
+- CLAUDE.md Automation section updated (schedule, weekend policy, last-write-wins, holiday caveat).
+
+**Known limitation:** market holidays aren't handled (no trading calendar) — a holiday run
+stamps prior-session data under the holiday weekday. Documented, not fixed.
+
+**Safe to close:** Yes once PR is opened/merged. Unrelated Lookup-tab (PR #97) thread below is untouched.
+
+---
+
 ## Session: 2026-06-16 — Lookup tab improvements: Phase 1 (six client-side slices)
 
 **What happened:** Implemented all six Phase 1 slices in `docs/index.html`, each

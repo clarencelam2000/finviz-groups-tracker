@@ -1,9 +1,14 @@
 name: Daily Snapshot
 on:
   schedule:
-    - cron: '45 14 * * 1-5'
-    - cron: '11 22 * * 1-5'
-    - cron: '35 23 * * *'
+    # Times are weekday-only and chosen in Eastern, but GitHub cron is fixed UTC
+    # and cannot follow DST. The UTC values below map to EDT (summer); in EST
+    # (winter) each run fires one hour earlier in ET. Never schedule on weekends —
+    # markets are closed and a weekend run would only re-capture Friday's stale
+    # close (see trading_date() in scripts/collect.py).
+    - cron: '49 13 * * 1-5'   # ~9:49 AM ET — just after the open
+    - cron: '51 14 * * 1-5'   # ~10:51 AM ET — mid-morning
+    - cron: '48 19 * * 1-5'   # ~3:48 PM ET — just before the close (EOD snapshot)
   workflow_dispatch:
 permissions:
   contents: write
@@ -38,13 +43,14 @@ jobs:
           now_utc = datetime.now(timezone.utc)
           now_et  = datetime.now(eastern)
           # Mirror trading_date() from collect.py: before 9 AM ET the data shown
-          # on Finviz is still the prior session's close, so the snapshot is dated
-          # to yesterday.
-          today = (
-              (now_et - timedelta(days=1)).strftime("%Y-%m-%d")
-              if now_et.hour < 9
-              else now_et.strftime("%Y-%m-%d")
-          )
+          # on Finviz is still the prior session's close, and weekends roll back
+          # to the preceding Friday (markets closed).
+          d = now_et.date()
+          if now_et.hour < 9:
+              d = d - timedelta(days=1)
+          while d.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+              d = d - timedelta(days=1)
+          today = d.strftime("%Y-%m-%d")
 
           FRESHNESS_MINUTES = 30
           checks = [("data/sectors/snapshots.csv", 8), ("data/industries/snapshots.csv", 100)]

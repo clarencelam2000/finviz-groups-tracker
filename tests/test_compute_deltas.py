@@ -353,3 +353,52 @@ class TestComputeForGroupMigration:
         assert "2026-06-01" in dates  # older row preserved
         tech_old = next(r for r in rows if r["date"] == "2026-06-01" and r["name"] == "Technology")
         assert tech_old["rank_week"] == "2"
+
+
+class TestComputeForGroupLastWriteWins:
+    """A re-run for an already-computed date must recompute, not skip (stale-delta fix)."""
+
+    def _write_deltas(self, path, rows):
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=cd.DELTA_COLUMNS)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({c: row.get(c, "") for c in cd.DELTA_COLUMNS})
+
+    def test_existing_target_date_rows_are_recomputed(self, tmp_path, tmp_snapshot_csv):
+        delta_path = tmp_path / "deltas.csv"
+        # Stale rows from an earlier (e.g. mid-morning) run with wrong ranks.
+        self._write_deltas(delta_path, [
+            {"date": "2026-06-09", "name": "Technology", "rank_day": "9.0"},
+            {"date": "2026-06-09", "name": "Energy", "rank_day": "9.0"},
+            {"date": "2026-06-09", "name": "Utilities", "rank_day": "9.0"},
+        ])
+
+        cd.compute_for_group("sector", snap_path=tmp_snapshot_csv, delta_path=delta_path)
+
+        with open(delta_path, newline="") as f:
+            rows = list(csv.DictReader(f))
+
+        # No duplicates — exactly one row per name for the target date.
+        target = [r for r in rows if r["date"] == "2026-06-09"]
+        assert len(target) == 3
+        by_name = {r["name"]: r for r in target}
+        # Recomputed: Technology has the highest perf_day (1.5) → rank_day 1.0.
+        assert by_name["Technology"]["rank_day"] == "1.0"
+
+    def test_skips_eviction_when_target_date_missing(self, tmp_path, tmp_snapshot_csv):
+        # If the snapshot has no rows for the requested date, existing delta rows
+        # for other dates must survive (eviction happens only after the data check).
+        delta_path = tmp_path / "deltas.csv"
+        self._write_deltas(delta_path, [
+            {"date": "2026-06-09", "name": "Technology", "rank_day": "1.0"},
+        ])
+
+        cd.compute_for_group(
+            "sector", target_date_str="2026-05-01",
+            snap_path=tmp_snapshot_csv, delta_path=delta_path,
+        )
+
+        with open(delta_path, newline="") as f:
+            rows = list(csv.DictReader(f))
+        assert any(r["date"] == "2026-06-09" for r in rows)

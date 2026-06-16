@@ -97,18 +97,6 @@ def _evict_date_rows(csv_path: Path, date_str: str):
     tmp.replace(csv_path)
 
 
-def load_existing_keys(csv_path: Path) -> set:
-    keys = set()
-    if not csv_path.exists():
-        return keys
-    df = pd.read_csv(csv_path, dtype=str)
-    if df.empty or "date" not in df.columns or "name" not in df.columns:
-        return keys
-    for _, row in df.iterrows():
-        keys.add((row["date"], row["name"]))
-    return keys
-
-
 def load_snapshots(csv_path: Path) -> pd.DataFrame:
     """Load snapshots CSV; return empty DataFrame if no data rows."""
     if not csv_path.exists():
@@ -218,7 +206,7 @@ def compute_for_group(group_type: str, target_date_str: str = None,
     if delta_path is None:
         delta_path = DATA_DIR / subdir / "deltas.csv"
 
-    migrated = ensure_deltas_csv(delta_path)
+    ensure_deltas_csv(delta_path)
 
     df = load_snapshots(snap_path)
     if df.empty or "date" not in df.columns:
@@ -236,19 +224,18 @@ def compute_for_group(group_type: str, target_date_str: str = None,
     else:
         target_date = available_dates[-1]
 
-    # Migration rewrote rows with blank new columns — evict target-date rows so
-    # they are recomputed with complete data on this run.
-    if migrated:
-        _evict_date_rows(delta_path, str(target_date))
-
-    existing_keys = load_existing_keys(delta_path)
-
     print(f"  [{group_type}] Computing deltas for date={target_date}")
 
     df_today = df[df["date"] == target_date].copy()
     if df_today.empty:
         print(f"  [{group_type}] No data for {target_date}. Skipping.")
         return
+
+    # Last-write-wins: evict any existing rows for the target date so a later
+    # (e.g. end-of-day) run recomputes them from the freshest snapshot instead
+    # of locking in the first run's intraday ranks. Done after the emptiness
+    # check above so we never wipe good rows when today's snapshot is missing.
+    _evict_date_rows(delta_path, str(target_date))
 
     df_today = compute_ranks(df_today)
     df_today["momentum_score"] = compute_momentum(df_today)
@@ -269,16 +256,6 @@ def compute_for_group(group_type: str, target_date_str: str = None,
     # Build output rows
     new_rows = []
     for _, row in df_today.iterrows():
-        key = (str(target_date), row["name"])
-        if key in existing_keys:
-            # TODO(stale-delta): once a (date, name) key is written, subsequent collect.py
-            # runs that day cannot update it — even though collect.py replaces the snapshot
-            # rows (last-write-wins via evict_today_rows). The first daily collection's ranks
-            # are locked in. Fix: call _evict_date_rows(delta_path, target_date) before this
-            # loop to force recompute, or accept that the PWA reads live ranks from snapshots
-            # (see computeRankFromSnap in docs/index.html, added in PR #99).
-            continue
-
         out = {
             "date": str(target_date),
             "name": row["name"],

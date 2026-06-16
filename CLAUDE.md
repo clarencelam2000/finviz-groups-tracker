@@ -120,10 +120,20 @@ python scripts/export_db.py
 
 ## Automation
 
-- GitHub Actions runs weekdays at **22:00 UTC** (5–6pm ET depending on DST).
+- GitHub Actions runs **weekdays only**, three times a day: `13:49`, `14:51`, and `19:48` UTC
+  (~9:49am / 10:51am / 3:48pm ET in summer; one hour earlier in ET during winter — GitHub cron
+  is fixed-UTC and cannot follow DST). The last run is the EOD snapshot just before the close.
+- **No weekend runs.** Markets are closed, so a weekend scrape only re-captures Friday's stale
+  close. `trading_date()` in `collect.py` also rolls any weekend or Monday-pre-open collection
+  (cron drift or manual dispatch) back to the preceding Friday, so **no row is ever stamped with a
+  weekend date**. Holidays are not handled (no trading calendar) — a holiday run stamps the prior
+  session's data under the holiday's weekday date.
 - Workflow: `.github/workflows/collect.yml`
 - Trigger: `workflow_dispatch` also available for manual runs.
 - On failure: GitHub emails automatically. Retry 3x before failing.
+- `collect.py` and `compute_deltas.py` are **last-write-wins** per `date`: a later run on the same
+  trading day evicts and rewrites that date's snapshot *and* delta rows, so the EOD run's ranks win
+  over an earlier intraday run's.
 - Gaps in data: compute_deltas.py uses nearest available date for lookbacks, so one missed day doesn't break 7d/14d/30d deltas.
 
 ### AI generation auth (Vertex AI)
