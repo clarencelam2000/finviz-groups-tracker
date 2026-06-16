@@ -6,9 +6,11 @@
 
 ## Current Status
 
-**Status:** LOOKUP TAB IMPROVEMENTS — Phase 0 (knowledge + plan) complete on branch `claude/lookup-tab-improvements-h7nw9b`. Wrote the pickup-able plan (`planning/lookup-tab-improvements.md`), moaty-metric inventory (`knowledge/moaty-metrics.md`), 3 ADRs (client-side-first, Rank Floor, breadth-excludes-week), CF edge roadmap, README "What makes this different" section, and seeded SPRINT with all Phase 1 slices (LOOK-1..6) + deferred backlog (LOOK-B1..7). No app behavior change yet. Phase 1 is all client-side in `docs/index.html`.
+**Status:** LOOKUP TAB IMPROVEMENTS — **Phase 0 + all six Phase 1 slices complete** on branch `claude/lookup-tab-improvements-h7nw9b` (PR #97). Every Phase 1 change is client-side in `docs/index.html`: weekly-rank sparkline (LOOK-1), conviction chip + Rank Floor (LOOK-2), breadth dot strip (LOOK-3), evidence-backed SIGNAL copy (LOOK-4), clarity wins — rank-basis label / 30d delta / loading skeleton (LOOK-5), and QoL — "Why this matters" glossary + Finviz/TradingView deeplinks (LOOK-6). SW cache → v4. Each commit is HTML-only (no pytest), paired with SPRINT + plan-doc updates. JS syntax verified after every slice via `new Function()` check.
 
-**Safe to close:** Phase 0 is committed/pushable on its own; Phase 1 slices not yet started. Next: implement LOOK-1 (retain history + sparkline).
+**Verification still pending:** I cannot run Playwright/serve in this cloud env to eyeball the live PWA. Recommend the owner open the Lookup tab (after GitHub Pages picks up the branch, or locally) and check a strong+sustained ticker (e.g. semis), a weak group, a low-confidence match, an untracked industry, and `ticker_not_found`. Deepvue was dropped (no public per-ticker URL); owner chose TradingView.
+
+**Safe to close:** Yes for the code — all committed/pushed on PR #97. Phase 1 functionally complete; remaining work is deferred backlog (LOOK-B1..7) + a live visual pass.
 
 **Prior open thread (separate branch):** AI TAB REBUILD on `claude/exciting-brown-1pc93v` still needs its PR opened/merged + a live-backend eyeball — unaffected by this session.
 
@@ -21,6 +23,26 @@
 **AI-MIGRATION status:** Vertex AI backend + WIF auth unchanged. daily-delta feature removed entirely (it was the apology-text source).
 
 **Safe to close:** Not yet — AI-rebuild PR still needs to be opened/merged. End-to-end eyeball of real generated output needs a live Gemini backend (`python scripts/generate_ai.py --force-ai` locally or via the `generate_ai.yml` Action; blocked in the cloud env). Tests + static markdown rendering verified here.
+
+---
+
+## Session: 2026-06-16 — Lookup tab improvements: Phase 1 (six client-side slices)
+
+**What happened:** Implemented all six Phase 1 slices in `docs/index.html`, each
+its own commit with paired SPRINT + plan-doc updates. (1) `loadGroup` now retains
+full delta history in `state.data[group].deltaAll`; `groupRankHistory()` +
+`rankSparkline()` draw an inverted-Y weekly-rank SVG per card. (2)
+`convictionInfo()` adds Rank Floor (max of month/quarter/half) + Sustained/
+Consistent chip. (3) `breadthStrip()` D·W·M·Q·6M·Y dots, gating on mo/qtr/half/ytd
+only (ADR-003). (4) `groupReasons()` feeds evidence into `contextSignalCard`. (5)
+"Rank (wk)" label + 30d delta chip + `lookupSkeleton()`. (6) `lookupGlossary()`
+collapsible + Finviz/TradingView deeplinks. SW cache → v4. JS syntax-checked after
+each slice.
+
+**Next steps:** Live visual pass on the PWA (blocked in cloud — owner to verify).
+Then deferred backlog LOOK-B1..7 (sparkline timeframe toggle, acceleration hint,
+recent-searches, jump-to-group, rotation-phase line, promote Rank Floor to the
+pipeline, revisit All-Green week gating). PR #97 is ready to merge once eyeballed.
 
 ---
 

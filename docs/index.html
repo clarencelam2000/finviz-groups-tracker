@@ -1399,6 +1399,26 @@
         </div>`;
     }
 
+    // "Why this matters" — collapsed glossary of the derived metrics shown above.
+    // Copy mirrors knowledge/moaty-metrics.md. Native <details> = no JS needed.
+    function lookupGlossary() {
+      const rows = [
+        ['Rank (wk)', 'Where this group places among all groups on weekly performance — #1 is the best performer. The sparkline tracks it over time (a rising line = improving).'],
+        ['Rank floor', 'The lowest its ranking has dropped to across 1, 3, and 6 months — a conservative read of how reliably strong it is.'],
+        ['Sustained / Consistent', 'Sustained = top-quartile across 1/3/6mo at once (not a recent flash). Consistent = the three timeframes agree and it’s at least top-half.'],
+        ['Momentum', 'Strength across every timeframe at once, 0–100% (a percentile across the seven perf windows).'],
+        ['Breadth', 'Whether the group is positive across the major timeframes. "All green" gates on month/quarter/half/YTD; the day & week dots show context but don’t gate.'],
+      ];
+      const items = rows.map(([t, d]) =>
+        `<div><span class="text-slate-200 font-medium">${t}</span> — <span class="text-slate-400">${d}</span></div>`
+      ).join('');
+      return `
+        <details class="rounded-xl bg-slate-800/60 border border-slate-700 mt-1">
+          <summary class="text-xs text-slate-400 px-3 py-2 cursor-pointer select-none">Why this matters</summary>
+          <div class="px-3 pb-3 space-y-1.5 text-xs">${items}</div>
+        </details>`;
+    }
+
     function renderLookup() {
       const el = document.getElementById('lookup-result');
       if (!el) return;
@@ -1427,6 +1447,15 @@
           : `<span class="ml-2 text-xs text-slate-500">${Math.round(conf*100)}% match</span>`;
       }
 
+      const symEnc = encodeURIComponent(data.symbol);
+      const links = `
+        <div class="flex gap-2 mt-1.5">
+          <a href="https://finviz.com/quote.ashx?t=${symEnc}" target="_blank" rel="noopener noreferrer"
+            class="text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">Finviz ↗</a>
+          <a href="https://www.tradingview.com/symbols/${symEnc}/" target="_blank" rel="noopener noreferrer"
+            class="text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">TradingView ↗</a>
+        </div>`;
+
       let html = `
         <div class="flex gap-3 items-start">
           ${data.image ? `<img src="${escapeHtml(data.image)}" alt="" class="w-12 h-12 rounded-lg object-contain bg-white/5 flex-shrink-0" onerror="this.style.display='none'">` : ''}
@@ -1435,12 +1464,14 @@
               <span class="ml-1 text-xs px-1.5 py-0.5 rounded bg-slate-700 align-middle">${escapeHtml(data.symbol)}</span></div>
             ${meta ? `<div class="text-xs text-slate-400 mt-0.5">${meta}</div>` : ''}
             <div class="text-sm text-slate-200 mt-1">${escapeHtml(data.finviz_sector || '—')} › ${escapeHtml(data.finviz_industry || 'N/A')}${confBadge}</div>
+            ${links}
           </div>
         </div>`;
 
       if (data.finviz_industry) html += groupPerfCard(data.finviz_industry, 'industries', 'Industry');
       if (data.finviz_sector)   html += groupPerfCard(data.finviz_sector, 'sectors', 'Sector');
       html += contextSignalCard(data.finviz_industry, data.finviz_sector);
+      html += lookupGlossary();
 
       el.innerHTML = html;
     }

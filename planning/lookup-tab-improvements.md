@@ -71,10 +71,12 @@ Each slice = code + docs + tracking.
 - [x] **Slice 5 — Clarity wins.** Done. Rank label now "Rank (wk)"; 30d
       rank-delta chip ("▲N over 30d") beside the weekly arrow; `lookupSkeleton()`
       replaces the "Looking up…" text.
-- [ ] **Slice 6 — QoL.** "Why this matters" collapsible glossary (copy from
-      `knowledge/moaty-metrics.md`), breadth/momentum info affordance, subtle
-      Finviz (`https://finviz.com/quote.ashx?t=SYM`) + Deepvue deeplinks in the
-      company header (verify exact Deepvue URL during impl).
+- [x] **Slice 6 — QoL.** Done. `lookupGlossary()` collapsed "Why this matters"
+      `<details>` (copy from `knowledge/moaty-metrics.md`; the percentile-basis
+      info affordance is folded into its Momentum/Breadth rows). Subtle Finviz
+      (`quote.ashx?t=SYM`) + **TradingView** (`/symbols/SYM/`) deeplinks in the
+      company header. Deepvue dropped — no public per-ticker URL (login-gated);
+      owner chose TradingView instead.
 
 ## Deferred — backlog (seed into SPRINT)
 
