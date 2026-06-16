@@ -217,8 +217,8 @@
       strengthView: 'sustained',
       topN: 20,
       data: {
-        sectors:    { snap: null, delta: null },
-        industries: { snap: null, delta: null },
+        sectors:    { snap: null, delta: null, deltaAll: null },
+        industries: { snap: null, delta: null, deltaAll: null },
       },
       fetchLog: null,
       aiData: null,
@@ -484,6 +484,9 @@
         ]);
         state.data[group].snap  = getLatest(snapRes.data);
         state.data[group].delta = getLatest(deltaRes.data);
+        // Retain full delta history for the lookup-tab rank sparkline. Other
+        // tabs read latest-only via .snap/.delta; this is consumed only there.
+        state.data[group].deltaAll = deltaRes.data || [];
 
         if (state.data[group].snap.length > 0) {
           const d = state.data[group].snap[0].date;
@@ -1156,6 +1159,50 @@
       return s;
     }
 
+    // Weekly-rank history for one group, oldest→newest, capped at the last
+    // `cap` trading days. Reads the retained full delta history (deltaAll).
+    function groupRankHistory(name, groupKey, cap = 30) {
+      if (!name) return [];
+      const all = (state.data[groupKey] && state.data[groupKey].deltaAll) || [];
+      const pts = all
+        .filter(r => r.name === name && r.date)
+        .map(r => ({ date: r.date, rank: pf(r.rank_week) }))
+        .filter(p => p.rank !== null)
+        .sort((a, b) => a.date.localeCompare(b.date));
+      return pts.slice(-cap);
+    }
+
+    // Inline SVG sparkline of weekly rank over time. Y is inverted so a rising
+    // line = improving rank (rank 1 is best). Returns '' when too few points.
+    function rankSparkline(points, n) {
+      if (!points || points.length < 2) return '';
+      const W = 168, H = 32, padX = 2, padY = 4;
+      const ranks = points.map(p => p.rank);
+      let lo = Math.min(...ranks), hi = Math.max(...ranks);
+      if (hi === lo) { hi += 1; lo -= 1; } // flat series → centered line
+      const x = i => padX + (i * (W - 2 * padX)) / (points.length - 1);
+      // invert: best rank (low number) → top of the chart
+      const y = r => padY + ((r - lo) / (hi - lo)) * (H - 2 * padY);
+      const coords = points.map((p, i) => `${x(i).toFixed(1)},${y(p.rank).toFixed(1)}`);
+      const last = points[points.length - 1];
+      const first = points[0];
+      const improving = last.rank <= first.rank; // lower (better) or equal
+      const stroke = improving ? '#34d399' : '#f87171';
+      const span = `last ${points.length}d`;
+      return `
+        <div class="pt-0.5">
+          <div class="flex justify-between items-baseline mb-0.5">
+            <span class="text-[0.6rem] uppercase tracking-wider text-slate-500">Weekly rank · ${span}</span>
+            <span class="text-[0.6rem] text-slate-500">best #${lo}${n ? ` of ${n}` : ''}</span>
+          </div>
+          <svg viewBox="0 0 ${W} ${H}" class="w-full h-8" preserveAspectRatio="none" aria-hidden="true">
+            <polyline fill="none" stroke="${stroke}" stroke-width="1.5"
+              stroke-linejoin="round" stroke-linecap="round" points="${coords.join(' ')}" />
+            <circle cx="${x(points.length - 1).toFixed(1)}" cy="${y(last.rank).toFixed(1)}" r="2" fill="${stroke}" />
+          </svg>
+        </div>`;
+    }
+
     function groupPerfCard(name, groupKey, label) {
       const { delta, snap, n } = findGroupData(name, groupKey);
       if (!delta && !snap) {
@@ -1187,6 +1234,8 @@
              <span class="block h-full rounded-full ${momStyle.bar}" style="width:${momPct}%"></span></span>`
         : '<span class="text-slate-600">—</span>';
 
+      const spark = rankSparkline(groupRankHistory(name, groupKey), n);
+
       return `
         <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 space-y-1.5">
           <div class="text-[0.65rem] uppercase tracking-wider text-slate-500">${label}</div>
@@ -1194,6 +1243,7 @@
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Rank</span><span class="text-slate-200">${rankStr}${deltaHtml}</span></div>
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Momentum</span><span>${momHtml}</span></div>
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Perf</span><span class="text-slate-300">Wk ${fmtPct(perfWeek)} · Mo ${fmtPct(perfMonth)} · YTD ${fmtPct(perfYtd)}</span></div>
+          ${spark}
         </div>`;
     }
 
@@ -1387,8 +1437,8 @@
     // Expose refresh globally for the retry button
     window.__refresh = function() {
       if (state.loading) return;
-      state.data.sectors    = { snap: null, delta: null };
-      state.data.industries = { snap: null, delta: null };
+      state.data.sectors    = { snap: null, delta: null, deltaAll: null };
+      state.data.industries = { snap: null, delta: null, deltaAll: null };
       state.fetchLog = null;
       state.aiData = null;
       state.latestAiDate = null;

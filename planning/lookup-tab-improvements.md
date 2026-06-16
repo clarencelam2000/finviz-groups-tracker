@@ -49,11 +49,11 @@ are deferred until CSV payload or logic-duplication actually hurts — see
 
 Each slice = code + docs + tracking.
 
-- [ ] **Slice 1 — Retain history + weekly-rank sparkline.** Stop discarding CSV
-      history in the lookup path; render an inline SVG polyline of `rank_week`
-      over the available window (~30d cap), y-axis inverted (up = improving),
-      labeled "Weekly rank · last Nd". Series is short until history grows;
-      fills in automatically.
+- [x] **Slice 1 — Retain history + weekly-rank sparkline.** Done. `loadGroup`
+      retains full delta history in `state.data[group].deltaAll`;
+      `groupRankHistory()` + `rankSparkline()` render an inline SVG of `rank_week`
+      over the last ~30d in each group card, y inverted (up = improving), labeled
+      "Weekly rank · last Nd". Hidden when <2 points. SW cache bumped to v4.
 - [ ] **Slice 2 — Conviction chip + Rank Floor.** Chip from `rank_agreement` +
       sustained rule ("Sustained" / "Consistent" / hidden). **Rank Floor** =
       worst (max) of `rank_month`, `rank_quarter`, `rank_half` → "Top {floor}
