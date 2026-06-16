@@ -23,6 +23,8 @@
     @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     details > summary { list-style: none; cursor: pointer; }
     details > summary::-webkit-details-marker { display: none; }
+    .glossary-chevron { display: inline-block; transition: transform 0.2s ease; }
+    details[open] .glossary-chevron { transform: rotate(90deg); }
     .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
     .scrollbar-none::-webkit-scrollbar { display: none; }
   </style>
@@ -1212,16 +1214,23 @@
       const improving = last.rank <= first.rank; // lower (better) or equal
       const stroke = improving ? '#34d399' : '#f87171';
       const span = `last ${points.length}d`;
+      // Range labels inside SVG: #lo (best, top) and #hi (worst, bottom).
+      // Omit on flat series since lo/hi are synthetic ±1 values.
+      const isFlat = Math.max(...points.map(p => p.rank)) === Math.min(...points.map(p => p.rank));
+      const rangeLabels = isFlat ? '' :
+        `<text x="${W - 2}" y="${padY + 5}" text-anchor="end" style="font-size:6px;fill:#475569">#${lo}</text>` +
+        `<text x="${W - 2}" y="${H - 1}" text-anchor="end" style="font-size:6px;fill:#475569">#${hi}</text>`;
       return `
         <div class="pt-0.5">
           <div class="flex justify-between items-baseline mb-0.5">
             <span class="text-[0.6rem] uppercase tracking-wider text-slate-500">Weekly rank · ${span}</span>
-            <span class="text-[0.6rem] text-slate-500">best #${lo}${n ? ` of ${n}` : ''}</span>
+            <span class="text-[0.6rem] text-slate-500">${n ? `of ${n}` : ''}</span>
           </div>
           <svg viewBox="0 0 ${W} ${H}" class="w-full h-8" preserveAspectRatio="none" aria-hidden="true">
             <polyline fill="none" stroke="${stroke}" stroke-width="1.5"
               stroke-linejoin="round" stroke-linecap="round" points="${coords.join(' ')}" />
             <circle cx="${x(points.length - 1).toFixed(1)}" cy="${y(last.rank).toFixed(1)}" r="2" fill="${stroke}" />
+            ${rangeLabels}
           </svg>
         </div>`;
     }
@@ -1322,12 +1331,15 @@
         : '<span class="text-slate-600">—</span>';
 
       const spark = rankSparkline(groupRankHistory(name, groupKey), n);
-      const { floor, chip } = convictionInfo(delta, n);
+      const { floor, best, chip } = convictionInfo(delta, n);
       const chipHtml = chip
         ? `<span class="text-[0.6rem] px-1.5 py-0.5 rounded border ${chip.cls}">${chip.text}</span>`
         : '';
-      const floorHtml = floor !== null
-        ? `<div class="flex justify-between items-center text-xs"><span class="text-slate-400">Rank floor</span><span class="text-slate-200">Top #${floor} across 1/3/6mo</span></div>`
+      const floorRangeStr = floor !== null
+        ? (best !== null && best !== floor ? `#${best}–#${floor}` : `#${floor}`) + (n ? ` of ${n}` : '')
+        : null;
+      const floorHtml = floorRangeStr !== null
+        ? `<div class="flex justify-between items-center text-xs"><span class="text-slate-400">Rank floor</span><span class="text-slate-200">${floorRangeStr} across 1/3/6mo</span></div>`
         : '';
 
       return `
@@ -1345,14 +1357,18 @@
 
     // Concrete evidence behind a group's standing: rank trajectory, conviction/
     // Rank Floor, momentum, and breadth. Returns short phrases (strongest first).
+    // Returns short evidence phrases for a group (name prefix omitted — the
+    // caller supplies a per-group label). Breadth "all green" is skipped since
+    // the breadth-strip badge already shows it; only "no timeframes positive"
+    // is worth calling out as a notable negative signal.
     function groupReasons(name, gd, n) {
       const { delta, snap } = gd;
       const out = [];
       if (delta) {
         const d30 = pf(delta.rank_week_delta_30d);
         const d7  = pf(delta.rank_week_delta_7d);
-        if (d30 !== null && Math.abs(d30) >= 3)      out.push(`${name} ${d30 > 0 ? '▲' : '▼'}${Math.abs(d30)} rank over 30d`);
-        else if (d7 !== null && Math.abs(d7) >= 3)   out.push(`${name} ${d7 > 0 ? '▲' : '▼'}${Math.abs(d7)} rank this wk`);
+        if (d30 !== null && Math.abs(d30) >= 3)      out.push(`${d30 > 0 ? '▲' : '▼'}${Math.abs(d30)} rank over 30d`);
+        else if (d7 !== null && Math.abs(d7) >= 3)   out.push(`${d7 > 0 ? '▲' : '▼'}${Math.abs(d7)} rank this wk`);
         const { floor, chip } = convictionInfo(delta, n);
         if (chip) out.push(`${chip.text.toLowerCase()} across 1/3/6mo (floor #${floor})`);
         const mom = pf(delta.momentum_score);
@@ -1361,7 +1377,8 @@
       if (snap) {
         let g = 0, t = 0;
         for (const tf of BREADTH_TFS) { if (!tf.gate) continue; t++; const v = pf(snap[tf.k]); if (v !== null && v > 0) g++; }
-        if (t > 0 && (g === t || g === 0)) out.push(`breadth ${g}/${t} green`);
+        // Skip "all green" — the breadth-strip badge already shows it. Only flag all-red.
+        if (t > 0 && g === 0) out.push('no timeframes positive');
       }
       return out;
     }
@@ -1383,13 +1400,17 @@
         label = 'MIXED'; cls = 'bg-amber-900/40 border-amber-500 text-amber-300';
         desc = 'Sector and industry are diverging or neutral — check the individual group trends above.';
       }
-      // Cite the 2–3 strongest concrete reasons (industry first, then sector).
-      const reasons = [
-        ...groupReasons(indName, ind, ind.n),
-        ...groupReasons(secName, sec, sec.n),
-      ].slice(0, 3);
-      const evidence = reasons.length
-        ? `<div class="text-[0.7rem] text-slate-400 mt-1.5">${escapeHtml(reasons.join(' · '))}</div>`
+      // Per-group evidence lines (industry first, sector second), each labeled.
+      const buildLine = (groupName, gd) => {
+        if (!groupName) return '';
+        const reasons = groupReasons(groupName, gd, gd.n).slice(0, 2);
+        if (!reasons.length) return '';
+        return `<div class="text-[0.7rem] mt-0.5"><span class="text-slate-500">${escapeHtml(groupName)}:</span> <span class="text-slate-400">${escapeHtml(reasons.join(' · '))}</span></div>`;
+      };
+      const indLine = buildLine(indName, ind);
+      const secLine = buildLine(secName, sec);
+      const evidence = (indLine || secLine)
+        ? `<div class="mt-1.5 space-y-0.5">${indLine}${secLine}</div>`
         : '';
       return `
         <div class="rounded-xl p-3 border ${cls}">
@@ -1403,18 +1424,21 @@
     // Copy mirrors knowledge/moaty-metrics.md. Native <details> = no JS needed.
     function lookupGlossary() {
       const rows = [
-        ['Rank (wk)', 'Where this group places among all groups on weekly performance — #1 is the best performer. The sparkline tracks it over time (a rising line = improving).'],
-        ['Rank floor', 'The lowest its ranking has dropped to across 1, 3, and 6 months — a conservative read of how reliably strong it is.'],
-        ['Sustained / Consistent', 'Sustained = top-quartile across 1/3/6mo at once (not a recent flash). Consistent = the three timeframes agree and it’s at least top-half.'],
-        ['Momentum', 'Strength across every timeframe at once, 0–100% (a percentile across the seven perf windows).'],
-        ['Breadth', 'Whether the group is positive across the major timeframes. "All green" gates on month/quarter/half/YTD; the day & week dots show context but don’t gate.'],
+        [‘rank (wk)’, ‘Where this group places among all groups on weekly performance — #1 is the best performer. The sparkline tracks it over time (a rising line = improving).’],
+        [‘rank floor’, ‘The range of rankings across 1, 3, and 6 months — best to worst. A tight, low range means it held its standing consistently.’],
+        [‘sustained / consistent’, ‘Sustained = top-quartile across 1/3/6mo at once (not a recent flash). Consistent = the three timeframes agree and it’s at least top-half.’],
+        [‘momentum’, ‘Strength across every timeframe at once, 0–100% (a percentile across the seven perf windows).’],
+        [‘breadth’, ‘Whether the group is positive across the major timeframes. “All green” gates on month/quarter/half/YTD; the day & week dots show context but don’t gate.’],
       ];
       const items = rows.map(([t, d]) =>
         `<div><span class="text-slate-200 font-medium">${t}</span> — <span class="text-slate-400">${d}</span></div>`
-      ).join('');
+      ).join(‘’);
       return `
         <details class="rounded-xl bg-slate-800/60 border border-slate-700 mt-1">
-          <summary class="text-xs text-slate-400 px-3 py-2 cursor-pointer select-none">Why this matters</summary>
+          <summary class="text-xs text-slate-400 px-3 py-2 cursor-pointer select-none flex items-center justify-between">
+            <span>why this matters</span>
+            <span class="glossary-chevron text-slate-500">›</span>
+          </summary>
           <div class="px-3 pb-3 space-y-1.5 text-xs">${items}</div>
         </details>`;
     }
