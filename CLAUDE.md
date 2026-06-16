@@ -123,11 +123,12 @@ python scripts/export_db.py
 - GitHub Actions runs **weekdays only**, three times a day: `13:49`, `14:51`, and `19:48` UTC
   (~9:49am / 10:51am / 3:48pm ET in summer; one hour earlier in ET during winter — GitHub cron
   is fixed-UTC and cannot follow DST). The last run is the EOD snapshot just before the close.
-- **No weekend runs.** Markets are closed, so a weekend scrape only re-captures Friday's stale
-  close. `trading_date()` in `collect.py` also rolls any weekend or Monday-pre-open collection
-  (cron drift or manual dispatch) back to the preceding Friday, so **no row is ever stamped with a
-  weekend date**. Holidays are not handled (no trading calendar) — a holiday run stamps the prior
-  session's data under the holiday's weekday date.
+- **No weekend or holiday dates.** Markets are closed on weekends and NYSE holidays, so such a
+  scrape only re-captures the prior session's stale close. `trading_date()` in `collect.py` rolls
+  any weekend, Monday-pre-open, or NYSE-holiday collection (cron drift or manual dispatch) back to
+  the most recent **trading day**, so **no row is ever stamped with a weekend or holiday date**.
+  The holiday list (`NYSE_HOLIDAYS` in `collect.py`) is hardcoded through 2027 — extend it for
+  future years; a year not in the table falls back to weekend-only handling.
 - Workflow: `.github/workflows/collect.yml`
 - Trigger: `workflow_dispatch` also available for manual runs.
 - On failure: GitHub emails automatically. Retry 3x before failing.

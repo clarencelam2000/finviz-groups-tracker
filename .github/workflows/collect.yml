@@ -39,18 +39,14 @@ jobs:
           from pathlib import Path
           import pytz
 
+          # Reuse the single source of truth so the verified date matches what
+          # collect.py stored (weekend + holiday rollback included). Playwright
+          # is installed by the earlier step, so importing scripts.collect works.
+          from scripts.collect import trading_date
+
           eastern = pytz.timezone("US/Eastern")
           now_utc = datetime.now(timezone.utc)
-          now_et  = datetime.now(eastern)
-          # Mirror trading_date() from collect.py: before 9 AM ET the data shown
-          # on Finviz is still the prior session's close, and weekends roll back
-          # to the preceding Friday (markets closed).
-          d = now_et.date()
-          if now_et.hour < 9:
-              d = d - timedelta(days=1)
-          while d.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
-              d = d - timedelta(days=1)
-          today = d.strftime("%Y-%m-%d")
+          today = trading_date(datetime.now(eastern))
 
           FRESHNESS_MINUTES = 30
           checks = [("data/sectors/snapshots.csv", 8), ("data/industries/snapshots.csv", 100)]
@@ -106,8 +102,12 @@ jobs:
           from pathlib import Path
           import pytz
 
+          # Use the stored trading date (weekend + holiday rollback) so the
+          # logged row counts reflect the date collect.py actually wrote.
+          from scripts.collect import trading_date
+
           eastern = pytz.timezone("US/Eastern")
-          run_date = datetime.now(eastern).strftime("%Y-%m-%d")
+          run_date = trading_date(datetime.now(eastern))
           timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
           def count_today_rows(csv_path, run_date):

@@ -317,27 +317,59 @@ def append_records(csv_path: Path, records: list, existing_keys: set):
 # Main
 # ---------------------------------------------------------------------------
 
+# NYSE full-day market holidays (observed dates). Half-days (e.g. the day after
+# Thanksgiving) still trade and are deliberately excluded. Extend this table as
+# new years are scheduled — a year that is absent simply gets weekend-only
+# handling for that year (holidays would then be stamped under their own date).
+NYSE_HOLIDAYS = frozenset({
+    # 2025
+    "2025-01-01", "2025-01-20", "2025-02-17", "2025-04-18", "2025-05-26",
+    "2025-06-19", "2025-07-04", "2025-09-01", "2025-11-27", "2025-12-25",
+    # 2026
+    "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25",
+    "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
+    # 2027
+    "2027-01-01", "2027-01-18", "2027-02-15", "2027-03-26", "2027-05-31",
+    "2027-06-18", "2027-07-05", "2027-09-06", "2027-11-25", "2027-12-24",
+})
+
+NYSE_HOLIDAY_YEARS = frozenset(int(d[:4]) for d in NYSE_HOLIDAYS)
+
+
+def _is_trading_day(d: date) -> bool:
+    """True if d is a weekday and not a known NYSE full-day holiday."""
+    if d.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+        return False
+    return d.strftime("%Y-%m-%d") not in NYSE_HOLIDAYS
+
+
 def trading_date(now_et: datetime) -> str:
     """Return the trading date for a given ET datetime.
 
-    Two adjustments keep the stored date aligned with the session whose data
+    Three adjustments keep the stored date aligned with the session whose data
     Finviz is actually showing:
 
     1. Before 9 AM ET the market hasn't opened and Finviz still shows the prior
        session's close, so step back one calendar day.
-    2. Markets are closed on weekends, so roll Saturday/Sunday (and a Monday
-       pre-open run, which step 1 lands on Sunday) back to the preceding Friday.
-       This guarantees we never stamp a row with a weekend date — whatever a
-       weekend or early-Monday run scrapes is still Friday's close.
+    2. Weekends are closed, so a Saturday/Sunday run (or a Monday pre-open run,
+       which step 1 lands on Sunday) rolls back to the most recent trading day.
+    3. NYSE holidays are closed too, so a holiday run (or the morning after one)
+       rolls back across the holiday to the prior trading day.
 
-    Note: U.S. market holidays are not handled (no trading calendar here). A run
-    on a holiday will resolve to that weekday and store the prior session's data
-    under the holiday's date. Acceptable for now; revisit if it causes drift.
+    The combined effect: the returned date is always a real trading day, so no
+    row is ever stamped with a weekend or holiday date no matter when collection
+    runs (scheduled cron drift, manual dispatch, or a holiday run). On those days
+    Finviz is still showing the prior session's close, which is exactly what we
+    store under the prior trading day.
+
+    Caveat: the holiday table (NYSE_HOLIDAYS) is hardcoded. For a year not yet in
+    the table, only the weekend rule applies — a holiday that year would be
+    stamped under its own date until the table is extended.
     """
     d = now_et.date()
     if now_et.hour < 9:
         d = d - timedelta(days=1)
-    while d.weekday() >= 5:  # 5 = Saturday, 6 = Sunday
+    while not _is_trading_day(d):
         d = d - timedelta(days=1)
     return d.strftime("%Y-%m-%d")
 
