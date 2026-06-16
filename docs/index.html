@@ -1424,15 +1424,15 @@
     // Copy mirrors knowledge/moaty-metrics.md. Native <details> = no JS needed.
     function lookupGlossary() {
       const rows = [
-        [‘rank (wk)’, ‘Where this group places among all groups on weekly performance — #1 is the best performer. The sparkline tracks it over time (a rising line = improving).’],
-        [‘rank floor’, ‘The range of rankings across 1, 3, and 6 months — best to worst. A tight, low range means it held its standing consistently.’],
-        [‘sustained / consistent’, ‘Sustained = top-quartile across 1/3/6mo at once (not a recent flash). Consistent = the three timeframes agree and it’s at least top-half.’],
-        [‘momentum’, ‘Strength across every timeframe at once, 0–100% (a percentile across the seven perf windows).’],
-        [‘breadth’, ‘Whether the group is positive across the major timeframes. “All green” gates on month/quarter/half/YTD; the day & week dots show context but don’t gate.’],
+        ["rank (wk)", "Where this group places among all groups on weekly performance — #1 is the best performer. The sparkline tracks it over time (a rising line = improving)."],
+        ["rank floor", "The range of rankings across 1, 3, and 6 months — best to worst. A tight, low range means it held its standing consistently."],
+        ["sustained / consistent", "Sustained = top-quartile across 1/3/6mo at once (not a recent flash). Consistent = the three timeframes agree and it’s at least top-half."],
+        ["momentum", "Strength across every timeframe at once, 0–100% (a percentile across the seven perf windows)."],
+        ["breadth", "Whether the group is positive across the major timeframes. “All green” gates on month/quarter/half/YTD; the day & week dots show context but don’t gate."],
       ];
       const items = rows.map(([t, d]) =>
         `<div><span class="text-slate-200 font-medium">${t}</span> — <span class="text-slate-400">${d}</span></div>`
-      ).join(‘’);
+      ).join("");
       return `
         <details class="rounded-xl bg-slate-800/60 border border-slate-700 mt-1">
           <summary class="text-xs text-slate-400 px-3 py-2 cursor-pointer select-none flex items-center justify-between">
