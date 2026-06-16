@@ -1164,14 +1164,30 @@
     }
 
     // Latest delta + snap row for a Finviz group name, plus group count n.
+    // Compute rank for one group from today's snapshots: count(groups with higher
+    // perf) + 1. Mirrors pandas rank(ascending=False, method='min'). Used so the
+    // Lookup card always reflects the freshest snapshot data even when deltas.csv
+    // lags behind by a collection cycle.
+    function computeRankFromSnap(snapRow, allSnaps, perfCol) {
+      if (!snapRow || !allSnaps.length) return null;
+      const v = pf(snapRow[perfCol]);
+      if (v === null) return null;
+      return allSnaps.filter(r => pf(r[perfCol]) !== null && pf(r[perfCol]) > v).length + 1;
+    }
+
     function findGroupData(name, groupKey) {
-      if (!name) return { delta: null, snap: null, n: 0 };
-      const deltas = state.data[groupKey] ? (state.data[groupKey].delta || []) : [];
-      const snaps  = state.data[groupKey] ? (state.data[groupKey].snap  || []) : [];
+      if (!name) return { delta: null, snap: null, allSnaps: [], n: 0 };
+      const deltas    = state.data[groupKey] ? (state.data[groupKey].delta || []) : [];
+      const rawSnaps  = state.data[groupKey] ? (state.data[groupKey].snap  || []) : [];
+      // Deduplicate by name (keep last = most recent collected_at in append order)
+      const seenNames = new Map();
+      for (const r of rawSnaps) seenNames.set(r.name, r);
+      const allSnaps  = [...seenNames.values()];
       return {
-        delta: deltas.find(r => r.name === name) || null,
-        snap:  snaps.find(r => r.name === name) || null,
-        n: deltas.length,
+        delta:    deltas.find(r => r.name === name) || null,
+        snap:     allSnaps.find(r => r.name === name) || null,
+        allSnaps,
+        n: allSnaps.length || deltas.length,
       };
     }
 
@@ -1238,14 +1254,27 @@
     // Rank Floor + conviction chip from the medium-term ranks (month/quarter/
     // half) and rank_agreement. Floor = worst (max) of the three → "never worse
     // than #N over 1/3/6mo". See knowledge/decisions/ADR-002-rank-floor-metric.md.
-    function convictionInfo(delta, n) {
-      if (!delta) return { floor: null, best: null, chip: null };
-      const ranks = ['rank_month', 'rank_quarter', 'rank_half']
-        .map(k => pf(delta[k])).filter(v => v !== null);
+    // snap + allSnaps: when provided, ranks are computed live from today's snapshot
+    // (always fresh). Falls back to pre-computed delta columns when unavailable.
+    function convictionInfo(delta, n, snap = null, allSnaps = []) {
+      if (!delta && !snap) return { floor: null, best: null, chip: null };
+      let ranks;
+      if (snap && allSnaps.length > 0) {
+        // Live: derive month/quarter/half ranks from today's snapshot data.
+        ranks = ['perf_month', 'perf_quarter', 'perf_half']
+          .map(col => computeRankFromSnap(snap, allSnaps, col))
+          .filter(v => v !== null);
+      } else if (delta) {
+        // Fallback: pre-computed ranks from deltas.csv (may lag by one cycle).
+        ranks = ['rank_month', 'rank_quarter', 'rank_half']
+          .map(k => pf(delta[k])).filter(v => v !== null);
+      } else {
+        ranks = [];
+      }
       if (ranks.length < 3) return { floor: null, best: null, chip: null };
       const floor = Math.max(...ranks);   // worst standing across the three
       const best  = Math.min(...ranks);   // best standing across the three
-      const agree = pf(delta.rank_agreement);
+      const agree = delta ? pf(delta.rank_agreement) : null; // historical; stays from delta
       let chip = null;
       if (n > 0) {
         const topQuartile = Math.ceil(n / 4);
@@ -1294,7 +1323,7 @@
     }
 
     function groupPerfCard(name, groupKey, label) {
-      const { delta, snap, n } = findGroupData(name, groupKey);
+      const { delta, snap, allSnaps, n } = findGroupData(name, groupKey);
       if (!delta && !snap) {
         return `
           <div class="rounded-xl p-3 bg-slate-800 border border-slate-700">
@@ -1303,7 +1332,11 @@
             <p class="text-xs text-slate-500 mt-2">Not separately tracked in the Finviz data yet.</p>
           </div>`;
       }
-      const rank        = delta ? pf(delta.rank_week) : null;
+      // Prefer live rank from today's snapshot over pre-computed delta rank,
+      // so the card stays in sync with the Today tab even when deltas.csv lags.
+      const rank        = snap
+        ? computeRankFromSnap(snap, allSnaps, 'perf_week')
+        : (delta ? pf(delta.rank_week) : null);
       const rankDelta7d = delta ? pf(delta.rank_week_delta_7d) : null;
       const rankDelta30d = delta ? pf(delta.rank_week_delta_30d) : null;
       const score       = delta ? pf(delta.momentum_score) : null;
@@ -1331,7 +1364,7 @@
         : '<span class="text-slate-600">—</span>';
 
       const spark = rankSparkline(groupRankHistory(name, groupKey), n);
-      const { floor, best, chip } = convictionInfo(delta, n);
+      const { floor, best, chip } = convictionInfo(delta, n, snap, allSnaps);
       const chipHtml = chip
         ? `<span class="text-[0.6rem] px-1.5 py-0.5 rounded border ${chip.cls}">${chip.text}</span>`
         : '';
@@ -1362,14 +1395,14 @@
     // the breadth-strip badge already shows it; only "no timeframes positive"
     // is worth calling out as a notable negative signal.
     function groupReasons(name, gd, n) {
-      const { delta, snap } = gd;
+      const { delta, snap, allSnaps } = gd;
       const out = [];
       if (delta) {
         const d30 = pf(delta.rank_week_delta_30d);
         const d7  = pf(delta.rank_week_delta_7d);
         if (d30 !== null && Math.abs(d30) >= 3)      out.push(`${d30 > 0 ? '▲' : '▼'}${Math.abs(d30)} rank over 30d`);
         else if (d7 !== null && Math.abs(d7) >= 3)   out.push(`${d7 > 0 ? '▲' : '▼'}${Math.abs(d7)} rank this wk`);
-        const { floor, chip } = convictionInfo(delta, n);
+        const { floor, chip } = convictionInfo(delta, n, snap, allSnaps);
         if (chip) out.push(`${chip.text.toLowerCase()} across 1/3/6mo (floor #${floor})`);
         const mom = pf(delta.momentum_score);
         if (mom !== null && (mom >= 0.7 || mom <= 0.3)) out.push(`momentum ${(mom * 100).toFixed(0)}%`);
