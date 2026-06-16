@@ -68,8 +68,9 @@ Each slice = code + docs + tracking.
       concrete signals (rank trajectory, conviction+floor, momentum, breadth);
       `contextSignalCard` shows the 2–3 strongest under the verdict. Scoring
       spine unchanged.
-- [ ] **Slice 5 — Clarity wins.** Label rank basis ("Rank (wk) #41 of 144"),
-      add 30d rank-delta context (`rank_week_delta_30d`), loading skeleton.
+- [x] **Slice 5 — Clarity wins.** Done. Rank label now "Rank (wk)"; 30d
+      rank-delta chip ("▲N over 30d") beside the weekly arrow; `lookupSkeleton()`
+      replaces the "Looking up…" text.
 - [ ] **Slice 6 — QoL.** "Why this matters" collapsible glossary (copy from
       `knowledge/moaty-metrics.md`), breadth/momentum info affordance, subtle
       Finviz (`https://finviz.com/quote.ashx?t=SYM`) + Deepvue deeplinks in the
