@@ -1314,6 +1314,29 @@
         </div>`;
     }
 
+    // Concrete evidence behind a group's standing: rank trajectory, conviction/
+    // Rank Floor, momentum, and breadth. Returns short phrases (strongest first).
+    function groupReasons(name, gd, n) {
+      const { delta, snap } = gd;
+      const out = [];
+      if (delta) {
+        const d30 = pf(delta.rank_week_delta_30d);
+        const d7  = pf(delta.rank_week_delta_7d);
+        if (d30 !== null && Math.abs(d30) >= 3)      out.push(`${name} ${d30 > 0 ? '▲' : '▼'}${Math.abs(d30)} rank over 30d`);
+        else if (d7 !== null && Math.abs(d7) >= 3)   out.push(`${name} ${d7 > 0 ? '▲' : '▼'}${Math.abs(d7)} rank this wk`);
+        const { floor, chip } = convictionInfo(delta, n);
+        if (chip) out.push(`${chip.text.toLowerCase()} across 1/3/6mo (floor #${floor})`);
+        const mom = pf(delta.momentum_score);
+        if (mom !== null && (mom >= 0.7 || mom <= 0.3)) out.push(`momentum ${(mom * 100).toFixed(0)}%`);
+      }
+      if (snap) {
+        let g = 0, t = 0;
+        for (const tf of BREADTH_TFS) { if (!tf.gate) continue; t++; const v = pf(snap[tf.k]); if (v !== null && v > 0) g++; }
+        if (t > 0 && (g === t || g === 0)) out.push(`breadth ${g}/${t} green`);
+      }
+      return out;
+    }
+
     function contextSignalCard(indName, secName) {
       const ind = findGroupData(indName, 'industries');
       const sec = findGroupData(secName, 'sectors');
@@ -1331,10 +1354,19 @@
         label = 'MIXED'; cls = 'bg-amber-900/40 border-amber-500 text-amber-300';
         desc = 'Sector and industry are diverging or neutral — check the individual group trends above.';
       }
+      // Cite the 2–3 strongest concrete reasons (industry first, then sector).
+      const reasons = [
+        ...groupReasons(indName, ind, ind.n),
+        ...groupReasons(secName, sec, sec.n),
+      ].slice(0, 3);
+      const evidence = reasons.length
+        ? `<div class="text-[0.7rem] text-slate-400 mt-1.5">${escapeHtml(reasons.join(' · '))}</div>`
+        : '';
       return `
         <div class="rounded-xl p-3 border ${cls}">
           <div class="text-sm font-bold">● SIGNAL: ${label}</div>
           <div class="text-xs text-slate-300 mt-1">${desc}</div>
+          ${evidence}
         </div>`;
     }
 

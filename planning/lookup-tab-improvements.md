@@ -64,8 +64,10 @@ Each slice = code + docs + tracking.
       "All green" badge / "k/4 green" count. Verdict gates on
       month/quarter/half/YTD only (`BREADTH_TFS[].gate`); day & week render but
       don't gate (ADR-003).
-- [ ] **Slice 4 — Evidence-backed SIGNAL copy.** Rewrite `contextSignalCard` to
-      cite the 2–3 strongest concrete reasons. Same scoring spine.
+- [x] **Slice 4 — Evidence-backed SIGNAL copy.** Done. `groupReasons()` pulls
+      concrete signals (rank trajectory, conviction+floor, momentum, breadth);
+      `contextSignalCard` shows the 2–3 strongest under the verdict. Scoring
+      spine unchanged.
 - [ ] **Slice 5 — Clarity wins.** Label rank basis ("Rank (wk) #41 of 144"),
       add 30d rank-delta context (`rank_week_delta_30d`), loading skeleton.
 - [ ] **Slice 6 — QoL.** "Why this matters" collapsible glossary (copy from
