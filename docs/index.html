@@ -1203,6 +1203,30 @@
         </div>`;
     }
 
+    // Rank Floor + conviction chip from the medium-term ranks (month/quarter/
+    // half) and rank_agreement. Floor = worst (max) of the three → "never worse
+    // than #N over 1/3/6mo". See knowledge/decisions/ADR-002-rank-floor-metric.md.
+    function convictionInfo(delta, n) {
+      if (!delta) return { floor: null, best: null, chip: null };
+      const ranks = ['rank_month', 'rank_quarter', 'rank_half']
+        .map(k => pf(delta[k])).filter(v => v !== null);
+      if (ranks.length < 3) return { floor: null, best: null, chip: null };
+      const floor = Math.max(...ranks);   // worst standing across the three
+      const best  = Math.min(...ranks);   // best standing across the three
+      const agree = pf(delta.rank_agreement);
+      let chip = null;
+      if (n > 0) {
+        const topQuartile = Math.ceil(n / 4);
+        const topHalf = Math.ceil(n / 2);
+        if (floor <= topQuartile) {
+          chip = { text: 'Sustained', cls: 'bg-emerald-900/50 text-emerald-300 border-emerald-700' };
+        } else if (agree !== null && agree >= 0.85 && floor <= topHalf) {
+          chip = { text: 'Consistent', cls: 'bg-sky-900/50 text-sky-300 border-sky-700' };
+        }
+      }
+      return { floor, best, chip };
+    }
+
     function groupPerfCard(name, groupKey, label) {
       const { delta, snap, n } = findGroupData(name, groupKey);
       if (!delta && !snap) {
@@ -1235,12 +1259,20 @@
         : '<span class="text-slate-600">—</span>';
 
       const spark = rankSparkline(groupRankHistory(name, groupKey), n);
+      const { floor, chip } = convictionInfo(delta, n);
+      const chipHtml = chip
+        ? `<span class="text-[0.6rem] px-1.5 py-0.5 rounded border ${chip.cls}">${chip.text}</span>`
+        : '';
+      const floorHtml = floor !== null
+        ? `<div class="flex justify-between items-center text-xs"><span class="text-slate-400">Rank floor</span><span class="text-slate-200">Top #${floor} across 1/3/6mo</span></div>`
+        : '';
 
       return `
         <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 space-y-1.5">
-          <div class="text-[0.65rem] uppercase tracking-wider text-slate-500">${label}</div>
+          <div class="flex justify-between items-center"><span class="text-[0.65rem] uppercase tracking-wider text-slate-500">${label}</span>${chipHtml}</div>
           <div class="text-sm font-medium text-white">${escapeHtml(name)}</div>
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Rank</span><span class="text-slate-200">${rankStr}${deltaHtml}</span></div>
+          ${floorHtml}
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Momentum</span><span>${momHtml}</span></div>
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Perf</span><span class="text-slate-300">Wk ${fmtPct(perfWeek)} · Mo ${fmtPct(perfMonth)} · YTD ${fmtPct(perfYtd)}</span></div>
           ${spark}

@@ -54,10 +54,11 @@ Each slice = code + docs + tracking.
       `groupRankHistory()` + `rankSparkline()` render an inline SVG of `rank_week`
       over the last ~30d in each group card, y inverted (up = improving), labeled
       "Weekly rank · last Nd". Hidden when <2 points. SW cache bumped to v4.
-- [ ] **Slice 2 — Conviction chip + Rank Floor.** Chip from `rank_agreement` +
-      sustained rule ("Sustained" / "Consistent" / hidden). **Rank Floor** =
-      worst (max) of `rank_month`, `rank_quarter`, `rank_half` → "Top {floor}
-      across 1/3/6mo". Computed client-side.
+- [x] **Slice 2 — Conviction chip + Rank Floor.** Done. `convictionInfo(delta,
+      n)` computes Rank Floor = max(rank_month, rank_quarter, rank_half) →
+      "Top #{floor} across 1/3/6mo" row, plus a chip: "Sustained" (floor ≤ top
+      quartile) / "Consistent" (rank_agreement ≥ 0.85 AND floor ≤ top half) /
+      hidden. Graceful null when the three ranks aren't all present.
 - [ ] **Slice 3 — Breadth dot strip.** Day·Wk·Mo·Qtr·6M·YTD dots (green/red per
       `perf_*` sign, grey if NaN). Green/All-Green signal gates on
       **month/quarter/half/YTD only** — week & day render but don't gate
