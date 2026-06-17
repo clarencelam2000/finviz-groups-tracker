@@ -559,3 +559,23 @@ class TestMomentumAccelIntegration:
         rows = list(csv.DictReader(open(delta)))
         # Only one date → no ACCEL_WINDOW history → momentum_accel empty.
         assert all(r["momentum_accel"] == "" for r in rows)
+
+    def test_improving_momentum_accel_positive(self, tmp_path):
+        """Group that goes from weak to strong over ACCEL_WINDOW sessions has
+        momentum_accel > 0 on the final date (plan spec: improving → positive)."""
+        snap = tmp_path / "snapshots.csv"
+        # 12 dates total so the last date has a valid 10-session prior frame.
+        # A is weak for dates 1–8 (rank last), then strong for dates 9–12 (rank first).
+        # B and C stay flat at 0.0 throughout.
+        date_perfs = {}
+        for i in range(1, 9):
+            date_perfs[f"2026-01-{i:02d}"] = {"A": -5.0, "B": 0.0, "C": 0.0}
+        for i in range(9, 13):
+            date_perfs[f"2026-01-{i:02d}"] = {"A": 5.0, "B": 0.0, "C": 0.0}
+        self._snap(snap, date_perfs)
+        delta = tmp_path / "deltas.csv"
+        cd.compute_for_group("sector", snap_path=snap, delta_path=delta)
+        rows = list(csv.DictReader(open(delta)))
+        # Last date is 2026-01-12; A was weak 10 sessions earlier (2026-01-02).
+        a_row = next(r for r in rows if r["date"] == "2026-01-12" and r["name"] == "A")
+        assert float(a_row["momentum_accel"]) > 0
