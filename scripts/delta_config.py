@@ -59,6 +59,13 @@ REGIME_LONG = ["perf_half", "perf_year", "perf_ytd"]
 
 # Which trading-day window to use when measuring momentum acceleration and the
 # rank-trend slope window length (in sessions).
+#
+# ACCEL_WINDOW ideally stays equal to a value already in LOOKBACK_WINDOWS so the
+# prior-frame data is already loaded by the delta loop (avoiding a redundant
+# compute_ranks pass). Currently both equal LOOKBACK_WINDOWS[1] = 10.
+# If you change ACCEL_WINDOW to a value outside LOOKBACK_WINDOWS, momentum_accel
+# will still be correct — it loads its own frame — but the extra compute_ranks call
+# adds a small overhead.
 ACCEL_WINDOW = 10
 SLOPE_WINDOW = 10
 
