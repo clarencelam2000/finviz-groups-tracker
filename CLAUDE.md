@@ -242,7 +242,67 @@ There is no need for a conditional or auto-detection — just run it when you ne
 
 ---
 
-## Important notes
+## Code quality and documentation standards
+
+### Configurable items — document everywhere they can be changed
+
+Any constant that controls pipeline behavior (lookback windows, thresholds, model names,
+window sizes, weights, etc.) **must** appear in **all three** of these places:
+
+1. **In-code comment** on the constant itself — explain what it controls, valid range/effect,
+   and any coupling constraints. Example from `scripts/delta_config.py`:
+   ```python
+   # ACCEL_WINDOW ideally stays equal to a value already in LOOKBACK_WINDOWS to avoid
+   # a redundant compute_ranks pass. Currently equals LOOKBACK_WINDOWS[1] = 10.
+   ACCEL_WINDOW = 10
+   ```
+
+2. **`README.md` § Configurable parameters** — the public-facing table anyone reads first.
+   Every parameter gets a row: name, default value, what it controls, how to change it safely.
+
+3. **`CLAUDE.md`** (this file) — note the constant in the relevant section (e.g., deltas.csv
+   columns, momentum score formula) so future Claude instances see it in their initial context.
+
+**Rule:** If you add or rename a configurable constant, update all three before committing.
+If a constant is only used internally and has no meaningful user-facing effect, it still needs
+an in-code comment but may skip the README table.
+
+---
+
+### Code comments — be liberal; tie TODOs to sprint tasks
+
+The general Claude Code rule ("default to no comments") is **relaxed for this project** in
+three specific situations:
+
+**1. Configurable constants** — always comment (see above).
+
+**2. Non-obvious behavior and known gotchas** — comment whenever a reader could waste time
+   debugging something that was already investigated. Examples from this codebase:
+   - `export_db.load_csv` silently ignores missing columns (documented in-code + README)
+   - `ACCEL_WINDOW` coupling to `LOOKBACK_WINDOWS` (documented in delta_config.py)
+   - Playwright Chromium install works in cloud but Finviz scraping is blocked by Cloudflare
+     (documented in CLAUDE.md Playwright section)
+
+   Format: one-line comment or a short NOTE/WARNING block. Keep it factual — what happens,
+   not a re-statement of the code.
+
+**3. TODOs — always reference a SPRINT.md task ID or a GitHub issue**
+
+   Never write a bare `# TODO: fix this`. Always tie it to something trackable:
+   ```python
+   # TODO(LB-FF1): derive window buttons from CSV header; see SPRINT.md § LB-FF1
+   # TODO(#123): handle the case where prior_date == target_date for same-day reruns
+   ```
+   If no SPRINT task exists yet, create one in `.session/SPRINT.md` first, then reference it.
+   This ensures every known gap is visible in the sprint board and never silently buried.
+
+**In documentation** (CLAUDE.md, README, data-pipeline.md): if a section describes behavior
+that has a known limitation or a planned improvement, add a `> **Note:**` or `> **Known gap:**`
+callout. See the export_db entry in README § Delta columns for an example.
+
+---
+
+
 
 - Playwright must be installed with `playwright install chromium` (or `playwright install chromium --with-deps` in CI).
 - The `exports/` directory and `*.db` / `*.parquet` files are gitignored.
