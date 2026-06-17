@@ -63,6 +63,35 @@ class TestFindNearestDate:
 
 
 # ---------------------------------------------------------------------------
+# find_trading_date_back
+# ---------------------------------------------------------------------------
+
+class TestFindTradingDateBack:
+    # Sorted trading days with a weekend gap (Jan 9-10 are Fri/Mon-ish) — the
+    # function counts sessions, so calendar gaps are irrelevant.
+    DATES = [date(2026, 1, 5), date(2026, 1, 6), date(2026, 1, 7),
+             date(2026, 1, 8), date(2026, 1, 9), date(2026, 1, 12),
+             date(2026, 1, 13)]
+
+    def test_counts_sessions_not_calendar_days(self):
+        # 5 sessions before Jan 13 is Jan 6 (skips the weekend gap entirely).
+        assert cd.find_trading_date_back(self.DATES, date(2026, 1, 13), 5) == date(2026, 1, 6)
+
+    def test_one_session_back(self):
+        assert cd.find_trading_date_back(self.DATES, date(2026, 1, 12), 1) == date(2026, 1, 9)
+
+    def test_insufficient_history_returns_none(self):
+        # Only 4 sessions exist before Jan 9 here; ask for 50.
+        assert cd.find_trading_date_back(self.DATES, date(2026, 1, 13), 50) is None
+
+    def test_target_not_present_returns_none(self):
+        assert cd.find_trading_date_back(self.DATES, date(2026, 1, 11), 1) is None
+
+    def test_zero_offset_returns_target(self):
+        assert cd.find_trading_date_back(self.DATES, date(2026, 1, 8), 0) == date(2026, 1, 8)
+
+
+# ---------------------------------------------------------------------------
 # compute_ranks
 # ---------------------------------------------------------------------------
 

@@ -6,10 +6,20 @@ appending to deltas CSVs.
 import argparse
 import csv
 import math
-from datetime import datetime, timedelta
+import sys
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).parent))
+from delta_config import (
+    LOOKBACK_WINDOWS,
+    PERF_DELTA_METRICS,
+    PERF_RANK_METRICS,
+    RANK_DELTA_METRICS,
+    delta_columns,
+)
 
 # ---------------------------------------------------------------------------
 # Config
@@ -24,26 +34,11 @@ SNAPSHOT_COLS = [
     "perf_half", "perf_year", "perf_ytd", "avg_volume", "rel_volume", "change",
 ]
 
-DELTA_COLUMNS = [
-    "date", "name",
-    "rank_day", "rank_week", "rank_month", "rank_quarter", "rank_half", "rank_year", "rank_ytd",
-    "rank_week_delta_7d", "rank_week_delta_14d", "rank_week_delta_30d",
-    "rank_month_delta_7d", "rank_month_delta_14d", "rank_month_delta_30d",
-    "rank_ytd_delta_7d", "rank_ytd_delta_14d", "rank_ytd_delta_30d",
-    "perf_week_delta_7d", "perf_week_delta_14d", "perf_week_delta_30d",
-    "perf_month_delta_7d",
-    "perf_ytd_delta_7d", "perf_ytd_delta_30d",
-    "momentum_score",
-    "rank_agreement",
-]
+DELTA_COLUMNS = delta_columns()
 
-PERF_RANK_METRICS = [
-    "perf_day", "perf_week", "perf_month", "perf_quarter",
-    "perf_half", "perf_year", "perf_ytd",
-]
-
-LOOKBACK_WINDOWS = [7, 14, 30]
-DATE_TOLERANCE = 5  # extra calendar days to search for nearest date
+# LOOKBACK_WINDOWS are trading sessions (not calendar days), resolved by
+# position in the sorted list of available trading dates.
+DATE_TOLERANCE = 5  # extra calendar days to search for nearest date (legacy helper)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -118,7 +113,11 @@ def load_snapshots(csv_path: Path) -> pd.DataFrame:
 
 
 def find_nearest_date(available_dates: list, target_date, tolerance_days: int = DATE_TOLERANCE):
-    """Find the closest available date that is <= target_date within tolerance."""
+    """Find the closest available date that is <= target_date within tolerance.
+
+    Calendar-day helper retained for reference/tests; the main delta path now
+    uses find_trading_date_back for trading-session lookbacks.
+    """
     candidates = [d for d in available_dates if d <= target_date]
     if not candidates:
         return None
@@ -126,6 +125,22 @@ def find_nearest_date(available_dates: list, target_date, tolerance_days: int = 
     if (target_date - best).days <= tolerance_days:
         return best
     return None
+
+
+def find_trading_date_back(available_dates: list, target_date, n_sessions: int):
+    """Return the date n_sessions trading days before target_date.
+
+    available_dates must be sorted ascending and contain only actual trading
+    days present in the snapshot. Returns None if target_date isn't present or
+    there aren't n_sessions of prior history (NaN deltas during early history).
+    """
+    if target_date not in available_dates:
+        return None
+    i = available_dates.index(target_date)
+    j = i - n_sessions
+    if j < 0:
+        return None
+    return available_dates[j]
 
 
 def compute_ranks(df_day: pd.DataFrame) -> pd.DataFrame:
@@ -241,17 +256,16 @@ def compute_for_group(group_type: str, target_date_str: str = None,
     df_today["momentum_score"] = compute_momentum(df_today)
     df_today["rank_agreement"] = compute_rank_agreement(df_today)
 
-    # Pre-load lookback snapshots
+    # Pre-load lookback snapshots, indexed by trading-session offset.
     lookback_frames = {}
-    for n_days in LOOKBACK_WINDOWS:
-        prior_target = target_date - timedelta(days=n_days)
-        prior_date = find_nearest_date(available_dates, prior_target)
+    for n_sessions in LOOKBACK_WINDOWS:
+        prior_date = find_trading_date_back(available_dates, target_date, n_sessions)
         if prior_date and prior_date != target_date:
             df_prior = df[df["date"] == prior_date].copy()
             df_prior = compute_ranks(df_prior)
-            lookback_frames[n_days] = df_prior.set_index("name")
+            lookback_frames[n_sessions] = df_prior.set_index("name")
         else:
-            lookback_frames[n_days] = None
+            lookback_frames[n_sessions] = None
 
     # Build output rows
     new_rows = []
@@ -268,17 +282,13 @@ def compute_for_group(group_type: str, target_date_str: str = None,
             "rank_ytd": _fmt(row.get("rank_ytd")),
         }
 
-        for n_days in LOOKBACK_WINDOWS:
-            prior_df = lookback_frames[n_days]
+        for n_sessions in LOOKBACK_WINDOWS:
+            prior_df = lookback_frames[n_sessions]
             name = row["name"]
 
             # Rank deltas: rank_prior - rank_today (positive = improved = moved up)
-            for rank_col, perf_col in [
-                ("rank_week", "perf_week"),
-                ("rank_month", "perf_month"),
-                ("rank_ytd", "perf_ytd"),
-            ]:
-                delta_col = f"{rank_col}_delta_{n_days}d"
+            for rank_col in RANK_DELTA_METRICS:
+                delta_col = f"{rank_col}_delta_{n_sessions}d"
                 if prior_df is not None and name in prior_df.index:
                     prior_rank = prior_df.loc[name, rank_col] if rank_col in prior_df.columns else float("nan")
                     today_rank = row.get(rank_col, float("nan"))
@@ -290,12 +300,9 @@ def compute_for_group(group_type: str, target_date_str: str = None,
                     val = float("nan")
                 out[delta_col] = _fmt(val)
 
-            # Perf deltas
-            for perf_col in ["perf_week", "perf_month", "perf_ytd"]:
-                # Not all combos required — check list
-                delta_col = f"{perf_col}_delta_{n_days}d"
-                if delta_col not in DELTA_COLUMNS:
-                    continue
+            # Perf deltas: today - prior (positive = perf improved over window)
+            for perf_col in PERF_DELTA_METRICS:
+                delta_col = f"{perf_col}_delta_{n_sessions}d"
                 if prior_df is not None and name in prior_df.index and perf_col in prior_df.columns:
                     prior_val = prior_df.loc[name, perf_col]
                     today_val = row.get(perf_col, float("nan"))
