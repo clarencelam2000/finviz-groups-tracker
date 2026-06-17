@@ -104,9 +104,11 @@ python scripts/export_db.py
 
 ## Playwright / Finviz notes
 
-> Verified against live Finviz on 2026-06-09.
+> Verified against live Finviz on 2026-06-16.
 
-- **Cannot run in Claude Code cloud** — Playwright CDN is blocked. Run `collect.py` locally or via GitHub Actions only. Use an environment with unrestricted outbound network for cloud testing.
+- **Playwright CDN works in Claude Code cloud** — Chromium downloads fine (~175MB). `playwright install chromium --with-deps` succeeds in the cloud container (verified 2026-06-16).
+- **collect.py still cannot scrape Finviz from Claude Code cloud** — but the reason is Cloudflare bot detection, NOT a network block. Our outbound IP is on Google Cloud (AS396982, `136.113.40.206`); Cloudflare returns HTTP 403 with `cf-mitigated: challenge` and serves a Turnstile JS challenge that headless Chromium fails because `navigator.webdriver=true` is detectable. GitHub Actions runs on Microsoft Azure IPs which Cloudflare treats differently (lower bot-score baseline). Run `collect.py` locally or via GitHub Actions.
+- **compute_deltas.py, export_db.py, dashboard, and tests all run fine in cloud** — no Finviz network dependency.
 - Finviz blocks plain HTTP — Playwright (headless Chromium) is required.
 - CSS selector: **`.groups_table`** (not `.table-groups` — verified live).
 - `wait_until="domcontentloaded"` — analytics scripts block the `load` event; domcontentloaded works fine.
@@ -115,6 +117,63 @@ python scripts/export_db.py
 - `rel_volume` is always NaN — not served for this custom group URL. Expected.
 - Retry logic: 3 attempts, 30s / 60s / 120s backoff. Set `COLLECT_RETRY_DELAY=0` env var to skip waits during debugging.
 - Finviz URL pattern: `https://finviz.com/groups?g={sector|industry}&v=152&o=name&c=0,1,2,3,4,5,15,16,17,18,19,20,22,24,25,26`
+
+---
+
+## What Playwright in cloud unlocks (verified 2026-06-16)
+
+Playwright + Chromium install and run correctly in cloud sessions. This opens up capabilities that didn't exist before:
+
+### PWA functional testing (`docs/index.html`)
+The PWA fetches CSVs from `raw.githubusercontent.com`. Playwright can **intercept those requests** and return local fixture CSV data, so we can test the full UI without deploying to GitHub Pages and without live data:
+
+```python
+# Pattern: serve the PWA locally, intercept GitHub raw CSV fetches
+import subprocess, time
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as p:
+    server = subprocess.Popen(['python3', '-m', 'http.server', '8080', '--directory', 'docs'])
+    time.sleep(1)
+    browser = p.chromium.launch(headless=True)
+    page = browser.new_page()
+
+    # Intercept CSV fetches and return local fixture data
+    page.route('**/raw.githubusercontent.com/**snapshots.csv', lambda r: r.fulfill(
+        body=open('tests/fixtures/sectors_snapshots.csv').read(), content_type='text/plain'
+    ))
+    page.route('**/raw.githubusercontent.com/**deltas.csv', lambda r: r.fulfill(
+        body=open('tests/fixtures/sectors_deltas.csv').read(), content_type='text/plain'
+    ))
+
+    page.goto('http://localhost:8080/', wait_until='networkidle')
+    # Now assert on rendered cards, tab switching, sort behavior, etc.
+    server.terminate()
+```
+
+What this lets us test: tab switching, card rendering, sort/filter, movers gainers/losers, momentum scores, empty-data placeholders, pull-to-refresh state, search filtering — all of it, headlessly, in cloud.
+
+### Streamlit dashboard functional testing (`dashboard/app.py`)
+The dashboard reads local CSV files directly, so no interception needed:
+
+```python
+# Run streamlit, then drive with Playwright
+subprocess.Popen(['streamlit', 'run', 'dashboard/app.py', '--server.headless', 'true', '--server.port', '8501'])
+time.sleep(3)
+page.goto('http://localhost:8501/')
+# Assert on tab content, chart presence, data table rows, etc.
+```
+
+### Scraping code development
+We can write, iterate, and debug `collect.py` scraping logic (selectors, parsing, retry behavior) against non-Cloudflare URLs without needing a local machine or burning GitHub Actions runs. Only the final Finviz target requires GitHub Actions due to Cloudflare.
+
+### Installing Playwright — on demand, not in requirements
+Do **not** add `playwright install chromium` to the default setup. It's 175MB and only needed for testing/dev tasks. Install it in-session when the task calls for it:
+```bash
+pip install playwright
+python3 -m playwright install chromium --with-deps
+```
+There is no need for a conditional or auto-detection — just run it when you need it.
 
 ---
 
@@ -165,7 +224,7 @@ wall, routes spend through $10/mo Vertex-only credits).
 - **Sync first**: Run `git fetch origin && git log --oneline origin/claude/elegant-babbage-hlxnfy -5` before doing anything else — GitHub Actions may have pushed data overnight, and you need the latest base before branching or editing. See `.claude/rules/branch-commit-discipline.md` for the full session-start checklist.
 - **Ending a session**: Before the user closes, update `.session/session-notes.md` with: what was done, what was discovered, any blockers, and the prioritized next steps. Be specific — vague notes are useless next session.
 - **Work log**: Update `.session/WORK_LOG.md` with any milestones hit (first successful scrape, first week of data, dashboard features added).
-- **Cannot run collect.py here**: The Claude Code cloud environment blocks Playwright's CDN and outbound access to finviz.com. `collect.py` must run **locally** on the user's machine or via **GitHub Actions**. Do not attempt `playwright install` or `python scripts/collect.py` in a cloud session — it will fail.
+- **Cannot run collect.py here**: Playwright installs fine in cloud, but Cloudflare blocks headless Chromium on Google Cloud IPs (AS396982). `collect.py` must run **locally** or via **GitHub Actions** (Azure IPs pass Cloudflare). Everything else — `compute_deltas.py`, tests, dashboard, PWA functional tests — runs fine in cloud. See "What Playwright in cloud unlocks" section above.
 - **Subagents for analysis**: Use subagents (Agent tool) for exploratory pandas/data work to avoid bloating the main context window.
 - **Context pressure**: Use `/compact` when nearing limits. Prioritize keeping INITIAL_SPEC.md decisions and script logic in context; data rows are expendable.
 - **Save research before it's lost**: If a session involved substantial research (API evaluation, debugging a non-obvious root cause, evaluating architectural trade-offs), write a summary to `knowledge/` before ending. A future Claude — or a human reading the code — should not have to rediscover it. Research logs go in `knowledge/` as free-form `.md` files; architectural decisions (and the alternatives rejected) go in `knowledge/decisions/` as ADRs. See `knowledge/README.md` for templates.
