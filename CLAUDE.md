@@ -300,6 +300,8 @@ three specific situations:
 that has a known limitation or a planned improvement, add a `> **Note:**` or `> **Known gap:**`
 callout. See the export_db entry in README § Delta columns for an example.
 
+You must include the necessary and sufficient info for anyone else on the team to pick it up later.
+
 ---
 
 
