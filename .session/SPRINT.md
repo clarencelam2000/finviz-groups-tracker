@@ -157,6 +157,7 @@ lookbacks, six momentum variants, PWA minimal renumber, generate_ai repointed).
 | # | Task | File(s) | Effort | Notes |
 |---|------|---------|--------|-------|
 | LB-FF1 | **[FAST-FOLLOW] PWA full-dynamic lookback windows** | `docs/index.html` | M | Derive lookback buttons/validation/columns from the CSV header at load time instead of the current hardcoded 5/10/20/50. Removes all literal window values from the JS so future window changes need zero PWA edits. The minimal renumber (PR on `jolly-darwin`) is the interim. |
+| PWA-TEST-GAP | **[FAST-FOLLOW] Fill PWA + Streamlit functional test gaps (PR #105 follow-up)** | `tests/test_functional_playwright.py` | L | The current Playwright tests only guard the Movers tab lookback buttons (PR #105 regression). Ten behavioral gaps remain untested. See the TODO(PWA-TEST-GAP) comment block at the top of `tests/test_functional_playwright.py` for the full gap list with detailed pick-up notes per gap. **Priority order (highest first):** Gap 7 (empty state), Gap 2 (Today tab), Gap 1 (Movers cards data), Gap 3 (Momentum tab), Gap 6 (Lookup tab + Worker intercept), Gaps 4/5/8/9/10. All tests use the same fixture-intercept pattern already in the file. Run with `playwright install chromium` then `pytest tests/test_functional_playwright.py -v`. |
 
 #### Data / Insight Features
 
