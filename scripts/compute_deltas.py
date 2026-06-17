@@ -14,10 +14,17 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
 from delta_config import (
+    ACCEL_WINDOW,
     LOOKBACK_WINDOWS,
+    MOMENTUM_COLS,
     PERF_DELTA_METRICS,
     PERF_RANK_METRICS,
     RANK_DELTA_METRICS,
+    REGIME_LONG,
+    REGIME_SHORT,
+    SLOPE_WINDOW,
+    WEIGHTS_FAST,
+    WEIGHTS_MID,
     delta_columns,
 )
 
@@ -209,6 +216,98 @@ def compute_rank_agreement(df_day: pd.DataFrame) -> pd.Series:
     return (1 - row_std / _MAX_STD_3).clip(lower=0.0, upper=1.0)
 
 
+def _perf_percentiles(df_day: pd.DataFrame) -> pd.DataFrame:
+    """Per-metric percentile [0=worst, 1=best] for each available perf metric."""
+    n = len(df_day)
+    pct = pd.DataFrame(index=df_day.index)
+    for col in PERF_RANK_METRICS:
+        if col in df_day.columns and df_day[col].notna().any():
+            ranks = df_day[col].rank(ascending=False, method="min", na_option="bottom")
+            pct[col] = (n - ranks) / (n - 1)
+    return pct
+
+
+def weighted_momentum(df_day: pd.DataFrame, weights: dict) -> pd.Series:
+    """Weighted mean of perf percentiles. Metrics absent from `weights` get 1.0.
+
+    Returns NaN for single-row frames (percentile undefined).
+    """
+    n = len(df_day)
+    if n <= 1:
+        return pd.Series([float("nan")] * n, index=df_day.index)
+    pct = _perf_percentiles(df_day)
+    if pct.shape[1] == 0:
+        return pd.Series([float("nan")] * n, index=df_day.index)
+    w = pd.Series({c: weights.get(c, 1.0) for c in pct.columns})
+    # row-wise weighted mean, skipping NaN cells (their weight drops out)
+    mask = pct.notna()
+    weighted_sum = (pct.fillna(0.0) * w).sum(axis=1)
+    weight_total = (mask * w).sum(axis=1)
+    return weighted_sum / weight_total.replace(0.0, float("nan"))
+
+
+def compute_regime(df_day: pd.DataFrame) -> pd.Series:
+    """Short-horizon percentile mean minus long-horizon percentile mean.
+
+    Positive = emerging leader (strong recently, weaker long-term); negative =
+    fading leader. Range roughly [-1, 1]. NaN if either bucket is unavailable.
+    """
+    n = len(df_day)
+    if n <= 1:
+        return pd.Series([float("nan")] * n, index=df_day.index)
+    pct = _perf_percentiles(df_day)
+    short_cols = [c for c in REGIME_SHORT if c in pct.columns]
+    long_cols = [c for c in REGIME_LONG if c in pct.columns]
+    if not short_cols or not long_cols:
+        return pd.Series([float("nan")] * n, index=df_day.index)
+    return pct[short_cols].mean(axis=1) - pct[long_cols].mean(axis=1)
+
+
+def compute_rank_trend_slope(df_hist: pd.DataFrame, available_dates: list,
+                             target_date, window: int = SLOPE_WINDOW) -> pd.Series:
+    """Least-squares slope of each group's rank_ytd over the last `window` sessions.
+
+    df_hist is the full multi-date snapshot. x = session index (0..k-1), y =
+    rank_ytd. Raw slope is negative when rank improves (rank 1 = best), so we
+    negate: positive = improving, matching the delta sign convention. Returns a
+    Series indexed by name; NaN when fewer than 2 sessions of history exist.
+    """
+    # Sessions from oldest to newest, ending at target_date.
+    if target_date not in available_dates:
+        return pd.Series(dtype=float)
+    end = available_dates.index(target_date)
+    start = max(0, end - window + 1)
+    sessions = available_dates[start:end + 1]
+    if len(sessions) < 2:
+        return pd.Series(dtype=float)
+
+    # Build name -> [(x, rank_ytd), ...] across the window, ranking each day.
+    per_name = {}
+    for x, d in enumerate(sessions):
+        day = compute_ranks(df_hist[df_hist["date"] == d])
+        for _, r in day.iterrows():
+            ry = r.get("rank_ytd")
+            if ry is not None and not (isinstance(ry, float) and math.isnan(ry)):
+                per_name.setdefault(r["name"], []).append((x, float(ry)))
+
+    slopes = {}
+    for name, pts in per_name.items():
+        if len(pts) < 2:
+            slopes[name] = float("nan")
+            continue
+        xs = [p[0] for p in pts]
+        ys = [p[1] for p in pts]
+        mx = sum(xs) / len(xs)
+        my = sum(ys) / len(ys)
+        denom = sum((x - mx) ** 2 for x in xs)
+        if denom == 0:
+            slopes[name] = float("nan")
+            continue
+        raw = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / denom
+        slopes[name] = -raw  # negate so positive = improving rank
+    return pd.Series(slopes)
+
+
 # ---------------------------------------------------------------------------
 # Core computation
 # ---------------------------------------------------------------------------
@@ -255,6 +354,16 @@ def compute_for_group(group_type: str, target_date_str: str = None,
     df_today = compute_ranks(df_today)
     df_today["momentum_score"] = compute_momentum(df_today)
     df_today["rank_agreement"] = compute_rank_agreement(df_today)
+    # Confirmed momentum: broad strength (momentum_score) gated by cross-timeframe
+    # consistency (rank_agreement). High only when the trend is corroborated.
+    df_today["momentum_confirmed"] = df_today["momentum_score"] * df_today["rank_agreement"]
+    df_today["momentum_weighted_mid"] = weighted_momentum(df_today, WEIGHTS_MID)
+    df_today["momentum_weighted_fast"] = weighted_momentum(df_today, WEIGHTS_FAST)
+    df_today["regime_short_long"] = compute_regime(df_today)
+
+    # Rank-trend slope over the trailing SLOPE_WINDOW sessions.
+    slope = compute_rank_trend_slope(df, available_dates, target_date)
+    df_today["rank_trend_slope"] = df_today["name"].map(slope)
 
     # Pre-load lookback snapshots, indexed by trading-session offset.
     lookback_frames = {}
@@ -266,6 +375,20 @@ def compute_for_group(group_type: str, target_date_str: str = None,
             lookback_frames[n_sessions] = df_prior.set_index("name")
         else:
             lookback_frames[n_sessions] = None
+
+    # Momentum acceleration: today's momentum_score minus its value ACCEL_WINDOW
+    # sessions ago. Positive = broad momentum is building.
+    accel_date = find_trading_date_back(available_dates, target_date, ACCEL_WINDOW)
+    if accel_date and accel_date != target_date:
+        df_accel = compute_ranks(df[df["date"] == accel_date].copy())
+        prior_mom = compute_momentum(df_accel)
+        prior_mom.index = df_accel["name"].values
+        df_today["momentum_accel"] = (
+            df_today["momentum_score"].values
+            - df_today["name"].map(prior_mom).values
+        )
+    else:
+        df_today["momentum_accel"] = float("nan")
 
     # Build output rows
     new_rows = []
@@ -314,8 +437,8 @@ def compute_for_group(group_type: str, target_date_str: str = None,
                     val = float("nan")
                 out[delta_col] = _fmt(val)
 
-        out["momentum_score"] = _fmt(row.get("momentum_score"))
-        out["rank_agreement"] = _fmt(row.get("rank_agreement"))
+        for mcol in MOMENTUM_COLS:
+            out[mcol] = _fmt(row.get(mcol))
         new_rows.append(out)
 
     if not new_rows:

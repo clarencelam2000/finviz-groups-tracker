@@ -431,3 +431,131 @@ class TestComputeForGroupLastWriteWins:
         with open(delta_path, newline="") as f:
             rows = list(csv.DictReader(f))
         assert any(r["date"] == "2026-06-09" for r in rows)
+
+
+# ---------------------------------------------------------------------------
+# Momentum variants
+# ---------------------------------------------------------------------------
+
+class TestWeightedMomentum:
+    def test_range_and_best_worst(self, snapshot_3):
+        s = cd.weighted_momentum(snapshot_3, cd.WEIGHTS_MID)
+        assert s.between(0.0, 1.0).all()
+        # Finance leads quarter (best) and is mid on month — the two metrics the
+        # mid profile weights heaviest — so it scores highest.
+        assert s.idxmax() == snapshot_3.index[snapshot_3["name"] == "Finance"][0]
+
+    def test_single_row_is_nan(self):
+        df = pd.DataFrame({"name": ["A"], "perf_week": [1.0]})
+        assert math.isnan(cd.weighted_momentum(df, cd.WEIGHTS_FAST).iloc[0])
+
+    def test_all_nan_column_excluded(self):
+        df = pd.DataFrame({
+            "name": ["A", "B"],
+            "perf_day": [1.0, 2.0],
+            "perf_week": [float("nan"), float("nan")],
+        })
+        s = cd.weighted_momentum(df, {"perf_day": 1.0, "perf_week": 5.0})
+        # perf_week all-NaN drops out; result driven entirely by perf_day.
+        assert s.between(0.0, 1.0).all()
+        assert not s.isna().any()
+
+    def test_fast_vs_mid_differ_on_horizon_split(self):
+        # A strong short-term, weak long-term; B the reverse.
+        df = pd.DataFrame({
+            "name": ["A", "B"],
+            "perf_day": [2.0, 1.0], "perf_week": [2.0, 1.0],
+            "perf_month": [1.0, 2.0], "perf_quarter": [1.0, 2.0],
+            "perf_half": [1.0, 2.0], "perf_year": [1.0, 2.0], "perf_ytd": [1.0, 2.0],
+        })
+        fast = cd.weighted_momentum(df, cd.WEIGHTS_FAST)
+        mid = cd.weighted_momentum(df, cd.WEIGHTS_MID)
+        ai = df.index[df["name"] == "A"][0]
+        # A scores relatively better under fast weighting than mid.
+        assert fast[ai] > mid[ai]
+
+
+class TestComputeRegime:
+    def test_emerging_vs_fading_sign(self):
+        df = pd.DataFrame({
+            "name": ["Emerging", "Fading"],
+            "perf_day": [2.0, 1.0], "perf_week": [2.0, 1.0],
+            "perf_half": [1.0, 2.0], "perf_year": [1.0, 2.0], "perf_ytd": [1.0, 2.0],
+        })
+        s = cd.compute_regime(df)
+        ei = df.index[df["name"] == "Emerging"][0]
+        fi = df.index[df["name"] == "Fading"][0]
+        assert s[ei] > 0  # strong short, weak long
+        assert s[fi] < 0
+
+    def test_single_row_is_nan(self):
+        df = pd.DataFrame({"name": ["A"], "perf_day": [1.0], "perf_half": [1.0]})
+        assert math.isnan(cd.compute_regime(df).iloc[0])
+
+    def test_missing_bucket_is_nan(self):
+        # No long-horizon metrics at all → NaN.
+        df = pd.DataFrame({
+            "name": ["A", "B"], "perf_day": [1.0, 2.0], "perf_week": [1.0, 2.0],
+        })
+        assert cd.compute_regime(df).isna().all()
+
+
+class TestRankTrendSlope:
+    def _hist(self, ranks_by_date):
+        """Build a multi-date snapshot where group 'A' takes the given perf_ytd
+        values (others fill the field)."""
+        rows = []
+        for d, a_perf in ranks_by_date.items():
+            rows.append({"date": d, "name": "A", "perf_ytd": a_perf})
+            rows.append({"date": d, "name": "B", "perf_ytd": 0.0})
+            rows.append({"date": d, "name": "C", "perf_ytd": -5.0})
+        return pd.DataFrame(rows)
+
+    def test_improving_rank_positive_slope(self):
+        # A's perf_ytd rises from below B (0.0) to above it → rank improves
+        # (rank 2 → rank 1) → positive (negated) slope.
+        dates = [date(2026, 1, i) for i in range(1, 6)]
+        df = self._hist({d: float(i - 2) for i, d in enumerate(dates)})
+        s = cd.compute_rank_trend_slope(df, dates, dates[-1])
+        assert s["A"] > 0
+
+    def test_flat_rank_zero_slope(self):
+        dates = [date(2026, 1, i) for i in range(1, 6)]
+        df = self._hist({d: 10.0 for d in dates})  # A always best, constant
+        s = cd.compute_rank_trend_slope(df, dates, dates[-1])
+        assert abs(s["A"]) < 1e-9
+
+    def test_insufficient_history_returns_empty(self):
+        dates = [date(2026, 1, 1)]
+        df = self._hist({dates[0]: 5.0})
+        s = cd.compute_rank_trend_slope(df, dates, dates[0])
+        assert s.empty
+
+
+class TestMomentumAccelIntegration:
+    """momentum_accel is assembled in compute_for_group; verify sign end-to-end."""
+
+    def _snap(self, path, dates_perf):
+        cols = cd.SNAPSHOT_COLS
+        rows = []
+        for d, perfs in dates_perf.items():
+            for name, p in perfs.items():
+                row = {c: "" for c in cols}
+                row.update({"date": d, "name": name, "group_type": "sector"})
+                for k in ["perf_day", "perf_week", "perf_month", "perf_quarter",
+                          "perf_half", "perf_year", "perf_ytd"]:
+                    row[k] = p
+                rows.append(row)
+        with open(path, "w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=cols)
+            w.writeheader()
+            w.writerows(rows)
+
+    def test_no_prior_frame_is_blank(self, tmp_path):
+        snap = tmp_path / "snapshots.csv"
+        self._snap(snap, {"2026-06-09": {"A": 3.0, "B": 1.0, "C": 2.0}})
+        delta = tmp_path / "deltas.csv"
+        cd.compute_for_group("sector", snap_path=snap, delta_path=delta)
+        rows = list(csv.DictReader(open(delta)))
+        # Only one date → no ACCEL_WINDOW history → momentum_accel empty.
+        assert all(r["momentum_accel"] == "" for r in rows)
