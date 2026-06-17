@@ -21,9 +21,18 @@ from pathlib import Path
 
 import pandas as pd
 
+sys.path.insert(0, str(Path(__file__).parent))
+from delta_config import LOOKBACK_WINDOWS
+
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
 AI_DIR = DATA_DIR / "ai"
+
+# Short-horizon rank-delta column used for movers/divergence signals. Derived
+# from the configured lookbacks so a window change doesn't silently empty the
+# AI output (the shortest window is the closest analog to the old 7d signal).
+SHORT_WIN = LOOKBACK_WINDOWS[0]
+SHORT_DELTA_COL = f"rank_ytd_delta_{SHORT_WIN}d"
 
 GEMINI_MODEL = "gemini-3.5-flash"
 
@@ -150,35 +159,35 @@ def serialize_snapshot_summary(snap_df: pd.DataFrame) -> str:
 
 
 def serialize_top_movers(delta_df: pd.DataFrame, n: int = 10) -> str:
-    if delta_df.empty or "rank_ytd_delta_7d" not in delta_df.columns:
-        return "No 7-day rank delta data available yet (need 7+ days of history)."
-    valid = delta_df.dropna(subset=["rank_ytd_delta_7d"]).copy()
+    if delta_df.empty or SHORT_DELTA_COL not in delta_df.columns:
+        return f"No {SHORT_WIN}-day rank delta data available yet (need {SHORT_WIN}+ sessions of history)."
+    valid = delta_df.dropna(subset=[SHORT_DELTA_COL]).copy()
     if valid.empty:
-        return "No 7-day rank delta data available yet."
+        return f"No {SHORT_WIN}-day rank delta data available yet."
 
     take = min(n, len(valid))
-    gainers = valid.nlargest(take, "rank_ytd_delta_7d")[
-        ["name", "rank_ytd_delta_7d", "rank_ytd", "momentum_score"]
+    gainers = valid.nlargest(take, SHORT_DELTA_COL)[
+        ["name", SHORT_DELTA_COL, "rank_ytd", "momentum_score"]
     ]
-    losers = valid.nsmallest(take, "rank_ytd_delta_7d")[
-        ["name", "rank_ytd_delta_7d", "rank_ytd", "momentum_score"]
+    losers = valid.nsmallest(take, SHORT_DELTA_COL)[
+        ["name", SHORT_DELTA_COL, "rank_ytd", "momentum_score"]
     ]
 
-    lines = ["TOP GAINERS (rank improved most in 7 days):"]
+    lines = [f"TOP GAINERS (rank improved most in {SHORT_WIN} sessions):"]
     for _, r in gainers.iterrows():
         ms = f"{r['momentum_score']:.2f}" if pd.notna(r.get("momentum_score")) else "N/A"
         rank_str = f"{r['rank_ytd']:.0f}" if pd.notna(r.get("rank_ytd")) else "N/A"
         lines.append(
-            f"  {r['name']}: +{r['rank_ytd_delta_7d']:.0f} spots, "
+            f"  {r['name']}: +{r[SHORT_DELTA_COL]:.0f} spots, "
             f"rank {rank_str}, momentum {ms}"
         )
 
-    lines.append("\nTOP LOSERS (rank declined most in 7 days):")
+    lines.append(f"\nTOP LOSERS (rank declined most in {SHORT_WIN} sessions):")
     for _, r in losers.iterrows():
         ms = f"{r['momentum_score']:.2f}" if pd.notna(r.get("momentum_score")) else "N/A"
         rank_str = f"{r['rank_ytd']:.0f}" if pd.notna(r.get("rank_ytd")) else "N/A"
         lines.append(
-            f"  {r['name']}: {r['rank_ytd_delta_7d']:.0f} spots, "
+            f"  {r['name']}: {r[SHORT_DELTA_COL]:.0f} spots, "
             f"rank {rank_str}, momentum {ms}"
         )
     return "\n".join(lines)
@@ -211,7 +220,7 @@ SUSTAINED_RANK_COLS = ["rank_month", "rank_quarter", "rank_half"]
 
 # Divergence thresholds
 _STRONG_MOMENTUM = 0.60   # "strong" momentum_score
-_RANK_JUMP_7D = 3.0       # spots improved in 7d to count as "emerging"
+_RANK_JUMP_SHORT = 3.0    # spots improved in the short window to count as "emerging"
 _LOW_AGREEMENT = 0.50     # rank_agreement below this is "fragile"
 
 
@@ -303,33 +312,33 @@ def serialize_momentum_laggards(delta_df: pd.DataFrame, n: int = 5) -> str:
 def serialize_divergences(snap_df: pd.DataFrame, delta_df: pd.DataFrame) -> str:
     """Rank/momentum conflicts — the early-warning signal no other tab shows."""
     if delta_df.empty or "momentum_score" not in delta_df.columns \
-            or "rank_ytd_delta_7d" not in delta_df.columns:
+            or SHORT_DELTA_COL not in delta_df.columns:
         return "DIVERGENCES:\n  Not enough history for divergence signals yet."
     d = delta_df.dropna(subset=["momentum_score"]).copy()
     if d.empty:
         return "DIVERGENCES:\n  Not enough history for divergence signals yet."
-    d["rank_ytd_delta_7d"] = pd.to_numeric(d["rank_ytd_delta_7d"], errors="coerce")
+    d[SHORT_DELTA_COL] = pd.to_numeric(d[SHORT_DELTA_COL], errors="coerce")
     median_mom = d["momentum_score"].median()
 
     lines = ["DIVERGENCES (early-warning):"]
     found = False
 
-    fading = d[(d["momentum_score"] >= _STRONG_MOMENTUM) & (d["rank_ytd_delta_7d"] < 0)]
-    fading = fading.sort_values("rank_ytd_delta_7d")  # most negative first
+    fading = d[(d["momentum_score"] >= _STRONG_MOMENTUM) & (d[SHORT_DELTA_COL] < 0)]
+    fading = fading.sort_values(SHORT_DELTA_COL)  # most negative first
     if not fading.empty:
         found = True
         items = [
-            f"{r['name']} (momentum {r['momentum_score']:.2f}, rank {r['rank_ytd_delta_7d']:+.0f} in 7d)"
+            f"{r['name']} (momentum {r['momentum_score']:.2f}, rank {r[SHORT_DELTA_COL]:+.0f} in {SHORT_WIN}d)"
             for _, r in fading.head(5).iterrows()
         ]
         lines.append("  Fading (strong momentum, rank slipping): " + "; ".join(items))
 
-    emerging = d[(d["rank_ytd_delta_7d"] >= _RANK_JUMP_7D) & (d["momentum_score"] < median_mom)]
-    emerging = emerging.sort_values("rank_ytd_delta_7d", ascending=False)
+    emerging = d[(d[SHORT_DELTA_COL] >= _RANK_JUMP_SHORT) & (d["momentum_score"] < median_mom)]
+    emerging = emerging.sort_values(SHORT_DELTA_COL, ascending=False)
     if not emerging.empty:
         found = True
         items = [
-            f"{r['name']} (rank {r['rank_ytd_delta_7d']:+.0f} in 7d, momentum {r['momentum_score']:.2f})"
+            f"{r['name']} (rank {r[SHORT_DELTA_COL]:+.0f} in {SHORT_WIN}d, momentum {r['momentum_score']:.2f})"
             for _, r in emerging.head(5).iterrows()
         ]
         lines.append("  Emerging (rank jumping, momentum still low): " + "; ".join(items))
