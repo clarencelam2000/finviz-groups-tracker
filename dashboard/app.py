@@ -6,10 +6,14 @@ import datetime
 import html as html_lib
 import json
 import os
+import sys
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+from delta_config import LOOKBACK_WINDOWS, delta_columns
 
 try:
     from dashboard.worker_client import lookup_ticker
@@ -36,18 +40,7 @@ SNAPSHOT_COLS = [
     "perf_half", "perf_year", "perf_ytd", "avg_volume", "rel_volume", "change",
 ]
 
-DELTA_COLUMNS = [
-    "date", "name",
-    "rank_day", "rank_week", "rank_month", "rank_quarter", "rank_half", "rank_year", "rank_ytd",
-    "rank_week_delta_7d", "rank_week_delta_14d", "rank_week_delta_30d",
-    "rank_month_delta_7d", "rank_month_delta_14d", "rank_month_delta_30d",
-    "rank_ytd_delta_7d", "rank_ytd_delta_14d", "rank_ytd_delta_30d",
-    "perf_week_delta_7d", "perf_week_delta_14d", "perf_week_delta_30d",
-    "perf_month_delta_7d",
-    "perf_ytd_delta_7d", "perf_ytd_delta_30d",
-    "momentum_score",
-    "rank_agreement",
-]
+DELTA_COLUMNS = delta_columns()
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +146,9 @@ with st.sidebar:
     ]
     selected_metric = st.selectbox("Rank by metric", metric_options, index=6)
 
-    lookback = st.selectbox("Lookback window (movers)", ["7d", "14d", "30d"])
+    lookback = st.selectbox(
+        "Lookback window (movers)", [f"{w}d" for w in LOOKBACK_WINDOWS]
+    )
 
 # ---------------------------------------------------------------------------
 # Filter data

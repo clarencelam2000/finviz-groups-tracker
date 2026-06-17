@@ -105,14 +105,15 @@
         <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-group="industries">Industries</button>
       </div>
       <div class="flex bg-slate-800 rounded-lg p-1 mb-4">
-        <button class="lookback-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-window="7d">7 Days</button>
-        <button class="lookback-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-window="14d">14 Days</button>
-        <button class="lookback-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-window="30d">30 Days</button>
+        <button class="lookback-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-window="5d">5 Days</button>
+        <button class="lookback-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-window="10d">10 Days</button>
+        <button class="lookback-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-window="20d">20 Days</button>
+        <button class="lookback-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-window="50d">50 Days</button>
       </div>
       <div id="movers-placeholder" class="rounded-xl bg-slate-800 border border-slate-700 p-6 text-center hidden">
         <div class="text-4xl mb-3">📅</div>
         <p class="text-white font-semibold mb-1">Data accumulating…</p>
-        <p class="text-slate-400 text-sm mb-2">7-day rank changes appear after <span id="movers-date-7d" class="text-slate-200 font-medium">June 16</span>.</p>
+        <p class="text-slate-400 text-sm mb-2">5-day rank changes appear after <span id="movers-date-5d" class="text-slate-200 font-medium">June 16</span>.</p>
         <p class="text-slate-500 text-xs">GitHub Actions collects data weekdays at 10pm UTC.</p>
       </div>
       <div id="movers-content" class="hidden">
@@ -214,7 +215,7 @@
     const state = {
       tab: 'today',
       group: 'sectors',
-      lookback: '7d',
+      lookback: '5d',
       sortMetric: 'perf_week',
       strengthView: 'sustained',
       topN: 20,
@@ -256,7 +257,7 @@
         const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
         if (['sectors','industries'].includes(p.group)) state.group = p.group;
         if (['perf_ytd','perf_week','perf_month','perf_quarter','perf_half','perf_year','perf_day'].includes(p.sortMetric)) state.sortMetric = p.sortMetric;
-        if (['7d','14d','30d'].includes(p.lookback)) state.lookback = p.lookback;
+        if (['5d','10d','20d','50d'].includes(p.lookback)) state.lookback = p.lookback;
       } catch(e) {}
     }
 
@@ -519,10 +520,10 @@
           const el = document.getElementById('last-updated');
           el.textContent = lbl.text;
           el.className = lbl.cls;
-          // Compute expected date for 7d movers
+          // Compute expected date for 5d (≈1 week) movers
           const dt = new Date(d + 'T12:00:00');
           dt.setDate(dt.getDate() + 7);
-          document.getElementById('movers-date-7d').textContent =
+          document.getElementById('movers-date-5d').textContent =
             dt.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
         }
       } catch (err) {
@@ -722,7 +723,7 @@
           :                'border-l-red-700';
 
         // YTD delta is a fixed anchor — a consistent momentum signal regardless of the active sort metric
-        const trendDelta = pf(d.rank_ytd_delta_7d);
+        const trendDelta = pf(d.rank_ytd_delta_5d);
         const trendArrow = trendDelta !== null && trendDelta !== 0
           ? `<span class="${trendDelta > 0 ? 'text-emerald-400' : 'text-red-400'} text-xs ml-1">${trendDelta > 0 ? '↑' : '↓'}</span>`
           : '';
@@ -1194,7 +1195,7 @@
     function groupScore(delta, snap, hasRow) {
       if (!hasRow) return 0.5; // no data → neutral
       let s = 0;
-      if ((delta ? (pf(delta.rank_week_delta_7d) ?? 0) : 0) > 0)   s += 0.3;
+      if ((delta ? (pf(delta.rank_week_delta_5d) ?? 0) : 0) > 0)   s += 0.3;
       if ((delta ? (pf(delta.momentum_score) ?? 0) : 0) > 0.6)     s += 0.5;
       if ((snap  ? (pf(snap.perf_week) ?? 0) : 0) > 0)             s += 0.2;
       return s;
@@ -1337,8 +1338,8 @@
       const rank        = snap
         ? computeRankFromSnap(snap, allSnaps, 'perf_week')
         : (delta ? pf(delta.rank_week) : null);
-      const rankDelta7d = delta ? pf(delta.rank_week_delta_7d) : null;
-      const rankDelta30d = delta ? pf(delta.rank_week_delta_30d) : null;
+      const rankDelta5d = delta ? pf(delta.rank_week_delta_5d) : null;
+      const rankDelta50d = delta ? pf(delta.rank_week_delta_50d) : null;
       const score       = delta ? pf(delta.momentum_score) : null;
       const perfWeek    = snap ? pf(snap.perf_week) : null;
       const perfMonth   = snap ? pf(snap.perf_month) : null;
@@ -1346,13 +1347,13 @@
 
       const rankStr = rank !== null ? `#${rank} of ${n}` : '—';
       let deltaHtml = '';
-      if (rankDelta7d !== null && rankDelta7d > 0)  deltaHtml = `<span class="text-emerald-400 ml-1">▲ +${rankDelta7d} this wk</span>`;
-      else if (rankDelta7d !== null && rankDelta7d < 0) deltaHtml = `<span class="text-red-400 ml-1">▼ ${rankDelta7d} this wk</span>`;
-      else if (rankDelta7d === 0) deltaHtml = `<span class="text-slate-500 ml-1">= 0 this wk</span>`;
+      if (rankDelta5d !== null && rankDelta5d > 0)  deltaHtml = `<span class="text-emerald-400 ml-1">▲ +${rankDelta5d} this wk</span>`;
+      else if (rankDelta5d !== null && rankDelta5d < 0) deltaHtml = `<span class="text-red-400 ml-1">▼ ${rankDelta5d} this wk</span>`;
+      else if (rankDelta5d === 0) deltaHtml = `<span class="text-slate-500 ml-1">= 0 this wk</span>`;
       let delta30Html = '';
-      if (rankDelta30d !== null && rankDelta30d !== 0) {
-        const cls30 = rankDelta30d > 0 ? 'text-emerald-400' : 'text-red-400';
-        delta30Html = `<span class="${cls30} ml-1">${rankDelta30d > 0 ? '▲' : '▼'}${Math.abs(rankDelta30d)} over 30d</span>`;
+      if (rankDelta50d !== null && rankDelta50d !== 0) {
+        const cls30 = rankDelta50d > 0 ? 'text-emerald-400' : 'text-red-400';
+        delta30Html = `<span class="${cls30} ml-1">${rankDelta50d > 0 ? '▲' : '▼'}${Math.abs(rankDelta50d)} over 50d</span>`;
       }
 
       const momPct = score !== null ? (score * 100).toFixed(0) : null;
@@ -1398,10 +1399,10 @@
       const { delta, snap, allSnaps } = gd;
       const out = [];
       if (delta) {
-        const d30 = pf(delta.rank_week_delta_30d);
-        const d7  = pf(delta.rank_week_delta_7d);
-        if (d30 !== null && Math.abs(d30) >= 3)      out.push(`${d30 > 0 ? '▲' : '▼'}${Math.abs(d30)} rank over 30d`);
-        else if (d7 !== null && Math.abs(d7) >= 3)   out.push(`${d7 > 0 ? '▲' : '▼'}${Math.abs(d7)} rank this wk`);
+        const d50 = pf(delta.rank_week_delta_50d);
+        const d5  = pf(delta.rank_week_delta_5d);
+        if (d50 !== null && Math.abs(d50) >= 3)      out.push(`${d50 > 0 ? '▲' : '▼'}${Math.abs(d50)} rank over 50d`);
+        else if (d5 !== null && Math.abs(d5) >= 3)   out.push(`${d5 > 0 ? '▲' : '▼'}${Math.abs(d5)} rank this wk`);
         const { floor, chip } = convictionInfo(delta, n, snap, allSnaps);
         if (chip) out.push(`${chip.text.toLowerCase()} across 1/3/6mo (floor #${floor})`);
         const mom = pf(delta.momentum_score);

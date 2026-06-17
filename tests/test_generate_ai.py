@@ -35,7 +35,7 @@ def delta_df():
         "date": [pd.Timestamp("2026-06-10").date()] * 3,
         "name": ["Energy", "Technology", "Healthcare"],
         "rank_ytd":          [1.0, 3.0, 2.0],
-        "rank_ytd_delta_7d": [5.0, -3.0, 1.0],
+        "rank_ytd_delta_5d": [5.0, -3.0, 1.0],
         "momentum_score":    [0.85, 0.30, 0.60],
     })
 
@@ -88,17 +88,17 @@ def test_top_movers_missing_delta_col():
 def test_top_movers_all_nan_delta():
     df = pd.DataFrame({
         "name": ["A", "B"],
-        "rank_ytd_delta_7d": [float("nan"), float("nan")],
+        "rank_ytd_delta_5d": [float("nan"), float("nan")],
     })
     result = generate_ai.serialize_top_movers(df)
     assert "No" in result
 
 
 def test_top_movers_nan_rank_ytd_does_not_raise():
-    # rank_ytd_delta_7d is valid but rank_ytd is NaN — must not raise ValueError
+    # rank_ytd_delta_5d is valid but rank_ytd is NaN — must not raise ValueError
     df = pd.DataFrame({
         "name": ["A", "B"],
-        "rank_ytd_delta_7d": [5.0, -3.0],
+        "rank_ytd_delta_5d": [5.0, -3.0],
         "rank_ytd": [float("nan"), float("nan")],
         "momentum_score": [0.7, 0.3],
     })
@@ -196,7 +196,7 @@ def test_momentum_laggards_orders_weakest_first(delta_df):
 # ---------------------------------------------------------------------------
 
 def test_divergences_not_enough_history():
-    df = pd.DataFrame({"name": ["A"], "momentum_score": [0.5]})  # no rank_ytd_delta_7d
+    df = pd.DataFrame({"name": ["A"], "momentum_score": [0.5]})  # no rank_ytd_delta_5d
     result = generate_ai.serialize_divergences(pd.DataFrame(), df)
     assert "Not enough history" in result
 
@@ -206,7 +206,7 @@ def test_divergences_fading():
     delta = pd.DataFrame({
         "name": ["Tech"],
         "momentum_score": [0.72],
-        "rank_ytd_delta_7d": [-4.0],
+        "rank_ytd_delta_5d": [-4.0],
     })
     result = generate_ai.serialize_divergences(pd.DataFrame(), delta)
     assert "Fading" in result
@@ -218,7 +218,7 @@ def test_divergences_emerging():
     delta = pd.DataFrame({
         "name": ["Up", "Strong"],
         "momentum_score": [0.20, 0.90],
-        "rank_ytd_delta_7d": [6.0, 0.0],
+        "rank_ytd_delta_5d": [6.0, 0.0],
     })
     result = generate_ai.serialize_divergences(pd.DataFrame(), delta)
     assert "Emerging" in result
@@ -233,7 +233,7 @@ def test_divergences_fragile_all_green():
     delta = pd.DataFrame({
         "name": ["Frag"],
         "momentum_score": [0.55],
-        "rank_ytd_delta_7d": [0.0],
+        "rank_ytd_delta_5d": [0.0],
         "rank_agreement": [0.40],   # below 0.50 threshold
     })
     result = generate_ai.serialize_divergences(snap, delta)
@@ -388,7 +388,7 @@ def test_generate_for_group_stores_note_string(monkeypatch):
     delta = pd.DataFrame({
         "date": [pd.Timestamp("2026-06-11").date()],
         "name": ["Energy"],
-        "rank_ytd": [1.0], "rank_ytd_delta_7d": [2.0], "momentum_score": [0.8],
+        "rank_ytd": [1.0], "rank_ytd_delta_5d": [2.0], "momentum_score": [0.8],
     })
     monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
     monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
@@ -421,7 +421,7 @@ def test_generate_for_group_industry_note_only(monkeypatch):
     delta = pd.DataFrame({
         "date": [pd.Timestamp("2026-06-11").date()],
         "name": ["Trucking"],
-        "rank_ytd": [1.0], "rank_ytd_delta_7d": [2.0], "momentum_score": [0.8],
+        "rank_ytd": [1.0], "rank_ytd_delta_5d": [2.0], "momentum_score": [0.8],
     })
     monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
     monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
@@ -862,7 +862,7 @@ def test_generate_for_group_skips_existing_note(monkeypatch):
     delta = pd.DataFrame({
         "date": [pd.Timestamp("2026-06-11").date()],
         "name": ["Energy"],
-        "rank_ytd": [1.0], "rank_ytd_delta_7d": [2.0], "momentum_score": [0.8],
+        "rank_ytd": [1.0], "rank_ytd_delta_5d": [2.0], "momentum_score": [0.8],
     })
     monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
     monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
