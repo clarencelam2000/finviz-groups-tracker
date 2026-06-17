@@ -51,6 +51,37 @@ class TestTradingDate:
         # Midnight ET → previous calendar day
         assert trading_date(self._et_dt("2026-06-09", 0)) == "2026-06-08"
 
+    def test_saturday_rolls_back_to_friday(self):
+        # Sat 2026-06-13 evening → Friday 2026-06-12 (markets closed Saturday)
+        assert trading_date(self._et_dt("2026-06-13", 20)) == "2026-06-12"
+
+    def test_sunday_rolls_back_to_friday(self):
+        # Sun 2026-06-14 evening → Friday 2026-06-12
+        assert trading_date(self._et_dt("2026-06-14", 18)) == "2026-06-12"
+
+    def test_monday_pre_open_rolls_back_to_friday(self):
+        # Mon 2026-06-15 2 AM → step back to Sunday, then roll to Friday 06-12
+        assert trading_date(self._et_dt("2026-06-15", 2)) == "2026-06-12"
+
+    def test_saturday_pre_open_rolls_back_to_friday(self):
+        # Sat 2026-06-13 1 AM → step back to Friday 06-12 directly
+        assert trading_date(self._et_dt("2026-06-13", 1)) == "2026-06-12"
+
+    def test_holiday_rolls_back_to_prior_trading_day(self):
+        # Fri 2026-07-03 is the observed Independence Day holiday (Jul 4 is Sat).
+        # A run that afternoon shows Thursday 07-02's close → store 07-02.
+        assert trading_date(self._et_dt("2026-07-03", 16)) == "2026-07-02"
+
+    def test_day_after_holiday_pre_open_rolls_across_holiday(self):
+        # Mon 2026-01-19 is MLK Day; a Tuesday 01-20 pre-open run steps back to
+        # the holiday, then across it to Friday 01-16.
+        assert trading_date(self._et_dt("2026-01-20", 7)) == "2026-01-16"
+
+    def test_holiday_then_weekend_rolls_to_prior_friday(self):
+        # Christmas 2026-12-25 (Fri) is a holiday → roll back over it and the
+        # preceding... 12-25 is Friday, so prior trading day is Thursday 12-24.
+        assert trading_date(self._et_dt("2026-12-25", 15)) == "2026-12-24"
+
 
 # ---------------------------------------------------------------------------
 # parse_perf
