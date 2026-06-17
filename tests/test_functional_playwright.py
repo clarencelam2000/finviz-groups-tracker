@@ -12,6 +12,61 @@ list) because they require Playwright. Add --ignore=tests/test_functional_playwr
 to skip, or run directly when Playwright is available.
 """
 
+# TODO(PWA-TEST-GAP): The tests below cover only the Movers tab lookback buttons
+# (PR #105 regression guard). The following PWA behaviors are NOT tested yet.
+# See SPRINT.md task PWA-TEST-GAP for pick-up instructions and prioritization.
+#
+# Gap 1 — Movers cards render actual delta data
+#   When a window button (5d/10d/20d/50d) is clicked, the gainer/loser cards must
+#   populate with real group names and rank-delta values from the fixture delta CSV.
+#   Currently we only assert the buttons exist, not that clicking them loads data.
+#   Entry point: intercept deltas.csv with fixture that has non-empty rank_ytd_delta_Nd
+#   columns; click each button; assert at least one gainer card and one loser card appear.
+#
+# Gap 2 — Today tab: card rendering, color coding, sort dropdown
+#   The Today tab is the primary landing view. No tests cover: snapshot cards render
+#   with group names and perf values; green/red color class applied based on perf_week
+#   sign; sort dropdown (Week/YTD/Month/Qtr/6-Month/1-Year/Day) re-orders cards;
+#   sector↔industry toggle reloads with a different set of cards.
+#
+# Gap 3 — Momentum tab populates from momentum_score
+#   Breadth leaderboard (momentum_score, progress bar) renders for at least 3 rows;
+#   the highest-score group appears first.
+#
+# Gap 4 — Strength tab: Sustained Strength and All Green views
+#   Clicking the Strength tab renders the two sub-views. Sustained Strength shows
+#   groups with floor ≤ top quartile across month/quarter/half. All Green shows
+#   dot matrix only for groups where all perf_* are positive.
+#
+# Gap 5 — AI tab: rotation phase label and briefing text load
+#   Intercept the data/ai/YYYY-MM-DD.json fetch (or the index.json fallback) with
+#   a fixture that has a known rotation_phase and briefing string; assert those
+#   strings appear in the rendered tab.
+#
+# Gap 6 — Lookup tab: ticker search → group score card
+#   Intercept the Worker /lookup endpoint (finviz-ticker-lookup.salmonbaby8.workers.dev)
+#   and return a fixture response mapping AAPL → Technology / Consumer Electronics.
+#   Assert the sector card and industry card render with the group's momentum score
+#   and the FAVORABLE/MIXED/CAUTION signal badge. Also test deeplink hrefs.
+#
+# Gap 7 — Empty state / data-accumulating placeholder
+#   When delta columns are all empty (e.g. fixture with empty rank_ytd_delta_5d),
+#   the Movers tab must show the "Data accumulating" placeholder instead of cards.
+#
+# Gap 8 — Sector ↔ Industry toggle reloads data
+#   Switching the group type (sector/industry segmented control) must trigger a
+#   new CSV fetch (or use cached data) and render a different card set.
+#
+# Gap 9 — Offline / service worker: app loads from cache
+#   After first load (populates SW cache), take the browser offline (page.context()
+#   .set_offline(True)) and reload; assert core UI elements still render from cache.
+#
+# Gap 10 — Streamlit: time series and momentum charts render
+#   The existing Streamlit test only checks the lookback selectbox options. Add:
+#   - Time Series tab renders a chart element (data-testid="stVegaLiteChart" or similar)
+#   - Momentum tab table has ≥1 data row
+#   - Snapshot tab download buttons are present
+
 import csv
 import io
 import subprocess
