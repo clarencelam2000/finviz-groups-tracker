@@ -17,8 +17,22 @@ All append operations check for existing `(date, name)` before writing. The `dat
 - Each `perf_*` metric gets its own independent rank column.
 
 ## Delta sign convention
-`rank_X_delta_Nd = rank_prior - rank_today`
+
+**Rank deltas** (opposite arithmetic direction from perf — rank 1 = best, so
+lower number = better):
+```
+rank_X_delta_Nd = rank_prior - rank_today
+```
 Positive = improved (e.g., was rank 18, now rank 12 → delta = +6).
+
+**Perf deltas** (straightforward — higher % = better):
+```
+perf_X_delta_Nd = today_perf - prior_perf
+```
+Positive = performance improved over the window (e.g., week % is higher now than
+N trading sessions ago). Note the arithmetic is the *opposite direction* from rank
+deltas — this is intentional: rank 1 means highest gain, so improvement lowers the
+rank number, while improvement in raw % raises the value.
 
 ## Lookback windows (trading-day based)
 Lookback windows are defined once in `scripts/delta_config.py` (`LOOKBACK_WINDOWS`,

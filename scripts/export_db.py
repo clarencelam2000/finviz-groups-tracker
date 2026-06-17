@@ -26,6 +26,13 @@ DELTA_COLUMNS = delta_columns()
 
 
 def load_csv(path: Path, expected_cols: list) -> pd.DataFrame:
+    # NOTE: columns listed in expected_cols but absent in the CSV are silently
+    # missing from the returned DataFrame — no error is raised at load time.
+    # This means callers that depend on specific columns (e.g. new delta_config
+    # columns added after a schema change) will get KeyErrors or NaN at the
+    # downstream SELECT/export step, not here. If the live deltas.csv predates a
+    # schema migration, run `python scripts/compute_deltas.py --date <d>` for each
+    # existing date to regenerate the missing columns before exporting.
     if not path.exists():
         print(f"  File not found: {path}. Returning empty DataFrame.")
         return pd.DataFrame(columns=expected_cols)

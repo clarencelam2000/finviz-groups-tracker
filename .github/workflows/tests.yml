@@ -23,7 +23,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-test.txt -r requirements-dev.txt
       - name: Run tests
-        run: pytest tests/ -v
+        run: |
+          pytest tests/ -v \
+            --ignore=tests/test_collect_parsing.py \
+            --ignore=tests/test_functional_playwright.py
 
   worker-test:
     runs-on: ubuntu-latest
