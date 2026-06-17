@@ -4,7 +4,7 @@
 
 Finviz Groups Tracker — daily scraper and analysis pipeline for Finviz sector and industry group performance data. Uses Playwright (headless Chromium) because Finviz blocks plain HTTP requests. Data is stored in append-only CSVs and processed into rank/delta artifacts.
 
-The core idea: track *changes* in sector/industry rankings over time (7d/14d/30d lookbacks) to identify where capital is rotating. See `INITIAL_SPEC.md` for full design rationale.
+The core idea: track *changes* in sector/industry rankings over time (5/10/20/50 trading-day lookbacks) to identify where capital is rotating. See `INITIAL_SPEC.md` for full design rationale.
 
 ---
 
@@ -36,7 +36,7 @@ python scripts/export_db.py
 | Script | What it does | Approx tokens |
 |--------|-------------|----------------|
 | `scripts/collect.py` | Playwright scraper; appends to snapshot CSVs; deduplicates on `(date, name)` | ~200–250 |
-| `scripts/compute_deltas.py` | Computes ranks and 7d/14d/30d deltas; appends to delta CSVs. Accepts `--date YYYY-MM-DD` | ~300–400 |
+| `scripts/compute_deltas.py` | Computes ranks, trading-day deltas (5/10/20/50), and momentum variants; appends to delta CSVs. Accepts `--date YYYY-MM-DD` | ~300–400 |
 | `scripts/export_db.py` | Exports CSVs → SQLite (`finviz_groups.db`) + Parquet in `./exports/` (not committed) | ~150 |
 | `scripts/backfill.py` | Shows current date coverage; prints manual backfill instructions. Accepts `--status` | ~50 |
 | `dashboard/app.py` | Streamlit dashboard: Snapshot, Top Movers, Time Series, Momentum tabs | ~100 |
@@ -66,12 +66,24 @@ data/
 - Null values stored as empty string in CSV
 
 ### deltas.csv columns
-`date, name, rank_week, rank_month, rank_quarter, rank_half, rank_year, rank_ytd, rank_week_delta_7d, rank_week_delta_14d, rank_week_delta_30d, rank_month_delta_7d, rank_month_delta_14d, rank_month_delta_30d, rank_ytd_delta_7d, rank_ytd_delta_14d, rank_ytd_delta_30d, perf_week_delta_7d, perf_week_delta_14d, perf_week_delta_30d, perf_month_delta_7d, perf_ytd_delta_7d, perf_ytd_delta_30d, momentum_score`
+
+> The schema is generated from `scripts/delta_config.py` (`delta_columns()`) — the single
+> source of truth. `compute_deltas.py`, `export_db.py`, and `dashboard/app.py` all import it.
+> Lookback windows are **trading sessions** `[5, 10, 20, 50]`, not calendar days.
+
+`date, name, rank_day, rank_week, rank_month, rank_quarter, rank_half, rank_year, rank_ytd`,
+then for each window `W` in `5/10/20/50`: `rank_week_delta_Wd, rank_month_delta_Wd, rank_ytd_delta_Wd, perf_week_delta_Wd, perf_month_delta_Wd, perf_ytd_delta_Wd`,
+then the momentum columns: `momentum_score, momentum_confirmed, momentum_weighted_mid, momentum_weighted_fast, momentum_accel, regime_short_long, rank_trend_slope, rank_agreement`.
 
 - `rank_*` values: rank 1 = best performer. Derived from `perf_*` values, never scraped.
-- `rank_*_delta_*d`: positive = improved (rose in ranking). E.g., `+6` means 6 spots better than N days ago.
+- `rank_*_delta_Wd`: positive = improved (rose in ranking). E.g., `+6` means 6 spots better than W trading sessions ago.
 - `momentum_score`: 0–1 float; average percentile rank across all 7 perf timeframes. Higher = stronger broad momentum.
-- Delta columns are `NaN` until enough history exists (e.g., 30d deltas need 30+ days of data).
+- `momentum_confirmed`: `momentum_score × rank_agreement` (strength gated by cross-timeframe consistency).
+- `momentum_weighted_mid` / `_fast`: percentile means weighted toward 1mo/3mo / day-week respectively.
+- `momentum_accel`: change in `momentum_score` over `ACCEL_WINDOW` (10) sessions; positive = building.
+- `regime_short_long`: short- minus long-horizon percentile (range ~[-1,1]); positive = emerging leader, negative = fading.
+- `rank_trend_slope`: negated least-squares slope of `rank_ytd` over the trailing window; positive = improving.
+- Delta/momentum columns are `NaN` until enough history exists (e.g., 50d deltas need 50+ sessions; accel needs 10).
 
 ---
 
@@ -88,7 +100,7 @@ python scripts/collect.py   # run at 10am, 1pm, 4pm, 5pm ET and compare collecte
 import pandas as pd
 df = pd.read_csv('data/industries/deltas.csv')
 latest = df[df['date'] == df['date'].max()]
-print(latest.nlargest(10, 'rank_ytd_delta_7d')[['name', 'rank_ytd', 'rank_ytd_delta_7d', 'momentum_score']])
+print(latest.nlargest(10, 'rank_ytd_delta_5d')[['name', 'rank_ytd', 'rank_ytd_delta_5d', 'momentum_score']])
 ```
 
 ### Reload dashboard after data update
@@ -194,7 +206,7 @@ There is no need for a conditional or auto-detection — just run it when you ne
 - `collect.py` and `compute_deltas.py` are **last-write-wins** per `date`: a later run on the same
   trading day evicts and rewrites that date's snapshot *and* delta rows, so the EOD run's ranks win
   over an earlier intraday run's.
-- Gaps in data: compute_deltas.py uses nearest available date for lookbacks, so one missed day doesn't break 7d/14d/30d deltas.
+- Gaps in data: compute_deltas.py counts trading sessions by position (`find_trading_date_back`), so missing/holiday days don't break the 5/10/20/50-session deltas.
 
 ## Session continuity (Claude Code web)
 

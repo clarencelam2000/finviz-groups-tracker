@@ -20,8 +20,18 @@ All append operations check for existing `(date, name)` before writing. The `dat
 `rank_X_delta_Nd = rank_prior - rank_today`
 Positive = improved (e.g., was rank 18, now rank 12 → delta = +6).
 
-## Lookback tolerance
-When looking for the snapshot N calendar days prior, scan up to 5 extra calendar days backward for the nearest available trading day. If no data found within that window, delta = NaN.
+## Lookback windows (trading-day based)
+Lookback windows are defined once in `scripts/delta_config.py` (`LOOKBACK_WINDOWS`,
+currently `[5, 10, 20, 50]`) and measured in **trading sessions**, not calendar days.
+`find_trading_date_back()` indexes back by position in the sorted list of available
+trading dates, so weekend/holiday gaps are skipped automatically. If fewer than N
+sessions of history exist, the delta is NaN. (The legacy calendar-based
+`find_nearest_date()` — scan up to 5 extra calendar days back — is retained for
+reference but is no longer on the main delta path.)
+
+To change windows, edit `LOOKBACK_WINDOWS`; every consumer derives its columns from
+`delta_config.delta_columns()`. The PWA still hardcodes the window literals (minimal
+renumber); making it read them from the CSV header is fast-follow LB-FF1.
 
 ## Momentum score formula
 ```python

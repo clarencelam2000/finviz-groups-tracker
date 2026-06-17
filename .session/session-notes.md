@@ -6,11 +6,13 @@
 
 ## Current Status
 
-**Status:** LOOKUP TAB IMPROVEMENTS — **Phase 0 + all six Phase 1 slices complete** on branch `claude/lookup-tab-improvements-h7nw9b` (PR #97). Every Phase 1 change is client-side in `docs/index.html`: weekly-rank sparkline (LOOK-1), conviction chip + Rank Floor (LOOK-2), breadth dot strip (LOOK-3), evidence-backed SIGNAL copy (LOOK-4), clarity wins — rank-basis label / 30d delta / loading skeleton (LOOK-5), and QoL — "Why this matters" glossary + Finviz/TradingView deeplinks (LOOK-6). SW cache → v4. Each commit is HTML-only (no pytest), paired with SPRINT + plan-doc updates. JS syntax verified after every slice via `new Function()` check.
+**Status:** LOOKBACK CONFIG + MOMENTUM VARIANTS — slices 1–5 complete on branch `claude/jolly-darwin-fjik54`. Plan (`planning/compute-deltas-lookbacks-and-momentum.md`) merged to default as PR #104. Implemented: (1) `scripts/delta_config.py` single source of truth for the deltas schema — `export_db.py`/`dashboard/app.py` now import `delta_columns()` (export_db copy was stale); (2) trading-day lookbacks 5/10/20/50 via `find_trading_date_back` (position-based, gap-tolerant), replacing calendar 7/14/30; (3) six momentum variants — `momentum_confirmed`, `momentum_weighted_mid` (1mo/3mo), `momentum_weighted_fast`, `regime_short_long`, `momentum_accel`, `rank_trend_slope`; (4) PWA minimal renumber in `docs/index.html`; (5) `generate_ai.py` repointed to `LOOKBACK_WINDOWS[0]` (was hardcoded `rank_ytd_delta_7d` — would have silently emptied movers/divergences). 159 tests pass (ex-playwright). End-to-end smoke run on real sector data produced 41 columns with all variants populated (accel NaN as expected — only 6 sessions of history; needs 10).
 
-**Verification still pending:** I cannot run Playwright/serve in this cloud env to eyeball the live PWA. Recommend the owner open the Lookup tab (after GitHub Pages picks up the branch, or locally) and check a strong+sustained ticker (e.g. semis), a weak group, a low-confidence match, an untracked industry, and `ticker_not_found`. Deepvue was dropped (no public per-ticker URL); owner chose TradingView.
+**Fast-follow tracked:** LB-FF1 in SPRINT — PWA full-dynamic windows (derive from CSV header, remove hardcoded 5/10/20/50 from JS). Minimal renumber is the interim.
 
-**Safe to close:** Yes for the code — all committed/pushed on PR #97. Phase 1 functionally complete; remaining work is deferred backlog (LOOK-B1..7) + a live visual pass.
+**Schema migration note:** `ensure_deltas_csv()` auto-migrates the live `deltas.csv` on next run (drops old `_7d/_14d/_30d`, adds new columns empty). To populate trading-day deltas + momentum cols on history, rerun `compute_deltas.py --date <d>` per existing date.
+
+**Safe to close:** Code committed on `claude/jolly-darwin-fjik54`. **Open the implementation PR** (slices 1–5) targeting `claude/elegant-babbage-hlxnfy` and call out LB-FF1 in the body. Live PWA eyeball still pending (can't serve in cloud).
 
 **Prior open thread (separate branch):** AI TAB REBUILD on `claude/exciting-brown-1pc93v` still needs its PR opened/merged + a live-backend eyeball — unaffected by this session.
 
@@ -23,6 +25,30 @@
 **AI-MIGRATION status:** Vertex AI backend + WIF auth unchanged. daily-delta feature removed entirely (it was the apology-text source).
 
 **Safe to close:** Not yet — AI-rebuild PR still needs to be opened/merged. End-to-end eyeball of real generated output needs a live Gemini backend (`python scripts/generate_ai.py --force-ai` locally or via the `generate_ai.yml` Action; blocked in the cloud env). Tests + static markdown rendering verified here.
+
+---
+
+## Session: 2026-06-17 — Lookback config + momentum variants (branch claude/jolly-darwin-fjik54)
+
+**What happened:** Reworked `compute_deltas.py` for configurable lookbacks and richer momentum.
+
+**Changes:**
+- NEW `scripts/delta_config.py`: single source of truth — `LOOKBACK_WINDOWS=[5,10,20,50]`
+  (trading days), `RANK_DELTA_METRICS`, `PERF_DELTA_METRICS`, `MOMENTUM_COLS`, weight profiles,
+  and `delta_columns()`. `compute_deltas.py`, `export_db.py`, `dashboard/app.py` all import it.
+  Killed the 3-way `DELTA_COLUMNS` duplication (export_db's was stale) and the loop/guard asymmetry.
+- `compute_deltas.py`: `find_trading_date_back()` (position-based, gap-tolerant) replaces calendar
+  subtraction. New pure fns: `weighted_momentum`, `compute_regime`, `compute_rank_trend_slope`,
+  plus inline `momentum_confirmed`/`momentum_accel` in `compute_for_group`.
+- `docs/index.html`: minimal window renumber 7/14/30 → 5/10/20/50 (+20d button). Full-dynamic
+  is fast-follow LB-FF1.
+- `scripts/generate_ai.py`: `SHORT_DELTA_COL = rank_ytd_delta_{LOOKBACK_WINDOWS[0]}d` — was
+  hardcoded to the removed `_7d` column.
+- Tests: +`tests/test_delta_config.py`, new `find_trading_date_back` + momentum-variant tests in
+  `test_compute_deltas.py`, fixture renames in `test_generate_ai.py`. 159 pass (ex-playwright).
+
+**Next:** Open the implementation PR; do LB-FF1 (PWA full-dynamic); regenerate delta history so
+the new trading-day/momentum columns populate; live PWA eyeball.
 
 ---
 

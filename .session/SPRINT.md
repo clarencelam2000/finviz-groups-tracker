@@ -148,6 +148,16 @@ _Dependency:_ None. Works today.
 
 ---
 
+#### Lookback config + momentum variants
+
+Plan: `planning/compute-deltas-lookbacks-and-momentum.md`. Slices 1–5 landed on
+`claude/jolly-darwin-fjik54` (config-driven wide schema, trading-day 5/10/20/50
+lookbacks, six momentum variants, PWA minimal renumber, generate_ai repointed).
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| LB-FF1 | **[FAST-FOLLOW] PWA full-dynamic lookback windows** | `docs/index.html` | M | Derive lookback buttons/validation/columns from the CSV header at load time instead of the current hardcoded 5/10/20/50. Removes all literal window values from the JS so future window changes need zero PWA edits. The minimal renumber (PR on `jolly-darwin`) is the interim. |
+
 #### Data / Insight Features
 
 | # | Task | File(s) | Effort | Notes |
@@ -184,6 +194,7 @@ _(nothing)_
 
 | # | Task | Date |
 |---|------|------|
+| LB-1..5 | Config-driven delta schema (`delta_config.py`), trading-day 5/10/20/50 lookbacks, momentum variants (confirmed, weighted-mid/fast, regime, accel ⊃ INS-4, rank-trend slope), PWA renumber, generate_ai repoint | 2026-06-17 |
 | AI-PWA | AI tab improvements (Items 1–8): key signals, delta card, conviction tags, industries structure, relative timestamp, native share, phase history strip, historical date navigation | 2026-06-12 |
 | AI-ARCH | AI architecture revamp: `TASK_SPECS`, `index.json` manifest, `gemini-2.5-flash`, incremental completion (PR #38) | 2026-06-11 |
 | MON-1 | Workflow logging + monitoring: AI partial completion fix, `ai_run_log.jsonl`, `fetch_log.csv` AI columns, PWA pipeline diamond (PR #35) | 2026-06-11 |

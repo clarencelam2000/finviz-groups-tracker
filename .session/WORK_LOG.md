@@ -123,6 +123,21 @@ to `stable/profile` with migrated field names. 28 vitest tests pass; `wrangler d
 --dry-run` bundles clean. Deploy is owner-gated (interactive `wrangler login` + FMP
 secret) — code is ready, awaiting `npm run deploy`.
 
+## 2026-06-17 — Configurable lookbacks + momentum variants
+
+`compute_deltas.py` is now driven by `scripts/delta_config.py` (single source of
+truth for the deltas schema). Lookbacks switched from calendar 7/14/30 to
+trading-day 5/10/20/50 via position-based `find_trading_date_back` (gap-tolerant).
+Added six momentum signals: `momentum_confirmed`, `momentum_weighted_mid`,
+`momentum_weighted_fast`, `regime_short_long`, `momentum_accel`, `rank_trend_slope`.
+Consumers updated: `export_db.py`/`dashboard/app.py` import `delta_columns()`
+(export_db's copy was stale); `docs/index.html` renumbered (full-dynamic is
+fast-follow LB-FF1); `generate_ai.py` repointed off the removed `rank_ytd_delta_7d`.
+159 tests pass; end-to-end smoke on real sector data verified the 41-column output.
+Plan PR #104; implementation on branch `claude/jolly-darwin-fjik54`.
+
+---
+
 ## 2026-06-16 — Lookup tab improvements Phase 1 shipped (6 client-side slices)
 
 The PWA Lookup tab now surfaces the derived "moaty" layer per ticker: a
