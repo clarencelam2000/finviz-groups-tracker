@@ -4,9 +4,13 @@ in ./exports/ directory.
 """
 
 import sqlite3
+import sys
 from pathlib import Path
 
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).parent))
+from delta_config import delta_columns
 
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -18,17 +22,7 @@ SNAPSHOT_COLS = [
     "perf_half", "perf_year", "perf_ytd", "avg_volume", "rel_volume", "change",
 ]
 
-DELTA_COLUMNS = [
-    "date", "name",
-    "rank_week", "rank_month", "rank_quarter", "rank_half", "rank_year", "rank_ytd",
-    "rank_week_delta_7d", "rank_week_delta_14d", "rank_week_delta_30d",
-    "rank_month_delta_7d", "rank_month_delta_14d", "rank_month_delta_30d",
-    "rank_ytd_delta_7d", "rank_ytd_delta_14d", "rank_ytd_delta_30d",
-    "perf_week_delta_7d", "perf_week_delta_14d", "perf_week_delta_30d",
-    "perf_month_delta_7d",
-    "perf_ytd_delta_7d", "perf_ytd_delta_30d",
-    "momentum_score",
-]
+DELTA_COLUMNS = delta_columns()
 
 
 def load_csv(path: Path, expected_cols: list) -> pd.DataFrame:
