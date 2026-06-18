@@ -156,8 +156,27 @@ lookbacks, six momentum variants, PWA minimal renumber, generate_ai repointed).
 
 | # | Task | File(s) | Effort | Notes |
 |---|------|---------|--------|-------|
-| LB-FF1 | **[FAST-FOLLOW] PWA full-dynamic lookback windows** | `docs/index.html` | M | Derive lookback buttons/validation/columns from the CSV header at load time instead of the current hardcoded 5/10/20/50. Removes all literal window values from the JS so future window changes need zero PWA edits. The minimal renumber (PR on `jolly-darwin`) is the interim. |
+| ~~LB-FF1~~ | ~~**[FAST-FOLLOW] PWA full-dynamic lookback windows**~~ | `docs/index.html` | M | ✅ **Done 2026-06-18 (PR #110)**. Buttons now derived from CSV header via `extractWindowsFromHeader()`. Zero literal window values remain in JS. |
 | PWA-TEST-GAP | **[FAST-FOLLOW] Fill PWA + Streamlit functional test gaps (PR #105 follow-up)** | `tests/test_functional_playwright.py` | L | The current Playwright tests only guard the Movers tab lookback buttons (PR #105 regression). Ten behavioral gaps remain untested. See the TODO(PWA-TEST-GAP) comment block at the top of `tests/test_functional_playwright.py` for the full gap list with detailed pick-up notes per gap. **Priority order (highest first):** Gap 7 (empty state), Gap 2 (Today tab), Gap 1 (Movers cards data), Gap 3 (Momentum tab), Gap 6 (Lookup tab + Worker intercept), Gaps 4/5/8/9/10. All tests use the same fixture-intercept pattern already in the file. Run with `playwright install chromium` then `pytest tests/test_functional_playwright.py -v`. |
+
+#### PWA Column Gaps (PR#105 new columns not yet surfaced)
+
+Full plan: `planning/compute-deltas-lookbacks-and-momentum.md` (see gap map). Surfaced in PWA as of 2026-06-18:
+
+| # | Column | Status | Notes |
+|---|--------|--------|-------|
+| ~~MOT-R1~~ | `regime_short_long` | ✅ Done 2026-06-18 | Rotation view in Momentum tab |
+| ~~MOT-A2~~ | `momentum_accel` | ✅ Done 2026-06-18 | ▲▲/▲/▼/▼▼ badge on Momentum cards |
+| ~~TOD-S3~~ | `rank_trend_slope` | ✅ Done 2026-06-18 | Slope glyph ↑↑/↑/~/↓/↓↓ beside trend arrow on Today cards |
+| ~~STR-C4~~ | `momentum_confirmed` | ✅ Done 2026-06-18 | Sort key in Strength tab (replaces momentum_score) |
+| ~~TOD-P5~~ | `perf_week_delta_20d`, `perf_ytd_delta_20d` | ✅ Done 2026-06-18 | "vs 20d ago" row in Today expanded card |
+| MOT-W1 | `momentum_weighted_mid` | Deferred | Similar concept to momentum_score; low marginal UX until users internalize existing view |
+| MOT-W2 | `momentum_weighted_fast` | Deferred | Same rationale as MOT-W1 |
+| MOT-M3 | `rank_month_delta_5d/10d/20d/50d` | Deferred | Could surface in Movers view alongside rank_ytd/rank_week deltas |
+| GAP-1 | `rank_day`, `rank_year` | Deferred | Low priority; no obvious placement without cluttering existing cards |
+| GAP-2 | `perf_month_delta_5d/10d/20d/50d`, `perf_ytd_delta_5d/10d/50d` | Deferred | 20d window surfaced (TOD-P5); other windows deferred |
+
+**Data availability note:** `momentum_accel` and `rank_trend_slope` need 10 sessions (~2026-06-23). `perf_*_delta_20d` needs 20 sessions (~2026-07-10). These columns appear empty until then — their UI elements are hidden gracefully until data arrives.
 
 #### Data / Insight Features
 
@@ -195,6 +214,8 @@ _(nothing)_
 
 | # | Task | Date |
 |---|------|------|
+| LB-FF1 | PWA full-dynamic lookback buttons derived from CSV header (`extractWindowsFromHeader`) (PR #110) | 2026-06-18 |
+| MOT-R1/A2, TOD-S3/P5, STR-C4 | Surface PR#105 momentum metrics in PWA: Rotation view, accel badge, slope glyph, confirmed sort, perf-delta row | 2026-06-18 |
 | LB-1..5 | Config-driven delta schema (`delta_config.py`), trading-day 5/10/20/50 lookbacks, momentum variants (confirmed, weighted-mid/fast, regime, accel ⊃ INS-4, rank-trend slope), PWA renumber, generate_ai repoint | 2026-06-17 |
 | AI-PWA | AI tab improvements (Items 1–8): key signals, delta card, conviction tags, industries structure, relative timestamp, native share, phase history strip, historical date navigation | 2026-06-12 |
 | AI-ARCH | AI architecture revamp: `TASK_SPECS`, `index.json` manifest, `gemini-2.5-flash`, incremental completion (PR #38) | 2026-06-11 |
