@@ -247,6 +247,10 @@
     const ACCEL_STRONG = 0.08;   // ▲▲ building / ▼▼ fading
     const ACCEL_SLIGHT = 0.02;   // ▲ / ▼
 
+    // Thresholds for the rank_trend_slope glyph on Today cards.
+    const SLOPE_STRONG = 0.05;   // ↑↑ / ↓↓
+    const SLOPE_SLIGHT = 0.01;   // ↑ / ↓
+
     const ALL_METRICS = [
       { key: 'perf_day',   label: 'Day' },
       { key: 'perf_week',  label: 'Wk'  },
@@ -366,6 +370,17 @@
       if (accel > -ACCEL_SLIGHT) return '';
       if (accel > -ACCEL_STRONG) return '<span class="text-red-400 text-xs">▼</span>';
       return '<span class="text-red-400 text-xs whitespace-nowrap">▼▼ fading</span>';
+    }
+
+    // Returns a small HTML glyph for rank_trend_slope (10-session LS slope of rank_ytd,
+    // negated so positive = improving). Shown beside the short-window delta arrow in Today.
+    function slopeGlyph(slope) {
+      if (slope === null || slope === undefined || slope === '' || isNaN(slope)) return '';
+      if (slope >  SLOPE_STRONG) return '<span class="text-emerald-400 text-xs ml-0.5">↑↑</span>';
+      if (slope >  SLOPE_SLIGHT) return '<span class="text-emerald-400 text-xs ml-0.5">↑</span>';
+      if (slope > -SLOPE_SLIGHT) return '<span class="text-slate-500 text-xs ml-0.5">~</span>';
+      if (slope > -SLOPE_STRONG) return '<span class="text-red-400 text-xs ml-0.5">↓</span>';
+      return '<span class="text-red-400 text-xs ml-0.5">↓↓</span>';
     }
 
     function getLatest(rows) {
@@ -783,6 +798,9 @@
         const trendArrow = trendDelta !== null && trendDelta !== 0
           ? `<span class="${trendDelta > 0 ? 'text-emerald-400' : 'text-red-400'} text-xs ml-1">${trendDelta > 0 ? '↑' : '↓'}</span>`
           : '';
+        // 10-session LS slope of rank_ytd; more reliable than a single-window diff.
+        // Falls back to showing nothing when NaN (first 10 sessions).
+        const slopeHtml = slopeGlyph(pf(d.rank_trend_slope));
 
         const subMetrics = ALL_METRICS.filter(m => m.key !== metric).slice(0, 2);
         const subLine = subMetrics.map(m => `<span>${m.label}: ${fmtPct(row[m.key])}</span>`).join('');
@@ -813,7 +831,7 @@
             <div class="p-3 flex items-center gap-3">
               ${rankBadge}
               <div class="flex-1 min-w-0">
-                <div class="font-medium text-sm text-white truncate">${row.name}${trendArrow}</div>
+                <div class="font-medium text-sm text-white truncate">${row.name}${trendArrow}${slopeHtml}</div>
                 <div class="flex gap-3 mt-0.5 text-xs flex-wrap">
                   ${subLine}
                   ${momStr}
