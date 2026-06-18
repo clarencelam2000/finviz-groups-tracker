@@ -812,6 +812,18 @@
           : cap >= 1000 ? '$' + (cap/1000).toFixed(1) + 'T'
           : cap >= 1    ? '$' + cap.toFixed(0) + 'B'
           :               '$' + (cap*1000).toFixed(0) + 'M';
+        // Perf deltas vs 20 sessions ago — most interpretable window (~1 month).
+        // Only shown when both columns are non-empty (needs 20 sessions of history).
+        const pw20 = pf(d.perf_week_delta_20d);
+        const py20 = pf(d.perf_ytd_delta_20d);
+        const fmtPp = v => `${v > 0 ? '+' : ''}${v.toFixed(1)}pp`;
+        const perfDeltaRow = (pw20 !== null && py20 !== null) ? `
+          <div class="border-t border-slate-700 pt-2 mt-1 text-xs text-center col-span-3">
+            <span class="text-slate-500">vs 20d ago: </span>
+            <span class="${pw20 > 0 ? 'text-emerald-400' : 'text-red-400'}">${fmtPp(pw20)} wk</span>
+            <span class="text-slate-600"> · </span>
+            <span class="${py20 > 0 ? 'text-emerald-400' : 'text-red-400'}">${fmtPp(py20)} YTD</span>
+          </div>` : '';
         const expandedDetail = isExpanded ? `
           <div class="px-3 pb-3">
             <div class="border-t border-slate-700 pt-2 grid grid-cols-3 gap-1 text-xs text-center">
@@ -824,6 +836,7 @@
               <div><div class="text-slate-300">${row.stocks || '—'}</div><div class="text-slate-500 mt-0.5">Stocks</div></div>
               <div><div class="text-slate-300">${capStr}</div><div class="text-slate-500 mt-0.5">Mkt Cap</div></div>
             </div>
+            ${perfDeltaRow}
           </div>` : '';
 
         return `
