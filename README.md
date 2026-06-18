@@ -189,13 +189,15 @@ No server required — it fetches the latest CSVs directly from GitHub on every 
 
 ### Tab guide
 
-**Today** — All sectors or industries as color-coded cards, sorted by Week % by default. Use the sort dropdown to switch between Week / YTD / Month / Qtr / 6-Month / 1-Year / Day. Each card shows the group's 6-Month rank badge (rank 1 = strongest 6-month performer), its name, and two secondary metrics, with the selected metric as the big number on the right. Green = positive, red = negative. Below the cards, a Pipeline section shows the last 5 workflow run outcomes including AI generation status (◆ green = complete, amber = partial, grey = skipped).
+**Today** — All sectors or industries as color-coded cards, sorted by Week % by default. Use the sort dropdown to switch between Week / YTD / Month / Qtr / 6-Month / 1-Year / Day. Each card shows the group's 6-Month rank badge (rank 1 = strongest 6-month performer), its name, and two secondary metrics. A small arrow (↑/↓) shows the 5-session YTD rank delta, and a slope glyph (↑↑/↑/~/↓/↓↓) beside it shows the 10-session least-squares trend of the YTD rank — more reliable than a single-window diff. Tap any card to expand it: shows Quarter / 6-Month / 1-Year %, P/E, stock count, and market cap. Once 20 sessions of history exist (~July 10), a "vs 20d ago" row also appears showing how much the weekly and YTD % have changed. Below the cards, a Pipeline section shows the last 5 workflow run outcomes including AI generation status (◆ green = complete, amber = partial, grey = skipped).
 
 **Movers** — The biggest rank climbers and fallers over 5 / 10 / 20 / 50 trading sessions. A "data accumulating" placeholder is shown until enough history exists (5-session deltas arrive after the 6th trading day). Each row shows how many ranking spots the group gained or lost. Green left border = gainer, red = loser.
 
-**Momentum** — A composite breadth leaderboard sorted by `momentum_score`. Shows which groups are consistently strong (or weak) across all 7 performance timeframes at once, not just one hot streak. Includes a mini progress bar. Works from day one (does not require delta history).
+**Momentum** — Two sub-views selectable via a toggle at the top:
+- **Momentum view** (default) — Composite breadth leaderboard sorted by `momentum_score`. Shows which groups are consistently strong across all 7 timeframes at once. Includes a mini progress bar and an acceleration badge (▲▲ building / ▼▼ fading) once 10 sessions of history exist (~June 23). Works from day one.
+- **Rotation view** — Groups ranked by `regime_short_long`: how much recent short-term strength (day + week) is outpacing or lagging long-term strength (6-month + year + YTD). Split into three sections: 🌱 Emerging (rotating in), → Established (balanced), 📉 Fading (rotating out). Each card shows the 0-centered regime bar, short vs. long % context, and momentum score. Works from day one.
 
-**Strength** — Two sub-views: Sustained Strength (top-N across all three medium-term timeframes: month / quarter / half-year simultaneously) and All Green (all perf timeframes positive, shown as an emoji dot matrix). Uses `rank_agreement` to measure multi-timeframe consensus.
+**Strength** — Two sub-views: Sustained Strength (top-N across all three medium-term timeframes: month / quarter / half-year simultaneously, sorted by `momentum_confirmed` = `momentum_score × rank_agreement`, rewarding groups that are both strong and consistent) and All Green (all perf timeframes positive, shown as an emoji dot matrix). Each Sustained card shows "Confirmed X% · Agree X%" so you can see the raw conviction level at a glance.
 
 **AI** — Nightly AI analysis from Gemini: rotation phase classification (Early / Mid / Late Cycle / Defensive), top-3 sector watchlist with thesis, and a 3-paragraph market briefing for both sectors and industries. Requires `GEMINI_API_KEY` in GitHub Actions secrets to generate. The dashboard reads pre-committed JSON — no LLM calls at runtime.
 
@@ -256,6 +258,18 @@ All pipeline parameters live in `scripts/delta_config.py`. Edit that file to cha
 | `REGIME_SHORT` / `REGIME_LONG` | day+week / half+year+ytd | Buckets for the `regime_short_long` signal. |
 
 > **To change lookback windows:** edit `LOOKBACK_WINDOWS`, then re-run `compute_deltas.py --date <d>` for each existing date to populate the new columns. `ensure_deltas_csv()` auto-migrates the CSV header on the next run (old columns drop, new columns appear empty).
+
+### PWA display thresholds (`docs/index.html`)
+
+These constants control when visual indicators appear or change state. All are near the top of the `<script>` block.
+
+| Constant | Default | What it controls |
+|----------|---------|-----------------|
+| `REGIME_THRESHOLD` | `0.15` | Boundary between Emerging/Established/Fading buckets in Rotation view. Groups with `\|regime\| > 0.15` get a colored section header and card color; within ±0.15 = Established. |
+| `ACCEL_STRONG` | `0.08` | `momentum_accel` threshold for the double-arrow badge (▲▲ building / ▼▼ fading). |
+| `ACCEL_SLIGHT` | `0.02` | `momentum_accel` threshold for the single-arrow badge (▲ / ▼). Values within ±0.02 show no badge. |
+| `SLOPE_STRONG` | `0.05` | `rank_trend_slope` threshold for the double-arrow glyph (↑↑ / ↓↓) on Today cards. |
+| `SLOPE_SLIGHT` | `0.01` | `rank_trend_slope` threshold for the single-arrow glyph (↑ / ↓). Values within ±0.01 show `~`. |
 
 ---
 

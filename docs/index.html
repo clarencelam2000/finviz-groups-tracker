@@ -262,6 +262,7 @@
       try {
         localStorage.setItem(PREFS_KEY, JSON.stringify({
           group: state.group, sortMetric: state.sortMetric, lookback: state.lookback,
+          momentumView: state.momentumView,
         }));
       } catch(e) {}
     }
@@ -273,6 +274,7 @@
         if (['perf_ytd','perf_week','perf_month','perf_quarter','perf_half','perf_year','perf_day'].includes(p.sortMetric)) state.sortMetric = p.sortMetric;
         // Accept any Nd pattern; corrected against actual windows after CSV loads.
         if (p.lookback && /^\d+d$/.test(p.lookback)) state.lookback = p.lookback;
+        if (['momentum','rotation'].includes(p.momentumView)) state.momentumView = p.momentumView;
       } catch(e) {}
     }
 
@@ -285,6 +287,12 @@
       });
       document.querySelectorAll('.lookback-btn').forEach(btn => {
         const active = btn.dataset.window === state.lookback;
+        btn.classList.toggle('bg-slate-600', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('text-slate-400', !active);
+      });
+      document.querySelectorAll('.momentum-view-btn').forEach(btn => {
+        const active = btn.dataset.mview === state.momentumView;
         btn.classList.toggle('bg-slate-600', active);
         btn.classList.toggle('text-white', active);
         btn.classList.toggle('text-slate-400', !active);
@@ -345,6 +353,9 @@
       if (n === null) return '<span class="text-slate-600">—</span>';
       return `<span class="${perfColor(n)}">${n > 0 ? '+' : ''}${n.toFixed(2)}%</span>`;
     }
+
+    // Format a percentage-point delta with sign and "pp" suffix.
+    const fmtPp = v => `${v > 0 ? '+' : ''}${v.toFixed(1)}pp`;
 
     function perfColor(n) {
       if (n === null) return 'text-slate-400';
@@ -816,7 +827,6 @@
         // Only shown when both columns are non-empty (needs 20 sessions of history).
         const pw20 = pf(d.perf_week_delta_20d);
         const py20 = pf(d.perf_ytd_delta_20d);
-        const fmtPp = v => `${v > 0 ? '+' : ''}${v.toFixed(1)}pp`;
         const perfDeltaRow = (pw20 !== null && py20 !== null) ? `
           <div class="border-t border-slate-700 pt-2 mt-1 text-xs text-center col-span-3">
             <span class="text-slate-500">vs 20d ago: </span>
@@ -1010,7 +1020,7 @@
         const wk   = pf(s.perf_week);
         const half = pf(s.perf_half);
         const sign = regime > 0 ? '+' : '';
-        const regimeColor = regime > 0.1 ? 'text-emerald-400' : regime < -0.1 ? 'text-red-400' : 'text-slate-400';
+        const regimeColor = regime > REGIME_THRESHOLD ? 'text-emerald-400' : regime < -REGIME_THRESHOLD ? 'text-red-400' : 'text-slate-400';
         const sub = [
           wk   !== null ? `Short: Wk ${wk   > 0 ? '+' : ''}${wk.toFixed(1)}%`   : null,
           half !== null ? `Long: 6mo ${half > 0 ? '+' : ''}${half.toFixed(1)}%` : null,
@@ -1881,6 +1891,7 @@
           b.classList.toggle('text-white', active);
           b.classList.toggle('text-slate-400', !active);
         });
+        savePrefs();
         renderMomentum();
       }));
 
