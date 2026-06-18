@@ -262,6 +262,7 @@
       try {
         localStorage.setItem(PREFS_KEY, JSON.stringify({
           group: state.group, sortMetric: state.sortMetric, lookback: state.lookback,
+          momentumView: state.momentumView,
         }));
       } catch(e) {}
     }
@@ -273,6 +274,7 @@
         if (['perf_ytd','perf_week','perf_month','perf_quarter','perf_half','perf_year','perf_day'].includes(p.sortMetric)) state.sortMetric = p.sortMetric;
         // Accept any Nd pattern; corrected against actual windows after CSV loads.
         if (p.lookback && /^\d+d$/.test(p.lookback)) state.lookback = p.lookback;
+        if (['momentum','rotation'].includes(p.momentumView)) state.momentumView = p.momentumView;
       } catch(e) {}
     }
 
@@ -285,6 +287,12 @@
       });
       document.querySelectorAll('.lookback-btn').forEach(btn => {
         const active = btn.dataset.window === state.lookback;
+        btn.classList.toggle('bg-slate-600', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('text-slate-400', !active);
+      });
+      document.querySelectorAll('.momentum-view-btn').forEach(btn => {
+        const active = btn.dataset.mview === state.momentumView;
         btn.classList.toggle('bg-slate-600', active);
         btn.classList.toggle('text-white', active);
         btn.classList.toggle('text-slate-400', !active);
@@ -1883,6 +1891,7 @@
           b.classList.toggle('text-white', active);
           b.classList.toggle('text-slate-400', !active);
         });
+        savePrefs();
         renderMomentum();
       }));
 
