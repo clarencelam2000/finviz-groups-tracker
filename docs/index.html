@@ -126,7 +126,12 @@
         <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-group="sectors">Sectors</button>
         <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-group="industries">Industries</button>
       </div>
-      <p class="text-xs text-slate-500 mb-3">Composite breadth score across all 7 timeframes. 100% = top in every timeframe.</p>
+      <!-- Momentum / Rotation sub-toggle -->
+      <div class="flex bg-slate-800 rounded-lg p-1 mb-3">
+        <button class="momentum-view-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-mview="momentum">Momentum</button>
+        <button class="momentum-view-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-mview="rotation">Rotation</button>
+      </div>
+      <p id="momentum-tab-desc" class="text-xs text-slate-500 mb-3">Composite breadth score across all 7 timeframes. 100% = top in every timeframe.</p>
       <div id="momentum-list" class="space-y-2"></div>
     </section>
 
@@ -215,6 +220,7 @@
       windows: [],      // populated from deltas.csv header at load time
       sortMetric: 'perf_week',
       strengthView: 'sustained',
+      momentumView: 'momentum',
       topN: 20,
       data: {
         sectors:    { snap: null, delta: null, deltaAll: null },
@@ -233,6 +239,17 @@
     // ── Preferences (localStorage) ─────────────────────────────────────────
 
     const PREFS_KEY = 'fvt_prefs_v1';
+
+    // Thresholds for the Rotation view (regime_short_long column).
+    const REGIME_THRESHOLD = 0.15;   // |regime| > this → Emerging or Fading bucket
+
+    // Thresholds for the momentum_accel badge on Momentum cards.
+    const ACCEL_STRONG = 0.08;   // ▲▲ building / ▼▼ fading
+    const ACCEL_SLIGHT = 0.02;   // ▲ / ▼
+
+    // Thresholds for the rank_trend_slope glyph on Today cards.
+    const SLOPE_STRONG = 0.05;   // ↑↑ / ↓↓
+    const SLOPE_SLIGHT = 0.01;   // ↑ / ↓
 
     const ALL_METRICS = [
       { key: 'perf_day',   label: 'Day' },
@@ -343,6 +360,27 @@
       if (score >= 0.50) return { text: 'text-sky-400',     bar: 'bg-sky-500' };
       if (score >= 0.25) return { text: 'text-amber-400',   bar: 'bg-amber-500' };
       return                    { text: 'text-red-400',     bar: 'bg-red-500' };
+    }
+
+    // Returns an HTML badge for momentum_accel, or '' when NaN / within flat zone.
+    function accelBadge(accel) {
+      if (accel === null || accel === undefined || accel === '' || isNaN(accel)) return '';
+      if (accel >  ACCEL_STRONG) return '<span class="text-emerald-400 text-xs whitespace-nowrap">▲▲ building</span>';
+      if (accel >  ACCEL_SLIGHT) return '<span class="text-emerald-400 text-xs">▲</span>';
+      if (accel > -ACCEL_SLIGHT) return '';
+      if (accel > -ACCEL_STRONG) return '<span class="text-red-400 text-xs">▼</span>';
+      return '<span class="text-red-400 text-xs whitespace-nowrap">▼▼ fading</span>';
+    }
+
+    // Returns a small HTML glyph for rank_trend_slope (10-session LS slope of rank_ytd,
+    // negated so positive = improving). Shown beside the short-window delta arrow in Today.
+    function slopeGlyph(slope) {
+      if (slope === null || slope === undefined || slope === '' || isNaN(slope)) return '';
+      if (slope >  SLOPE_STRONG) return '<span class="text-emerald-400 text-xs ml-0.5">↑↑</span>';
+      if (slope >  SLOPE_SLIGHT) return '<span class="text-emerald-400 text-xs ml-0.5">↑</span>';
+      if (slope > -SLOPE_SLIGHT) return '<span class="text-slate-500 text-xs ml-0.5">~</span>';
+      if (slope > -SLOPE_STRONG) return '<span class="text-red-400 text-xs ml-0.5">↓</span>';
+      return '<span class="text-red-400 text-xs ml-0.5">↓↓</span>';
     }
 
     function getLatest(rows) {
@@ -760,6 +798,9 @@
         const trendArrow = trendDelta !== null && trendDelta !== 0
           ? `<span class="${trendDelta > 0 ? 'text-emerald-400' : 'text-red-400'} text-xs ml-1">${trendDelta > 0 ? '↑' : '↓'}</span>`
           : '';
+        // 10-session LS slope of rank_ytd; more reliable than a single-window diff.
+        // Falls back to showing nothing when NaN (first 10 sessions).
+        const slopeHtml = slopeGlyph(pf(d.rank_trend_slope));
 
         const subMetrics = ALL_METRICS.filter(m => m.key !== metric).slice(0, 2);
         const subLine = subMetrics.map(m => `<span>${m.label}: ${fmtPct(row[m.key])}</span>`).join('');
@@ -771,6 +812,18 @@
           : cap >= 1000 ? '$' + (cap/1000).toFixed(1) + 'T'
           : cap >= 1    ? '$' + cap.toFixed(0) + 'B'
           :               '$' + (cap*1000).toFixed(0) + 'M';
+        // Perf deltas vs 20 sessions ago — most interpretable window (~1 month).
+        // Only shown when both columns are non-empty (needs 20 sessions of history).
+        const pw20 = pf(d.perf_week_delta_20d);
+        const py20 = pf(d.perf_ytd_delta_20d);
+        const fmtPp = v => `${v > 0 ? '+' : ''}${v.toFixed(1)}pp`;
+        const perfDeltaRow = (pw20 !== null && py20 !== null) ? `
+          <div class="border-t border-slate-700 pt-2 mt-1 text-xs text-center col-span-3">
+            <span class="text-slate-500">vs 20d ago: </span>
+            <span class="${pw20 > 0 ? 'text-emerald-400' : 'text-red-400'}">${fmtPp(pw20)} wk</span>
+            <span class="text-slate-600"> · </span>
+            <span class="${py20 > 0 ? 'text-emerald-400' : 'text-red-400'}">${fmtPp(py20)} YTD</span>
+          </div>` : '';
         const expandedDetail = isExpanded ? `
           <div class="px-3 pb-3">
             <div class="border-t border-slate-700 pt-2 grid grid-cols-3 gap-1 text-xs text-center">
@@ -783,6 +836,7 @@
               <div><div class="text-slate-300">${row.stocks || '—'}</div><div class="text-slate-500 mt-0.5">Stocks</div></div>
               <div><div class="text-slate-300">${capStr}</div><div class="text-slate-500 mt-0.5">Mkt Cap</div></div>
             </div>
+            ${perfDeltaRow}
           </div>` : '';
 
         return `
@@ -790,7 +844,7 @@
             <div class="p-3 flex items-center gap-3">
               ${rankBadge}
               <div class="flex-1 min-w-0">
-                <div class="font-medium text-sm text-white truncate">${row.name}${trendArrow}</div>
+                <div class="font-medium text-sm text-white truncate">${row.name}${trendArrow}${slopeHtml}</div>
                 <div class="flex gap-3 mt-0.5 text-xs flex-wrap">
                   ${subLine}
                   ${momStr}
@@ -872,13 +926,25 @@
 
     function renderMomentum() {
       const delta = state.data[state.group].delta || [];
+      const snap  = state.data[state.group].snap  || [];
       const container = document.getElementById('momentum-list');
+      const descEl    = document.getElementById('momentum-tab-desc');
 
       if (delta.length === 0) {
         container.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">No data available.</p>';
         return;
       }
 
+      if (state.momentumView === 'rotation') {
+        descEl.textContent = 'Rotation signal: recent (day+wk) vs. long-horizon (6mo+yr+ytd) strength. Positive = rotating in.';
+        renderRotation(delta, snap, container);
+      } else {
+        descEl.textContent = 'Composite breadth score across all 7 timeframes. 100% = top in every timeframe.';
+        renderMomentumCards(delta, container);
+      }
+    }
+
+    function renderMomentumCards(delta, container) {
       const sorted = [...delta]
         .filter(r => r.momentum_score !== '' && r.momentum_score !== undefined)
         .sort((a, b) => (pf(b.momentum_score) ?? 0) - (pf(a.momentum_score) ?? 0));
@@ -893,12 +959,16 @@
           rankYtd  !== null ? `YTD #${rankYtd}`  : null,
           rankWeek !== null ? `Week #${rankWeek}` : null,
         ].filter(Boolean).join(' · ');
+        const badge = accelBadge(pf(row.momentum_accel));
 
         return `
           <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 flex items-center gap-3">
             <span class="text-sm font-bold text-slate-500 w-5 text-right flex-shrink-0">${i+1}</span>
             <div class="flex-1 min-w-0">
-              <div class="text-sm font-medium text-white truncate">${row.name}</div>
+              <div class="flex items-center justify-between gap-1">
+                <div class="text-sm font-medium text-white truncate">${row.name}</div>
+                ${badge}
+              </div>
               ${subParts ? `<div class="text-xs text-slate-400 mt-0.5">${subParts}</div>` : ''}
             </div>
             <div class="flex-shrink-0 w-16 text-right">
@@ -909,6 +979,67 @@
             </div>
           </div>`;
       }).join('');
+    }
+
+    function renderRotation(delta, snap, container) {
+      const snapMap = Object.fromEntries((snap || []).map(r => [r.name, r]));
+      const withRegime = delta.map(r => ({ ...r, _regime: pf(r.regime_short_long) }));
+      const valid   = withRegime.filter(r => r._regime !== null).sort((a, b) => b._regime - a._regime);
+      const invalid = withRegime.filter(r => r._regime === null);
+
+      const emerging    = valid.filter(r => r._regime >  REGIME_THRESHOLD);
+      const established = valid.filter(r => r._regime >= -REGIME_THRESHOLD && r._regime <= REGIME_THRESHOLD);
+      const fading      = valid.filter(r => r._regime <  -REGIME_THRESHOLD);
+
+      const regimeBar = (regime) => {
+        const pct = Math.min(Math.abs(regime) * 50, 50).toFixed(1);
+        const fill = regime > 0
+          ? `<div class="absolute top-0 h-full bg-emerald-500" style="left:50%;width:${pct}%"></div>`
+          : `<div class="absolute top-0 h-full bg-red-500" style="right:50%;width:${pct}%"></div>`;
+        return `
+          <div class="relative w-full h-1.5 rounded-full bg-slate-700 overflow-hidden my-1">
+            <div class="absolute top-0 left-1/2 w-px h-full bg-slate-500"></div>
+            ${fill}
+          </div>`;
+      };
+
+      const renderCard = (row) => {
+        const regime = row._regime;
+        const s = snapMap[row.name] || {};
+        const mom  = pf(row.momentum_score);
+        const wk   = pf(s.perf_week);
+        const half = pf(s.perf_half);
+        const sign = regime > 0 ? '+' : '';
+        const regimeColor = regime > 0.1 ? 'text-emerald-400' : regime < -0.1 ? 'text-red-400' : 'text-slate-400';
+        const sub = [
+          wk   !== null ? `Short: Wk ${wk   > 0 ? '+' : ''}${wk.toFixed(1)}%`   : null,
+          half !== null ? `Long: 6mo ${half > 0 ? '+' : ''}${half.toFixed(1)}%` : null,
+          mom  !== null ? `Mom ${(mom*100).toFixed(0)}%` : null,
+        ].filter(Boolean).join('  ·  ');
+        return `
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700">
+            <div class="flex items-center justify-between">
+              <div class="text-sm font-medium text-white">${row.name}</div>
+              <div class="text-xs font-mono ${regimeColor} flex-shrink-0 ml-2">${sign}${regime.toFixed(2)}</div>
+            </div>
+            ${regimeBar(regime)}
+            ${sub ? `<div class="text-xs text-slate-400">${sub}</div>` : ''}
+          </div>`;
+      };
+
+      const section = (rows, label, labelClass) => rows.length === 0 ? '' : `
+        <h3 class="text-xs font-semibold ${labelClass} uppercase tracking-wider mb-2 mt-4 first:mt-0">${label} (${rows.length})</h3>
+        <div class="space-y-2">${rows.map(renderCard).join('')}</div>`;
+
+      const noHistory = invalid.length > 0
+        ? `<p class="text-xs text-slate-600 text-center mt-4">Insufficient history for ${invalid.length} group${invalid.length > 1 ? 's' : ''}</p>`
+        : '';
+
+      container.innerHTML =
+        section(emerging,    '🌱 Emerging — short-term outpacing long-term', 'text-emerald-400') +
+        section(established, '→ Established — balanced trend',               'text-slate-400') +
+        section(fading,      '📉 Fading — long-term outpacing short-term',   'text-red-400') +
+        noHistory;
     }
 
     // ── Render: Strength ──────────────────────────────────────────────────
@@ -934,30 +1065,32 @@
       threshRow.classList.toggle('hidden', view === 'allgreen');
 
       if (view === 'sustained') {
+        // Sort by momentum_confirmed (score × agreement) — rewards both strength and
+        // cross-timeframe consistency. Falls back to momentum_score when confirmed is NaN.
         const strong = delta.filter(r => {
           const rm = pf(r.rank_month), rq = pf(r.rank_quarter), rh = pf(r.rank_half);
           return rm !== null && rq !== null && rh !== null
             && rm <= effectiveN && rq <= effectiveN && rh <= effectiveN;
-        }).sort((a, b) => (pf(b.momentum_score) ?? 0) - (pf(a.momentum_score) ?? 0));
+        }).sort((a, b) => (pf(b.momentum_confirmed) ?? pf(b.momentum_score) ?? 0) - (pf(a.momentum_confirmed) ?? pf(a.momentum_score) ?? 0));
 
         const weak = delta.filter(r => {
           const rm = pf(r.rank_month), rq = pf(r.rank_quarter), rh = pf(r.rank_half);
           return rm !== null && rq !== null && rh !== null
             && rm > n - effectiveN && rq > n - effectiveN && rh > n - effectiveN;
-        }).sort((a, b) => (pf(a.momentum_score) ?? 1) - (pf(b.momentum_score) ?? 1));
+        }).sort((a, b) => (pf(a.momentum_confirmed) ?? pf(a.momentum_score) ?? 1) - (pf(b.momentum_confirmed) ?? pf(b.momentum_score) ?? 1));
 
         const renderList = (rows, isStrong) => rows.map(row => {
-          const ra = pf(row.rank_agreement);
-          const mom = pf(row.momentum_score);
+          const conf = pf(row.momentum_confirmed);
+          const ra   = pf(row.rank_agreement);
           const border = isStrong ? 'border-l-emerald-500' : 'border-l-red-500';
           const rankParts = [
             `Mo #${pf(row.rank_month) ?? '?'}`,
             `Qtr #${pf(row.rank_quarter) ?? '?'}`,
             `½yr #${pf(row.rank_half) ?? '?'}`,
           ].join(' · ');
-          const raStr = ra !== null ? `Agree ${(ra*100).toFixed(0)}%` : '';
-          const momStr = mom !== null ? `Mom ${(mom*100).toFixed(0)}%` : '';
-          const sub = [rankParts, raStr, momStr].filter(Boolean).join('  ·  ');
+          const confStr = conf !== null ? `Confirmed ${(conf*100).toFixed(0)}%` : '';
+          const raStr   = ra   !== null ? `Agree ${(ra*100).toFixed(0)}%`       : '';
+          const sub = [rankParts, confStr, raStr].filter(Boolean).join('  ·  ');
           return `
             <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 ${border}">
               <div class="text-sm font-medium text-white">${row.name}</div>
@@ -1738,6 +1871,18 @@
     });
     document.getElementById('ai-nav-prev').addEventListener('click', () => navigateAI('prev'));
     document.getElementById('ai-nav-next').addEventListener('click', () => navigateAI('next'));
+
+    document.querySelectorAll('.momentum-view-btn').forEach(btn =>
+      btn.addEventListener('click', () => {
+        state.momentumView = btn.dataset.mview;
+        document.querySelectorAll('.momentum-view-btn').forEach(b => {
+          const active = b.dataset.mview === state.momentumView;
+          b.classList.toggle('bg-slate-600', active);
+          b.classList.toggle('text-white', active);
+          b.classList.toggle('text-slate-400', !active);
+        });
+        renderMomentum();
+      }));
 
     document.querySelectorAll('.strength-view-btn').forEach(btn =>
       btn.addEventListener('click', () => {
