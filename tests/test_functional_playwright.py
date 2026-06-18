@@ -198,6 +198,91 @@ class TestPWALookbackWindows:
             server.terminate()
             server.wait()
 
+    def test_lookback_buttons_derived_from_csv_header(self):
+        """LB-FF1: buttons come from the CSV header, not hardcoded JS.
+
+        Serve a delta CSV whose only rank_ytd_delta_* columns are 3d and 7d.
+        Assert that exactly those two window buttons appear in the PWA, and that
+        the old 5d/10d/20d/50d buttons are NOT present.
+        """
+        from playwright.sync_api import sync_playwright
+        import csv
+        import io
+
+        # Build a minimal delta CSV with windows 3d and 7d only.
+        custom_windows = ["3d", "7d"]
+        base_cols = ["date", "name", "rank_day", "rank_week", "rank_month",
+                     "rank_quarter", "rank_half", "rank_year", "rank_ytd"]
+        delta_cols = base_cols[:]
+        for w in custom_windows:
+            for m in ["rank_week", "rank_month", "rank_ytd"]:
+                delta_cols.append(f"{m}_delta_{w}")
+            for m in ["perf_week", "perf_month", "perf_ytd"]:
+                delta_cols.append(f"{m}_delta_{w}")
+        delta_cols += ["momentum_score", "momentum_confirmed", "momentum_weighted_mid",
+                       "momentum_weighted_fast", "momentum_accel", "regime_short_long",
+                       "rank_trend_slope", "rank_agreement"]
+
+        buf = io.StringIO()
+        w = csv.DictWriter(buf, fieldnames=delta_cols)
+        w.writeheader()
+        row = {c: "" for c in delta_cols}
+        row.update({"date": "2026-06-17", "name": "Technology",
+                    "rank_ytd": "1", "rank_ytd_delta_3d": "2", "momentum_score": "0.8"})
+        w.writerow(row)
+        custom_delta = buf.getvalue()
+        snap_body = _snapshot_csv()
+
+        docs_dir = Path(__file__).parent.parent / "docs"
+        server = subprocess.Popen(
+            ["python3", "-m", "http.server", "8183", "--directory", str(docs_dir)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        time.sleep(1)
+
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                ctx = browser.new_context()
+                page = ctx.new_page()
+
+                page.route("**/raw.githubusercontent.com/**snapshots.csv",
+                           lambda r: r.fulfill(body=snap_body, content_type="text/plain"))
+                page.route("**/raw.githubusercontent.com/**deltas.csv",
+                           lambda r: r.fulfill(body=custom_delta, content_type="text/plain"))
+                page.route("**/data/fetch_log.csv",
+                           lambda r: r.fulfill(body="", content_type="text/plain"))
+                page.route("**/data/ai/**", lambda r: r.fulfill(status=404))
+
+                page.goto("http://localhost:8183/", wait_until="networkidle",
+                          timeout=15000)
+
+                movers_tab = page.locator("[data-tab='movers'], button:has-text('Movers')")
+                if movers_tab.count() > 0:
+                    movers_tab.first.click()
+                    page.wait_for_timeout(500)
+
+                # Derived buttons should match the custom CSV header.
+                for win in custom_windows:
+                    btn = page.locator(f"button[data-window='{win}']")
+                    assert btn.count() > 0, (
+                        f"Expected button data-window='{win}' derived from CSV header."
+                    )
+
+                # Hardcoded windows must not appear.
+                for old_win in ["5d", "10d", "20d", "50d"]:
+                    btn = page.locator(f"button[data-window='{old_win}']")
+                    assert btn.count() == 0, (
+                        f"Hardcoded window button '{old_win}' still appears; "
+                        f"buttons are not being derived from CSV header."
+                    )
+
+                ctx.close()
+                browser.close()
+        finally:
+            server.terminate()
+            server.wait()
+
     def test_default_lookback_is_5d(self):
         """First load: active lookback button is 5d (the new default)."""
         from playwright.sync_api import sync_playwright

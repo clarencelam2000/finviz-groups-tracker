@@ -104,16 +104,12 @@
         <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-group="sectors">Sectors</button>
         <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-group="industries">Industries</button>
       </div>
-      <div class="flex bg-slate-800 rounded-lg p-1 mb-4">
-        <button class="lookback-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-window="5d">5 Days</button>
-        <button class="lookback-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-window="10d">10 Days</button>
-        <button class="lookback-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-window="20d">20 Days</button>
-        <button class="lookback-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-window="50d">50 Days</button>
-      </div>
+      <!-- Lookback buttons populated dynamically from deltas.csv header (LB-FF1) -->
+      <div id="lookback-btn-row" class="flex bg-slate-800 rounded-lg p-1 mb-4"></div>
       <div id="movers-placeholder" class="rounded-xl bg-slate-800 border border-slate-700 p-6 text-center hidden">
         <div class="text-4xl mb-3">📅</div>
         <p class="text-white font-semibold mb-1">Data accumulating…</p>
-        <p class="text-slate-400 text-sm mb-2">5-day rank changes appear after <span id="movers-date-5d" class="text-slate-200 font-medium">June 16</span>.</p>
+        <p class="text-slate-400 text-sm mb-2">Rank changes appear after <span id="movers-date-short" class="text-slate-200 font-medium">June 16</span>.</p>
         <p class="text-slate-500 text-xs">GitHub Actions collects data weekdays at 10pm UTC.</p>
       </div>
       <div id="movers-content" class="hidden">
@@ -215,7 +211,8 @@
     const state = {
       tab: 'today',
       group: 'sectors',
-      lookback: '5d',
+      lookback: '5d',   // corrected to windows[0] after CSV load if needed
+      windows: [],      // populated from deltas.csv header at load time
       sortMetric: 'perf_week',
       strengthView: 'sustained',
       topN: 20,
@@ -257,7 +254,8 @@
         const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
         if (['sectors','industries'].includes(p.group)) state.group = p.group;
         if (['perf_ytd','perf_week','perf_month','perf_quarter','perf_half','perf_year','perf_day'].includes(p.sortMetric)) state.sortMetric = p.sortMetric;
-        if (['5d','10d','20d','50d'].includes(p.lookback)) state.lookback = p.lookback;
+        // Accept any Nd pattern; corrected against actual windows after CSV loads.
+        if (p.lookback && /^\d+d$/.test(p.lookback)) state.lookback = p.lookback;
       } catch(e) {}
     }
 
@@ -352,6 +350,33 @@
       const dates = [...new Set(rows.map(r => r.date).filter(Boolean))].sort();
       const latest = dates[dates.length - 1];
       return rows.filter(r => r.date === latest);
+    }
+
+    // Parse lookback windows from deltas.csv column names (e.g. rank_ytd_delta_5d → "5d").
+    // Falls back to hardcoded defaults if no matching columns are found.
+    function extractWindowsFromHeader(fields) {
+      const seen = new Set();
+      const windows = [];
+      for (const f of (fields || [])) {
+        const m = f.match(/^rank_ytd_delta_(\d+d)$/);
+        if (m && !seen.has(m[1])) { seen.add(m[1]); windows.push(m[1]); }
+      }
+      windows.sort((a, b) => parseInt(a) - parseInt(b));
+      return windows.length > 0 ? windows : ['5d', '10d', '20d', '50d'];
+    }
+
+    // Render lookback buttons from state.windows and wire click handlers.
+    // Called once after the first delta CSV loads; safe to call again on refresh.
+    function renderLookbackButtons() {
+      const row = document.getElementById('lookback-btn-row');
+      if (!row) return;
+      row.innerHTML = state.windows.map(win => {
+        const active = win === state.lookback;
+        const cls = active ? 'bg-slate-600 text-white' : 'text-slate-400';
+        return `<button class="lookback-btn flex-1 py-2 rounded-md text-sm font-medium ${cls} transition-colors" data-window="${win}">${parseInt(win)} Days</button>`;
+      }).join('');
+      row.querySelectorAll('.lookback-btn').forEach(btn =>
+        btn.addEventListener('click', () => switchLookback(btn.dataset.window)));
     }
 
     function hasMoversData(rows, win) {
@@ -514,16 +539,24 @@
         // tabs read latest-only via .snap/.delta; this is consumed only there.
         state.data[group].deltaAll = deltaRes.data || [];
 
+        // Derive lookback windows from the delta CSV header (LB-FF1). Only do
+        // this once (on the first group load) to avoid re-rendering mid-session.
+        if (state.windows.length === 0) {
+          state.windows = extractWindowsFromHeader(deltaRes.meta && deltaRes.meta.fields);
+          if (!state.windows.includes(state.lookback)) state.lookback = state.windows[0];
+          renderLookbackButtons();
+        }
+
         if (state.data[group].snap.length > 0) {
           const d = state.data[group].snap[0].date;
           const lbl = freshnessLabel(d, state.data[group].snap[0].collected_at);
           const el = document.getElementById('last-updated');
           el.textContent = lbl.text;
           el.className = lbl.cls;
-          // Compute expected date for 5d (≈1 week) movers
+          // Expected date for the shortest window (≈1 week for 5d default).
           const dt = new Date(d + 'T12:00:00');
           dt.setDate(dt.getDate() + 7);
-          document.getElementById('movers-date-5d').textContent =
+          document.getElementById('movers-date-short').textContent =
             dt.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
         }
       } catch (err) {
@@ -722,8 +755,8 @@
           : mainVal < -2 ? 'border-l-red-500'
           :                'border-l-red-700';
 
-        // YTD delta is a fixed anchor — a consistent momentum signal regardless of the active sort metric
-        const trendDelta = pf(d.rank_ytd_delta_5d);
+        // YTD delta for the shortest available window — consistent momentum signal regardless of sort metric
+        const trendDelta = pf(d[`rank_ytd_delta_${state.windows[0] || '5d'}`]);
         const trendArrow = trendDelta !== null && trendDelta !== 0
           ? `<span class="${trendDelta > 0 ? 'text-emerald-400' : 'text-red-400'} text-xs ml-1">${trendDelta > 0 ? '↑' : '↓'}</span>`
           : '';
@@ -1195,7 +1228,7 @@
     function groupScore(delta, snap, hasRow) {
       if (!hasRow) return 0.5; // no data → neutral
       let s = 0;
-      if ((delta ? (pf(delta.rank_week_delta_5d) ?? 0) : 0) > 0)   s += 0.3;
+      if ((delta ? (pf(delta[`rank_week_delta_${state.windows[0] || '5d'}`]) ?? 0) : 0) > 0)   s += 0.3;
       if ((delta ? (pf(delta.momentum_score) ?? 0) : 0) > 0.6)     s += 0.5;
       if ((snap  ? (pf(snap.perf_week) ?? 0) : 0) > 0)             s += 0.2;
       return s;
@@ -1338,22 +1371,24 @@
       const rank        = snap
         ? computeRankFromSnap(snap, allSnaps, 'perf_week')
         : (delta ? pf(delta.rank_week) : null);
-      const rankDelta5d = delta ? pf(delta.rank_week_delta_5d) : null;
-      const rankDelta50d = delta ? pf(delta.rank_week_delta_50d) : null;
-      const score       = delta ? pf(delta.momentum_score) : null;
+      const shortWin = state.windows[0] || '5d';
+      const longWin  = state.windows[state.windows.length - 1] || '50d';
+      const rankDeltaShort = delta ? pf(delta[`rank_week_delta_${shortWin}`]) : null;
+      const rankDeltaLong  = delta ? pf(delta[`rank_week_delta_${longWin}`]) : null;
+      const score          = delta ? pf(delta.momentum_score) : null;
       const perfWeek    = snap ? pf(snap.perf_week) : null;
       const perfMonth   = snap ? pf(snap.perf_month) : null;
       const perfYtd     = snap ? pf(snap.perf_ytd) : null;
 
       const rankStr = rank !== null ? `#${rank} of ${n}` : '—';
       let deltaHtml = '';
-      if (rankDelta5d !== null && rankDelta5d > 0)  deltaHtml = `<span class="text-emerald-400 ml-1">▲ +${rankDelta5d} this wk</span>`;
-      else if (rankDelta5d !== null && rankDelta5d < 0) deltaHtml = `<span class="text-red-400 ml-1">▼ ${rankDelta5d} this wk</span>`;
-      else if (rankDelta5d === 0) deltaHtml = `<span class="text-slate-500 ml-1">= 0 this wk</span>`;
-      let delta30Html = '';
-      if (rankDelta50d !== null && rankDelta50d !== 0) {
-        const cls30 = rankDelta50d > 0 ? 'text-emerald-400' : 'text-red-400';
-        delta30Html = `<span class="${cls30} ml-1">${rankDelta50d > 0 ? '▲' : '▼'}${Math.abs(rankDelta50d)} over 50d</span>`;
+      if (rankDeltaShort !== null && rankDeltaShort > 0)  deltaHtml = `<span class="text-emerald-400 ml-1">▲ +${rankDeltaShort} this wk</span>`;
+      else if (rankDeltaShort !== null && rankDeltaShort < 0) deltaHtml = `<span class="text-red-400 ml-1">▼ ${rankDeltaShort} this wk</span>`;
+      else if (rankDeltaShort === 0) deltaHtml = `<span class="text-slate-500 ml-1">= 0 this wk</span>`;
+      let deltaLongHtml = '';
+      if (rankDeltaLong !== null && rankDeltaLong !== 0) {
+        const clsLong = rankDeltaLong > 0 ? 'text-emerald-400' : 'text-red-400';
+        deltaLongHtml = `<span class="${clsLong} ml-1">${rankDeltaLong > 0 ? '▲' : '▼'}${Math.abs(rankDeltaLong)} over ${longWin}</span>`;
       }
 
       const momPct = score !== null ? (score * 100).toFixed(0) : null;
@@ -1380,7 +1415,7 @@
         <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 space-y-1.5">
           <div class="flex justify-between items-center"><span class="text-[0.65rem] uppercase tracking-wider text-slate-500">${label}</span>${chipHtml}</div>
           <div class="text-sm font-medium text-white">${escapeHtml(name)}</div>
-          <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Rank (wk)</span><span class="text-slate-200">${rankStr}${deltaHtml}${delta30Html}</span></div>
+          <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Rank (wk)</span><span class="text-slate-200">${rankStr}${deltaHtml}${deltaLongHtml}</span></div>
           ${floorHtml}
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Momentum</span><span>${momHtml}</span></div>
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Perf</span><span class="text-slate-300">Wk ${fmtPct(perfWeek)} · Mo ${fmtPct(perfMonth)} · YTD ${fmtPct(perfYtd)}</span></div>
@@ -1399,9 +1434,11 @@
       const { delta, snap, allSnaps } = gd;
       const out = [];
       if (delta) {
-        const d50 = pf(delta.rank_week_delta_50d);
-        const d5  = pf(delta.rank_week_delta_5d);
-        if (d50 !== null && Math.abs(d50) >= 3)      out.push(`${d50 > 0 ? '▲' : '▼'}${Math.abs(d50)} rank over 50d`);
+        const sw = state.windows[0] || '5d';
+        const lw = state.windows[state.windows.length - 1] || '50d';
+        const d50 = pf(delta[`rank_week_delta_${lw}`]);
+        const d5  = pf(delta[`rank_week_delta_${sw}`]);
+        if (d50 !== null && Math.abs(d50) >= 3)      out.push(`${d50 > 0 ? '▲' : '▼'}${Math.abs(d50)} rank over ${lw}`);
         else if (d5 !== null && Math.abs(d5) >= 3)   out.push(`${d5 > 0 ? '▲' : '▼'}${Math.abs(d5)} rank this wk`);
         const { floor, chip } = convictionInfo(delta, n, snap, allSnaps);
         if (chip) out.push(`${chip.text.toLowerCase()} across 1/3/6mo (floor #${floor})`);
@@ -1661,6 +1698,8 @@
       state.latestAiDate = null;
       state.latestSnapshotDate = null;
       state.currentAiDate = null;
+      // Reset windows so they're re-derived from the fresh CSV on next load.
+      state.windows = [];
       const nav = document.getElementById('ai-date-nav');
       if (nav) nav.classList.add('hidden');
       document.getElementById('last-updated').textContent = 'Loading…';
@@ -1673,8 +1712,7 @@
     document.querySelectorAll('.group-toggle-btn').forEach(btn =>
       btn.addEventListener('click', () => switchGroup(btn.dataset.group)));
 
-    document.querySelectorAll('.lookback-btn').forEach(btn =>
-      btn.addEventListener('click', () => switchLookback(btn.dataset.window)));
+    // Lookback button listeners are wired in renderLookbackButtons() after CSV load (LB-FF1).
 
     document.getElementById('sort-metric').addEventListener('change', e => {
       state.sortMetric = e.target.value;
