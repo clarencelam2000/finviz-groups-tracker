@@ -85,6 +85,18 @@ then the momentum columns: `momentum_score, momentum_confirmed, momentum_weighte
 - `rank_trend_slope`: negated least-squares slope of `rank_ytd` over the trailing window; positive = improving.
 - Delta/momentum columns are `NaN` until enough history exists (e.g., 50d deltas need 50+ sessions; accel needs 10).
 
+### PWA display thresholds (in `docs/index.html` near top of `<script>`)
+
+These constants gate visual indicators in the PWA. Edit them directly in `index.html` — they are not derived from the CSV pipeline.
+
+| Constant | Default | Controls |
+|----------|---------|---------|
+| `REGIME_THRESHOLD` | `0.15` | Boundary between Emerging / Established / Fading buckets in Rotation view. Also the card color cutoff — must stay consistent (uses `REGIME_THRESHOLD` in both places). |
+| `ACCEL_STRONG` | `0.08` | `momentum_accel` threshold for double-arrow (▲▲/▼▼) badge on Momentum cards. |
+| `ACCEL_SLIGHT` | `0.02` | `momentum_accel` threshold for single-arrow (▲/▼) badge. Within ±`ACCEL_SLIGHT` = no badge. |
+| `SLOPE_STRONG` | `0.05` | `rank_trend_slope` threshold for double-arrow (↑↑/↓↓) glyph on Today cards. |
+| `SLOPE_SLIGHT` | `0.01` | `rank_trend_slope` threshold for single-arrow (↑/↓) glyph. Within ±`SLOPE_SLIGHT` = `~`. |
+
 ---
 
 ## Common workflows
