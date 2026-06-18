@@ -1,4 +1,4 @@
-const CACHE = 'finviz-v7';
+const CACHE = 'finviz-v8';
 
 self.addEventListener('install', e => {
   e.waitUntil(

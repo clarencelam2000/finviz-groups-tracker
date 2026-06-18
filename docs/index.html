@@ -126,7 +126,12 @@
         <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-group="sectors">Sectors</button>
         <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-group="industries">Industries</button>
       </div>
-      <p class="text-xs text-slate-500 mb-3">Composite breadth score across all 7 timeframes. 100% = top in every timeframe.</p>
+      <!-- Momentum / Rotation sub-toggle -->
+      <div class="flex bg-slate-800 rounded-lg p-1 mb-3">
+        <button class="momentum-view-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-mview="momentum">Momentum</button>
+        <button class="momentum-view-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-mview="rotation">Rotation</button>
+      </div>
+      <p id="momentum-tab-desc" class="text-xs text-slate-500 mb-3">Composite breadth score across all 7 timeframes. 100% = top in every timeframe.</p>
       <div id="momentum-list" class="space-y-2"></div>
     </section>
 
@@ -215,6 +220,7 @@
       windows: [],      // populated from deltas.csv header at load time
       sortMetric: 'perf_week',
       strengthView: 'sustained',
+      momentumView: 'momentum',
       topN: 20,
       data: {
         sectors:    { snap: null, delta: null, deltaAll: null },
@@ -233,6 +239,9 @@
     // ── Preferences (localStorage) ─────────────────────────────────────────
 
     const PREFS_KEY = 'fvt_prefs_v1';
+
+    // Thresholds for the Rotation view (regime_short_long column).
+    const REGIME_THRESHOLD = 0.15;   // |regime| > this → Emerging or Fading bucket
 
     const ALL_METRICS = [
       { key: 'perf_day',   label: 'Day' },
@@ -872,13 +881,25 @@
 
     function renderMomentum() {
       const delta = state.data[state.group].delta || [];
+      const snap  = state.data[state.group].snap  || [];
       const container = document.getElementById('momentum-list');
+      const descEl    = document.getElementById('momentum-tab-desc');
 
       if (delta.length === 0) {
         container.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">No data available.</p>';
         return;
       }
 
+      if (state.momentumView === 'rotation') {
+        descEl.textContent = 'Rotation signal: recent (day+wk) vs. long-horizon (6mo+yr+ytd) strength. Positive = rotating in.';
+        renderRotation(delta, snap, container);
+      } else {
+        descEl.textContent = 'Composite breadth score across all 7 timeframes. 100% = top in every timeframe.';
+        renderMomentumCards(delta, container);
+      }
+    }
+
+    function renderMomentumCards(delta, container) {
       const sorted = [...delta]
         .filter(r => r.momentum_score !== '' && r.momentum_score !== undefined)
         .sort((a, b) => (pf(b.momentum_score) ?? 0) - (pf(a.momentum_score) ?? 0));
@@ -909,6 +930,67 @@
             </div>
           </div>`;
       }).join('');
+    }
+
+    function renderRotation(delta, snap, container) {
+      const snapMap = Object.fromEntries((snap || []).map(r => [r.name, r]));
+      const withRegime = delta.map(r => ({ ...r, _regime: pf(r.regime_short_long) }));
+      const valid   = withRegime.filter(r => r._regime !== null).sort((a, b) => b._regime - a._regime);
+      const invalid = withRegime.filter(r => r._regime === null);
+
+      const emerging    = valid.filter(r => r._regime >  REGIME_THRESHOLD);
+      const established = valid.filter(r => r._regime >= -REGIME_THRESHOLD && r._regime <= REGIME_THRESHOLD);
+      const fading      = valid.filter(r => r._regime <  -REGIME_THRESHOLD);
+
+      const regimeBar = (regime) => {
+        const pct = Math.min(Math.abs(regime) * 50, 50).toFixed(1);
+        const fill = regime > 0
+          ? `<div class="absolute top-0 h-full bg-emerald-500" style="left:50%;width:${pct}%"></div>`
+          : `<div class="absolute top-0 h-full bg-red-500" style="right:50%;width:${pct}%"></div>`;
+        return `
+          <div class="relative w-full h-1.5 rounded-full bg-slate-700 overflow-hidden my-1">
+            <div class="absolute top-0 left-1/2 w-px h-full bg-slate-500"></div>
+            ${fill}
+          </div>`;
+      };
+
+      const renderCard = (row) => {
+        const regime = row._regime;
+        const s = snapMap[row.name] || {};
+        const mom  = pf(row.momentum_score);
+        const wk   = pf(s.perf_week);
+        const half = pf(s.perf_half);
+        const sign = regime > 0 ? '+' : '';
+        const regimeColor = regime > 0.1 ? 'text-emerald-400' : regime < -0.1 ? 'text-red-400' : 'text-slate-400';
+        const sub = [
+          wk   !== null ? `Short: Wk ${wk   > 0 ? '+' : ''}${wk.toFixed(1)}%`   : null,
+          half !== null ? `Long: 6mo ${half > 0 ? '+' : ''}${half.toFixed(1)}%` : null,
+          mom  !== null ? `Mom ${(mom*100).toFixed(0)}%` : null,
+        ].filter(Boolean).join('  ·  ');
+        return `
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700">
+            <div class="flex items-center justify-between">
+              <div class="text-sm font-medium text-white">${row.name}</div>
+              <div class="text-xs font-mono ${regimeColor} flex-shrink-0 ml-2">${sign}${regime.toFixed(2)}</div>
+            </div>
+            ${regimeBar(regime)}
+            ${sub ? `<div class="text-xs text-slate-400">${sub}</div>` : ''}
+          </div>`;
+      };
+
+      const section = (rows, label, labelClass) => rows.length === 0 ? '' : `
+        <h3 class="text-xs font-semibold ${labelClass} uppercase tracking-wider mb-2 mt-4 first:mt-0">${label} (${rows.length})</h3>
+        <div class="space-y-2">${rows.map(renderCard).join('')}</div>`;
+
+      const noHistory = invalid.length > 0
+        ? `<p class="text-xs text-slate-600 text-center mt-4">Insufficient history for ${invalid.length} group${invalid.length > 1 ? 's' : ''}</p>`
+        : '';
+
+      container.innerHTML =
+        section(emerging,    '🌱 Emerging — short-term outpacing long-term', 'text-emerald-400') +
+        section(established, '→ Established — balanced trend',               'text-slate-400') +
+        section(fading,      '📉 Fading — long-term outpacing short-term',   'text-red-400') +
+        noHistory;
     }
 
     // ── Render: Strength ──────────────────────────────────────────────────
@@ -1738,6 +1820,18 @@
     });
     document.getElementById('ai-nav-prev').addEventListener('click', () => navigateAI('prev'));
     document.getElementById('ai-nav-next').addEventListener('click', () => navigateAI('next'));
+
+    document.querySelectorAll('.momentum-view-btn').forEach(btn =>
+      btn.addEventListener('click', () => {
+        state.momentumView = btn.dataset.mview;
+        document.querySelectorAll('.momentum-view-btn').forEach(b => {
+          const active = b.dataset.mview === state.momentumView;
+          b.classList.toggle('bg-slate-600', active);
+          b.classList.toggle('text-white', active);
+          b.classList.toggle('text-slate-400', !active);
+        });
+        renderMomentum();
+      }));
 
     document.querySelectorAll('.strength-view-btn').forEach(btn =>
       btn.addEventListener('click', () => {
