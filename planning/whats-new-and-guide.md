@@ -1,56 +1,91 @@
-# Plan: "What's New" + "Guide / Glossary" for the PWA (and dashboard fast-follow)
+# Plan: "What's New" + "Guide / Glossary" for the PWA (and dashboard)
 
-> **Status:** Approved design plan, not yet implemented. This document is the blueprint for a
-> future implementation session. No UI/UX code has been written. The content/data file
-> (`docs/releases.json`) and the glossary copy are the source of truth everything else reads from.
+> **Status:** Approved design plan — **not yet implemented.** This document is the complete
+> pick-up brief for a future implementation session. No UI/UX code exists yet. Anyone on the
+> team should be able to build this from this file alone, without other context.
 
-## Context — why this is being added
+---
 
-Tools and dashboards almost universally have two things this project currently lacks:
+## 1. Context — why we're adding this
 
-1. **A "What's New" / release notes surface** — so users notice features land (movers,
-   momentum, AI tab, ticker lookup were all shipped silently). Right now the only version
-   signal is `sw.js`'s `CACHE = 'finviz-v9'` string and the dev-facing `.session/WORK_LOG.md`.
-2. **A "Guide / What it means" glossary** — the app surfaces *proprietary* calculated metrics
-   (momentum_score, momentum_confirmed, regime_short_long, momentum_accel, rank_trend_slope,
-   rank deltas, sustained strength, all-green, rank floor) plus color/arrow/threshold glyphs
-   that are meaningless without explanation. Authoritative copy already exists in
-   `knowledge/moaty-metrics.md` (explicitly written to feed an in-app "why this matters"
-   glossary) but is not surfaced in the product.
+The product (a mobile PWA at `docs/index.html` + a Streamlit dashboard at `dashboard/app.py`)
+shows sector/industry rankings and a layer of **proprietary calculated metrics** — momentum
+score, regime, acceleration, rank-trend slope, rank deltas, and more. Two gaps:
 
-Intended outcome: a single content source feeding **one discoverable hub** in the PWA, with
-contextual deep-links from each tab — and a lighter mirror in the Streamlit dashboard.
+1. **No release-notes / "What's New" surface.** Several features (Movers, Momentum, the AI tab,
+   Ticker Lookup, the Rotation sub-view) shipped with zero in-app announcement. Users have no
+   way to learn what changed. The only version signal today is the cache-busting string
+   `CACHE = 'finviz-v9'` in `docs/sw.js` and the developer-facing `.session/WORK_LOG.md`.
 
-## Approved decisions
+2. **No in-app explanation of what the numbers mean.** The app shows metrics and visual cues
+   (colored card edges, up/down arrows, glyphs, regime bars) that are meaningless without a
+   key. Authoritative plain-English definitions already exist in `knowledge/moaty-metrics.md`
+   (each metric has a written "User one-liner"), explicitly authored to feed an in-app
+   glossary — but nothing surfaces them to users yet.
 
-- **PWA surface = Variant A — "Hub + contextual deep-links."** An `ℹ️` icon in the header
-  opens a slide-up sheet (the hub) with two segmented sections: **What's New** | **Guide**.
-  The tab bar stays at 6 — no 7th tab. Each existing tab gets a tiny "why this matters" link
-  that deep-links *into* the hub, scrolled to the relevant metric. What's New shows an
-  unseen-update dot on the `ℹ️` icon + a one-time dismissible banner after a version bump.
-- **Release-notes source of truth = curated `docs/releases.json`** (not derived from
-  WORK_LOG). Hand-curated, user-facing tone, separate from dev notes.
-- **Glossary scope = Option 1** — proprietary metrics (reusing `moaty-metrics.md` one-liners)
-  + a short "how to read a card" walkthrough + a color/arrow/threshold legend. Option-3
-  extras (data-provenance section, FAQ, per-tab walkthrough) are an explicit fast-follow, not
-  in this pass.
+**Intended outcome:** one discoverable in-app **hub** that holds both "What's New" and a
+"Guide" (glossary + how-to), fed by a single source of truth, with small contextual links from
+each screen that jump into the relevant Guide entry. A lighter version of the same content
+appears in the desktop dashboard.
 
-## Architecture / data model
+---
 
-### 1. Release notes — `docs/releases.json` (new file; the source of truth)
-Curated, newest-first array. The PWA fetches it (same-origin under `docs/`, so it works via
-the service worker cache-first path — no `raw.githubusercontent` CSV path needed). Shape:
+## 2. The two features, in plain terms
+
+### 2a. "What's New" (release notes)
+A short, reverse-chronological list of user-facing changes ("New Momentum tab", "Faster
+loading", etc.). When a new release exists that the user hasn't seen, the app shows a small
+**unseen-update dot** on the hub icon and a one-time **dismissible banner**. This is the
+pattern most apps use ("What's New in this version").
+
+### 2b. "Guide" (glossary + how-to)
+Plain-English definitions of every metric the app displays, a short "how to read a card"
+walkthrough, and a **legend** explaining every color/arrow/bar cue. Content is lifted verbatim
+from the "User one-liner" lines in `knowledge/moaty-metrics.md` — we do **not** re-write
+definitions, to keep one canonical wording.
+
+---
+
+## 3. How users reach it (the chosen UX, fully described)
+
+We evaluated three placements (a dedicated 7th tab; auto-popups + scattered inline help; and a
+single hub with contextual links). **We chose the single-hub approach** because the PWA tab bar
+already has 6 tabs (Today / Movers / Momentum / Strength / AI / Lookup) and is tight on mobile —
+adding a 7th crowds it, and scattering content invites duplication. The chosen design:
+
+- **One `ℹ️` icon in the header** (the bar directly above the tab bar, `#tab-bar` is around
+  `docs/index.html:58`). Tapping it opens a **slide-up sheet** ("the hub") with two switchable
+  sections: **What's New** and **Guide**.
+- **The tab bar stays at 6 — no new tab.**
+- **Contextual deep-links:** each existing screen gets a small "why this matters →" link that
+  opens the hub directly at the relevant glossary entry (e.g. tapping it next to a momentum
+  score opens the hub scrolled to the `momentum_score` definition). This gives contextual help
+  *without* duplicating the copy onto every screen — there is exactly one copy, in the hub.
+- **Unseen-update indicator:** a dot on the `ℹ️` icon when there's a release the user hasn't
+  seen, plus a one-time dismissible banner after an update.
+
+This keeps a single content source with many entry points, rather than copies scattered per
+screen.
+
+---
+
+## 4. Architecture & data model
+
+### 4a. Release notes live in a new file: `docs/releases.json`
+Hand-curated (user-facing tone), newest-first. It lives under `docs/`, so the PWA fetches it
+**same-origin** — it is served by the existing service worker like the rest of the app shell,
+with no dependency on the `raw.githubusercontent.com` CSV path the data uses. Shape:
 
 ```jsonc
 {
-  "current": "2026.06.18",          // current version id; bump on each release
+  "current": "2026.06.18",          // id of the newest release; drives the "unseen" dot
   "releases": [
     {
-      "version": "2026.06.18",
+      "version": "2026.06.18",      // YYYY.MM.DD — human-scannable, monotonic, no semver to maintain
       "date": "2026-06-18",
       "title": "Guide & What's New",
-      "tag": "feature",             // feature | fix | data | improvement
-      "tab": "momentum",            // OPTIONAL: deep-links the entry to a tab
+      "tag": "feature",             // one of: feature | fix | data | improvement
+      "tab": "momentum",            // OPTIONAL: if set, tapping the entry jumps to that tab
       "notes": [
         "New ℹ️ Guide explains every metric and color.",
         "What's New now flags updates with a dot."
@@ -60,103 +95,159 @@ the service worker cache-first path — no `raw.githubusercontent` CSV path need
 }
 ```
 
-- **Versioning convention:** `YYYY.MM.DD` (human-scannable, monotonic, no separate semver to
-  maintain). Document this convention in `README.md` § Configurable parameters and `CLAUDE.md`.
-- **"Unseen" tracking:** store last-seen `current` in `localStorage` under a new key
-  `fvt_seen_release_v1` (mirrors existing `PREFS_KEY = 'fvt_prefs_v1'` convention in
-  `docs/index.html`). Dot/banner shows when `releases.current !== storedSeen`.
-- **Coupling note to document:** bumping a release = (a) prepend entry to `releases.json`,
-  (b) set `current`, (c) bump `sw.js` `CACHE` so the new shell/JSON aren't served stale.
-  Add this 3-step checklist to `CLAUDE.md` § Automation and `.claude/rules/`.
+- **Version convention** `YYYY.MM.DD`: scannable and naturally ordered; avoids maintaining a
+  separate semver scheme. Document this in `README.md` (Configurable parameters) and `CLAUDE.md`.
+- **"Unseen" tracking:** store the last-seen `current` value in `localStorage` under a new key
+  `fvt_seen_release_v1` (this mirrors the app's existing preferences key `PREFS_KEY =
+  'fvt_prefs_v1'` in `docs/index.html`). Show the dot/banner whenever `releases.current` differs
+  from the stored value.
+- **Release-bump checklist (must be documented in `CLAUDE.md` § Automation and a rules file):**
+  cutting a release = (a) prepend a new entry to `releases.json`, (b) update `current`, and
+  (c) bump `CACHE` in `docs/sw.js` so the new shell + JSON aren't served from a stale cache.
+  All three together, every time.
 
-### 2. Glossary — content embedded in `docs/index.html`
-Glossary copy is small and stable, and the PWA can't read `knowledge/*.md` at runtime. Define
-a single JS data structure near the top constants (alongside `REGIME_THRESHOLD` etc., ~L244)
-e.g. `const GUIDE = { metrics: [...], legend: [...], howto: [...] }`, each metric entry keyed
-by an `id` (e.g. `momentum_score`) so tab links can deep-link via `#guide-momentum_score`.
-Content is **copied from `knowledge/moaty-metrics.md`** ("User one-liner" text) — do not
-re-author. `knowledge/moaty-metrics.md` remains the canonical written source; add a comment
-in both places noting they must stay in sync (the in-code-comment rule from CLAUDE.md).
+### 4b. Glossary content embedded in `docs/index.html`
+The glossary copy is small and stable, and the PWA cannot read `knowledge/*.md` at runtime.
+Define one JavaScript data structure near the existing top-of-script constants (alongside
+`REGIME_THRESHOLD` etc., around `docs/index.html:243`):
 
-### 3. Hub sheet — reuse existing patterns, add a sheet primitive
-- **Render:** vanilla JS string templating, matching `renderToday()` etc. New
-  `renderGuideSheet()` / `openHub(section, anchorId)` functions.
-- **Accordions:** reuse the existing `<details>`/`.glossary-chevron` pattern from
-  `lookupGlossary()` (docs/index.html ~L1639) for each metric entry.
-- **Sheet container:** add one fixed-position slide-up overlay (CSS transform/opacity, same
-  approach as the toast/error overlay patterns) — there is no modal system today, so this is
-  the one genuinely new UI primitive.
-- **Header icon:** add `ℹ️` button to the header (the bar above `#tab-bar`, ~L58) with a dot
-  badge element toggled by the unseen-release check.
-- **Contextual links:** each tab's render function appends a small "why this matters →" link
+```js
+const GUIDE = {
+  metrics: [ /* { id, label, oneLiner, detail } per metric, id e.g. "momentum_score" */ ],
+  legend:  [ /* color / arrow / bar cues — see §5 */ ],
+  howto:   [ /* short "how to read a card" steps */ ],
+};
+```
+
+Each metric entry is keyed by an `id` (e.g. `momentum_score`) so the contextual links can target
+it (e.g. anchor `#guide-momentum_score`). **Copy the text verbatim from the "User one-liner"
+lines in `knowledge/moaty-metrics.md`** — do not re-author. Add a short comment in both
+`knowledge/moaty-metrics.md` and next to `GUIDE` stating they must stay in sync (per the
+in-code-comment rule in `CLAUDE.md`).
+
+The metric set to include (all from `knowledge/moaty-metrics.md`):
+`momentum_score`, `momentum_confirmed`, `regime_short_long`, `momentum_accel`,
+`rank_trend_slope`, `rank_agreement`, `rank_*` and `rank_*_delta_Nd`, Sustained Strength,
+All Green / Breadth, and Rank Floor.
+
+### 4c. The hub itself — reuse what exists, add one new primitive
+- **Rendering:** vanilla-JS string templating, matching the existing `renderToday()` /
+  `renderMovers()` style. Add `renderGuideSheet()` and `openHub(section, anchorId)`.
+- **Accordions:** reuse the existing native `<details>` + `.glossary-chevron` pattern from
+  `lookupGlossary()` (around `docs/index.html:1639`) for each metric entry — this is already in
+  the codebase and styled.
+- **The sheet container is the only genuinely new UI primitive.** There is no modal/sheet system
+  today; add one fixed-position slide-up overlay using CSS transform/opacity, following the same
+  lightweight approach as the existing toast (`showToast`, ~`docs/index.html:483`) and error
+  overlay (`showError`, ~`docs/index.html:744`) patterns.
+- **Header icon:** add an `ℹ️` button to the header bar with a small dot badge element toggled by
+  the unseen-release check.
+- **Contextual links:** in each `render*()` function, append a small "why this matters →" link
   that calls `openHub('guide', '<metric-id>')`.
 
-## Files to modify / create
+---
+
+## 5. The color/arrow/bar legend (includes the colored card bar)
+
+The Guide's **legend** section must explain every visual cue. These are not invented — they
+already exist in `docs/index.html` and are currently unexplained. The legend should render the
+**live threshold constants** (read them from JS scope, do not hard-code the numbers as prose) so
+it can never drift from actual behavior, and so it auto-satisfies the CLAUDE.md "document
+configurable items everywhere" rule. Cues to document:
+
+- **Colored left bar on cards** *(this is the "colored bar" cue)*. On the **Today** tab the card's
+  left edge is colored by the value of the currently-selected perf metric
+  (`docs/index.html:801`): emerald ≥ +2%, green > 0, red ≤ −2%, dark-red < 0, grey when no data.
+  On the **Rotation** sub-view the cards additionally use a horizontal **regime fill bar**
+  (`regimeBar`, ~`docs/index.html:1004`) whose color/length encodes `regime_short_long`
+  (emerald = emerging leader, red = fading). Explain both: what the colors mean and what value
+  drives them.
+- **Trend arrows** (↑ / ↓ next to a name): short-window `rank_ytd` delta direction.
+- **Slope glyphs** (↑↑ / ↑ / ~ / ↓ / ↓↓): `rank_trend_slope`, gated by `SLOPE_STRONG = 0.05`
+  and `SLOPE_SLIGHT = 0.01`.
+- **Acceleration badges** (▲▲ / ▲ / ▼ / ▼▼): `momentum_accel`, gated by `ACCEL_STRONG = 0.08`
+  and `ACCEL_SLIGHT = 0.02`.
+- **Regime buckets** (Emerging / Established / Fading): `regime_short_long` vs
+  `REGIME_THRESHOLD = 0.15`.
+
+---
+
+## 6. Files to create / modify
 
 | File | Change |
 |------|--------|
-| `docs/releases.json` | **New.** Curated release entries + `current` version. |
-| `docs/index.html` | Header `ℹ️` button + dot; slide-up sheet markup; `GUIDE` content const; `renderGuideSheet`/`openHub`; localStorage seen-version logic; "why this matters" links in each `render*()`. |
-| `docs/sw.js` | Bump `CACHE`; add `releases.json` to precache list (currently only `/` + `manifest.json`). |
-| `knowledge/moaty-metrics.md` | Add a sync note pointing at the `GUIDE` const in index.html. |
-| `README.md`, `CLAUDE.md`, `.claude/rules/` | Document version convention + the 3-step release-bump checklist. |
-| `.session/WORK_LOG.md` / `SPRINT.md` | Add the "Guide + What's New" milestone / sprint tasks. |
+| `docs/releases.json` | **New.** Curated release entries + `current`. |
+| `docs/index.html` | Header `ℹ️` button + unseen dot; slide-up hub sheet markup; `GUIDE` content constant; `renderGuideSheet` / `openHub`; localStorage seen-version logic (`fvt_seen_release_v1`); "why this matters →" links in each `render*()`. |
+| `docs/sw.js` | Bump `CACHE`; add `releases.json` to the precache list (today it precaches only `/` + `manifest.json`). |
+| `knowledge/moaty-metrics.md` | Add a "kept in sync with the `GUIDE` constant in `docs/index.html`" note. |
+| `README.md`, `CLAUDE.md`, `.claude/rules/` | Document the `YYYY.MM.DD` version convention and the 3-step release-bump checklist (releases.json entry + `current` + `sw.js` CACHE). |
+| `.session/SPRINT.md`, `.session/WORK_LOG.md` | Add the sprint tasks / milestone entry. |
+| `tests/` | New tests — see §8. |
 
-### Dashboard (secondary / fast-follow — same source of truth)
-`dashboard/app.py` (8 tabs today, no help section). Lighter mirror:
-- Sidebar expander **"ℹ️ Guide & Glossary"** rendering the same metric definitions (read from
-  the shared text source) — reuse `moaty-metrics.md` content.
-- A **"What's New"** expander that reads `docs/releases.json` (local file path) and lists the
-  latest entries.
-- No deep-linking needed on desktop. This keeps PWA primary, dashboard a thin reflection.
+### Dashboard (secondary, same source of truth) — `dashboard/app.py`
+The Streamlit dashboard has 8 tabs and no help section today. Add a **lighter mirror**, not a
+fork of the content:
+- A sidebar expander **"ℹ️ Guide & Glossary"** rendering the same metric definitions (sourced
+  from `knowledge/moaty-metrics.md`).
+- A **"What's New"** expander that reads `docs/releases.json` (local file path) and lists recent
+  entries.
+- No deep-linking needed on desktop. The PWA is primary; the dashboard reflects it.
 
-## A+ refinements (folded in)
+---
 
-These are the high-leverage upgrades worth building from day one — each closes a drift or
-UX gap cheaply:
+## 7. Refinements worth building from day one
 
-1. **Legend renders live thresholds, not prose.** The color/arrow/threshold legend reads the
-   actual constants (`REGIME_THRESHOLD`, `ACCEL_STRONG/SLIGHT`, `SLOPE_STRONG/SLIGHT`) from the
-   JS scope and prints their current values. The glossary can never drift from behavior, and it
-   auto-satisfies CLAUDE.md's "document configurable items everywhere" rule.
+1. **Legend reads live thresholds** (see §5) — no prose copy of numbers that can rot.
+2. **Actionable What's New entries** — the optional `"tab"` field lets an entry deep-link to the
+   feature it announces (closes the sheet, calls `switchTab()`).
+3. **First-visit seeding (no backlog nag)** — on first run with no stored version, seed
+   `fvt_seen_release_v1` to `releases.current` so brand-new users don't get a "new!" dot for the
+   entire history. The dot clears on **open** (not a forced dismiss); the post-update banner is
+   separately dismissible.
+4. **Anti-drift doc test** — assert every metric id referenced by a "why this matters" link
+   exists in `GUIDE`, and every `GUIDE` metric has copy. Catches "added a metric, forgot the
+   glossary entry."
+5. **Release/cache coupling guard** — a test asserting `releases.current === releases[0].version`,
+   plus a PR-review reminder that `sw.js` `CACHE` must bump whenever `releases.json` changes.
+6. **Searchable Guide + graceful offline degrade** — a small filter input in the Guide section
+   (mirrors existing search-filter UX). If `releases.json` fails to load (offline), the hub still
+   opens to the Guide, and What's New shows a quiet "couldn't load updates" line — consistent
+   with the app's existing silent-fail style (`showError`, and `sw.js`'s `.catch(() => {})`).
 
-2. **What's New bullets can be actionable.** A release note entry may carry an optional
-   `"tab"` field (e.g. `"momentum"`); tapping the entry closes the sheet and `switchTab()`s
-   there. Announcement → the actual feature in one tap.
+---
 
-3. **First-visit seeding (no backlog nag).** On first run with no stored version, seed
-   `fvt_seen_release_v1` to `releases.current` so brand-new users don't see a "new!" dot for the
-   entire history — only genuine future updates flag. The dot clears on **open** (not forced
-   dismiss); the post-bump banner is separately dismissible.
+## 8. Out of scope for the first pass (deferred — with reasons)
 
-4. **Anti-drift doc test.** A test asserts: every metric id referenced by a tab's
-   "why this matters" deep-link exists in `GUIDE` (no dead anchors), and every `GUIDE` metric
-   has copy. Catches the classic "added a metric, forgot the glossary entry" gap.
+These are deliberately left for a follow-up so the first pass stays shippable:
 
-5. **Release/cache coupling guard.** A test asserts `releases.json.current === releases[0].version`
-   and (PR-level check) that `sw.js`'s `CACHE` was bumped whenever `releases.json` changed —
-   guarding the stale-cache footgun structurally, not by memory.
+- **A "Where the data comes from" section** — explaining the data source (Finviz), the
+  weekday-only 3×/day update cadence, why there are no weekend/holiday rows, and what the
+  "Updated 2h ago" freshness label means. Deferred because this content changes when pipeline
+  behavior changes (e.g. cron/DST drift) and needs its own maintenance discipline.
+- **An FAQ** — e.g. "why is rel_volume blank?", "why did a rank jump?", "momentum_score vs
+  momentum_confirmed?". Deferred to keep the first content set small and high-confidence.
+- **A per-tab walkthrough** — a short "what each of the 6 tabs is for" tour. Deferred; the
+  per-metric glossary covers the highest-value confusion first.
+- **A forced What's New popup on every update** — we intentionally use the quieter dot + one-time
+  dismissible banner instead, to avoid nagging.
+- **Auto-generating `releases.json` from `WORK_LOG.md`** — `WORK_LOG.md` is developer-oriented
+  and noisy; release notes are curated by hand for user-facing tone.
 
-6. **Searchable Guide + graceful degrade.** A small filter input in the hub's Guide section
-   (mirrors existing search-filter UX). If `releases.json` fails to fetch (offline), the hub
-   still opens to Guide and What's New shows a quiet "couldn't load updates" line — matching the
-   app's existing silent-fail ethos (`showError`, SW `.catch(() => {})`).
+---
 
-## Out of scope (explicit fast-follows)
-- Option-3 glossary extras: data-provenance section, FAQ, per-tab walkthrough.
-- Auto-popup modal for What's New (Variant A uses dot + dismissible banner, not a forced modal).
-- Auto-generating releases.json from WORK_LOG.
+## 9. Verification (when implemented)
 
-## Verification (when implemented)
-- **PWA functional test** via Playwright using the local-server + route-intercept pattern in
-  CLAUDE.md ("What Playwright in cloud unlocks"): serve `docs/`, intercept CSV fetches with
-  fixtures, also serve `releases.json`. Assert: `ℹ️` opens the sheet; What's New lists entries;
-  glossary accordions expand; a tab "why this matters" link opens the hub scrolled to the right
-  anchor; dot disappears after open and persists across reload (localStorage).
-- **Unseen-version logic:** unit-test the pure comparison (current vs stored) in isolation if
-  extracted; otherwise cover via the Playwright reload assertion.
-- **Dashboard:** run streamlit headless + Playwright, assert the Guide and What's New expanders
-  render and the latest release title appears.
-- **JSON validity:** a tiny test asserting `docs/releases.json` parses and `current` matches the
-  newest `releases[0].version`.
-- Run `python3 -m pytest tests/ -q` before commit.
+- **PWA functional test** via Playwright, using the local-server + route-intercept pattern
+  documented in `CLAUDE.md` ("What Playwright in cloud unlocks"): serve `docs/`, intercept the
+  CSV fetches with fixtures, and serve a fixture `releases.json`. Assert: `ℹ️` opens the hub;
+  What's New lists entries; tapping an entry with a `tab` field switches tabs; glossary
+  accordions expand; a "why this matters →" link opens the hub scrolled to the right anchor; the
+  unseen dot clears after opening and stays cleared across reload (localStorage persistence).
+- **Unseen-version logic:** unit-test the pure current-vs-stored comparison if extracted;
+  otherwise cover it via the Playwright reload assertion.
+- **Glossary/anchor integrity:** the anti-drift test from §7.4.
+- **`releases.json` validity:** a small test asserting it parses and `current` equals
+  `releases[0].version`.
+- **Dashboard:** run Streamlit headless + Playwright; assert the Guide and What's New expanders
+  render and the newest release title appears.
+- Run `python3 -m pytest tests/ -q` before every commit.
