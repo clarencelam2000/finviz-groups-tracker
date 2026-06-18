@@ -243,6 +243,10 @@
     // Thresholds for the Rotation view (regime_short_long column).
     const REGIME_THRESHOLD = 0.15;   // |regime| > this → Emerging or Fading bucket
 
+    // Thresholds for the momentum_accel badge on Momentum cards.
+    const ACCEL_STRONG = 0.08;   // ▲▲ building / ▼▼ fading
+    const ACCEL_SLIGHT = 0.02;   // ▲ / ▼
+
     const ALL_METRICS = [
       { key: 'perf_day',   label: 'Day' },
       { key: 'perf_week',  label: 'Wk'  },
@@ -352,6 +356,16 @@
       if (score >= 0.50) return { text: 'text-sky-400',     bar: 'bg-sky-500' };
       if (score >= 0.25) return { text: 'text-amber-400',   bar: 'bg-amber-500' };
       return                    { text: 'text-red-400',     bar: 'bg-red-500' };
+    }
+
+    // Returns an HTML badge for momentum_accel, or '' when NaN / within flat zone.
+    function accelBadge(accel) {
+      if (accel === null || accel === undefined || accel === '' || isNaN(accel)) return '';
+      if (accel >  ACCEL_STRONG) return '<span class="text-emerald-400 text-xs whitespace-nowrap">▲▲ building</span>';
+      if (accel >  ACCEL_SLIGHT) return '<span class="text-emerald-400 text-xs">▲</span>';
+      if (accel > -ACCEL_SLIGHT) return '';
+      if (accel > -ACCEL_STRONG) return '<span class="text-red-400 text-xs">▼</span>';
+      return '<span class="text-red-400 text-xs whitespace-nowrap">▼▼ fading</span>';
     }
 
     function getLatest(rows) {
@@ -914,12 +928,16 @@
           rankYtd  !== null ? `YTD #${rankYtd}`  : null,
           rankWeek !== null ? `Week #${rankWeek}` : null,
         ].filter(Boolean).join(' · ');
+        const badge = accelBadge(pf(row.momentum_accel));
 
         return `
           <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 flex items-center gap-3">
             <span class="text-sm font-bold text-slate-500 w-5 text-right flex-shrink-0">${i+1}</span>
             <div class="flex-1 min-w-0">
-              <div class="text-sm font-medium text-white truncate">${row.name}</div>
+              <div class="flex items-center justify-between gap-1">
+                <div class="text-sm font-medium text-white truncate">${row.name}</div>
+                ${badge}
+              </div>
               ${subParts ? `<div class="text-xs text-slate-400 mt-0.5">${subParts}</div>` : ''}
             </div>
             <div class="flex-shrink-0 w-16 text-right">
