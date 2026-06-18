@@ -1052,30 +1052,32 @@
       threshRow.classList.toggle('hidden', view === 'allgreen');
 
       if (view === 'sustained') {
+        // Sort by momentum_confirmed (score × agreement) — rewards both strength and
+        // cross-timeframe consistency. Falls back to momentum_score when confirmed is NaN.
         const strong = delta.filter(r => {
           const rm = pf(r.rank_month), rq = pf(r.rank_quarter), rh = pf(r.rank_half);
           return rm !== null && rq !== null && rh !== null
             && rm <= effectiveN && rq <= effectiveN && rh <= effectiveN;
-        }).sort((a, b) => (pf(b.momentum_score) ?? 0) - (pf(a.momentum_score) ?? 0));
+        }).sort((a, b) => (pf(b.momentum_confirmed) ?? pf(b.momentum_score) ?? 0) - (pf(a.momentum_confirmed) ?? pf(a.momentum_score) ?? 0));
 
         const weak = delta.filter(r => {
           const rm = pf(r.rank_month), rq = pf(r.rank_quarter), rh = pf(r.rank_half);
           return rm !== null && rq !== null && rh !== null
             && rm > n - effectiveN && rq > n - effectiveN && rh > n - effectiveN;
-        }).sort((a, b) => (pf(a.momentum_score) ?? 1) - (pf(b.momentum_score) ?? 1));
+        }).sort((a, b) => (pf(a.momentum_confirmed) ?? pf(a.momentum_score) ?? 1) - (pf(b.momentum_confirmed) ?? pf(b.momentum_score) ?? 1));
 
         const renderList = (rows, isStrong) => rows.map(row => {
-          const ra = pf(row.rank_agreement);
-          const mom = pf(row.momentum_score);
+          const conf = pf(row.momentum_confirmed);
+          const ra   = pf(row.rank_agreement);
           const border = isStrong ? 'border-l-emerald-500' : 'border-l-red-500';
           const rankParts = [
             `Mo #${pf(row.rank_month) ?? '?'}`,
             `Qtr #${pf(row.rank_quarter) ?? '?'}`,
             `½yr #${pf(row.rank_half) ?? '?'}`,
           ].join(' · ');
-          const raStr = ra !== null ? `Agree ${(ra*100).toFixed(0)}%` : '';
-          const momStr = mom !== null ? `Mom ${(mom*100).toFixed(0)}%` : '';
-          const sub = [rankParts, raStr, momStr].filter(Boolean).join('  ·  ');
+          const confStr = conf !== null ? `Confirmed ${(conf*100).toFixed(0)}%` : '';
+          const raStr   = ra   !== null ? `Agree ${(ra*100).toFixed(0)}%`       : '';
+          const sub = [rankParts, confStr, raStr].filter(Boolean).join('  ·  ');
           return `
             <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 ${border}">
               <div class="text-sm font-medium text-white">${row.name}</div>
