@@ -12,9 +12,13 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
 | Metric | Where | What it is |
 |--------|-------|-----------|
 | `momentum_score` | deltas.csv | 0–1; avg percentile rank across all 7 perf timeframes |
+| `momentum_confirmed` | deltas.csv | momentum_score × rank_agreement; strength gated by consistency |
+| `momentum_accel` | deltas.csv | change in momentum_score over 10 sessions; positive = building |
+| `regime_short_long` | deltas.csv | short-horizon minus long-horizon percentile; positive = emerging |
+| `rank_trend_slope` | deltas.csv | negated LS slope of rank_ytd over 10 sessions; positive = improving |
 | `rank_*` | deltas.csv | rank 1 = best performer per timeframe (week/month/…/ytd) |
-| `rank_*_delta_Nd` | deltas.csv | rank change vs N days ago; positive = improved |
-| `perf_*_delta_Nd` | deltas.csv | raw perf change vs N days ago (acceleration signal) |
+| `rank_*_delta_Nd` | deltas.csv | rank change vs N sessions ago (N = 5, 10, 20, 50); positive = improved |
+| `perf_*_delta_Nd` | deltas.csv | raw perf change vs N sessions ago (acceleration signal) |
 | `rank_agreement` | deltas.csv | 0–1; how tightly month/quarter/half ranks cluster |
 | Sustained Strength | derived view | top-N in rank_month AND rank_quarter AND rank_half |
 | All Green / Breadth | derived view | perf positive across the checked timeframes |
@@ -37,11 +41,12 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
 - **User one-liner:** "Where this group places among all groups for a given
   timeframe — #1 is the best performer."
 
-## rank_*_delta_Nd (N = 7, 14, 30)
+## rank_*_delta_Nd (N = 5, 10, 20, 50)
 - **Sign convention:** `rank_prior - rank_today`; positive = improved (rose in
-  ranking). NaN until enough history exists.
+  ranking). NaN until enough history exists. N is in **trading sessions**, not
+  calendar days (defined in `scripts/delta_config.py` `LOOKBACK_WINDOWS`).
 - **User one-liner:** "How many spots this group moved up (+) or down (−) over
-  the last N days."
+  the last N trading sessions."
 
 ## perf_*_delta_Nd
 - Raw performance change vs N days ago — basis for an acceleration hint
@@ -55,6 +60,57 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   across timeframes, not a recent flash.
 - **User one-liner:** "How much the 1-, 3-, and 6-month rankings agree — high
   means a consistent trend, not a one-week pop."
+
+## momentum_confirmed
+- **Source:** `df_today["momentum_confirmed"] = df_today["momentum_score"] * df_today["rank_agreement"]`
+  (`scripts/compute_deltas.py`). Product of two 0–1 scores; range 0–1.
+- **Signals:** high only when the group is *both* broadly strong (high momentum_score)
+  *and* that strength is consistent across timeframes (high rank_agreement). A strong
+  momentum_score with low rank_agreement (e.g. one outlier timeframe dragging up the
+  average) will produce a low confirmed score.
+- **User one-liner:** "Momentum filtered by consistency — high only when the group is
+  strong across timeframes AND those timeframes agree."
+
+## regime_short_long
+- **Source:** `compute_regime()` (`scripts/compute_deltas.py` L249). Short-horizon
+  percentile mean (`perf_day`, `perf_week`) minus long-horizon percentile mean
+  (`perf_half`, `perf_year`, `perf_ytd`). Range roughly [−1, 1]. NaN if either
+  bucket is unavailable.
+- **PWA thresholds:** `REGIME_THRESHOLD = 0.15` in `docs/index.html`. Values above
+  threshold → Emerging bucket (emerald); within ±threshold → Established; below
+  negative threshold → Fading (red).
+- **Signals:** positive = recently outperforming relative to its own long-term average
+  (an emerging or re-accelerating leader); negative = recently underperforming relative
+  to its own trend (a fading leader).
+- **User one-liner:** "Whether this group is gaining (+) or losing (−) momentum
+  relative to its longer-term trend — positive means recently accelerating."
+
+## momentum_accel
+- **Source:** `df_today["momentum_accel"] = momentum_score_today - momentum_score_prior`
+  where prior is `ACCEL_WINDOW = 10` trading sessions ago (`scripts/compute_deltas.py`
+  L379–391; `ACCEL_WINDOW` in `scripts/delta_config.py`). NaN if fewer than 10
+  sessions of history exist.
+- **PWA thresholds:** `ACCEL_STRONG = 0.08` and `ACCEL_SLIGHT = 0.02` in
+  `docs/index.html`. |accel| > ACCEL_STRONG → double arrow (▲▲/▼▼); > ACCEL_SLIGHT →
+  single arrow (▲/▼); within ±ACCEL_SLIGHT → no badge.
+- **Signals:** positive = momentum is building over the last 10 sessions; negative =
+  momentum is fading. Captures *rate of change*, not absolute level.
+- **User one-liner:** "How fast this group's momentum is building (+) or fading (−)
+  over the last 10 trading sessions."
+
+## rank_trend_slope
+- **Source:** `compute_rank_trend_slope()` (`scripts/compute_deltas.py` L266). Negated
+  least-squares slope of `rank_ytd` over the trailing `SLOPE_WINDOW = 10` sessions.
+  Negated because rank 1 = best: a falling rank number is improvement, so raw slope is
+  negative when improving. NaN if fewer than 2 sessions of history exist.
+- **PWA thresholds:** `SLOPE_STRONG = 0.05` and `SLOPE_SLIGHT = 0.01` in
+  `docs/index.html`. |slope| > SLOPE_STRONG → double arrow (↑↑/↓↓); > SLOPE_SLIGHT →
+  single arrow (↑/↓); within ±SLOPE_SLIGHT → `~` (flat).
+- **Signals:** positive = rank_ytd has been trending upward (improving) consistently
+  over 10 sessions; negative = trending downward. More reliable than a single-window
+  delta because it fits a line to the full trailing window.
+- **User one-liner:** "Whether this group's YTD ranking is on a consistent upward (↑)
+  or downward (↓) trajectory over the last 10 sessions."
 
 ## Sustained Strength
 - **Source:** dashboard view (`dashboard/app.py` L552). A group is
