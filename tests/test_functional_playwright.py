@@ -421,3 +421,104 @@ class TestStreamlitLookbackSelector:
         finally:
             proc.terminate()
             proc.wait()
+
+
+@pytest.mark.functional
+class TestPWAHub:
+    """Verify the Guide & What's New hub (plan: planning/whats-new-and-guide.md §9)."""
+
+    def _serve(self):
+        docs_dir = Path(__file__).parent.parent / "docs"
+        server = subprocess.Popen(
+            ["python3", "-m", "http.server", "8183", "--directory", str(docs_dir)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        time.sleep(1)
+        return server
+
+    def _wire_routes(self, page):
+        snap_body, delta_body = _snapshot_csv(), _delta_csv()
+        page.route("**/raw.githubusercontent.com/**snapshots.csv",
+                   lambda r: r.fulfill(body=snap_body, content_type="text/plain"))
+        page.route("**/raw.githubusercontent.com/**deltas.csv",
+                   lambda r: r.fulfill(body=delta_body, content_type="text/plain"))
+        page.route("**/data/fetch_log.csv",
+                   lambda r: r.fulfill(body="", content_type="text/plain"))
+        page.route("**/data/ai/**", lambda r: r.fulfill(status=404))
+
+    def test_hub_opens_guide_deeplink_and_unseen_dot(self):
+        from playwright.sync_api import sync_playwright
+
+        server = self._serve()
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                # Fresh context: no stored seen-release → first visit seeds, no dot.
+                page = browser.new_page()
+                self._wire_routes(page)
+                page.goto("http://localhost:8183/", wait_until="networkidle", timeout=15000)
+
+                # First visit: dot is hidden (seeded to current).
+                assert page.locator("#hub-dot.hidden").count() == 1
+
+                # ℹ️ opens the hub on What's New, listing release entries.
+                page.locator("#hub-btn").click()
+                page.wait_for_timeout(400)
+                assert page.locator("#hub-overlay:not(.hidden)").count() == 1
+                assert "Guide & What's New" in page.locator("#hub-body").inner_text() or \
+                       page.locator("#hub-body").inner_text().strip() != ""
+
+                # Switch to Guide; accordions present.
+                page.locator(".hub-section-btn[data-section='guide']").click()
+                page.wait_for_timeout(200)
+                assert page.locator("#guide-momentum_score").count() == 1
+
+                # Contextual deep-link from Today opens hub scrolled to momentum_score.
+                page.locator("#hub-close").click()
+                page.wait_for_timeout(400)
+                page.locator("[data-tab='today']").click()
+                page.locator("#tab-today .why-link").first.click()
+                page.wait_for_timeout(300)
+                assert page.locator("#guide-momentum_score[open]").count() == 1
+
+                browser.close()
+        finally:
+            server.terminate()
+            server.wait()
+
+    def test_unseen_dot_when_stored_release_is_stale(self):
+        from playwright.sync_api import sync_playwright
+
+        server = self._serve()
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                context = browser.new_context()
+                context.add_init_script(
+                    "localStorage.setItem('fvt_seen_release_v1','2000.01.01');"
+                )
+                page = context.new_page()
+                self._wire_routes(page)
+                page.goto("http://localhost:8183/", wait_until="networkidle", timeout=15000)
+                page.wait_for_timeout(400)
+
+                # Stale stored version → dot visible + banner shown.
+                assert page.locator("#hub-dot:not(.hidden)").count() == 1
+                assert page.locator("#update-banner:not(.hidden)").count() == 1
+
+                # Opening the hub clears the dot and persists the seen version to
+                # localStorage (so it stays cleared across a real reload). We assert
+                # the stored value rather than reloading, because add_init_script
+                # re-seeds the stale value on every navigation including reload.
+                page.locator("#hub-btn").click()
+                page.wait_for_timeout(300)
+                page.locator("#hub-close").click()
+                page.wait_for_timeout(300)
+                assert page.locator("#hub-dot.hidden").count() == 1
+                seen = page.evaluate("() => localStorage.getItem('fvt_seen_release_v1')")
+                assert seen == "2026.06.19", f"seen release not persisted: {seen!r}"
+
+                browser.close()
+        finally:
+            server.terminate()
+            server.wait()

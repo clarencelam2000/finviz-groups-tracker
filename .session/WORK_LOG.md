@@ -170,3 +170,14 @@ SPRINT; no app behavior change yet.
 - [ ] Consider adding alert when momentum_score crosses threshold
 - [ ] Cross-reference with SPY/QQQ volume on same day
 - [ ] 6b: Sector → Industry drill-down in dashboard sidebar (L effort)
+
+## 2026-06-19 — Guide & What's New hub (PWA + dashboard)
+Implemented planning/whats-new-and-guide.md first pass on branch claude/epic-sagan-njeu84.
+PWA gains a header ℹ️ hub (slide-up sheet) with What's New (docs/releases.json) and a Guide
+(11-metric glossary copied verbatim from moaty-metrics.md, live-threshold legend, how-to,
+search). Unseen-release dot + one-time banner via localStorage fvt_seen_release_v1 with
+first-visit seeding. Contextual "why this matters →" deep-links on Today/Movers/Momentum/
+Strength. Dashboard sidebar mirrors both (glossary parsed from moaty-metrics.md, What's New
+from releases.json). sw.js CACHE v9→v10. New test_guide_releases.py (anti-drift + verbatim
+sync + releases validity) and TestPWAHub Playwright class — all green. 3 pre-existing
+TestPWALookbackWindows failures are unrelated (fail on base branch too).

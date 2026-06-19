@@ -271,6 +271,24 @@ These constants control when visual indicators appear or change state. All are n
 | `SLOPE_STRONG` | `0.05` | `rank_trend_slope` threshold for the double-arrow glyph (↑↑ / ↓↓) on Today cards. |
 | `SLOPE_SLIGHT` | `0.01` | `rank_trend_slope` threshold for the single-arrow glyph (↑ / ↓). Values within ±0.01 show `~`. |
 
+> The Guide's **legend** renders these thresholds live (read from JS scope), so the in-app explanation can never drift from the numbers above.
+
+### Releases / "What's New" (`docs/releases.json`)
+
+The PWA's ℹ️ hub shows release notes from `docs/releases.json` and flags unseen updates with a dot.
+
+| Item | Convention | Notes |
+|------|-----------|-------|
+| Version | `YYYY.MM.DD` | Human-scannable, monotonic, no semver. `current` must equal the newest entry's `version`. |
+| `tag` | `feature` / `fix` / `data` / `improvement` | Colors the entry badge. |
+| `tab` (optional) | a PWA tab id (e.g. `momentum`) | Adds an "Open {tab} →" deep-link to the entry. |
+| Unseen tracking | `localStorage` key `fvt_seen_release_v1` | First visit seeds to `current` (no backlog nag); dot clears on opening the hub. |
+
+> **Cutting a release = 3 steps, always together:** (1) prepend an entry to `releases.json`,
+> (2) update `current`, (3) bump `CACHE` in `docs/sw.js`. See CLAUDE.md § Automation.
+> The glossary copy in the `GUIDE` constant (`docs/index.html`) is kept verbatim-synced with the
+> User one-liners in `knowledge/moaty-metrics.md`; `tests/test_guide_releases.py` enforces both.
+
 ---
 
 ## GitHub Actions

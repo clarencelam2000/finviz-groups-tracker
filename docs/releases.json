@@ -1,0 +1,39 @@
+{
+  "current": "2026.06.19",
+  "releases": [
+    {
+      "version": "2026.06.19",
+      "date": "2026-06-19",
+      "title": "Guide & What's New",
+      "tag": "feature",
+      "notes": [
+        "New ℹ️ button in the header opens a Guide that explains every metric, color, and arrow.",
+        "What's New now flags updates with a dot on the ℹ️ icon and a one-time banner.",
+        "The Guide's legend always reflects the app's live thresholds, so it can't drift."
+      ]
+    },
+    {
+      "version": "2026.06.17",
+      "date": "2026-06-17",
+      "title": "Richer momentum & longer lookbacks",
+      "tag": "improvement",
+      "tab": "momentum",
+      "notes": [
+        "Lookback windows are now 5 / 10 / 20 / 50 trading sessions.",
+        "New confirmed-momentum, acceleration, regime, and rank-trend signals.",
+        "Rotation sub-view splits groups into Emerging / Established / Fading."
+      ]
+    },
+    {
+      "version": "2026.06.11",
+      "date": "2026-06-11",
+      "title": "AI daily notes",
+      "tag": "feature",
+      "tab": "ai",
+      "notes": [
+        "The AI tab now writes a plain-English daily note per group.",
+        "Covers strength, movers & momentum, and divergences."
+      ]
+    }
+  ]
+}

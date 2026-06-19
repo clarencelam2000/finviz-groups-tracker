@@ -42,6 +42,43 @@ SNAPSHOT_COLS = [
 
 DELTA_COLUMNS = delta_columns()
 
+METRICS_MD = BASE_DIR / "knowledge" / "moaty-metrics.md"
+RELEASES_JSON = BASE_DIR / "docs" / "releases.json"
+
+
+@st.cache_data
+def _glossary_entries():
+    """Parse (section title, User one-liner) pairs from knowledge/moaty-metrics.md.
+
+    This keeps the dashboard glossary in lock-step with the canonical wording —
+    the same one-liners the PWA's GUIDE constant copies verbatim. Returns [] if
+    the file is missing rather than crashing the dashboard.
+    """
+    import re
+
+    if not METRICS_MD.exists():
+        return []
+    text = METRICS_MD.read_text(encoding="utf-8")
+    entries = []
+    # Split on level-2 headers; each section may carry one "User one-liner" that
+    # wraps across lines in the source markdown.
+    for chunk in re.split(r"\n##\s+", "\n" + text)[1:]:
+        title = chunk.splitlines()[0].split("(")[0].strip().strip("*")
+        m = re.search(r'User one-liner:\*\*\s*"(.*?)"', chunk, re.S)
+        if m:
+            one_liner = re.sub(r"\s+", " ", m.group(1)).strip()
+            entries.append((title, one_liner))
+    return entries
+
+
+@st.cache_data
+def _load_releases():
+    """Newest-first release entries from docs/releases.json; [] on any failure."""
+    try:
+        return json.loads(RELEASES_JSON.read_text(encoding="utf-8")).get("releases", [])
+    except Exception:
+        return []
+
 
 # ---------------------------------------------------------------------------
 # Data loading
@@ -149,6 +186,24 @@ with st.sidebar:
     lookback = st.selectbox(
         "Lookback window (movers)", [f"{w}d" for w in LOOKBACK_WINDOWS]
     )
+
+    # ── Guide & What's New (lighter mirror of the PWA hub) ──────────────────
+    # Single source of truth: glossary one-liners are parsed from
+    # knowledge/moaty-metrics.md; release notes are read from docs/releases.json
+    # (the same file the PWA fetches). No content is forked here.
+    with st.expander("ℹ️ Guide & Glossary"):
+        for label, one_liner in _glossary_entries():
+            st.markdown(f"**{label}** — {one_liner}")
+
+    with st.expander("🆕 What's New"):
+        releases = _load_releases()
+        if not releases:
+            st.caption("Couldn't load updates.")
+        else:
+            for rel in releases:
+                st.markdown(f"**{rel.get('title', rel['version'])}**  ·  {rel.get('date', '')}")
+                for note in rel.get("notes", []):
+                    st.markdown(f"- {note}")
 
 # ---------------------------------------------------------------------------
 # Filter data
