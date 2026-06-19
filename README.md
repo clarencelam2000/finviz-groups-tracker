@@ -273,6 +273,18 @@ These constants control when visual indicators appear or change state. All are n
 
 > The Guide's **legend** renders these thresholds live (read from JS scope), so the in-app explanation can never drift from the numbers above.
 
+### Scrape schedule (`worker-cron/wrangler.toml`)
+
+The daily scrape is scheduled by the Cloudflare Worker `finviz-cron-dispatcher` (`worker-cron/`),
+which fires `workflow_dispatch` to launch `collect.yml`. A single GitHub cron in `collect.yml`
+remains as a same-time redundancy backstop. See `planning/cloudflare-cron-scheduler.md`.
+
+| Parameter | Default | What it controls / how to change |
+|-----------|---------|----------------------------------|
+| `[triggers] crons` (`worker-cron/wrangler.toml`) | `["49 13 * * 1-5", "51 14 * * 1-5", "48 19 * * 1-5"]` | The three weekday-only fire times (UTC; fixed-UTC, no DST). Edit here, then `wrangler deploy` from `worker-cron/`. The EOD entry (`48 19`) is mirrored by the backstop cron in `collect.yml` — change both together. |
+| `DISPATCH_REF` (`worker-cron/wrangler.toml` `[vars]`) | `claude/elegant-babbage-hlxnfy` | The git ref `collect.yml` runs on. Change without touching Worker code; redeploy to apply. |
+| `GITHUB_DISPATCH_TOKEN` (Worker secret) | — | GitHub fine-grained PAT (this repo, Actions: R/W). Set via `wrangler secret put`, never committed. |
+
 ### Releases / "What's New" (`docs/releases.json`)
 
 The PWA's ℹ️ hub shows release notes from `docs/releases.json` and flags unseen updates with a dot.

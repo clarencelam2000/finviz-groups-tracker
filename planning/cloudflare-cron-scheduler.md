@@ -50,7 +50,7 @@ landing near the close — while the working scrape pipeline is left untouched.
 
 ---
 
-## Phase 1 — The `finviz-cron-dispatcher` Worker
+## Phase 1 — The `finviz-cron-dispatcher` Worker ✅ DONE (code/tests; deploy pending VP PAT)
 
 New directory `worker-cron/` (mirrors the structure/tooling of `worker/`, including Vitest).
 
@@ -84,7 +84,7 @@ Worker/Vitest test conventions (`worker/test/index.test.js`), KV binding pattern
 
 ---
 
-## Phase 2 — Trim `collect.yml` to a backstop
+## Phase 2 — Trim `collect.yml` to a backstop ✅ DONE
 
 - In `.github/workflows/collect.yml`, remove the two intraday `schedule:` entries; **keep
   `48 19 * * 1-5`** as the EOD redundancy backstop. Keep `workflow_dispatch` (now the primary
@@ -97,7 +97,7 @@ Worker/Vitest test conventions (`worker/test/index.test.js`), KV binding pattern
 
 ---
 
-## Phase 3 — Edge-scrape research spike (investigate only, no implementation)
+## Phase 3 — Edge-scrape research spike (investigate only, no implementation) ⏳ DEFERRED to its own session
 
 Time-boxed (~half a session). Deliverable is a written verdict, not code:
 - Stand up a throwaway Cloudflare Browser Rendering (`@cloudflare/puppeteer`) test that
@@ -109,7 +109,7 @@ Time-boxed (~half a session). Deliverable is a written verdict, not code:
 
 ---
 
-## Phase 4 — Docs, tests, handoff
+## Phase 4 — Docs, tests, handoff ✅ DONE (ADR-004; Phase 3 spike findings deferred)
 
 - **`CLAUDE.md` § Automation:** rewrite to describe Cloudflare Cron Trigger as primary
   scheduler + GitHub cron backstop; note cron expressions now live in `worker-cron/wrangler.toml`.
