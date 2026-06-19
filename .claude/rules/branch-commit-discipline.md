@@ -42,6 +42,22 @@ Mark every PR as ready for review immediately after opening it. Only leave it as
 
 ---
 
+## Cutting a release (PWA "What's New")
+
+When a PR ships a user-facing change, update the release surface in the **same PR** — all
+three together, or the unseen-update dot and cache will desync:
+
+1. Prepend an entry to `docs/releases.json` `releases[]` (newest-first), `version` =
+   `YYYY.MM.DD`, with `title`, `tag` (`feature|fix|data|improvement`), optional `tab`, and
+   user-facing `notes[]`.
+2. Set top-level `current` to the new `version`.
+3. Bump `CACHE` in `docs/sw.js`.
+
+Glossary copy: the `GUIDE` constant in `docs/index.html` is kept **verbatim-synced** with the
+User one-liners in `knowledge/moaty-metrics.md`. Adding a metric ⇒ add its `GUIDE` entry.
+`tests/test_guide_releases.py` guards both the sync and `current === releases[0].version`.
+Full rationale: CLAUDE.md § Automation and `planning/whats-new-and-guide.md`.
+
 ## Keep commits small and focused
 
 Each commit is one logical, self-contained change. A reader must understand what changed and why from the diff alone — no surrounding context needed.

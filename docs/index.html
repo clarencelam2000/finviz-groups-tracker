@@ -39,16 +39,36 @@
         <h1 class="text-lg font-bold text-white leading-tight cursor-pointer" id="title-scroll-top">Finviz Tracker</h1>
         <p id="last-updated" class="text-xs text-slate-400">Loading…</p>
       </div>
-      <button id="refresh-btn"
-              class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-700 active:bg-slate-600 text-slate-300"
-              aria-label="Refresh">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
-          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-        </svg>
-      </button>
+      <div class="flex items-center gap-2">
+        <button id="hub-btn"
+                class="relative w-10 h-10 flex items-center justify-center rounded-full bg-slate-700 active:bg-slate-600 text-slate-300"
+                aria-label="Guide & What's New">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+          <!-- Unseen-release dot; toggled by applyUnseenIndicator() -->
+          <span id="hub-dot" class="hidden absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-sky-400 ring-2 ring-slate-900"></span>
+        </button>
+        <button id="refresh-btn"
+                class="w-10 h-10 flex items-center justify-center rounded-full bg-slate-700 active:bg-slate-600 text-slate-300"
+                aria-label="Refresh">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+          </svg>
+        </button>
+      </div>
     </div>
   </header>
+
+  <!-- One-time post-update banner (shown by applyUnseenIndicator when a release is unseen) -->
+  <div id="update-banner" class="hidden bg-sky-900/60 border-b border-sky-700 px-4 py-2 flex items-center justify-between gap-3 text-sm">
+    <span id="update-banner-text" class="text-sky-100 truncate">What's new</span>
+    <div class="flex items-center gap-2 flex-shrink-0">
+      <button id="update-banner-see" class="text-xs font-medium px-2 py-1 rounded bg-sky-700 text-sky-100 active:bg-sky-600">See what's new</button>
+      <button id="update-banner-x" class="text-sky-300 text-lg leading-none px-1" aria-label="Dismiss">×</button>
+    </div>
+  </div>
 
   <!-- Pull-to-refresh indicator (height animated via JS) -->
   <div id="pull-indicator" class="overflow-hidden flex items-center justify-center bg-slate-900 text-slate-400 text-xs" style="height:0">
@@ -91,6 +111,7 @@
                placeholder="Filter industries…"
                class="w-full bg-slate-700 text-slate-200 rounded-lg px-3 py-2 text-sm border border-slate-600 placeholder-slate-500 outline-none focus:border-slate-500">
       </div>
+      <button class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','momentum_score')">ⓘ What do these numbers mean? →</button>
       <div id="today-cards" class="space-y-2"></div>
       <div id="pipeline-section" class="mt-5 hidden">
         <div class="text-xs text-slate-500 font-semibold uppercase tracking-wider mb-2">Pipeline</div>
@@ -113,6 +134,7 @@
         <p class="text-slate-500 text-xs">GitHub Actions collects data weekdays at 10pm UTC.</p>
       </div>
       <div id="movers-content" class="hidden">
+        <button class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','rank_delta')">ⓘ How is rank change measured? →</button>
         <h3 class="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">Top Gainers — YTD Rank</h3>
         <div id="gainers-list" class="space-y-2 mb-5"></div>
         <h3 class="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">Top Losers — YTD Rank</h3>
@@ -132,6 +154,7 @@
         <button class="momentum-view-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-mview="rotation">Rotation</button>
       </div>
       <p id="momentum-tab-desc" class="text-xs text-slate-500 mb-3">Composite breadth score across all 7 timeframes. 100% = top in every timeframe.</p>
+      <button class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','momentum_accel')">ⓘ What do the badges & regime mean? →</button>
       <div id="momentum-list" class="space-y-2"></div>
     </section>
 
@@ -155,6 +178,7 @@
           <button class="topn-btn px-3 py-1 rounded-lg text-xs font-medium text-slate-400 bg-slate-800 border border-slate-700" data-n="40">40</button>
         </div>
       </div>
+      <button class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','sustained_strength')">ⓘ What counts as "sustained"? →</button>
       <div id="strength-list" class="space-y-2"></div>
     </section>
 
@@ -199,6 +223,23 @@
     </section>
 
   </main>
+
+  <!-- Guide & What's New hub (slide-up sheet) -->
+  <div id="hub-overlay" class="fixed inset-0 z-40 hidden">
+    <div id="hub-backdrop" class="absolute inset-0 bg-black/60"></div>
+    <div id="hub-sheet"
+         class="absolute left-0 right-0 bottom-0 max-h-[88vh] bg-slate-900 rounded-t-2xl border-t border-slate-700 flex flex-col translate-y-full transition-transform duration-300"
+         style="padding-bottom: env(safe-area-inset-bottom)">
+      <div class="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-700">
+        <div class="flex bg-slate-800 rounded-lg p-1 text-sm font-medium">
+          <button class="hub-section-btn px-3 py-1.5 rounded-md text-slate-400" data-section="whatsnew">What's New</button>
+          <button class="hub-section-btn px-3 py-1.5 rounded-md text-slate-400" data-section="guide">Guide</button>
+        </div>
+        <button id="hub-close" class="w-9 h-9 flex items-center justify-center rounded-full text-slate-400 active:bg-slate-700 text-xl leading-none" aria-label="Close">×</button>
+      </div>
+      <div id="hub-body" class="overflow-y-auto px-4 py-3 scrollbar-none"></div>
+    </div>
+  </div>
 
   <script>
   (() => {
@@ -250,6 +291,58 @@
     // Thresholds for the rank_trend_slope glyph on Today cards.
     const SLOPE_STRONG = 0.05;   // ↑↑ / ↓↓
     const SLOPE_SLIGHT = 0.01;   // ↑ / ↓
+
+    // ── Guide / Glossary content ───────────────────────────────────────────
+    // The metric `oneLiner` strings are copied VERBATIM from the "User one-liner"
+    // lines in knowledge/moaty-metrics.md — that file is the single source of
+    // truth for the wording. Keep the two IN SYNC: edit a definition here only
+    // if you edit it there too (and vice-versa). See CLAUDE.md § Code quality.
+    // The seen-release key mirrors PREFS_KEY's versioning convention.
+    const SEEN_RELEASE_KEY = 'fvt_seen_release_v1';
+    const GUIDE = {
+      metrics: [
+        { id: 'momentum_score', label: 'Momentum score',
+          oneLiner: 'How strong this group is across every timeframe at once, from 0 to 100%.',
+          detail: 'Average percentile rank across all seven perf timeframes (day → YTD). Higher = broadly strong everywhere.' },
+        { id: 'momentum_confirmed', label: 'Confirmed momentum',
+          oneLiner: 'Momentum filtered by consistency — high only when the group is strong across timeframes AND those timeframes agree.',
+          detail: 'momentum_score × rank_agreement. A strong score with low agreement (one outlier timeframe) is discounted.' },
+        { id: 'regime_short_long', label: 'Regime (emerging / fading)',
+          oneLiner: 'Whether this group is gaining (+) or losing (−) momentum relative to its longer-term trend — positive means recently accelerating.',
+          detail: 'Short-horizon percentile minus long-horizon percentile. Drives the Rotation buckets and the regime fill bar.' },
+        { id: 'momentum_accel', label: 'Acceleration',
+          oneLiner: "How fast this group's momentum is building (+) or fading (−) over the last 10 trading sessions.",
+          detail: 'Change in momentum_score over 10 sessions. Drives the ▲▲/▲/▼/▼▼ badges on Momentum cards.' },
+        { id: 'rank_trend_slope', label: 'Rank trend',
+          oneLiner: "Whether this group's YTD ranking is on a consistent upward (↑) or downward (↓) trajectory over the last 10 sessions.",
+          detail: 'Least-squares slope of rank_ytd over 10 sessions (negated so up = improving). Drives the ↑↑/↑/~/↓/↓↓ glyph on Today cards.' },
+        { id: 'rank_agreement', label: 'Rank agreement',
+          oneLiner: 'How much the 1-, 3-, and 6-month rankings agree — high means a consistent trend, not a one-week pop.',
+          detail: '0–1 score for how tightly the month/quarter/half percentile ranks cluster.' },
+        { id: 'rank', label: 'Rank',
+          oneLiner: 'Where this group places among all groups for a given timeframe — #1 is the best performer.',
+          detail: 'Derived from perf each day (never scraped). Rank 1 = highest % gain.' },
+        { id: 'rank_delta', label: 'Rank change (Nd)',
+          oneLiner: 'How many spots this group moved up (+) or down (−) over the last N trading sessions.',
+          detail: 'N is measured in trading sessions (5 / 10 / 20 / 50), not calendar days. Positive = improved.' },
+        { id: 'sustained_strength', label: 'Sustained strength',
+          oneLiner: 'Strong across 1, 3, and 6 months at the same time — not just a recent flash.',
+          detail: 'Top-N in rank_month AND rank_quarter AND rank_half simultaneously.' },
+        { id: 'breadth', label: 'All green / breadth',
+          oneLiner: "Whether the group is positive across the major timeframes — all green means everything's trending up.",
+          detail: 'Gates on month/quarter/half/YTD; the day & week dots show context but do not gate the verdict.' },
+        { id: 'rank_floor', label: 'Rank floor',
+          oneLiner: "The lowest this group's ranking has dropped to across 1, 3, and 6 months — its floor.",
+          detail: 'Worst (numerically highest) rank across rank_month / quarter / half. "Never worse than #N."' },
+      ],
+      howto: [
+        'Each card is one group: a rank badge on the left, the selected timeframe’s % on the right, and momentum below the name.',
+        'The colored left edge reflects the selected metric’s value — green is a gain, red is a loss (see Legend for the exact bands).',
+        'Arrows and glyphs next to the name show short-term direction (↑/↓) and the longer rank trend (↑↑ … ↓↓).',
+        'Tap a card to expand quarter / 6-month / 1-year performance and valuation detail.',
+      ],
+      // The legend is built from the live threshold constants — see buildLegend().
+    };
 
     const ALL_METRICS = [
       { key: 'perf_day',   label: 'Day' },
@@ -1831,6 +1924,181 @@
       renderMovers();
     }
 
+    // ── Guide & What's New hub ───────────────────────────────────────────────
+
+    // Release data is fetched same-origin (served by the SW like the rest of the
+    // shell), independent of the raw.githubusercontent.com CSV path. null = not
+    // loaded or load failed (we degrade to "couldn't load updates").
+    let RELEASES = null;
+
+    async function loadReleases() {
+      try {
+        const res = await fetch('releases.json', { cache: 'no-cache' });
+        if (!res.ok) throw new Error('http ' + res.status);
+        RELEASES = await res.json();
+      } catch (e) {
+        RELEASES = null; // graceful offline degrade — hub still opens to the Guide
+      }
+      applyUnseenIndicator();
+    }
+
+    function getSeenRelease() { try { return localStorage.getItem(SEEN_RELEASE_KEY); } catch(e) { return null; } }
+    function setSeenRelease(v) { try { localStorage.setItem(SEEN_RELEASE_KEY, v); } catch(e) {} }
+
+    function clearUnseen() {
+      if (RELEASES && RELEASES.current) setSeenRelease(RELEASES.current);
+      const dot = document.getElementById('hub-dot');
+      if (dot) dot.classList.add('hidden');
+      const banner = document.getElementById('update-banner');
+      if (banner) banner.classList.add('hidden');
+    }
+
+    function applyUnseenIndicator() {
+      const dot = document.getElementById('hub-dot');
+      if (!RELEASES || !RELEASES.current) { if (dot) dot.classList.add('hidden'); return; }
+      const seen = getSeenRelease();
+      if (seen === null) {
+        // First visit: seed to current so brand-new users don't get a backlog "new!" nag.
+        setSeenRelease(RELEASES.current);
+        if (dot) dot.classList.add('hidden');
+        return;
+      }
+      const unseen = seen !== RELEASES.current;
+      if (dot) dot.classList.toggle('hidden', !unseen);
+      if (unseen) {
+        const rel = (RELEASES.releases && RELEASES.releases[0]) || {};
+        const banner = document.getElementById('update-banner');
+        const txt = document.getElementById('update-banner-text');
+        if (txt) txt.textContent = rel.title ? `What's new: ${rel.title}` : "What's new";
+        if (banner) banner.classList.remove('hidden');
+      }
+    }
+
+    function openHub(section, anchorId) {
+      const overlay = document.getElementById('hub-overlay');
+      const sheet = document.getElementById('hub-sheet');
+      if (!overlay) return;
+      overlay.classList.remove('hidden');
+      requestAnimationFrame(() => sheet.classList.remove('translate-y-full'));
+      clearUnseen(); // the dot clears on open (not a forced dismiss)
+      setHubSection(section || 'whatsnew', anchorId);
+    }
+
+    function closeHub() {
+      const overlay = document.getElementById('hub-overlay');
+      const sheet = document.getElementById('hub-sheet');
+      if (!overlay) return;
+      sheet.classList.add('translate-y-full');
+      setTimeout(() => overlay.classList.add('hidden'), 300);
+    }
+
+    function setHubSection(section, anchorId) {
+      document.querySelectorAll('.hub-section-btn').forEach(b => {
+        const active = b.dataset.section === section;
+        b.classList.toggle('bg-slate-600', active);
+        b.classList.toggle('text-white', active);
+        b.classList.toggle('text-slate-400', !active);
+      });
+      const body = document.getElementById('hub-body');
+      body.innerHTML = section === 'guide' ? renderGuideSheet() : renderWhatsNew();
+      body.scrollTop = 0;
+      if (section === 'guide') {
+        wireGuideSearch();
+        if (anchorId) {
+          const el = document.getElementById('guide-' + anchorId);
+          if (el) { if (el.tagName === 'DETAILS') el.open = true; el.scrollIntoView({ block: 'start' }); }
+        }
+      }
+    }
+
+    function renderWhatsNew() {
+      if (!RELEASES || !Array.isArray(RELEASES.releases) || RELEASES.releases.length === 0) {
+        return `<p class="text-slate-500 text-sm text-center py-8">Couldn’t load updates.</p>`;
+      }
+      const tagColor = { feature:'bg-sky-800 text-sky-200', fix:'bg-amber-800 text-amber-200', data:'bg-slate-700 text-slate-300', improvement:'bg-emerald-800 text-emerald-200' };
+      return RELEASES.releases.map(r => {
+        const notes = (r.notes || []).map(n =>
+          `<li class="flex gap-2"><span class="text-sky-400 flex-shrink-0">▸</span><span>${escapeHtml(n)}</span></li>`).join('');
+        const tag = r.tag ? `<span class="text-[0.6rem] px-1.5 py-0.5 rounded ${tagColor[r.tag] || 'bg-slate-700 text-slate-300'} uppercase tracking-wide">${escapeHtml(r.tag)}</span>` : '';
+        const jump = r.tab ? `<button class="mt-2 text-xs text-sky-400 active:text-sky-300" onclick="__hubJump('${escapeHtml(r.tab)}')">Open ${escapeHtml(r.tab)} →</button>` : '';
+        return `<div class="mb-4 pb-4 border-b border-slate-800 last:border-0 last:mb-0 last:pb-0">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-white font-semibold text-sm">${escapeHtml(r.title || r.version)}</span>${tag}
+          </div>
+          <div class="text-xs text-slate-500 mb-2">${escapeHtml(r.date || r.version)}</div>
+          <ul class="space-y-1 text-sm text-slate-300">${notes}</ul>
+          ${jump}
+        </div>`;
+      }).join('');
+    }
+
+    // Legend reads the LIVE threshold constants so it can never drift from behavior.
+    function buildLegend() {
+      const bar = (cls) => `<span class="inline-block w-3 h-4 rounded-sm ${cls} align-middle"></span>`;
+      const row = (swatch, text) => `<div class="flex items-start gap-2">${swatch ? `<span class="flex-shrink-0 pt-0.5">${swatch}</span>` : ''}<span class="text-slate-300">${text}</span></div>`;
+      const head = (t) => `<div class="text-xs text-slate-500 uppercase tracking-wider mt-3 first:mt-0">${t}</div>`;
+      return [
+        head('Card left edge (selected metric %)'),
+        row(bar('bg-emerald-500'), 'Emerald — strong gain, above +2%.'),
+        row(bar('bg-green-600'), 'Green — mild gain, 0 to +2%.'),
+        row(bar('bg-red-700'), 'Dark red — mild loss, −2% to 0.'),
+        row(bar('bg-red-500'), 'Red — sharp loss, below −2%.'),
+        row(bar('bg-slate-700'), 'Grey — no data.'),
+        head('Rotation regime bar'),
+        row(bar('bg-emerald-500'), `Emerald — emerging leader (regime above +${REGIME_THRESHOLD}). Bar length encodes strength.`),
+        row(bar('bg-red-500'), `Red — fading (regime below −${REGIME_THRESHOLD}).`),
+        head('Arrows & glyphs (next to a name)'),
+        row('<span class="text-emerald-400">↑</span>/<span class="text-red-400">↓</span>', 'Trend arrow — short-window YTD rank direction.'),
+        row('<span class="text-emerald-400">↑↑ ↑</span> ~ <span class="text-red-400">↓ ↓↓</span>', `Slope glyph (rank trend): double past ±${SLOPE_STRONG}, single past ±${SLOPE_SLIGHT}, ~ within that.`),
+        row('<span class="text-emerald-400">▲▲ ▲</span> <span class="text-red-400">▼ ▼▼</span>', `Acceleration: double past ±${ACCEL_STRONG}, single past ±${ACCEL_SLIGHT}.`),
+        head('Rotation buckets'),
+        row('', `Emerging / Established / Fading split at regime ±${REGIME_THRESHOLD}.`),
+      ].join('');
+    }
+
+    function renderGuideSheet() {
+      const search = `<input id="guide-search" type="search" inputmode="search" autocomplete="off" spellcheck="false"
+          placeholder="Search the guide…"
+          class="w-full bg-slate-800 text-slate-200 rounded-lg px-3 py-2 text-sm border border-slate-600 placeholder-slate-500 outline-none focus:border-slate-500">`;
+      const metrics = GUIDE.metrics.map(m => `
+        <details id="guide-${m.id}" class="guide-entry rounded-xl bg-slate-800/60 border border-slate-700 mb-1.5"
+                 data-text="${escapeHtml((m.label + ' ' + m.oneLiner + ' ' + m.detail).toLowerCase())}">
+          <summary class="text-sm px-3 py-2.5 flex items-center justify-between">
+            <span class="text-slate-200 font-medium">${escapeHtml(m.label)}</span>
+            <span class="glossary-chevron text-slate-500">›</span>
+          </summary>
+          <div class="px-3 pb-3 space-y-1.5">
+            <p class="text-sm text-slate-300">${escapeHtml(m.oneLiner)}</p>
+            <p class="text-xs text-slate-500">${escapeHtml(m.detail)}</p>
+          </div>
+        </details>`).join('');
+      const howto = GUIDE.howto.map(s =>
+        `<li class="flex gap-2"><span class="text-sky-400 flex-shrink-0">▸</span><span>${escapeHtml(s)}</span></li>`).join('');
+      return `
+        <div class="mb-3">${search}</div>
+        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Metrics</h3>
+        <div id="guide-metrics">${metrics}</div>
+        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-5 mb-2">Legend</h3>
+        <div class="space-y-1.5 text-sm">${buildLegend()}</div>
+        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-5 mb-2">How to read a card</h3>
+        <ul class="space-y-1.5 text-sm text-slate-300">${howto}</ul>`;
+    }
+
+    function wireGuideSearch() {
+      const inp = document.getElementById('guide-search');
+      if (!inp) return;
+      inp.addEventListener('input', () => {
+        const q = inp.value.trim().toLowerCase();
+        document.querySelectorAll('.guide-entry').forEach(el => {
+          el.classList.toggle('hidden', !!q && !el.dataset.text.includes(q));
+        });
+      });
+    }
+
+    // Globals for the header button, banner, contextual links, and What's New jumps.
+    window.__openHub = (section, anchorId) => openHub(section, anchorId);
+    window.__hubJump = (tab) => { closeHub(); setTimeout(() => switchTab(tab), 280); };
+
     // Expose refresh globally for the retry button
     window.__refresh = function() {
       if (state.loading) return;
@@ -1874,6 +2142,13 @@
     });
 
     document.getElementById('refresh-btn').addEventListener('click', window.__refresh);
+    document.getElementById('hub-btn').addEventListener('click', () => openHub('whatsnew'));
+    document.getElementById('hub-close').addEventListener('click', closeHub);
+    document.getElementById('hub-backdrop').addEventListener('click', closeHub);
+    document.querySelectorAll('.hub-section-btn').forEach(btn =>
+      btn.addEventListener('click', () => setHubSection(btn.dataset.section)));
+    document.getElementById('update-banner-see').addEventListener('click', () => openHub('whatsnew'));
+    document.getElementById('update-banner-x').addEventListener('click', clearUnseen);
     document.getElementById('ai-share-btn').addEventListener('click', shareAI);
     document.getElementById('ticker-submit').addEventListener('click', doLookup);
     document.getElementById('ticker-input').addEventListener('keydown', e => {
@@ -1971,6 +2246,7 @@
     loadPrefs();
     initUIFromState();
     loadAndRender();
+    loadReleases();
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

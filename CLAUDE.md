@@ -220,6 +220,26 @@ There is no need for a conditional or auto-detection — just run it when you ne
   over an earlier intraday run's.
 - Gaps in data: compute_deltas.py counts trading sessions by position (`find_trading_date_back`), so missing/holiday days don't break the 5/10/20/50-session deltas.
 
+### Cutting a release ("What's New") — 3 steps, always together
+
+The PWA's **What's New** hub reads `docs/releases.json`. Release versions use the
+`YYYY.MM.DD` convention (human-scannable, monotonic, no semver to maintain). When you
+ship a user-facing change, do **all three** of these in the same PR:
+
+1. **Prepend** a new entry to `releases.json` `releases[]` (newest-first): `version`
+   (`YYYY.MM.DD`), `date`, `title`, `tag` (`feature|fix|data|improvement`), optional
+   `tab` (deep-links the entry to a tab), and a short user-facing `notes[]`.
+2. **Update** the top-level `current` to the new `version` (this drives the unseen-update
+   dot). `tests/test_guide_releases.py` asserts `current === releases[0].version`.
+3. **Bump** `CACHE` in `docs/sw.js` (e.g. `finviz-v10` → `v11`) so the new shell +
+   `releases.json` aren't served from a stale cache.
+
+> The in-app **Guide** glossary copy lives in the `GUIDE` constant in `docs/index.html`,
+> copied **verbatim** from the User one-liners in `knowledge/moaty-metrics.md`. The legend
+> reads the live threshold constants (`REGIME_THRESHOLD`, `ACCEL_*`, `SLOPE_*`) so it can't
+> drift. If you add a metric, add its `GUIDE` entry too — the anti-drift test enforces that
+> every "why this matters" link targets a real `GUIDE` id.
+
 ## Session continuity (Claude Code web)
 
 > These are instructions for future Claude instances, not the user. The user runs Claude Code on the web (code.claude.com), not the CLI.

@@ -1,10 +1,14 @@
-const CACHE = 'finviz-v9';
+// Bump CACHE on every release (see CLAUDE.md § Automation release-bump checklist):
+// prepend a releases.json entry + update its `current` + bump CACHE here — all three
+// together, so the new shell + releases.json aren't served from a stale cache.
+const CACHE = 'finviz-v10';
 
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c => c.addAll([
       '/finviz-groups-tracker/',
       '/finviz-groups-tracker/manifest.json',
+      '/finviz-groups-tracker/releases.json',
     ]))
   );
   self.skipWaiting();

@@ -1,8 +1,9 @@
 # Plan: "What's New" + "Guide / Glossary" for the PWA (and dashboard)
 
-> **Status:** Approved design plan — **not yet implemented.** This document is the complete
-> pick-up brief for a future implementation session. No UI/UX code exists yet. Anyone on the
-> team should be able to build this from this file alone, without other context.
+> **Status:** ✅ **First pass implemented** (branch `claude/epic-sagan-njeu84`). The PWA hub,
+> `releases.json`, glossary, legend, contextual links, unseen-dot/banner, dashboard mirror,
+> docs, and tests are all in place. §8 items remain deferred as planned. See the completion
+> checklist at the bottom of this file. Original design brief preserved below.
 
 ---
 
@@ -253,3 +254,29 @@ These are deliberately left for a follow-up so the first pass stays shippable:
 - **Dashboard:** run Streamlit headless + Playwright; assert the Guide and What's New expanders
   render and the newest release title appears.
 - Run `python3 -m pytest tests/ -q` before every commit.
+
+---
+
+## 10. Completion checklist (first pass — implemented 2026-06-19)
+
+- [x] `docs/releases.json` created (3 seed entries, `current` = newest).
+- [x] `docs/sw.js`: `CACHE` bumped v9 → v10; `releases.json` added to precache.
+- [x] `docs/index.html`: header ℹ️ button + unseen dot; one-time dismissible banner;
+      slide-up hub sheet (What's New / Guide sections); `GUIDE` constant (11 metrics, verbatim
+      one-liners + how-to); `renderWhatsNew`/`renderGuideSheet`/`openHub`/`closeHub`/`buildLegend`;
+      `fvt_seen_release_v1` localStorage logic with first-visit seeding; searchable Guide;
+      graceful offline degrade; live-threshold legend; "why this matters →" links on Today,
+      Movers, Momentum, Strength; `tab` deep-link jumps.
+- [x] `dashboard/app.py`: sidebar "ℹ️ Guide & Glossary" (parsed from moaty-metrics.md) +
+      "🆕 What's New" (reads releases.json) expanders — no forked copy.
+- [x] `knowledge/moaty-metrics.md`: sync note added.
+- [x] `README.md`, `CLAUDE.md`, `.claude/rules/`: `YYYY.MM.DD` convention + 3-step release-bump
+      checklist documented.
+- [x] Tests: `tests/test_guide_releases.py` (anti-drift, releases validity, verbatim sync) +
+      `TestPWAHub` Playwright class (hub opens, deep-link scroll, dot/banner show + clear + persist).
+
+### Deferred (still §8): "Where the data comes from", FAQ, per-tab walkthrough, forced popup,
+auto-generating releases.json from WORK_LOG.
+
+### Known: 3 pre-existing `TestPWALookbackWindows` Playwright tests fail on the base branch
+(LB-FF1 dynamic-button timing) — unrelated to this feature.

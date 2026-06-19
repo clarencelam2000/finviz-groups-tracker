@@ -5,6 +5,12 @@
 > Plain Finviz shows today's numbers; we show trajectory, conviction, and
 > breadth. This file is the source of truth for those metrics — and for the
 > in-app "Why this matters" glossary copy.
+>
+> **Kept in sync with the in-app Guide.** The `GUIDE` constant in
+> `docs/index.html` copies the **User one-liner** lines below *verbatim*, and the
+> Streamlit dashboard (`dashboard/app.py`) parses them from this file at runtime.
+> If you edit a one-liner here, edit the matching `GUIDE` entry too (and vice-versa).
+> `tests/test_guide_releases.py::test_guide_one_liners_match_metrics_md` enforces it.
 
 All derived metrics live in `data/*/deltas.csv` and are produced by
 `scripts/compute_deltas.py`. `perf_*` raw values live in `data/*/snapshots.csv`.
