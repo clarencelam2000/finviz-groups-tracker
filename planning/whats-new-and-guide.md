@@ -157,7 +157,9 @@ configurable items everywhere" rule. Cues to document:
 
 - **Colored left bar on cards** *(this is the "colored bar" cue)*. On the **Today** tab the card's
   left edge is colored by the value of the currently-selected perf metric
-  (`docs/index.html:801`): emerald ≥ +2%, green > 0, red ≤ −2%, dark-red < 0, grey when no data.
+  (`docs/index.html:801`): emerald > +2%, green (0, +2%], dark-red [−2%, 0], red < −2%, grey when
+  no data. Note: dark-red is the mild-negative band (near zero), red is the sharp-negative band
+  (< −2%). The distinction matters for the legend — dark-red and red are not interchangeable.
   On the **Rotation** sub-view the cards additionally use a horizontal **regime fill bar**
   (`regimeBar`, ~`docs/index.html:1004`) whose color/length encodes `regime_short_long`
   (emerald = emerging leader, red = fading). Explain both: what the colors mean and what value
@@ -179,7 +181,7 @@ configurable items everywhere" rule. Cues to document:
 | `docs/releases.json` | **New.** Curated release entries + `current`. |
 | `docs/index.html` | Header `ℹ️` button + unseen dot; slide-up hub sheet markup; `GUIDE` content constant; `renderGuideSheet` / `openHub`; localStorage seen-version logic (`fvt_seen_release_v1`); "why this matters →" links in each `render*()`. |
 | `docs/sw.js` | Bump `CACHE`; add `releases.json` to the precache list (today it precaches only `/` + `manifest.json`). |
-| `knowledge/moaty-metrics.md` | Add a "kept in sync with the `GUIDE` constant in `docs/index.html`" note. |
+| `knowledge/moaty-metrics.md` | Already has User one-liners for all metrics in the Guide scope. Add a "kept in sync with the `GUIDE` constant in `docs/index.html`" note. |
 | `README.md`, `CLAUDE.md`, `.claude/rules/` | Document the `YYYY.MM.DD` version convention and the 3-step release-bump checklist (releases.json entry + `current` + `sw.js` CACHE). |
 | `.session/SPRINT.md`, `.session/WORK_LOG.md` | Add the sprint tasks / milestone entry. |
 | `tests/` | New tests — see §8. |
