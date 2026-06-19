@@ -27,8 +27,11 @@ timing drift to the correct trading day, so the pipeline needs no logic changes.
 **Decisions already made with the VP:**
 - **Scope:** ship the scheduler replacement now; include a *time-boxed research spike* (no
   implementation) to learn whether Cloudflare Browser Rendering could ever scrape Finviz.
-- **GitHub cron:** keep **one** entry (the EOD `48 19 * * 1-5`) as a fallback backstop;
-  Cloudflare becomes primary. Last-write-wins per date makes a rare double-run harmless.
+- **GitHub cron:** keep **one** entry (the EOD `48 19 * * 1-5`) as a redundancy backstop;
+  Cloudflare becomes primary. Both fire simultaneously at `:48` every trading day — this is
+  intentional redundancy, not a delayed fallback. A true time-offset fallback (e.g. fire
+  GitHub 15 min later) would still be subject to GitHub's unreliable scheduling and provides
+  no meaningful safety guarantee. Last-write-wins per date makes the expected double-run harmless.
 - **Worker placement (staff call):** a **new dedicated `finviz-cron-dispatcher` Worker**,
   not a `scheduled()` handler bolted onto the live `finviz-ticker-lookup` Worker — so the
   scheduler has an independent deploy cycle and zero blast radius on ticker lookups.
@@ -56,11 +59,14 @@ New directory `worker-cron/` (mirrors the structure/tooling of `worker/`, includ
   - `[triggers] crons = ["49 13 * * 1-5", "51 14 * * 1-5", "48 19 * * 1-5"]`
     (UTC, weekday-only — identical expressions to today's GitHub cron; Cloudflare cron is
     also fixed-UTC, so DST behaves exactly as documented in `CLAUDE.md` § Automation).
+  - `[vars] DISPATCH_REF = "claude/elegant-babbage-hlxnfy"` — the branch that `collect.yml`
+    runs on. Stored as a var (not a secret) so it can be changed without touching Worker code.
+    TODO(D1): change to `"main"` once SPRINT.md task D1 (create `main`, set as default) is done.
   - Small KV namespace binding `DISPATCH_LOG` for observability (last-fire timestamp + outcome).
 - **`worker-cron/src/index.js`**
   - `scheduled(event, env, ctx)` handler → `POST` to
     `https://api.github.com/repos/clarencelam2000/finviz-groups-tracker/actions/workflows/collect.yml/dispatches`
-    with body `{ "ref": "<default branch>" }`, headers `Authorization: Bearer ${env.GITHUB_DISPATCH_TOKEN}`,
+    with body `{ "ref": env.DISPATCH_REF }`, headers `Authorization: Bearer ${env.GITHUB_DISPATCH_TOKEN}`,
     `Accept: application/vnd.github+json`, `User-Agent: finviz-cron-dispatcher`,
     `X-GitHub-Api-Version: 2022-11-28`. Record `{ ts, status, cron: event.cron }` to KV.
   - Minimal `fetch()` handler exposing `GET /health` (KV connectivity) and `GET /last`
@@ -81,10 +87,13 @@ Worker/Vitest test conventions (`worker/test/index.test.js`), KV binding pattern
 ## Phase 2 — Trim `collect.yml` to a backstop
 
 - In `.github/workflows/collect.yml`, remove the two intraday `schedule:` entries; **keep
-  `48 19 * * 1-5`** as the EOD fallback. Keep `workflow_dispatch` (now the primary entry path).
+  `48 19 * * 1-5`** as the EOD redundancy backstop. Keep `workflow_dispatch` (now the primary
+  entry path).
 - Add a comment block explaining: Cloudflare `finviz-cron-dispatcher` is the primary
-  scheduler via `workflow_dispatch`; the single remaining cron is a safety net if the Worker
-  is down. No step/logic changes — the runner still does collect → verify → deltas → commit.
+  scheduler via `workflow_dispatch`; the single remaining cron fires simultaneously at the
+  same time as the CF cron and acts as redundancy (not a delayed fallback — GitHub's cron is
+  too timing-unreliable for that). Last-write-wins per date makes the double-run harmless.
+  No step/logic changes — the runner still does collect → verify → deltas → commit.
 
 ---
 
@@ -113,7 +122,9 @@ Time-boxed (~half a session). Deliverable is a written verdict, not code:
   so `releases.json`/`sw.js` are intentionally untouched.
 
 Suggested commit slicing (small, focused, each with its test/doc): (1) dispatcher Worker +
-tests, (2) collect.yml backstop trim, (3) Phase 3 spike ADR, (4) docs/session handoff.
+tests + add `worker-cron-test:` job to `.github/workflows/tests.yml` (mirrors the existing
+`worker-test:` job; `working-directory: worker-cron`), (2) collect.yml backstop trim,
+(3) Phase 3 spike ADR, (4) docs/session handoff.
 
 ---
 
