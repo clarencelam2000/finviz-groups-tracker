@@ -4,36 +4,149 @@
     {
       "version": "2026.06.19",
       "date": "2026-06-19",
-      "title": "Guide & What's New",
+      "title": "Guide & What's New hub",
       "tag": "feature",
       "notes": [
-        "New ℹ️ button in the header opens a Guide that explains every metric, color, and arrow.",
-        "What's New now flags updates with a dot on the ℹ️ icon and a one-time banner.",
-        "The Guide's legend always reflects the app's live thresholds, so it can't drift.",
-        "Rotation signal updated: short horizon is now week + month (day was too noisy); long horizon is now 3mo + 6mo + year."
+        "New ℹ️ button opens a built-in Guide explaining every metric, color, arrow, and threshold — no external docs needed.",
+        "Unseen-update dot on ℹ️ and a one-time banner let you know when something new has shipped.",
+        "The Guide legend reads the app's live threshold constants, so it can never drift out of sync.",
+        "Rotation signal fixed: short horizon is now week + month (day was too noisy); long horizon is 3mo + 6mo + year.",
+        "Phase-history strip on AI cards redesigned as a clean CSS timeline — graduated opacity, a connecting line, and dates on both ends."
+      ]
+    },
+    {
+      "version": "2026.06.18",
+      "date": "2026-06-18",
+      "title": "Momentum signals on every card",
+      "tag": "feature",
+      "tab": "momentum",
+      "notes": [
+        "Momentum cards show an acceleration badge (▲▲ / ▲ / ▼ / ▼▼) so you can see momentum building or fading at a glance.",
+        "New Rotation sub-view in the Momentum tab splits groups into Emerging / Established / Fading based on the regime signal.",
+        "Today cards gain a rank-trend arrow (↑↑ / ↑ / ~ / ↓ / ↓↓) and a performance-delta context row when you expand a card.",
+        "Strength tab is now sorted by confirmed momentum (strength × cross-timeframe consistency).",
+        "Lookback buttons are derived straight from your data — no hard-coded values.",
+        "Momentum/Rotation sub-view preference is remembered between visits."
       ]
     },
     {
       "version": "2026.06.17",
       "date": "2026-06-17",
-      "title": "Richer momentum & longer lookbacks",
+      "title": "Trading-day lookbacks & richer signals",
       "tag": "improvement",
       "tab": "momentum",
       "notes": [
-        "Lookback windows are now 5 / 10 / 20 / 50 trading sessions.",
-        "New confirmed-momentum, acceleration, regime, and rank-trend signals.",
-        "Rotation sub-view splits groups into Emerging / Established / Fading."
+        "Lookback windows switched from calendar days to trading sessions: 5 / 10 / 20 / 50 days — weekends and holidays no longer skew the deltas.",
+        "Six new computed signals: confirmed momentum, weighted momentum (mid- and fast-horizon), acceleration, regime (emerging vs. fading), rank-trend slope, and rank agreement.",
+        "All momentum columns are now derived from a single config, so the pipeline, dashboard, and PWA always stay in sync."
+      ]
+    },
+    {
+      "version": "2026.06.16",
+      "date": "2026-06-16",
+      "title": "Lookup tab: moaty metrics",
+      "tag": "feature",
+      "tab": "lookup",
+      "notes": [
+        "Lookup now shows a weekly-rank sparkline so you can see at a glance whether a group's rank has been rising or falling.",
+        "Rank Floor shows the worst rank across 1mo / 3mo / 6mo — a Sustained or Consistent conviction chip appears when the floor clears the bar.",
+        "Breadth dot strip (D·W·M·Q·6M·Y) shows which timeframes are positive; an All-Green badge fires when the meaningful ones all confirm.",
+        "The Signal card now cites concrete evidence — rank trajectory, conviction, momentum percentile — instead of a bare label.",
+        "One-tap deep links to Finviz and TradingView charts added to every ticker result.",
+        "Weekend and NYSE-holiday phantom dates eliminated: snapshots are always stamped with the real trading day."
+      ]
+    },
+    {
+      "version": "2026.06.15",
+      "date": "2026-06-15",
+      "title": "AI notes rebuilt as plain-English",
+      "tag": "improvement",
+      "tab": "ai",
+      "notes": [
+        "The AI briefing is now a single readable note per group instead of a rigid structured format that sometimes leaked raw JSON or went blank.",
+        "Notes are built directly from computed signals — sustained strength, movers, momentum leaders and laggards, divergences — so they always render cleanly.",
+        "Ticker Lookup goes live: Worker deployed to the edge, PWA Lookup tab and Streamlit tab both wired to it."
+      ]
+    },
+    {
+      "version": "2026.06.14",
+      "date": "2026-06-14",
+      "title": "Ticker Lookup",
+      "tag": "feature",
+      "tab": "lookup",
+      "notes": [
+        "New Lookup tab: type any ticker to instantly see its Finviz sector and industry, company profile, and how those groups are ranking right now.",
+        "Results are cached at the edge so repeat lookups return in milliseconds.",
+        "AI tab date navigation: Prev / Next arrows let you browse past briefings without the buttons ever getting stuck."
+      ]
+    },
+    {
+      "version": "2026.06.13",
+      "date": "2026-06-13",
+      "title": "AI notes: smarter generation & reliability",
+      "tag": "fix",
+      "tab": "ai",
+      "notes": [
+        "Fixed a daily-quota bug that could leave today's AI note half-written or missing — partial results now resume and fill in only what's needed.",
+        "AI generation now runs in its own workflow step so collection and analysis are independent; a failed scrape no longer blocks the briefing.",
+        "Smart-skip logic: if the data hasn't changed since the last run, the AI step skips redundant API calls."
+      ]
+    },
+    {
+      "version": "2026.06.12",
+      "date": "2026-06-12",
+      "title": "A richer AI tab",
+      "tag": "improvement",
+      "tab": "ai",
+      "notes": [
+        "Key-signal bullets, a collapsible briefing, and conviction tags make the AI note faster to scan.",
+        "Rotation phase and a top-sector watchlist with thesis now appear alongside the briefing.",
+        "A 'what changed' delta card shows how today's read compares to yesterday's.",
+        "Relative timestamp, native share sheet, and a phase-history strip added.",
+        "Browse back through any past date using the date-navigation arrows.",
+        "New sort options added to Today tab: Qtr %, 6-Month %, and 1-Year % (7 sort options total); rank badge circles now show 6-month rank."
       ]
     },
     {
       "version": "2026.06.11",
       "date": "2026-06-11",
-      "title": "AI daily notes",
+      "title": "AI Insights tab launches",
       "tag": "feature",
       "tab": "ai",
       "notes": [
-        "The AI tab now writes a plain-English daily note per group.",
-        "Covers strength, movers & momentum, and divergences."
+        "New AI tab surfaces a nightly plain-English briefing for both sectors and industries, generated by Gemini.",
+        "Includes a rotation-phase read (Early / Mid / Late Cycle / Defensive) and a top-sector watchlist with investment thesis.",
+        "Workflow monitoring added: each pipeline run now logs AI outcome (complete / partial / skipped) so you can see at a glance whether today's note is fresh."
+      ]
+    },
+    {
+      "version": "2026.06.10",
+      "date": "2026-06-10",
+      "title": "Strength tab, AI pipeline & PWA polish",
+      "tag": "feature",
+      "tab": "strength",
+      "notes": [
+        "New Strength tab: Sustained Strength surfaces groups that are top-ranked across month, quarter, and half simultaneously. All-Green flags every timeframe positive.",
+        "New rank-agreement signal (0–1) measures how consistently a group ranks across timeframes — 1.0 means all confirm the same standing.",
+        "Pull-to-refresh, persistent preferences (group/sort/lookback survive app close), and search filtering added to the PWA.",
+        "iOS Add-to-Home-Screen icon added; errors now show on the active tab instead of silently failing.",
+        "Data freshness timestamp now shows in Pacific time in the PWA header.",
+        "Haptic feedback fires when pull-to-refresh crosses the release threshold."
+      ]
+    },
+    {
+      "version": "2026.06.09",
+      "date": "2026-06-09",
+      "title": "Finviz Groups Tracker launches",
+      "tag": "feature",
+      "tab": "today",
+      "notes": [
+        "Daily scraper captures all Finviz sector and industry groups every trading day via Playwright — no API subscription required.",
+        "Ranks and rank/performance deltas computed daily; rank 1 is always the strongest performer across that timeframe.",
+        "Installable iPhone PWA (Safari → Add to Home Screen) with Today, Movers, and Momentum tabs from day one.",
+        "Today tab shows color-coded performance cards; Movers ranks groups by how much their YTD rank has shifted; Momentum shows the running momentum score.",
+        "Companion Streamlit dashboard adds snapshot tables, multi-group time series, a performance heatmap, and CSV download.",
+        "GitHub Actions runs the full pipeline daily and emails on failure — no manual intervention needed."
       ]
     }
   ]
