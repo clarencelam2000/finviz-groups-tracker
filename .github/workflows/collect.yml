@@ -1,15 +1,22 @@
 name: Daily Snapshot
 on:
   schedule:
-    # Times are weekday-only and chosen in Eastern, but GitHub cron is fixed UTC
-    # and cannot follow DST. The UTC values below map to EDT (summer); in EST
-    # (winter) each run fires one hour earlier in ET. Never schedule on weekends —
-    # markets are closed and a weekend run would only re-capture Friday's stale
-    # close (see trading_date() in scripts/collect.py).
-    - cron: '49 13 * * 1-5'   # ~9:49 AM ET — just after the open
-    - cron: '51 14 * * 1-5'   # ~10:51 AM ET — mid-morning
-    - cron: '48 19 * * 1-5'   # ~3:48 PM ET — just before the close (EOD snapshot)
-  workflow_dispatch:
+    # PRIMARY scheduler is the Cloudflare Worker `finviz-cron-dispatcher`
+    # (worker-cron/), which fires workflow_dispatch on time — GitHub's schedule:
+    # cron drifts hours and is dropped under load (see planning/cloudflare-cron-scheduler.md).
+    #
+    # The single cron below is a REDUNDANCY BACKSTOP, not a delayed fallback: it
+    # fires at the SAME time (:48) as the Cloudflare EOD trigger every trading
+    # day. Both runs are expected and harmless — collect.py/compute_deltas.py are
+    # last-write-wins per date. A time-offset fallback would gain nothing because
+    # GitHub's cron is itself too timing-unreliable to depend on.
+    #
+    # GitHub cron is fixed-UTC and cannot follow DST: this maps to ~3:48 PM ET in
+    # summer (EDT) / ~2:48 PM ET in winter (EST). Weekday-only — never schedule on
+    # weekends; a weekend run would only re-capture Friday's stale close (see
+    # trading_date() in scripts/collect.py).
+    - cron: '48 19 * * 1-5'   # ~3:48 PM ET — EOD snapshot (backstop to Cloudflare)
+  workflow_dispatch:          # PRIMARY entry path — invoked by finviz-cron-dispatcher
 permissions:
   contents: write
 env:
