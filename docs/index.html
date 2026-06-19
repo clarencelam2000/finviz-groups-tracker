@@ -766,7 +766,7 @@
           <span class="text-[10px] text-slate-500 uppercase tracking-widest font-medium">Phase History</span>
           <div class="h-px flex-1" style="background:rgba(71,85,105,0.5)"></div>
         </div>
-        <div class="flex items-start gap-3 overflow-x-auto scrollbar-none pb-1 px-1">
+        <div class="flex items-start gap-3 overflow-x-auto scrollbar-none pt-1.5 pb-1 px-1">
           ${pills.map(p => {
             const pm = phaseColors[p.label] || { dot: '#64748b', text: '#94a3b8', short: p.label.slice(0, 4) };
             const d = new Date(p.date + 'T12:00:00Z');
