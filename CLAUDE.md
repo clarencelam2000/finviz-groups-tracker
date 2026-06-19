@@ -203,9 +203,18 @@ There is no need for a conditional or auto-detection — just run it when you ne
 
 ## Automation
 
-- GitHub Actions runs **weekdays only**, three times a day: `13:49`, `14:51`, and `19:48` UTC
-  (~9:49am / 10:51am / 3:48pm ET in summer; one hour earlier in ET during winter — GitHub cron
-  is fixed-UTC and cannot follow DST). The last run is the EOD snapshot just before the close.
+- **Primary scheduler: the Cloudflare Worker `finviz-cron-dispatcher` (`worker-cron/`).** Its
+  Cron Triggers fire **weekdays only**, three times a day: `13:49`, `14:51`, and `19:48` UTC
+  (~9:49am / 10:51am / 3:48pm ET in summer; one hour earlier in ET during winter — Cloudflare
+  cron is fixed-UTC and cannot follow DST). Each trigger POSTs a GitHub `workflow_dispatch` to
+  launch `collect.yml` on Azure runners. The cron expressions live in `worker-cron/wrangler.toml`
+  `[triggers] crons`. The last run is the EOD snapshot just before the close. **Why a separate
+  scheduler:** GitHub's `schedule:` cron drifts hours and is dropped under load;
+  `workflow_dispatch` is event-driven and prompt. See `planning/cloudflare-cron-scheduler.md`
+  and `knowledge/decisions/` for the full rationale.
+- **Backstop: one GitHub cron** (`48 19 * * 1-5`) remains in `collect.yml` as redundancy. It
+  fires at the *same time* as the Cloudflare EOD trigger (not a delayed fallback — GitHub cron is
+  too timing-unreliable for that). The expected double-run is harmless: last-write-wins per date.
 - **No weekend or holiday dates.** Markets are closed on weekends and NYSE holidays, so such a
   scrape only re-captures the prior session's stale close. `trading_date()` in `collect.py` rolls
   any weekend, Monday-pre-open, or NYSE-holiday collection (cron drift or manual dispatch) back to

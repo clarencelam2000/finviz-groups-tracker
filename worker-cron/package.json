@@ -1,0 +1,17 @@
+{
+  "name": "finviz-cron-dispatcher",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker: Cron Trigger that dispatches collect.yml via GitHub workflow_dispatch",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8",
+    "wrangler": "^3.99.0"
+  }
+}

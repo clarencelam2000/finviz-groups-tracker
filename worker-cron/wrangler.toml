@@ -1,0 +1,35 @@
+# Cloudflare Worker config for finviz-cron-dispatcher.
+#
+# This Worker is a *scheduler only*: its Cron Triggers fire on time (Cloudflare
+# cron is precise and event-driven, unlike GitHub's schedule: which drifts hours
+# and is dropped under load) and POST workflow_dispatch to launch the existing,
+# proven collect.yml on GitHub's Azure runners. It does NOT scrape Finviz — see
+# planning/cloudflare-cron-scheduler.md for why the scrape stays on GitHub.
+#
+# Before first deploy:
+#   1. Create the KV namespace and paste its id below:
+#        wrangler kv namespace create DISPATCH_LOG
+#   2. Set the GitHub PAT as a secret (NOT in this file):
+#        wrangler secret put GITHUB_DISPATCH_TOKEN
+#      The PAT is a GitHub fine-grained token scoped to THIS repo only, with
+#      Actions: Read and write (nothing else).
+name = "finviz-cron-dispatcher"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+# Cron Triggers (UTC, weekday-only) — identical expressions to today's GitHub
+# cron in collect.yml. Cloudflare cron is fixed-UTC, so DST behaves exactly as
+# documented in CLAUDE.md § Automation (one hour earlier in ET during winter).
+[triggers]
+crons = ["49 13 * * 1-5", "51 14 * * 1-5", "48 19 * * 1-5"]
+
+[vars]
+# The git ref that collect.yml runs on. Stored as a var (not a secret) so it can
+# be changed without touching Worker code.
+# TODO(D1): change to "main" once SPRINT.md task D1 (create main, set as default) is done.
+DISPATCH_REF = "claude/elegant-babbage-hlxnfy"
+
+[[kv_namespaces]]
+binding = "DISPATCH_LOG"
+# Created via: wrangler kv namespace create DISPATCH_LOG
+id = "8edeadedaf9345748592320549669ff4"
