@@ -759,6 +759,7 @@
         'Late Cycle':  { dot: '#f97316', text: '#fdba74', short: 'Late'  },
         'Defensive':   { dot: '#3b82f6', text: '#93c5fd', short: 'Def'   },
       };
+      const nonTodayCount = pills.length - 1;
 
       container.innerHTML = `
         <div class="flex items-center gap-2.5 mb-3">
@@ -766,18 +767,22 @@
           <span class="text-[10px] text-slate-500 uppercase tracking-widest font-medium">Phase History</span>
           <div class="h-px flex-1" style="background:rgba(71,85,105,0.5)"></div>
         </div>
-        <div class="flex items-start gap-3 overflow-x-auto scrollbar-none pt-1.5 pb-1 px-1">
-          ${pills.map(p => {
+        <div class="flex items-start gap-3 overflow-x-auto scrollbar-none pt-1.5 pb-1 px-1"
+             style="background:linear-gradient(transparent 15px,rgba(71,85,105,0.4) 15px,rgba(71,85,105,0.4) 16px,transparent 16px);">
+          ${pills.map((p, i) => {
             const pm = phaseColors[p.label] || { dot: '#64748b', text: '#94a3b8', short: p.label.slice(0, 4) };
             const d = new Date(p.date + 'T12:00:00Z');
             const fmtDate = (d.getUTCMonth() + 1) + '/' + d.getUTCDate();
+            const opacity = p.isToday ? 1 : 0.28 + 0.52 * (i / Math.max(1, nonTodayCount - 1));
             const dotStyle = p.isToday
               ? `background-color:${pm.dot};box-shadow:0 0 0 2px #0f172a,0 0 0 3.5px ${pm.dot};`
-              : `background-color:${pm.dot};opacity:0.55;`;
-            return `<div class="flex-shrink-0 flex flex-col items-center gap-1" title="${p.date} — ${p.label}">
+              : `background-color:${pm.dot};`;
+            const opacityStyle = p.isToday ? '' : `opacity:${opacity.toFixed(2)};`;
+            const showDate = p.isToday || i === 0;
+            return `<div class="flex-shrink-0 flex flex-col items-center gap-1" style="${opacityStyle}" title="${p.date} — ${p.label}">
               <div class="w-5 h-5 rounded-full" style="${dotStyle}"></div>
-              <span class="text-[9px] leading-none font-medium" style="color:${pm.text};${!p.isToday ? 'opacity:0.7;' : ''}">${pm.short}</span>
-              ${p.isToday ? `<span class="text-[9px] text-slate-500 leading-none">${fmtDate}</span>` : ''}
+              <span class="text-[9px] leading-none font-medium" style="color:${pm.text};">${pm.short}</span>
+              ${showDate ? `<span class="text-[9px] text-slate-500 leading-none">${fmtDate}</span>` : ''}
             </div>`;
           }).join('')}
         </div>`;
@@ -1333,15 +1338,18 @@
       const phaseLabel = phase && phase.label && phase.label !== 'Unknown' ? phase.label : '';
       if (phaseLabel) {
         const phaseMap = {
-          'Early Cycle': { icon: '🟢', bg: 'bg-emerald-900/40', border: 'border-emerald-600/50', text: 'text-emerald-300' },
-          'Mid Cycle':   { icon: '🟡', bg: 'bg-yellow-900/40',  border: 'border-yellow-600/50',  text: 'text-yellow-300' },
-          'Late Cycle':  { icon: '🟠', bg: 'bg-orange-900/40',  border: 'border-orange-600/50',  text: 'text-orange-300' },
-          'Defensive':   { icon: '🔵', bg: 'bg-sky-900/40',     border: 'border-sky-600/50',     text: 'text-sky-300'    },
+          'Early Cycle': { dot: '#22c55e', bg: 'bg-emerald-900/40', border: 'border-emerald-600/50', text: 'text-emerald-300' },
+          'Mid Cycle':   { dot: '#eab308', bg: 'bg-yellow-900/40',  border: 'border-yellow-600/50',  text: 'text-yellow-300' },
+          'Late Cycle':  { dot: '#f97316', bg: 'bg-orange-900/40',  border: 'border-orange-600/50',  text: 'text-orange-300' },
+          'Defensive':   { dot: '#3b82f6', bg: 'bg-sky-900/40',     border: 'border-sky-600/50',     text: 'text-sky-300'    },
         };
-        const pm = phaseMap[phaseLabel] || { icon: '🔍', bg: 'bg-slate-800', border: 'border-slate-600', text: 'text-slate-300' };
+        const pm = phaseMap[phaseLabel] || { dot: '#64748b', bg: 'bg-slate-800', border: 'border-slate-600', text: 'text-slate-300' };
         html += `
           <div class="rounded-xl p-4 ${pm.bg} border ${pm.border} mb-3">
-            <div class="text-sm font-bold ${pm.text} mb-1">${pm.icon} Rotation Phase: ${escapeHtml(phaseLabel)}</div>
+            <div class="flex items-center gap-2 mb-1">
+              <div class="w-3.5 h-3.5 rounded-full flex-shrink-0" style="background-color:${pm.dot}"></div>
+              <div class="text-sm font-bold ${pm.text}">Rotation Phase: ${escapeHtml(phaseLabel)}</div>
+            </div>
             ${phase.reasoning ? `<div class="text-xs text-slate-300 italic leading-relaxed">${escapeHtml(phase.reasoning)}</div>` : ''}
           </div>`;
         if (state.group === 'sectors') {
