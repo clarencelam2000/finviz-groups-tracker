@@ -64,6 +64,9 @@ def test_every_guide_metric_has_copy():
     assert len(entries) == len(ids), "every GUIDE metric needs id + label + oneLiner"
     for mid, label in entries:
         assert label.strip(), f"GUIDE metric {mid} has empty label"
+    for grp, (mid, _) in zip(_guide_one_liners(), entries):
+        text = next((g for g in grp if g), "")
+        assert text.strip(), f"GUIDE metric {mid} has empty oneLiner"
 
 
 def test_releases_json_valid_and_current_matches_newest():

@@ -273,7 +273,7 @@ def _render_group_card(name: str, group_type: str, label: str):
         return
 
     rank = row.get("rank_week")
-    delta7 = row.get("rank_week_delta_7d")
+    delta7 = row.get("rank_week_delta_5d")
     momentum = row.get("momentum_score")
     perf_week, perf_month, perf_ytd = row.get("perf_week"), row.get("perf_month"), row.get("perf_ytd")
 
@@ -550,7 +550,7 @@ with tab5:
         if not heatmap_delta_cols:
             st.info("No delta columns available yet.")
         else:
-            default_col = "rank_ytd_delta_7d" if "rank_ytd_delta_7d" in heatmap_delta_cols else heatmap_delta_cols[0]
+            default_col = "rank_ytd_delta_5d" if "rank_ytd_delta_5d" in heatmap_delta_cols else heatmap_delta_cols[0]
             selected_delta = st.selectbox(
                 "Delta metric", heatmap_delta_cols,
                 index=heatmap_delta_cols.index(default_col),
