@@ -42,3 +42,18 @@ jobs:
       - name: Run worker tests
         working-directory: worker
         run: npm test
+
+  worker-cron-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install worker-cron dependencies
+        working-directory: worker-cron
+        run: npm ci
+      - name: Run worker-cron tests
+        working-directory: worker-cron
+        run: npm test
