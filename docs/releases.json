@@ -10,7 +10,22 @@
         "New ℹ️ button in the header opens a Guide that explains every metric, color, and arrow.",
         "What's New now flags updates with a dot on the ℹ️ icon and a one-time banner.",
         "The Guide's legend always reflects the app's live thresholds, so it can't drift.",
-        "Rotation signal updated: short horizon is now week + month (day was too noisy); long horizon is now 3mo + 6mo + year."
+        "Rotation signal updated: short horizon is now week + month (day was too noisy); long horizon is now 3mo + 6mo + year.",
+        "Phase-history dots on AI cards redesigned as a clean CSS timeline — graduated opacity, connecting line, and dates on both ends."
+      ]
+    },
+    {
+      "version": "2026.06.18",
+      "date": "2026-06-18",
+      "title": "Momentum signals on every card",
+      "tag": "feature",
+      "tab": "momentum",
+      "notes": [
+        "Momentum cards now show an acceleration badge (▲▲/▲/▼/▼▼) so you can see momentum building or fading at a glance.",
+        "New Rotation sub-view splits groups into Emerging / Established / Fading.",
+        "Today cards gain a rank-trend arrow (↑/↓) plus a performance-delta context row when expanded.",
+        "Strength tab is now sorted by confirmed momentum.",
+        "Your Momentum / Rotation sub-view choice is remembered between visits, and lookback buttons are now read straight from the data."
       ]
     },
     {
@@ -26,6 +41,64 @@
       ]
     },
     {
+      "version": "2026.06.16",
+      "date": "2026-06-16",
+      "title": "Lookup tab upgrade",
+      "tag": "feature",
+      "tab": "lookup",
+      "notes": [
+        "Look up any ticker and see its sector/industry strength at a glance: a weekly-rank sparkline, a Rank Floor with a Sustained/Consistent conviction chip, and a breadth dot strip.",
+        "The Signal card now cites concrete evidence for its read instead of a bare label.",
+        "Added a 'Why this matters' glossary plus one-tap deep links to Finviz and TradingView charts.",
+        "Data fix: snapshots stamped on weekends or NYSE holidays are rolled back to the real trading day, so no phantom dates appear."
+      ]
+    },
+    {
+      "version": "2026.06.15",
+      "date": "2026-06-15",
+      "title": "More reliable AI notes",
+      "tag": "improvement",
+      "tab": "ai",
+      "notes": [
+        "The AI tab was rebuilt around a single plain-English note per group, replacing the brittle format that occasionally produced blank or garbled briefings.",
+        "Notes are now built directly from the computed signals — strength, movers, momentum leaders/laggards, and divergences — so they always render cleanly."
+      ]
+    },
+    {
+      "version": "2026.06.14",
+      "date": "2026-06-14",
+      "title": "Ticker Lookup arrives",
+      "tag": "feature",
+      "tab": "lookup",
+      "notes": [
+        "New Lookup tab: type a ticker to see its Finviz sector and industry, company profile, and how those groups are ranking.",
+        "Backed by a fast edge cache so repeat lookups return instantly."
+      ]
+    },
+    {
+      "version": "2026.06.13",
+      "date": "2026-06-13",
+      "title": "AI notes stop dropping out",
+      "tag": "fix",
+      "tab": "ai",
+      "notes": [
+        "Fixed a daily-quota issue that could leave the AI note half-written or missing.",
+        "Partial results now resume and fill in only what's missing, so you get a complete note each day."
+      ]
+    },
+    {
+      "version": "2026.06.12",
+      "date": "2026-06-12",
+      "title": "A richer AI tab",
+      "tag": "improvement",
+      "tab": "ai",
+      "notes": [
+        "AI tab adds key-signal bullets, a collapsible briefing, and conviction tags.",
+        "New rotation phase + watchlist, a 'what changed' delta card, and a relative timestamp.",
+        "Share a briefing natively, scan a phase-history strip, and navigate back through past dates."
+      ]
+    },
+    {
       "version": "2026.06.11",
       "date": "2026-06-11",
       "title": "AI daily notes",
@@ -34,6 +107,31 @@
       "notes": [
         "The AI tab now writes a plain-English daily note per group.",
         "Covers strength, movers & momentum, and divergences."
+      ]
+    },
+    {
+      "version": "2026.06.10",
+      "date": "2026-06-10",
+      "title": "Strength tab & AI Insights",
+      "tag": "feature",
+      "tab": "strength",
+      "notes": [
+        "New Strength tab surfaces Sustained Strength (top-ranked across month/quarter/half at once) and an All-Green view where every timeframe is positive.",
+        "New rank-agreement signal measures how consistently a group ranks across timeframes.",
+        "First AI Insights: a nightly briefing for sectors and industries with a rotation-phase read and a top-sector watchlist."
+      ]
+    },
+    {
+      "version": "2026.06.09",
+      "date": "2026-06-09",
+      "title": "Finviz Groups Tracker launches",
+      "tag": "feature",
+      "tab": "today",
+      "notes": [
+        "Tracks every Finviz sector and industry group every trading day, so you can see where capital is rotating.",
+        "Installable iPhone app (Add to Home Screen) with three tabs to start: Today's color-coded performance, Movers leaderboard, and Momentum.",
+        "Rankings and rank/performance changes are computed daily across multiple lookbacks — rank 1 is always the strongest performer.",
+        "A companion Streamlit dashboard adds snapshots, time series, and downloadable CSVs for deeper analysis."
       ]
     }
   ]
