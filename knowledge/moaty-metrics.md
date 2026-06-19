@@ -79,8 +79,8 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
 
 ## regime_short_long
 - **Source:** `compute_regime()` (`scripts/compute_deltas.py` L249). Short-horizon
-  percentile mean (`perf_day`, `perf_week`) minus long-horizon percentile mean
-  (`perf_half`, `perf_year`, `perf_ytd`). Range roughly [−1, 1]. NaN if either
+  percentile mean (`perf_week`, `perf_month`) minus long-horizon percentile mean
+  (`perf_quarter`, `perf_half`, `perf_year`). Range roughly [−1, 1]. NaN if either
   bucket is unavailable.
 - **PWA thresholds:** `REGIME_THRESHOLD = 0.15` in `docs/index.html`. Values above
   threshold → Emerging bucket (emerald); within ±threshold → Established; below

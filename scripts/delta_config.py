@@ -54,8 +54,10 @@ WEIGHTS_FAST = {
 }
 
 # Short- vs long-horizon buckets for the regime score.
-REGIME_SHORT = ["perf_day", "perf_week"]
-REGIME_LONG = ["perf_half", "perf_year", "perf_ytd"]
+# Short = wk + month (smoother than day, still captures recent rotation).
+# Long = 3mo + 6mo + yr (excludes perf_ytd to avoid double-counting with yr).
+REGIME_SHORT = ["perf_week", "perf_month"]
+REGIME_LONG = ["perf_quarter", "perf_half", "perf_year"]
 
 # Which trading-day window to use when measuring momentum acceleration and the
 # rank-trend slope window length (in sessions).
