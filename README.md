@@ -195,7 +195,7 @@ No server required — it fetches the latest CSVs directly from GitHub on every 
 
 **Momentum** — Two sub-views selectable via a toggle at the top:
 - **Momentum view** (default) — Composite breadth leaderboard sorted by `momentum_score`. Shows which groups are consistently strong across all 7 timeframes at once. Includes a mini progress bar and an acceleration badge (▲▲ building / ▼▼ fading) once 10 sessions of history exist (~June 23). Works from day one.
-- **Rotation view** — Groups ranked by `regime_short_long`: how much recent short-term strength (day + week) is outpacing or lagging long-term strength (6-month + year + YTD). Split into three sections: 🌱 Emerging (rotating in), → Established (balanced), 📉 Fading (rotating out). Each card shows the 0-centered regime bar, short vs. long % context, and momentum score. Works from day one.
+- **Rotation view** — Groups ranked by `regime_short_long`: how much recent short-term strength (week + month) is outpacing or lagging long-term strength (3-month + 6-month + year). Split into three sections: 🌱 Emerging (rotating in), → Established (balanced), 📉 Fading (rotating out). Each card shows the 0-centered regime bar, short vs. long % context, and momentum score. Works from day one.
 
 **Strength** — Two sub-views: Sustained Strength (top-N across all three medium-term timeframes: month / quarter / half-year simultaneously, sorted by `momentum_confirmed` = `momentum_score × rank_agreement`, rewarding groups that are both strong and consistent) and All Green (all perf timeframes positive, shown as an emoji dot matrix). Each Sustained card shows "Confirmed X% · Agree X%" so you can see the raw conviction level at a glance.
 
@@ -255,7 +255,7 @@ All pipeline parameters live in `scripts/delta_config.py`. Edit that file to cha
 | `ACCEL_WINDOW` | `10` | Sessions lookback for `momentum_accel` (change in `momentum_score`). Best kept equal to a value already in `LOOKBACK_WINDOWS` (currently `LOOKBACK_WINDOWS[1]`) to avoid an extra `compute_ranks` pass. |
 | `SLOPE_WINDOW` | `10` | Sessions window for `rank_trend_slope` least-squares fit. |
 | `WEIGHTS_MID` / `WEIGHTS_FAST` | see file | Per-metric weights for `momentum_weighted_mid` / `_fast`. |
-| `REGIME_SHORT` / `REGIME_LONG` | day+week / half+year+ytd | Buckets for the `regime_short_long` signal. |
+| `REGIME_SHORT` / `REGIME_LONG` | wk+month / 3mo+6mo+year | Buckets for the `regime_short_long` signal. Day was excluded (too volatile); `perf_ytd` excluded from long (double-counts `perf_year`). |
 
 > **To change lookback windows:** edit `LOOKBACK_WINDOWS`, then re-run `compute_deltas.py --date <d>` for each existing date to populate the new columns. `ensure_deltas_csv()` auto-migrates the CSV header on the next run (old columns drop, new columns appear empty).
 

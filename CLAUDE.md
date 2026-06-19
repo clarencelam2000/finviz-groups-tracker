@@ -81,7 +81,7 @@ then the momentum columns: `momentum_score, momentum_confirmed, momentum_weighte
 - `momentum_confirmed`: `momentum_score × rank_agreement` (strength gated by cross-timeframe consistency).
 - `momentum_weighted_mid` / `_fast`: percentile means weighted toward 1mo/3mo / day-week respectively.
 - `momentum_accel`: change in `momentum_score` over `ACCEL_WINDOW` (10) sessions; positive = building.
-- `regime_short_long`: short- minus long-horizon percentile (range ~[-1,1]); positive = emerging leader, negative = fading.
+- `regime_short_long`: short- minus long-horizon percentile (range ~[-1,1]); positive = emerging leader, negative = fading. Short bucket: `perf_week + perf_month`. Long bucket: `perf_quarter + perf_half + perf_year`. Configured in `scripts/delta_config.py` as `REGIME_SHORT` / `REGIME_LONG`.
 - `rank_trend_slope`: negated least-squares slope of `rank_ytd` over the trailing window; positive = improving.
 - Delta/momentum columns are `NaN` until enough history exists (e.g., 50d deltas need 50+ sessions; accel needs 10).
 
