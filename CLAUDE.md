@@ -253,6 +253,7 @@ ship a user-facing change, do **all three** of these in the same PR:
 - **Context pressure**: Use `/compact` when nearing limits. Prioritize keeping INITIAL_SPEC.md decisions and script logic in context; data rows are expendable.
 - **Save research before it's lost**: If a session involved substantial research (API evaluation, debugging a non-obvious root cause, evaluating architectural trade-offs), write a summary to `knowledge/` before ending. A future Claude — or a human reading the code — should not have to rediscover it. Research logs go in `knowledge/` as free-form `.md` files; architectural decisions (and the alternatives rejected) go in `knowledge/decisions/` as ADRs. See `knowledge/README.md` for templates.
 
+Note: there's no send_later tool in this session, so you can't auto-schedule the hourly re-check — webhooks won't tell you about CI success or merge-conflict transitions, so user will ping you if they would like me to re-check, or you can respond to any review-comment/CI-failure events as they arrive.
 ---
 
 ## Repository structure
