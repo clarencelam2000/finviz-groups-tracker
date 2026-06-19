@@ -753,21 +753,31 @@
 
       if (pills.length < 2) { container.innerHTML = ''; return; }
 
-      const phaseMap = {
-        'Early Cycle': { icon: '🟢', short: 'Early' },
-        'Mid Cycle':   { icon: '🟡', short: 'Mid' },
-        'Late Cycle':  { icon: '🟠', short: 'Late' },
-        'Defensive':   { icon: '🔵', short: 'Def' },
+      const phaseColors = {
+        'Early Cycle': { dot: '#22c55e', text: '#86efac', short: 'Early' },
+        'Mid Cycle':   { dot: '#eab308', text: '#fde047', short: 'Mid'   },
+        'Late Cycle':  { dot: '#f97316', text: '#fdba74', short: 'Late'  },
+        'Defensive':   { dot: '#3b82f6', text: '#93c5fd', short: 'Def'   },
       };
 
       container.innerHTML = `
-        <div class="text-xs text-slate-500 uppercase tracking-wider mb-2 px-0.5">Phase history</div>
-        <div class="flex gap-1.5 overflow-x-auto scrollbar-none pb-1">
+        <div class="flex items-center gap-2.5 mb-3">
+          <div class="h-px flex-1" style="background:rgba(71,85,105,0.5)"></div>
+          <span class="text-[10px] text-slate-500 uppercase tracking-widest font-medium">Phase History</span>
+          <div class="h-px flex-1" style="background:rgba(71,85,105,0.5)"></div>
+        </div>
+        <div class="flex items-start gap-3 overflow-x-auto scrollbar-none pb-1 px-1">
           ${pills.map(p => {
-            const pm = phaseMap[p.label] || { icon: '⚪', short: p.label.slice(0, 4) };
-            return `<div class="flex-shrink-0 flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg ${p.isToday ? 'bg-slate-600 ring-1 ring-slate-400' : 'bg-slate-800 border border-slate-700'} text-center min-w-[44px]" title="${p.date}">
-              <span class="text-sm leading-none">${pm.icon}</span>
-              <span class="text-xs text-slate-400 leading-none">${pm.short}</span>
+            const pm = phaseColors[p.label] || { dot: '#64748b', text: '#94a3b8', short: p.label.slice(0, 4) };
+            const d = new Date(p.date + 'T12:00:00Z');
+            const fmtDate = (d.getUTCMonth() + 1) + '/' + d.getUTCDate();
+            const dotStyle = p.isToday
+              ? `background-color:${pm.dot};box-shadow:0 0 0 2px #0f172a,0 0 0 3.5px ${pm.dot};`
+              : `background-color:${pm.dot};opacity:0.55;`;
+            return `<div class="flex-shrink-0 flex flex-col items-center gap-1" title="${p.date} — ${p.label}">
+              <div class="w-5 h-5 rounded-full" style="${dotStyle}"></div>
+              <span class="text-[9px] leading-none font-medium" style="color:${pm.text};${!p.isToday ? 'opacity:0.7;' : ''}">${pm.short}</span>
+              ${p.isToday ? `<span class="text-[9px] text-slate-500 leading-none">${fmtDate}</span>` : ''}
             </div>`;
           }).join('')}
         </div>`;
