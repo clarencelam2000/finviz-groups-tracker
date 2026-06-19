@@ -55,8 +55,11 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   the last N trading sessions."
 
 ## perf_*_delta_Nd
-- Raw performance change vs N days ago — basis for an acceleration hint
-  (▲▲ accelerating / ▼ fading). Currently unused in the Lookup tab (backlog).
+- Raw performance change vs N trading sessions ago — basis for an acceleration
+  hint (▲▲ accelerating / ▼ fading). Surfaced on the Today tab's expanded card
+  as the "vs 20d ago" context row (wk and YTD perf change over ~1 month).
+- **User one-liner:** "How much this group's own return has changed versus N
+  trading sessions ago — positive means it's performing better than it was."
 
 ## rank_agreement
 - **Source:** `compute_rank_agreement` (L183). Converts month/quarter/half
