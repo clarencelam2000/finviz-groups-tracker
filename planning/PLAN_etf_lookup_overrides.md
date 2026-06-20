@@ -1,7 +1,7 @@
 # Fix ETF Lookups — Curated ETF→Finviz-Group Override Layer
 
-> Status: **Plan approved, Phase 0 (this doc) landing.** Phase 1 implementation has not
-> started — do not begin it until the team gives the go-ahead after this plan is merged.
+> Status: **Phase 0 + Phase 1 COMPLETE (2026-06-20).** All 1.1–1.9 steps implemented,
+> 50 worker tests + 165 Python tests pass. PR open on `claude/trusting-einstein-f1h4bo`.
 > Tracked as `ETF-1` in `.session/SPRINT.md`.
 
 ## Context (VP-level decision brief)
