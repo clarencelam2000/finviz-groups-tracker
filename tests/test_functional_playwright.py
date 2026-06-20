@@ -486,6 +486,53 @@ class TestPWAHub:
             server.terminate()
             server.wait()
 
+    def test_guide_tab_filter_and_smart_default(self):
+        from playwright.sync_api import sync_playwright
+
+        server = self._serve()
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                page = browser.new_page()
+                self._wire_routes(page)
+                page.goto("http://localhost:8183/", wait_until="networkidle", timeout=15000)
+
+                # Open hub → Guide; the chip row has all 7 chips.
+                page.locator("#hub-btn").click()
+                page.wait_for_timeout(300)
+                page.locator(".hub-section-btn[data-section='guide']").click()
+                page.wait_for_timeout(200)
+                assert page.locator(".guide-chip").count() == 7
+
+                # Filter to Momentum: a momentum metric shows, a movers-only one hides.
+                page.locator(".guide-chip[data-chip='momentum']").click()
+                page.wait_for_timeout(150)
+                assert page.locator("#guide-regime_short_long:not(.hidden)").count() == 1
+                assert page.locator("#guide-rank_delta.hidden").count() == 1
+
+                # 'All' restores the movers-only metric.
+                page.locator(".guide-chip[data-chip='all']").click()
+                page.wait_for_timeout(150)
+                assert page.locator("#guide-rank_delta:not(.hidden)").count() == 1
+
+                # Smart default: from the Movers tab, opening the Guide scopes to movers.
+                page.locator("#hub-close").click()
+                page.wait_for_timeout(300)
+                page.locator("[data-tab='movers']").click()
+                page.wait_for_timeout(150)
+                page.locator("#hub-btn").click()
+                page.wait_for_timeout(200)
+                page.locator(".hub-section-btn[data-section='guide']").click()
+                page.wait_for_timeout(200)
+                assert page.locator(".guide-chip[data-chip='movers'].bg-sky-600").count() == 1
+                assert page.locator("#guide-rank_delta:not(.hidden)").count() == 1
+                assert page.locator("#guide-regime_short_long.hidden").count() == 1
+
+                browser.close()
+        finally:
+            server.terminate()
+            server.wait()
+
     def test_unseen_dot_when_stored_release_is_stale(self):
         from playwright.sync_api import sync_playwright
 
@@ -516,7 +563,7 @@ class TestPWAHub:
                 page.wait_for_timeout(300)
                 assert page.locator("#hub-dot.hidden").count() == 1
                 seen = page.evaluate("() => localStorage.getItem('fvt_seen_release_v1')")
-                assert seen == "2026.06.19", f"seen release not persisted: {seen!r}"
+                assert seen == "2026.06.20", f"seen release not persisted: {seen!r}"
 
                 browser.close()
         finally:

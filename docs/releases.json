@@ -1,6 +1,17 @@
 {
-  "current": "2026.06.19",
+  "current": "2026.06.20",
   "releases": [
+    {
+      "version": "2026.06.20",
+      "date": "2026-06-20",
+      "title": "Filter the Guide by tab",
+      "tag": "improvement",
+      "notes": [
+        "The Guide now has tab chips (All · Today · Movers · Momentum · Strength · AI · Lookup) so you can see just the metrics relevant to where you are.",
+        "Smart default: opening the Guide from a tab — or from a 'why this matters' link — starts you on that tab's metrics instead of the full list.",
+        "Tab filter and search work together, and an 'All' chip always brings back the complete glossary."
+      ]
+    },
     {
       "version": "2026.06.19",
       "date": "2026-06-19",

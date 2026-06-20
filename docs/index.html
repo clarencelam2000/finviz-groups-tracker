@@ -301,46 +301,46 @@
     const SEEN_RELEASE_KEY = 'fvt_seen_release_v1';
     const GUIDE = {
       metrics: [
-        { id: 'momentum_score', label: 'Momentum score',
+        { id: 'momentum_score', label: 'Momentum score', tabs: ['today', 'momentum'],
           oneLiner: 'How strong this group is across every timeframe at once, from 0 to 100%.',
           detail: 'Average percentile rank across all seven perf timeframes (day → YTD). Higher = broadly strong everywhere.' },
-        { id: 'momentum_confirmed', label: 'Confirmed momentum',
+        { id: 'momentum_confirmed', label: 'Confirmed momentum', tabs: ['momentum', 'strength'],
           oneLiner: 'Momentum filtered by consistency — high only when the group is strong across timeframes AND those timeframes agree.',
           detail: 'momentum_score × rank_agreement. A strong score with low agreement (one outlier timeframe) is discounted.' },
-        { id: 'regime_short_long', label: 'Regime (emerging / fading)',
+        { id: 'regime_short_long', label: 'Regime (emerging / fading)', tabs: ['momentum'],
           oneLiner: 'Whether this group is gaining (+) or losing (−) momentum relative to its longer-term trend — positive means recently accelerating.',
           detail: 'Short-horizon percentile minus long-horizon percentile. Drives the Rotation buckets and the regime fill bar.' },
-        { id: 'momentum_accel', label: 'Acceleration',
+        { id: 'momentum_accel', label: 'Acceleration', tabs: ['momentum'],
           oneLiner: "How fast this group's momentum is building (+) or fading (−) over the last 10 trading sessions.",
           detail: 'Change in momentum_score over 10 sessions. Drives the ▲▲/▲/▼/▼▼ badges on Momentum cards.' },
-        { id: 'rank_trend_slope', label: 'Rank trend',
+        { id: 'rank_trend_slope', label: 'Rank trend', tabs: ['today'],
           oneLiner: "Whether this group's YTD ranking is on a consistent upward (↑) or downward (↓) trajectory over the last 10 sessions.",
           detail: 'Least-squares slope of rank_ytd over 10 sessions (negated so up = improving). Drives the ↑↑/↑/~/↓/↓↓ glyph on Today cards.' },
-        { id: 'rank_agreement', label: 'Rank agreement',
+        { id: 'rank_agreement', label: 'Rank agreement', tabs: ['strength', 'lookup'],
           oneLiner: 'How much the 1-, 3-, and 6-month rankings agree — high means a consistent trend, not a one-week pop.',
           detail: '0–1 score for how tightly the month/quarter/half percentile ranks cluster.' },
-        { id: 'rank', label: 'Rank',
+        { id: 'rank', label: 'Rank', tabs: ['today', 'movers', 'strength', 'lookup'],
           oneLiner: 'Where this group places among all groups for a given timeframe — #1 is the best performer.',
           detail: 'Derived from perf each day (never scraped). Rank 1 = highest % gain.' },
-        { id: 'rank_delta', label: 'Rank change (Nd)',
+        { id: 'rank_delta', label: 'Rank change (Nd)', tabs: ['movers'],
           oneLiner: 'How many spots this group moved up (+) or down (−) over the last N trading sessions.',
           detail: 'N is measured in trading sessions (5 / 10 / 20 / 50), not calendar days. Positive = improved.' },
-        { id: 'perf_delta', label: 'Performance change (Nd)',
+        { id: 'perf_delta', label: 'Performance change (Nd)', tabs: ['today'],
           oneLiner: "How much this group's own return has changed versus N trading sessions ago — positive means it's performing better than it was.",
           detail: 'Shown on an expanded Today card as the "vs 20d ago" row: week and YTD % change over ~1 month. Unlike rank change, this is the group vs. itself, not vs. other groups.' },
-        { id: 'sustained_strength', label: 'Sustained strength',
+        { id: 'sustained_strength', label: 'Sustained strength', tabs: ['strength'],
           oneLiner: 'Strong across 1, 3, and 6 months at the same time — not just a recent flash.',
           detail: 'Top-N in rank_month AND rank_quarter AND rank_half simultaneously.' },
-        { id: 'breadth', label: 'All green / breadth',
+        { id: 'breadth', label: 'All green / breadth', tabs: ['strength', 'lookup'],
           oneLiner: "Whether the group is positive across the major timeframes — all green means everything's trending up.",
           detail: 'Gates on month/quarter/half/YTD; the day & week dots show context but do not gate the verdict.' },
-        { id: 'rank_floor', label: 'Rank floor',
+        { id: 'rank_floor', label: 'Rank floor', tabs: ['lookup'],
           oneLiner: "The lowest this group's ranking has dropped to across 1, 3, and 6 months — its floor.",
           detail: 'Worst (numerically highest) rank across rank_month / quarter / half. "Never worse than #N."' },
-        { id: 'rotation_phase', label: 'Rotation phase (AI)',
+        { id: 'rotation_phase', label: 'Rotation phase (AI)', tabs: ['ai'],
           oneLiner: 'An AI read of where the market is in its cycle — Early, Mid, or Late Cycle, or Defensive — based on which sectors are leading.',
           detail: 'Generated nightly from the sector signals (sectors only). Shown on the AI tab with a reasoning line and summarized in the Phase History strip.' },
-        { id: 'ai_note', label: 'AI daily note',
+        { id: 'ai_note', label: 'AI daily note', tabs: ['ai'],
           oneLiner: 'A plain-English summary the AI writes each day for sectors and industries, highlighting strength, movers, and divergences.',
           detail: 'Freeform briefing built from the computed signals — sustained strength, notable movers, momentum leaders and laggards, and divergences.' },
       ],
@@ -352,6 +352,23 @@
       ],
       // The legend is built from the live threshold constants — see buildLegend().
     };
+
+    // Guide tab-filter chips. Order mirrors the main tab bar; 'all' shows every
+    // metric. Each GUIDE metric carries a `tabs: [...]` array (see metrics above);
+    // a metric appears under a chip if that chip's id is in its tabs. Keep these
+    // labels in sync with the tab bar (#tab-bar) if tabs are renamed.
+    const GUIDE_TAB_CHIPS = [
+      { id: 'all',      label: 'All'      },
+      { id: 'today',    label: 'Today'    },
+      { id: 'movers',   label: 'Movers'   },
+      { id: 'momentum', label: 'Momentum' },
+      { id: 'strength', label: 'Strength' },
+      { id: 'ai',       label: 'AI'       },
+      { id: 'lookup',   label: 'Lookup'   },
+    ];
+    // Active Guide chip. Reset on each hub open from context (see setHubSection):
+    // the metric you deep-linked to, or the tab you opened the hub from.
+    let guideTabFilter = 'all';
 
     const ALL_METRICS = [
       { key: 'perf_day',   label: 'Day' },
@@ -2030,11 +2047,27 @@
         b.classList.toggle('text-white', active);
         b.classList.toggle('text-slate-400', !active);
       });
+      // Smart default for the Guide tab filter: when deep-linking to a metric,
+      // scope to that metric's tab (so it stays visible); otherwise scope to the
+      // tab the hub was opened from. Falls back to 'all' if neither is a known tab.
+      if (section === 'guide') {
+        const validTab = (t) => GUIDE_TAB_CHIPS.some(c => c.id === t && c.id !== 'all');
+        const anchorMetric = anchorId && GUIDE.metrics.find(m => m.id === anchorId);
+        if (anchorMetric && Array.isArray(anchorMetric.tabs) && anchorMetric.tabs.length) {
+          guideTabFilter = anchorMetric.tabs[0];
+        } else if (validTab(state.tab)) {
+          guideTabFilter = state.tab;
+        } else {
+          guideTabFilter = 'all';
+        }
+      }
       const body = document.getElementById('hub-body');
       body.innerHTML = section === 'guide' ? renderGuideSheet() : renderWhatsNew();
       body.scrollTop = 0;
       if (section === 'guide') {
         wireGuideSearch();
+        wireGuideChips();
+        applyGuideFilter();
         if (anchorId) {
           const el = document.getElementById('guide-' + anchorId);
           if (el) { if (el.tagName === 'DETAILS') el.open = true; el.scrollIntoView({ block: 'start' }); }
@@ -2091,8 +2124,15 @@
       const search = `<input id="guide-search" type="search" inputmode="search" autocomplete="off" spellcheck="false"
           placeholder="Search the guide…"
           class="w-full bg-slate-800 text-slate-200 rounded-lg px-3 py-2 text-sm border border-slate-600 placeholder-slate-500 outline-none focus:border-slate-500">`;
+      const chips = GUIDE_TAB_CHIPS.map(c => {
+        const active = c.id === guideTabFilter;
+        return `<button class="guide-chip flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-medium border ${active ? 'bg-sky-600 border-sky-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}"
+                 data-chip="${c.id}">${escapeHtml(c.label)}</button>`;
+      }).join('');
+      const chipRow = `<div id="guide-chips" class="flex gap-1.5 overflow-x-auto scrollbar-none mb-3 -mx-1 px-1">${chips}</div>`;
       const metrics = GUIDE.metrics.map(m => `
         <details id="guide-${m.id}" class="guide-entry rounded-xl bg-slate-800/60 border border-slate-700 mb-1.5"
+                 data-tabs="${escapeHtml((m.tabs || []).join(' '))}"
                  data-text="${escapeHtml((m.label + ' ' + m.oneLiner + ' ' + m.detail).toLowerCase())}">
           <summary class="text-sm px-3 py-2.5 flex items-center justify-between">
             <span class="text-slate-200 font-medium">${escapeHtml(m.label)}</span>
@@ -2107,8 +2147,10 @@
         `<li class="flex gap-2"><span class="text-sky-400 flex-shrink-0">▸</span><span>${escapeHtml(s)}</span></li>`).join('');
       return `
         <div class="mb-3">${search}</div>
+        ${chipRow}
         <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Metrics</h3>
         <div id="guide-metrics">${metrics}</div>
+        <p id="guide-empty" class="hidden text-slate-500 text-sm text-center py-4">No metrics for this tab. Tap “All” to see everything.</p>
         <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-5 mb-2">Legend</h3>
         <div class="space-y-1.5 text-sm">${buildLegend()}</div>
         <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-5 mb-2">How to read a card</h3>
@@ -2118,12 +2160,42 @@
     function wireGuideSearch() {
       const inp = document.getElementById('guide-search');
       if (!inp) return;
-      inp.addEventListener('input', () => {
-        const q = inp.value.trim().toLowerCase();
-        document.querySelectorAll('.guide-entry').forEach(el => {
-          el.classList.toggle('hidden', !!q && !el.dataset.text.includes(q));
-        });
+      inp.addEventListener('input', applyGuideFilter);
+    }
+
+    function wireGuideChips() {
+      document.querySelectorAll('.guide-chip').forEach(btn =>
+        btn.addEventListener('click', () => {
+          guideTabFilter = btn.dataset.chip;
+          document.querySelectorAll('.guide-chip').forEach(b => {
+            const active = b.dataset.chip === guideTabFilter;
+            b.classList.toggle('bg-sky-600', active);
+            b.classList.toggle('border-sky-500', active);
+            b.classList.toggle('text-white', active);
+            b.classList.toggle('bg-slate-800', !active);
+            b.classList.toggle('border-slate-700', !active);
+            b.classList.toggle('text-slate-400', !active);
+          });
+          applyGuideFilter();
+        }));
+    }
+
+    // Combined Guide filter: a metric shows only if it matches BOTH the active
+    // tab chip (or 'all') AND the search text. Search spans label/oneLiner/detail.
+    function applyGuideFilter() {
+      const inp = document.getElementById('guide-search');
+      const q = inp ? inp.value.trim().toLowerCase() : '';
+      let visible = 0;
+      document.querySelectorAll('.guide-entry').forEach(el => {
+        const tabOk = guideTabFilter === 'all'
+          || (el.dataset.tabs || '').split(' ').includes(guideTabFilter);
+        const textOk = !q || el.dataset.text.includes(q);
+        const show = tabOk && textOk;
+        el.classList.toggle('hidden', !show);
+        if (show) visible++;
       });
+      const empty = document.getElementById('guide-empty');
+      if (empty) empty.classList.toggle('hidden', visible > 0);
     }
 
     // Globals for the header button, banner, contextual links, and What's New jumps.

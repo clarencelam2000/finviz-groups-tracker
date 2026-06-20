@@ -22,6 +22,9 @@ METRICS_MD = ROOT / "knowledge" / "moaty-metrics.md"
 
 VALID_TAGS = {"feature", "fix", "data", "improvement"}
 
+# Mirrors the data-tab values in the PWA tab bar (#tab-bar in index.html).
+VALID_GUIDE_TABS = {"today", "movers", "momentum", "strength", "ai", "lookup"}
+
 
 def _index_html():
     return INDEX.read_text(encoding="utf-8")
@@ -43,6 +46,28 @@ def _guide_one_liners():
     return re.findall(r"oneLiner:\s*(?:'((?:[^'\\]|\\.)*)'|\"((?:[^\"\\]|\\.)*)\")", block)
 
 
+def _guide_metric_tabs():
+    """Parse each GUIDE metric's id + tabs[] (both on the entry's first line)."""
+    html = _index_html()
+    start = html.index("const GUIDE = {")
+    block = html[start:html.index("howto:", start)]
+    pairs = re.findall(r"\{\s*id:\s*'([^']+)',[^\n]*?tabs:\s*\[([^\]]*)\]", block)
+    return {mid: re.findall(r"'([^']+)'", tabs) for mid, tabs in pairs}
+
+
+def test_every_guide_metric_has_valid_tabs():
+    """Each metric must carry a non-empty tabs[] of known tab ids, so it can
+    never vanish under all chip filters (Guide tab-filter drift guard)."""
+    ids = set(_guide_metric_ids())
+    tabs_by_id = _guide_metric_tabs()
+    missing = ids - set(tabs_by_id)
+    assert not missing, f"GUIDE metrics missing a tabs[] array: {missing}"
+    for mid, tabs in tabs_by_id.items():
+        assert tabs, f"GUIDE metric {mid} has an empty tabs[]"
+        bad = set(tabs) - VALID_GUIDE_TABS
+        assert not bad, f"GUIDE metric {mid} has unknown tab(s): {bad}"
+
+
 def test_why_links_target_existing_guide_ids():
     html = _index_html()
     linked = set(re.findall(r"__openHub\('guide','([^']+)'\)", html))
@@ -57,7 +82,7 @@ def test_every_guide_metric_has_copy():
     start = html.index("const GUIDE = {")
     block = html[start:html.index("howto:", start)]
     entries = re.findall(
-        r"\{\s*id:\s*'([^']+)',\s*label:\s*'([^']+)',\s*oneLiner:",
+        r"\{\s*id:\s*'([^']+)',\s*label:\s*'([^']+)',[\s\S]*?oneLiner:",
         block,
     )
     ids = _guide_metric_ids()
