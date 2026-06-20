@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseCsv, buildTaxonomy } from '../scripts/build_taxonomy.js';
+import { parseCsv, buildTaxonomy, extractSnapshotNames, buildEtfOverrides } from '../scripts/build_taxonomy.js';
 
 describe('parseCsv', () => {
   it('parses simple rows', () => {
@@ -53,5 +53,87 @@ describe('buildTaxonomy', () => {
     const r = parseCsv('fmp_industry,fmp_sector,finviz_industry,finviz_sector,confidence,note\nX,Y,Z,W,,note\n');
     const t = buildTaxonomy(r);
     expect(t.industries['X'].confidence).toBe(0);
+  });
+});
+
+describe('extractSnapshotNames', () => {
+  const snapshotCsv =
+    'date,collected_at,group_type,name,stocks\n' +
+    '2026-06-09,2026-06-09T06:19:08Z,sector,Technology,100\n' +
+    '2026-06-09,2026-06-09T06:19:08Z,sector,Energy,50\n';
+
+  it('extracts unique name values from snapshot CSV', () => {
+    const names = extractSnapshotNames(snapshotCsv);
+    expect(names.has('Technology')).toBe(true);
+    expect(names.has('Energy')).toBe(true);
+    expect(names.size).toBe(2);
+  });
+
+  it('returns empty set for header-only CSV', () => {
+    expect(extractSnapshotNames('date,name\n').size).toBe(0);
+  });
+
+  it('returns empty set when name column is absent', () => {
+    expect(extractSnapshotNames('date,ticker\n2026-06-09,AAPL\n').size).toBe(0);
+  });
+});
+
+describe('buildEtfOverrides', () => {
+  const industries = new Set(['Semiconductors', 'Gold', 'Airlines']);
+  const sectors = new Set(['Technology', 'Basic Materials', 'Industrials', 'Energy']);
+
+  const etfCsv =
+    'ticker,finviz_industry,finviz_sector,etf_name,kind,note\n' +
+    'SMH,Semiconductors,Technology,VanEck Semiconductor ETF,thematic,semis\n' +
+    'GDX,Gold,Basic Materials,VanEck Gold Miners ETF,thematic,gold\n' +
+    'JETS,Airlines,Industrials,U.S. Global Jets ETF,thematic,airlines\n' +
+    'XLE,,Energy,Energy SPDR,sector,energy sector\n' +
+    'SPY,,,SPDR S&P 500,diversified,broad market\n';
+
+  it('builds an overrides map keyed by uppercased ticker', () => {
+    const { overrides, errors } = buildEtfOverrides(parseCsv(etfCsv), industries, sectors);
+    expect(errors).toHaveLength(0);
+    expect(overrides['SMH']).toEqual({ finviz_industry: 'Semiconductors', finviz_sector: 'Technology', kind: 'thematic' });
+  });
+
+  it('sector kind has blank finviz_industry', () => {
+    const { overrides } = buildEtfOverrides(parseCsv(etfCsv), industries, sectors);
+    expect(overrides['XLE'].finviz_industry).toBe('');
+    expect(overrides['XLE'].finviz_sector).toBe('Energy');
+    expect(overrides['XLE'].kind).toBe('sector');
+  });
+
+  it('diversified kind has both fields blank', () => {
+    const { overrides } = buildEtfOverrides(parseCsv(etfCsv), industries, sectors);
+    expect(overrides['SPY'].finviz_industry).toBe('');
+    expect(overrides['SPY'].finviz_sector).toBe('');
+    expect(overrides['SPY'].kind).toBe('diversified');
+  });
+
+  it('returns validation error for unknown finviz_industry', () => {
+    const badCsv =
+      'ticker,finviz_industry,finviz_sector,etf_name,kind,note\n' +
+      'BOGUS,Copper Miners,Basic Materials,Test ETF,thematic,test\n';
+    const { errors } = buildEtfOverrides(parseCsv(badCsv), industries, sectors);
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0]).toContain('"Copper Miners"');
+  });
+
+  it('returns validation error for unknown finviz_sector', () => {
+    const badCsv =
+      'ticker,finviz_industry,finviz_sector,etf_name,kind,note\n' +
+      'BOGUS,,Bogus Sector,Test ETF,sector,test\n';
+    const { errors } = buildEtfOverrides(parseCsv(badCsv), industries, sectors);
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0]).toContain('"Bogus Sector"');
+  });
+
+  it('skips rows with blank ticker', () => {
+    const csvWithBlank =
+      'ticker,finviz_industry,finviz_sector,etf_name,kind,note\n' +
+      ',Semiconductors,Technology,Missing Ticker ETF,thematic,\n' +
+      'SMH,Semiconductors,Technology,VanEck Semiconductor ETF,thematic,semis\n';
+    const { overrides } = buildEtfOverrides(parseCsv(csvWithBlank), industries, sectors);
+    expect(Object.keys(overrides)).toEqual(['SMH']);
   });
 });
