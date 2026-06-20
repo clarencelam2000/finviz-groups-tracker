@@ -105,8 +105,8 @@ def test_releases_json_valid_and_current_matches_newest():
     for r in data["releases"]:
         for field in ("version", "date", "title", "tag", "notes"):
             assert field in r, f"release {r.get('version')} missing {field}"
-        assert re.fullmatch(r"\d{4}\.\d{2}\.\d{2}", r["version"]), (
-            f"version {r['version']} must be YYYY.MM.DD"
+        assert re.fullmatch(r"\d{4}\.\d{2}\.\d{2}(\.\d+)?", r["version"]), (
+            f"version {r['version']} must be YYYY.MM.DD or YYYY.MM.DD.N"
         )
         assert r["tag"] in VALID_TAGS, f"unknown tag {r['tag']}"
         assert r["notes"], "release notes must be non-empty"

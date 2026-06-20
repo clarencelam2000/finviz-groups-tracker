@@ -1657,9 +1657,12 @@
     }
 
     // Check GROUP_SYNONYMS first; returns {name, groupKey} or null.
+    // Ticker heuristic: ≤4 chars, no space, alphanumeric → skip synonym to preserve
+    // ticker path (e.g. TECH ETF). Mirrors the bypass in findFuzzyGroupMatch.
     function resolveGroupSynonym(raw) {
       if (!raw) return null;
       const q = raw.trim().toLowerCase();
+      if (q.length <= 4 && !q.includes(' ') && /^[a-z0-9]+$/.test(q)) return null;
       const target = GROUP_SYNONYMS[q];
       if (!target) return null;
       for (const groupKey of ['industries', 'sectors']) {
