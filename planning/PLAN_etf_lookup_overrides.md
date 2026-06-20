@@ -62,6 +62,10 @@ overrides retained as the precedence layer.
   industries) and `data/sectors/snapshots.csv` (11 sectors). Verified verbatim presence of
   `Copper`, `Aerospace & Defense`, `Semiconductors`, `Biotechnology`, `Gold`, `Uranium`,
   `Solar`, `Airlines`, `Oil & Gas E&P`, `Banks - Regional`.
+- **`isEtf` signal validated (2026-06-20):** Live FMP `stable/profile` responses confirmed
+  `isEtf: true` for all 19 planned seed ETFs (COPX, ITA, XLE, XLF, SPY, QQQ, SMH, SOXX,
+  XBI, IBB, GDX, GDXJ, URA, TAN, JETS, XOP, OIH, KRE, KBE). The gate `Boolean(p.isEtf)` is
+  a reliable signal for this override layer; no fallback to `isFund` is needed.
 - **FMP free-tier facts** (`knowledge/fmp-api-findings.md`): only `stable/profile` works;
   `available-industries`/`available-sectors`/`profile-bulk`/holdings are paid (402). Daily
   cap ~240 calls — the 30-day KV cache makes runtime cost ~1 call/ticker/30 days.
@@ -112,7 +116,13 @@ All `finviz_*` values **must match Finviz names verbatim** — enforced by 1.2.
   for every non-blank override value assert membership; **exit non-zero with a clear message**
   on any unknown group. This guarantees overrides link into the rotation map and prevents
   silent typos (e.g. "Aerospace and Defense").
-- Keep existing `npm run build:taxonomy` and `npm run deploy` wiring (deploy builds first).
+- **Single script, two outputs:** the extended `build_taxonomy.js` emits both
+  `taxonomy_map.json` (existing) and `etf_overrides.json` (new) in one run. This keeps
+  `npm run build:taxonomy` and `npm run deploy` (`build:taxonomy && wrangler deploy`) intact
+  with no changes to `package.json`. Do not introduce a separate `build:overrides` script.
+- **Export the validation function** (alongside existing `parseCsv` / `buildTaxonomy`
+  exports) so vitest can import it and test the bogus-name exit path with a fixture — not
+  via a subprocess call. See §1.6.
 
 ### 1.3 Runtime lookup: extend `worker/src/taxonomy.js`
 Add `lookupEtf(symbol)` importing `etf_overrides.json`; return
@@ -137,11 +147,23 @@ ETF entries keep the old wrong value until TTL. Bust the seed set post-deploy vi
 `DELETE /cache?t=...` for each seeded ETF (or accept natural expiry). Document in README.
 
 ### 1.5 PWA rendering: `docs/index.html` `renderLookup()` (~L1982–2046)
-- When `classification_source === 'etf_override'` and `etf_kind !== 'diversified'`: render the
-  industry/sector cards as normal plus a small badge: **"ETF — classified by holdings theme."**
-- When `etf_kind === 'diversified'`: render **"Broad market ETF — not a single rotation
-  group"** instead of an industry card (no false group link).
-- Leave non-ETF rendering untouched.
+Three ETF rendering states, determined by `etf_kind` (absent / `null` = not an ETF override):
+
+- **`thematic`** (`finviz_industry` set): render industry + sector cards as normal, plus a
+  small badge **"ETF — classified by holdings theme."**
+- **`sector`** (`finviz_industry` blank, `finviz_sector` set): render sector card only (no
+  industry card — there isn't one); badge reads **"Sector ETF — spans all industries within
+  this sector."** Do not render an empty industry slot.
+- **`diversified`** (both blank): render **"Broad market ETF — not a single rotation group"**
+  instead of any industry/sector card.
+
+Leave non-ETF rendering (`etf_kind` absent or `null`) entirely untouched.
+
+**Backward-compat note for stale KV cache entries:** entries cached before deploy have no
+`classification_source` or `etf_kind` fields. Treat absent/`undefined` `classification_source`
+as `'fmp_taxonomy'` and absent/`undefined` `etf_kind` as `null`. Stale-cached ETF entries
+will silently show no badge (acceptable until TTL); the seed set should be busted post-deploy
+(see §1.4 cache caveat).
 
 ### 1.6 Tests
 - `worker/test/index.test.js`: mock FMP returning `isEtf:true, sector:"Financial Services",
@@ -150,8 +172,10 @@ ETF entries keep the old wrong value until TTL. Bust the seed set post-deploy vi
   ITA → Aerospace & Defense. Assert a non-ETF (AAPL) is unchanged
   (`classification_source === "fmp_taxonomy"`). Assert a `diversified` ETF (SPY) returns empty
   industry + `etf_kind === "diversified"`.
-- Build validation: a small test (or script self-check) proving an override row referencing a
-  bogus group name causes `build_taxonomy` to fail. Use a fixture, not the real CSV.
+- Build validation: import the exported validation function from `build_taxonomy.js` directly
+  in vitest (same pattern as existing `parseCsv`/`buildTaxonomy` imports). Pass a fixture CSV
+  with a bogus group name and assert the function throws / returns a non-zero signal. Do NOT
+  use a subprocess call (`child_process.execSync`) — it makes the test brittle and slow.
 - Run `cd worker && npm test` and root `python3 -m pytest tests/ -q` before each commit.
 
 ### 1.7 Docs (same PR as the code)
@@ -217,7 +241,11 @@ curl ".../lookup?t=ITA"    # finviz_industry "Aerospace & Defense"
 ```
 
 ## Open questions / assumptions
-- Seed list of ~30–50 ETFs is a starting point; refine from real lookup logs over time.
+- **`isEtf` signal: validated.** Live FMP API confirmed `isEtf: true` for all 19 seed ETFs
+  on 2026-06-20 (see Current architecture above). Not an open question — proceed with
+  `Boolean(p.isEtf)` gate.
+- Seed list names ~31 tickers (15 thematic + 11 sector SPDRs + 5 diversified); refine from
+  real lookup logs over time. The "~30–50" range in the options table is directional.
 - Leveraged/inverse ETFs (SOXL, etc.) are out of the initial seed — add as `thematic`
   pointing at the underlying industry only if demand appears.
 - `etf_overrides.json` is bundled into the worker, so updates require a deploy (acceptable;
