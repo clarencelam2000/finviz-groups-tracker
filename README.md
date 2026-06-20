@@ -256,6 +256,9 @@ All pipeline parameters live in `scripts/delta_config.py`. Edit that file to cha
 | `SLOPE_WINDOW` | `10` | Sessions window for `rank_trend_slope` least-squares fit. |
 | `WEIGHTS_MID` / `WEIGHTS_FAST` | see file | Per-metric weights for `momentum_weighted_mid` / `_fast`. |
 | `REGIME_SHORT` / `REGIME_LONG` | wk+month / 3mo+6mo+year | Buckets for the `regime_short_long` signal. Day was excluded (too volatile); `perf_ytd` excluded from long (double-counts `perf_year`). |
+| `RS_SLOPE_COL` | `"rs_month"` | Canonical RS spread used for the `rs_slope` least-squares fit. `rs_month` chosen as the most informative mid-frequency RS signal. |
+| `RS_AGREEMENT_COLS` | `["rs_month", "rs_quarter", "rs_half"]` | RS spread columns used to compute `rs_agreement`. Mirrors `rank_agreement` inputs for consistency. |
+| `RS_REGIME_SHORT` / `RS_REGIME_LONG` | wk+month / qtr+half+year | Buckets for `rs_regime_short_long` (RS analog of `regime_short_long`). |
 
 > **To change lookback windows:** edit `LOOKBACK_WINDOWS`, then re-run `compute_deltas.py --date <d>` for each existing date to populate the new columns. `ensure_deltas_csv()` auto-migrates the CSV header on the next run (old columns drop, new columns appear empty).
 

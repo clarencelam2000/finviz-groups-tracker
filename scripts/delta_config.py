@@ -72,6 +72,43 @@ ACCEL_WINDOW = 10
 SLOPE_WINDOW = 10
 
 
+# ---------------------------------------------------------------------------
+# Relative-strength (RS vs SPY) columns
+# ---------------------------------------------------------------------------
+
+# Raw RS spreads: group_perf_X − SPY_perf_X per timeframe.
+# Positive = beating the market over that horizon.
+RS_TIMEFRAMES = [
+    "rs_day", "rs_week", "rs_month", "rs_quarter", "rs_half", "rs_year", "rs_ytd",
+]
+
+# Canonical RS line used for rs_slope computation (least-squares slope of
+# this spread over SLOPE_WINDOW sessions). rs_month is chosen because it is
+# the most informative mid-frequency signal for detecting relative-strength
+# trends, matching the 1-month window used by regime_short_long.
+RS_SLOPE_COL = "rs_month"
+
+# Medium-timeframe RS columns used to compute rs_agreement.
+# Mirrors the rank_agreement inputs (rank_month/quarter/half) for consistency.
+RS_AGREEMENT_COLS = ["rs_month", "rs_quarter", "rs_half"]
+
+# Short/long RS horizon buckets for rs_regime_short_long.
+# Short = week + month (fresh rotation signal without day noise).
+# Long = quarter + half + year (durable trend baseline).
+RS_REGIME_SHORT = ["rs_week", "rs_month"]
+RS_REGIME_LONG = ["rs_quarter", "rs_half", "rs_year"]
+
+# All RS-derived columns appended after MOMENTUM_COLS in the deltas schema.
+RS_COLS = RS_TIMEFRAMES + [
+    "rs_score",           # 0–1; mean percentile of RS spreads across all 7 timeframes
+    "rs_agreement",       # 0–1; cross-timeframe consistency of RS spreads (mo/qtr/half)
+    "rs_confirmed",       # rs_score × rs_agreement; strength gated by consistency
+    "rs_slope",           # LS slope of rs_month over SLOPE_WINDOW; positive = building
+    "rs_accel",           # change in rs_score over ACCEL_WINDOW; positive = RS building
+    "rs_regime_short_long",  # short-horizon RS − long-horizon RS; positive = emerging leader
+]
+
+
 def delta_columns() -> list[str]:
     """Return the full ordered list of deltas.csv columns.
 
@@ -85,4 +122,5 @@ def delta_columns() -> list[str]:
         for m in PERF_DELTA_METRICS:
             cols.append(f"{m}_delta_{w}d")
     cols += MOMENTUM_COLS
+    cols += RS_COLS
     return cols
