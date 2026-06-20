@@ -1,10 +1,12 @@
 /**
  * taxonomy.js — runtime FMP→Finviz taxonomy lookup.
  *
- * taxonomy_map.json is generated from data/taxonomy_map.csv by
- * scripts/build_taxonomy.js. Re-run that script after editing the CSV.
+ * taxonomy_map.json and etf_overrides.json are generated from
+ * data/taxonomy_map.csv and data/etf_overrides.csv by scripts/build_taxonomy.js.
+ * Re-run that script after editing either CSV.
  */
 import taxonomy from './taxonomy_map.json';
+import etfOverrides from './etf_overrides.json';
 
 const INDUSTRIES = taxonomy.industries || {};
 const SECTORS = taxonomy.sectors || {};
@@ -31,4 +33,15 @@ export function lookupTaxonomy(fmpIndustry) {
  */
 export function lookupSector(fmpSector) {
   return (fmpSector && SECTORS[fmpSector]) || '';
+}
+
+/**
+ * Look up a curated ETF override by ticker symbol (uppercased).
+ * Returns {finviz_industry, finviz_sector, kind} on hit, null on miss.
+ * The override layer sits above FMP taxonomy — curated values win.
+ * Source: data/etf_overrides.csv (rebuilt by scripts/build_taxonomy.js).
+ */
+export function lookupEtf(symbol) {
+  const hit = symbol ? etfOverrides[symbol.toUpperCase()] : null;
+  return hit || null;
 }

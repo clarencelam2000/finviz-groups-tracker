@@ -4,17 +4,17 @@
     {
       "version": "2026.06.20",
       "date": "2026-06-20",
-      "title": "Lookup group search + Guide improvements",
-      "tag": "feature",
+      "title": "ETF lookups fixed + Lookup group search",
+      "tag": "fix",
       "tab": "lookup",
       "notes": [
-        "Type a sector or industry name in the Lookup tab — it resolves instantly from cached data, no network call needed (e.g. Semiconductors, Energy, Technology).",
-        "Typeahead dropdown appears as you type (≥ 2 chars): up to 6 matches from both sectors and industries, matched text highlighted, keyboard-navigable (↑ ↓ Enter Esc).",
-        "Group cards now show a full deep-dive: all 7 timeframe ranks, all 7 performance %s, YTD rank deltas over every window, and a momentum section (confirmed, acceleration, regime, rank trend).",
-        "The deep-dive also shows for industry and sector cards when looking up a ticker — full context without leaving the Lookup tab.",
-        "The Guide now has tab chips (All · Today · Movers · Momentum · Strength · AI · Lookup) so you can see just the metrics relevant to where you are.",
-        "Smart default: opening the Guide from a tab starts you on that tab's metrics automatically.",
-        "Glossary in the Lookup card now explains all deep-dive metrics (confirmed momentum, acceleration, regime, rank trend, YTD rank delta)."
+        "ETF lookups now show their true sector or industry. COPX shows Basic Materials › Copper, ITA shows Industrials › Aerospace & Defense, SMH shows Technology › Semiconductors — not \"Financial / Asset Management\" (which was what FMP reports for all fund entities).",
+        "Thematic ETFs (COPX, ITA, SMH, SOXX, XBI, IBB, GDX, GDXJ, URA, TAN, JETS, XOP, OIH, KRE, KBE) now show their holdings theme with a blue badge.",
+        "Sector SPDR ETFs (XLE, XLF, XLI, XLK, XLV, XLP, XLY, XLU, XLB, XLRE, XLC) show the sector card and a \"Sector ETF\" badge — no industry card since they span all industries.",
+        "Broad market ETFs (SPY, QQQ, VTI, DIA, IWM) show an informational card explaining they track the full market — no single rotation group applies.",
+        "Type a sector or industry name in the Lookup tab — it resolves instantly from cached data, zero network calls (e.g. Semiconductors, Energy, Technology).",
+        "Typeahead dropdown appears as you type (≥ 2 chars): up to 6 matches, matched text highlighted, keyboard-navigable (↑ ↓ Enter Esc).",
+        "Group cards now show a full deep-dive: all 7 timeframe ranks and performance %s, YTD rank deltas, and a momentum section (confirmed, acceleration, regime, rank trend)."
       ]
     },
     {
