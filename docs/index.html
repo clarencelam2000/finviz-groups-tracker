@@ -211,12 +211,17 @@
 
     <!-- TAB: Ticker Lookup -->
     <section id="tab-lookup" class="px-3 pt-3 pb-24 hidden">
-      <p class="text-xs text-slate-500 mb-3">Enter a ticker to see its Finviz sector/industry and how those groups are tracking right now.</p>
+      <p class="text-xs text-slate-500 mb-3">Enter a ticker or group name (e.g. AAPL, Semiconductors, Energy).</p>
       <div class="flex gap-2 mb-4">
-        <input id="ticker-input" type="text" inputmode="text" autocomplete="off"
-               autocapitalize="characters" spellcheck="false" maxlength="10"
-               placeholder="Ticker (e.g. AAPL)"
-               class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500">
+        <div class="relative flex-1">
+          <input id="ticker-input" type="text" inputmode="text" autocomplete="off"
+                 autocapitalize="off" spellcheck="false" maxlength="60"
+                 placeholder="Search ticker or group…"
+                 class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500">
+          <div id="lookup-suggestions"
+               class="hidden absolute z-30 left-0 right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-lg overflow-hidden shadow-xl"
+               role="listbox" aria-label="Group suggestions"></div>
+        </div>
         <button id="ticker-submit" class="px-4 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-500 transition-colors">Look up</button>
       </div>
       <div id="lookup-result" class="space-y-3"></div>
@@ -274,7 +279,7 @@
       currentAiDate: null,
       loading: false,
       expandedName: null,
-      lookup: { symbol: null, data: null, loading: false, error: null },
+      lookup: { symbol: null, data: null, loading: false, error: null, groupResult: null },
     };
 
     // ── Preferences (localStorage) ─────────────────────────────────────────
@@ -301,19 +306,19 @@
     const SEEN_RELEASE_KEY = 'fvt_seen_release_v1';
     const GUIDE = {
       metrics: [
-        { id: 'momentum_score', label: 'Momentum score', tabs: ['today', 'momentum'],
+        { id: 'momentum_score', label: 'Momentum score', tabs: ['today', 'momentum', 'lookup'],
           oneLiner: 'How strong this group is across every timeframe at once, from 0 to 100%.',
           detail: 'Average percentile rank across all seven perf timeframes (day → YTD). Higher = broadly strong everywhere.' },
-        { id: 'momentum_confirmed', label: 'Confirmed momentum', tabs: ['momentum', 'strength'],
+        { id: 'momentum_confirmed', label: 'Confirmed momentum', tabs: ['momentum', 'strength', 'lookup'],
           oneLiner: 'Momentum filtered by consistency — high only when the group is strong across timeframes AND those timeframes agree.',
           detail: 'momentum_score × rank_agreement. A strong score with low agreement (one outlier timeframe) is discounted.' },
-        { id: 'regime_short_long', label: 'Regime (emerging / fading)', tabs: ['momentum'],
+        { id: 'regime_short_long', label: 'Regime (emerging / fading)', tabs: ['momentum', 'lookup'],
           oneLiner: 'Whether this group is gaining (+) or losing (−) momentum relative to its longer-term trend — positive means recently accelerating.',
           detail: 'Short-horizon percentile minus long-horizon percentile. Drives the Rotation buckets and the regime fill bar.' },
-        { id: 'momentum_accel', label: 'Acceleration', tabs: ['momentum'],
+        { id: 'momentum_accel', label: 'Acceleration', tabs: ['momentum', 'lookup'],
           oneLiner: "How fast this group's momentum is building (+) or fading (−) over the last 10 trading sessions.",
           detail: 'Change in momentum_score over 10 sessions. Drives the ▲▲/▲/▼/▼▼ badges on Momentum cards.' },
-        { id: 'rank_trend_slope', label: 'Rank trend', tabs: ['today'],
+        { id: 'rank_trend_slope', label: 'Rank trend', tabs: ['today', 'lookup'],
           oneLiner: "Whether this group's YTD ranking is on a consistent upward (↑) or downward (↓) trajectory over the last 10 sessions.",
           detail: 'Least-squares slope of rank_ytd over 10 sessions (negated so up = improving). Drives the ↑↑/↑/~/↓/↓↓ glyph on Today cards.' },
         { id: 'rank_agreement', label: 'Rank agreement', tabs: ['strength', 'lookup'],
@@ -322,7 +327,7 @@
         { id: 'rank', label: 'Rank', tabs: ['today', 'movers', 'strength', 'lookup'],
           oneLiner: 'Where this group places among all groups for a given timeframe — #1 is the best performer.',
           detail: 'Derived from perf each day (never scraped). Rank 1 = highest % gain.' },
-        { id: 'rank_delta', label: 'Rank change (Nd)', tabs: ['movers'],
+        { id: 'rank_delta', label: 'Rank change (Nd)', tabs: ['movers', 'lookup'],
           oneLiner: 'How many spots this group moved up (+) or down (−) over the last N trading sessions.',
           detail: 'N is measured in trading sessions (5 / 10 / 20 / 50), not calendar days. Positive = improved.' },
         { id: 'perf_delta', label: 'Performance change (Nd)', tabs: ['today'],
@@ -475,6 +480,15 @@
 
     // Format a percentage-point delta with sign and "pp" suffix.
     const fmtPp = v => `${v > 0 ? '+' : ''}${v.toFixed(1)}pp`;
+
+    // Format a rank delta integer (+ = improved, - = fell) with colour.
+    function fmtRankDelta(v) {
+      const n = pf(v);
+      if (n === null) return '<span class="text-slate-600">—</span>';
+      if (n > 0) return `<span class="text-emerald-400">+${n}</span>`;
+      if (n < 0) return `<span class="text-red-400">${n}</span>`;
+      return '<span class="text-slate-500">0</span>';
+    }
 
     function perfColor(n) {
       if (n === null) return 'text-slate-400';
@@ -1509,6 +1523,84 @@
       };
     }
 
+    // Case-insensitive exact match against in-memory group names.
+    // Prefers industries (more specific) over sectors on name collision.
+    // Null-checks state.data[key]?.snap (race on slow connections, Gotcha 3).
+    function findGroupByName(raw) {
+      if (!raw) return null;
+      const q = raw.trim().toLowerCase();
+      for (const groupKey of ['industries', 'sectors']) {
+        const snaps = (state.data[groupKey]?.snap) || [];
+        const match = snaps.find(r => r.name.toLowerCase() === q);
+        if (match) return { name: match.name, groupKey };
+      }
+      return null;
+    }
+
+    // Returns up to 6 typeahead suggestions from both sectors + industries.
+    // Prefix matches come before substring matches; within each group, alphabetical.
+    function typeaheadSuggestions(raw) {
+      if (!raw || raw.trim().length < 2) return [];
+      const q = raw.trim().toLowerCase();
+      const prefix = [], sub = [];
+      for (const groupKey of ['sectors', 'industries']) {
+        const snaps = (state.data[groupKey]?.snap) || [];
+        for (const r of snaps) {
+          const lo = r.name.toLowerCase();
+          if (lo.startsWith(q)) prefix.push({ name: r.name, groupKey });
+          else if (lo.includes(q)) sub.push({ name: r.name, groupKey });
+        }
+      }
+      prefix.sort((a, b) => a.name.localeCompare(b.name));
+      sub.sort((a, b) => a.name.localeCompare(b.name));
+      return [...prefix, ...sub].slice(0, 6);
+    }
+
+    let _suggFocusIdx = -1;
+
+    function hideSuggestions() {
+      const el = document.getElementById('lookup-suggestions');
+      if (el) el.classList.add('hidden');
+      _suggFocusIdx = -1;
+    }
+
+    function updateSuggestionHighlight() {
+      document.querySelectorAll('.lookup-suggestion').forEach((btn, i) => {
+        btn.classList.toggle('bg-slate-700', i === _suggFocusIdx);
+        btn.setAttribute('aria-selected', String(i === _suggFocusIdx));
+      });
+    }
+
+    function renderSuggestions(suggestions, raw) {
+      const el = document.getElementById('lookup-suggestions');
+      if (!el) return;
+      if (!suggestions.length) { el.classList.add('hidden'); return; }
+      const q = raw.trim().toLowerCase();
+      el.innerHTML = suggestions.map(s => {
+        const lo = s.name.toLowerCase();
+        const idx = lo.indexOf(q);
+        const hl = idx >= 0
+          ? escapeHtml(s.name.slice(0, idx))
+            + `<span class="font-semibold text-sky-300">${escapeHtml(s.name.slice(idx, idx + q.length))}</span>`
+            + escapeHtml(s.name.slice(idx + q.length))
+          : escapeHtml(s.name);
+        const badge = s.groupKey === 'sectors'
+          ? `<span class="flex-shrink-0 text-[0.55rem] px-1.5 py-0.5 rounded bg-violet-900/50 text-violet-300 leading-none">S</span>`
+          : `<span class="flex-shrink-0 text-[0.55rem] px-1.5 py-0.5 rounded bg-sky-900/50 text-sky-300 leading-none">I</span>`;
+        return `<button class="lookup-suggestion w-full text-left px-3 py-2.5 text-sm text-white hover:bg-slate-700 flex justify-between items-center gap-2"
+          style="min-height:40px" role="option" aria-selected="false"
+          data-name="${escapeHtml(s.name)}" data-group="${s.groupKey}"><span>${hl}</span>${badge}</button>`;
+      }).join('');
+      _suggFocusIdx = -1;
+      el.classList.remove('hidden');
+    }
+
+    function doGroupLookup(name, groupKey) {
+      hideSuggestions();
+      state.lookup = { symbol: null, data: null, loading: false, error: null, groupResult: { name, groupKey } };
+      renderLookup();
+    }
+
     function groupScore(delta, snap, hasRow) {
       if (!hasRow) return 0.5; // no data → neutral
       let s = 0;
@@ -1640,7 +1732,7 @@
         </div>`;
     }
 
-    function groupPerfCard(name, groupKey, label) {
+    function groupPerfCard(name, groupKey, label, expanded = false) {
       const { delta, snap, allSnaps, n } = findGroupData(name, groupKey);
       if (!delta && !snap) {
         return `
@@ -1695,6 +1787,89 @@
         ? `<div class="flex justify-between items-center text-xs"><span class="text-slate-400">Rank floor</span><span class="text-slate-200">${floorRangeStr} across 1/3/6mo</span></div>`
         : '';
 
+      // ── Expanded section (Idea 3) ──────────────────────────────────────────
+      // Full rank table, perf table, rank-delta table, and momentum deep dive.
+      // All data from state.data (already loaded) — zero new network calls.
+      let expandedHtml = '';
+      if (expanded) {
+        const TFS = [
+          { label: 'D',   rankKey: 'rank_day',     perfKey: 'perf_day'     },
+          { label: 'W',   rankKey: 'rank_week',    perfKey: 'perf_week'    },
+          { label: 'M',   rankKey: 'rank_month',   perfKey: 'perf_month'   },
+          { label: 'Q',   rankKey: 'rank_quarter', perfKey: 'perf_quarter' },
+          { label: '6M',  rankKey: 'rank_half',    perfKey: 'perf_half'    },
+          { label: '1Y',  rankKey: 'rank_year',    perfKey: 'perf_year'    },
+          { label: 'YTD', rankKey: 'rank_ytd',     perfKey: 'perf_ytd'     },
+        ];
+        const cell = (val, lbl) =>
+          `<div class="text-center"><div class="text-xs">${val}</div><div class="text-[0.55rem] text-slate-500 mt-0.5">${lbl}</div></div>`;
+
+        const rankCells = TFS.map(tf => {
+          const r = delta ? pf(delta[tf.rankKey]) : null;
+          return cell(r !== null ? `<span class="text-slate-200">#${r}</span>` : '<span class="text-slate-600">—</span>', tf.label);
+        }).join('');
+
+        const perfCells = TFS.map(tf => {
+          const v = snap ? pf(snap[tf.perfKey]) : null;
+          return cell(v !== null
+            ? `<span class="${perfColor(v)}">${v > 0 ? '+' : ''}${v.toFixed(2)}%</span>`
+            : '<span class="text-slate-600">—</span>', tf.label);
+        }).join('');
+
+        const deltaCells = state.windows.map(win => {
+          const v = delta ? pf(delta[`rank_ytd_delta_${win}`]) : null;
+          return cell(fmtRankDelta(v), win);
+        }).join('');
+
+        const confirmed = delta ? pf(delta.momentum_confirmed) : null;
+        const accel     = delta ? pf(delta.momentum_accel)     : null;
+        const regime    = delta ? pf(delta.regime_short_long)  : null;
+        const slope     = delta ? pf(delta.rank_trend_slope)   : null;
+
+        const fmtConfirmed = confirmed !== null
+          ? `<span class="${momentumStyle(confirmed).text}">${(confirmed * 100).toFixed(0)}%</span>`
+          : '<span class="text-slate-600">—</span>';
+        const fmtAccel = accel !== null
+          ? (accelBadge(accel) || '<span class="text-slate-500">flat</span>')
+          : '<span class="text-slate-600">—</span>';
+        const regimeCls = regime !== null
+          ? (regime >= REGIME_THRESHOLD ? 'text-emerald-400' : regime <= -REGIME_THRESHOLD ? 'text-red-400' : 'text-slate-400')
+          : '';
+        const regimeLabel = regime !== null
+          ? (regime >= REGIME_THRESHOLD ? 'emerging' : regime <= -REGIME_THRESHOLD ? 'fading' : 'neutral')
+          : '';
+        const fmtRegime = regime !== null
+          ? `<span class="${regimeCls}">${regime > 0 ? '+' : ''}${regime.toFixed(2)} <span class="text-xs opacity-75">${regimeLabel}</span></span>`
+          : '<span class="text-slate-600">—</span>';
+        const fmtSlope = slope !== null ? slopeGlyph(slope) : '<span class="text-slate-600">—</span>';
+
+        expandedHtml = `
+          <div class="border-t border-slate-700 pt-2 mt-0.5 space-y-2.5">
+            <div>
+              <div class="text-[0.6rem] uppercase tracking-wider text-slate-500 mb-1.5">All ranks</div>
+              <div class="grid grid-cols-4 gap-y-2">${rankCells}</div>
+            </div>
+            <div>
+              <div class="text-[0.6rem] uppercase tracking-wider text-slate-500 mb-1.5">Performance</div>
+              <div class="grid grid-cols-4 gap-y-2">${perfCells}</div>
+            </div>
+            ${state.windows.length > 0 ? `
+            <div>
+              <div class="text-[0.6rem] uppercase tracking-wider text-slate-500 mb-1.5">YTD rank delta (trading days ago)</div>
+              <div class="grid grid-cols-4 gap-y-2">${deltaCells}</div>
+            </div>` : ''}
+            <div>
+              <div class="text-[0.6rem] uppercase tracking-wider text-slate-500 mb-1.5">Momentum deep dive</div>
+              <div class="space-y-1">
+                <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Confirmed</span><span>${fmtConfirmed}</span></div>
+                <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Acceleration</span><span>${fmtAccel}</span></div>
+                <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Regime</span><span>${fmtRegime}</span></div>
+                <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Rank trend</span><span>${fmtSlope}</span></div>
+              </div>
+            </div>
+          </div>`;
+      }
+
       return `
         <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 space-y-1.5">
           <div class="flex justify-between items-center"><span class="text-[0.65rem] uppercase tracking-wider text-slate-500">${label}</span>${chipHtml}</div>
@@ -1705,6 +1880,7 @@
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Perf</span><span class="text-slate-300">Wk ${fmtPct(perfWeek)} · Mo ${fmtPct(perfMonth)} · YTD ${fmtPct(perfYtd)}</span></div>
           ${breadthStrip(snap)}
           ${spark}
+          ${expandedHtml}
         </div>`;
     }
 
@@ -1779,11 +1955,16 @@
     // Copy mirrors knowledge/moaty-metrics.md. Native <details> = no JS needed.
     function lookupGlossary() {
       const rows = [
-        ["rank (wk)", "Where this group places among all groups on weekly performance — #1 is the best performer. The sparkline tracks it over time (a rising line = improving)."],
-        ["rank floor", "The range of rankings across 1, 3, and 6 months — best to worst. A tight, low range means it held its standing consistently."],
-        ["sustained / consistent", "Sustained = top-quartile across 1/3/6mo at once (not a recent flash). Consistent = the three timeframes agree and it’s at least top-half."],
-        ["momentum", "Strength across every timeframe at once, 0–100% (a percentile across the seven perf windows)."],
-        ["breadth", "Whether the group is positive across the major timeframes. “All green” gates on month/quarter/half/YTD; the day & week dots show context but don’t gate."],
+        [“rank (wk)”, “Where this group places among all groups on weekly performance — #1 is the best performer. The sparkline tracks it over time (a rising line = improving).”],
+        [“rank floor”, “The range of rankings across 1, 3, and 6 months — best to worst. A tight, low range means it held its standing consistently.”],
+        [“sustained / consistent”, “Sustained = top-quartile across 1/3/6mo at once (not a recent flash). Consistent = the three timeframes agree and it’s at least top-half.”],
+        [“momentum”, “Strength across every timeframe at once, 0–100% (a percentile across the seven perf windows).”],
+        [“breadth”, “Whether the group is positive across the major timeframes. “All green” gates on month/quarter/half/YTD; the day & week dots show context but don’t gate.”],
+        [“confirmed momentum”, “Momentum × rank_agreement — high only when the group is broadly strong AND its timeframes agree (not a one-timeframe pop).”],
+        [“acceleration”, “Whether momentum is building (▲) or fading (▼) over the last 10 sessions. Flat = momentum isn’t accelerating in either direction.”],
+        [“regime”, “Positive = recently accelerating vs. longer-term trend (emerging leader). Negative = fading. Uses short-horizon minus long-horizon percentile.”],
+        [“rank trend”, “↑↑/↑ = consistent improvement in YTD rank over the last 10 sessions. ↓↓/↓ = steady slide. ~ = flat.”],
+        [“YTD rank delta”, “How many spots this group’s YTD rank moved over the last N trading sessions. Positive = improved (lower rank number = better).”],
       ];
       const items = rows.map(([t, d]) =>
         `<div><span class="text-slate-200 font-medium">${t}</span> — <span class="text-slate-400">${d}</span></div>`
@@ -1801,10 +1982,19 @@
     function renderLookup() {
       const el = document.getElementById('lookup-result');
       if (!el) return;
-      const { data, loading, error } = state.lookup;
+      const { data, loading, error, groupResult } = state.lookup;
 
       if (loading) { el.innerHTML = lookupSkeleton(); return; }
-      if (!data && !error) { el.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">Enter a ticker above.</p>'; return; }
+
+      // Group-name path (Ideas 1/2): resolved locally, no Worker call.
+      if (groupResult) {
+        const { name, groupKey } = groupResult;
+        const label = groupKey === 'sectors' ? 'Sector' : 'Industry';
+        el.innerHTML = groupPerfCard(name, groupKey, label, true) + lookupGlossary();
+        return;
+      }
+
+      if (!data && !error) { el.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">Enter a ticker or group name above.</p>'; return; }
       if (error || (data && data.error)) {
         const code = error || data.error;
         const msg = code === 'ticker_not_found' ? 'Ticker not found. Verify it is a US-listed symbol.'
@@ -1847,8 +2037,8 @@
           </div>
         </div>`;
 
-      if (data.finviz_industry) html += groupPerfCard(data.finviz_industry, 'industries', 'Industry');
-      if (data.finviz_sector)   html += groupPerfCard(data.finviz_sector, 'sectors', 'Sector');
+      if (data.finviz_industry) html += groupPerfCard(data.finviz_industry, 'industries', 'Industry', true);
+      if (data.finviz_sector)   html += groupPerfCard(data.finviz_sector, 'sectors', 'Sector', true);
       html += contextSignalCard(data.finviz_industry, data.finviz_sector);
       html += lookupGlossary();
 
@@ -1857,15 +2047,26 @@
 
     async function doLookup() {
       const input = document.getElementById('ticker-input');
-      const sym = (input.value || '').trim().toUpperCase();
-      if (!sym) return;
-      state.lookup = { symbol: sym, data: null, loading: true, error: null };
+      const raw = (input.value || '').trim();
+      if (!raw) return;
+      hideSuggestions();
+
+      // Try local group match first (case-insensitive, zero network calls).
+      const groupMatch = findGroupByName(raw);
+      if (groupMatch) {
+        doGroupLookup(groupMatch.name, groupMatch.groupKey);
+        return;
+      }
+
+      // Fall through to ticker path: uppercase for the Worker.
+      const sym = raw.toUpperCase();
+      state.lookup = { symbol: sym, data: null, loading: true, error: null, groupResult: null };
       renderLookup();
       try {
         const data = await lookupTicker(sym);
-        state.lookup = { symbol: sym, data, loading: false, error: null };
+        state.lookup = { symbol: sym, data, loading: false, error: null, groupResult: null };
       } catch (e) {
-        state.lookup = { symbol: sym, data: null, loading: false, error: e.message || 'network_error' };
+        state.lookup = { symbol: sym, data: null, loading: false, error: e.message || 'network_error', groupResult: null };
       }
       renderLookup();
     }
@@ -2254,8 +2455,45 @@
     document.getElementById('update-banner-x').addEventListener('click', clearUnseen);
     document.getElementById('ai-share-btn').addEventListener('click', shareAI);
     document.getElementById('ticker-submit').addEventListener('click', doLookup);
-    document.getElementById('ticker-input').addEventListener('keydown', e => {
-      if (e.key === 'Enter') doLookup();
+    document.getElementById('ticker-input').addEventListener('keydown', function(e) {
+      const suggs = document.getElementById('lookup-suggestions');
+      const visible = suggs && !suggs.classList.contains('hidden');
+      const buttons = visible ? [...suggs.querySelectorAll('.lookup-suggestion')] : [];
+      if (visible && e.key === 'ArrowDown') {
+        e.preventDefault();
+        _suggFocusIdx = (_suggFocusIdx + 1) % buttons.length;
+        updateSuggestionHighlight(); return;
+      }
+      if (visible && e.key === 'ArrowUp') {
+        e.preventDefault();
+        _suggFocusIdx = (_suggFocusIdx - 1 + buttons.length) % buttons.length;
+        updateSuggestionHighlight(); return;
+      }
+      if (e.key === 'Escape') { hideSuggestions(); return; }
+      if (e.key === 'Tab')    { hideSuggestions(); return; }
+      if (e.key === 'Enter') {
+        if (visible && _suggFocusIdx >= 0 && buttons[_suggFocusIdx]) {
+          e.preventDefault();
+          const btn = buttons[_suggFocusIdx];
+          document.getElementById('ticker-input').value = btn.dataset.name;
+          doGroupLookup(btn.dataset.name, btn.dataset.group);
+          return;
+        }
+        doLookup();
+      }
+    });
+    document.getElementById('ticker-input').addEventListener('input', function() {
+      const raw = this.value.trim();
+      if (raw.length < 2) { hideSuggestions(); return; }
+      renderSuggestions(typeaheadSuggestions(raw), raw);
+    });
+    // Delay hide to let click on suggestions fire first.
+    document.getElementById('ticker-input').addEventListener('blur', () => setTimeout(hideSuggestions, 150));
+    document.getElementById('lookup-suggestions').addEventListener('click', function(e) {
+      const btn = e.target.closest('.lookup-suggestion');
+      if (!btn) return;
+      document.getElementById('ticker-input').value = btn.dataset.name;
+      doGroupLookup(btn.dataset.name, btn.dataset.group);
     });
     document.getElementById('ai-nav-prev').addEventListener('click', () => navigateAI('prev'));
     document.getElementById('ai-nav-next').addEventListener('click', () => navigateAI('next'));

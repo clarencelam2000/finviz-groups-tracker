@@ -1,6 +1,6 @@
 # Lookup Tab — Search Experience Enhancements
 
-> **Status: RFC / build brief. Nothing here is implemented yet.**
+> **Status: Sprint 1 (Ideas 1+2+4) and Sprint 2 (Idea 3) complete on `claude/ecstatic-davinci-fbtqsp`. Ideas 5–7 deferred.**
 > Supersedes the draft in PR #128 — that PR should be closed in favour of this one.
 >
 > Each idea below is self-contained: rationale, acceptance criteria, and a
