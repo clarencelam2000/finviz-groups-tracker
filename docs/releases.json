@@ -1,6 +1,20 @@
 {
-  "current": "2026.06.20",
+  "current": "2026.06.21",
   "releases": [
+    {
+      "version": "2026.06.21",
+      "date": "2026-06-21",
+      "title": "Lookup: recents, pins, fuzzy search, and smart chips",
+      "tag": "feature",
+      "tab": "lookup",
+      "notes": [
+        "The Lookup tab now remembers your last 8 searches — they appear as chips below the search bar when the input is empty.",
+        "Pin any ticker or group from its result card (☆ Pin) to keep it permanently at the top of the chip shelf, surviving the 8-item recents cap.",
+        "Type a colloquial name like 'semis', 'pharma', 'banks', or 'biotech' — built-in synonyms resolve it to the exact Finviz group instantly.",
+        "Made a typo? Fuzzy matching catches near-misses (e.g. 'semiconductrs') and shows a one-tap 'Did you mean Semiconductors?' prompt.",
+        "When the Lookup tab is fresh (no history, no typing), it shows your top momentum groups for the day as suggestion chips."
+      ]
+    },
     {
       "version": "2026.06.20",
       "date": "2026-06-20",

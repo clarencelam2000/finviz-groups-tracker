@@ -224,6 +224,8 @@
         </div>
         <button id="ticker-submit" class="px-4 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium hover:bg-sky-500 transition-colors">Look up</button>
       </div>
+      <!-- Empty-state chips: recents, pinned, top momentum (Ideas 5+7, planning/lookup-search-enhancements.md) -->
+      <div id="lookup-chips" class="hidden mb-4"></div>
       <div id="lookup-result" class="space-y-3"></div>
     </section>
 
@@ -259,6 +261,34 @@
     const FETCH_LOG_URL = `${BASE}/fetch_log.csv`;
     const WORKER_URL = 'https://finviz-ticker-lookup.salmonbaby8.workers.dev';
 
+    // localStorage keys for Lookup tab persistence (Ideas 5+7, planning/lookup-search-enhancements.md).
+    // fvg_lookup_recent: [{type:'group'|'ticker', name, groupKey?}] newest-first, max RECENT_MAX; pinned items exempt.
+    // fvg_lookup_pinned: [{type:'group'|'ticker', name, groupKey?}] no cap; survives recents overflow.
+    const RECENT_KEY = 'fvg_lookup_recent';
+    const PINNED_KEY = 'fvg_lookup_pinned';
+    const RECENT_MAX = 8; // max unpinned recents; pinned items do not count against this
+
+    // Colloquial aliases for Finviz group names (Idea 6, planning/lookup-search-enhancements.md).
+    // Add entries here when a common alias is found not to resolve via exact/fuzzy match.
+    // Pairs: alias (lowercase) → exact Finviz name.
+    const GROUP_SYNONYMS = {
+      'semis':         'Semiconductors',
+      'pharma':        'Drug Manufacturers—General',
+      'banks':         'Banks—Diversified',
+      'biotech':       'Biotechnology',
+      'reits':         'Real Estate Investment Trusts',
+      'software':      'Software—Application',
+      'tech':          'Technology',
+      'energy':        'Energy',
+      'healthcare':    'Health Care',
+      'financials':    'Financial',
+      'utilities':     'Utilities',
+      'consumer':      'Consumer Cyclical',
+      'industrials':   'Industrials',
+      'materials':     'Basic Materials',
+      'communication': 'Communication Services',
+    };
+
     const state = {
       tab: 'today',
       group: 'sectors',
@@ -279,7 +309,7 @@
       currentAiDate: null,
       loading: false,
       expandedName: null,
-      lookup: { symbol: null, data: null, loading: false, error: null, groupResult: null },
+      lookup: { symbol: null, data: null, loading: false, error: null, groupResult: null, didYouMean: null },
     };
 
     // ── Preferences (localStorage) ─────────────────────────────────────────
@@ -1495,6 +1525,171 @@
       return data;
     }
 
+    // ── Lookup: localStorage helpers (Ideas 5+7) ──────────────────────────────
+    function lsGet(key, fallback) {
+      try { return JSON.parse(localStorage.getItem(key) ?? 'null') ?? fallback; } catch { return fallback; }
+    }
+    function lsSet(key, val) {
+      try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
+    }
+
+    function getRecents() { return lsGet(RECENT_KEY, []); }
+    function getPinned()  { return lsGet(PINNED_KEY, []); }
+
+    function isPinned(type, name) {
+      return getPinned().some(p => p.type === type && p.name === name);
+    }
+
+    // Add item to recents (pinned items are skipped — they persist separately).
+    function addRecent(item) {
+      if (isPinned(item.type, item.name)) return;
+      let r = getRecents().filter(x => !(x.type === item.type && x.name === item.name));
+      r.unshift(item);
+      lsSet(RECENT_KEY, r.slice(0, RECENT_MAX));
+    }
+
+    function togglePin(type, name, groupKey) {
+      const pinned = getPinned();
+      const idx = pinned.findIndex(p => p.type === type && p.name === name);
+      if (idx >= 0) {
+        // Unpin: remove from pinned, move back to recents
+        pinned.splice(idx, 1);
+        lsSet(PINNED_KEY, pinned);
+        const item = { type, name, ...(groupKey ? { groupKey } : {}) };
+        let r = getRecents().filter(x => !(x.type === type && x.name === name));
+        r.unshift(item);
+        lsSet(RECENT_KEY, r.slice(0, RECENT_MAX));
+      } else {
+        // Pin: add to pinned, remove from recents
+        const item = { type, name, ...(groupKey ? { groupKey } : {}) };
+        pinned.push(item);
+        lsSet(PINNED_KEY, pinned);
+        lsSet(RECENT_KEY, getRecents().filter(x => !(x.type === type && x.name === name)));
+      }
+      renderLookupChips();
+      renderLookup();
+    }
+
+    // ── Lookup: empty-state chip rendering (Ideas 5+7) ────────────────────────
+
+    // Returns top N groups by momentum_score from in-memory state (Idea 7).
+    function topMomentumChips(n) {
+      const out = [];
+      for (const groupKey of ['sectors', 'industries']) {
+        for (const r of ((state.data[groupKey]?.delta) || [])) {
+          const score = pf(r.momentum_score);
+          if (score !== null) out.push({ type: 'group', name: r.name, groupKey, score });
+        }
+      }
+      out.sort((a, b) => b.score - a.score);
+      return out.slice(0, n);
+    }
+
+    function _chipBadge(type, groupKey) {
+      if (type === 'ticker')
+        return '<span class="text-[0.5rem] px-1 py-0.5 rounded bg-slate-700 text-slate-400 ml-1">T</span>';
+      return groupKey === 'sectors'
+        ? '<span class="text-[0.5rem] px-1 py-0.5 rounded bg-violet-900/50 text-violet-300 ml-1">S</span>'
+        : '<span class="text-[0.5rem] px-1 py-0.5 rounded bg-sky-900/50 text-sky-300 ml-1">I</span>';
+    }
+
+    function savedChipHtml(item) {
+      const badge = _chipBadge(item.type, item.groupKey);
+      const gAttr = item.groupKey ? ` data-chip-group="${item.groupKey}"` : '';
+      return `<button class="lookup-chip flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-sm text-slate-200 hover:bg-slate-700 active:bg-slate-600 transition-colors" style="min-height:36px" data-chip-type="${item.type}" data-chip-name="${escapeHtml(item.name)}"${gAttr}>${escapeHtml(item.name)}${badge}</button>`;
+    }
+
+    function dataChipHtml(item) {
+      const badge = _chipBadge('group', item.groupKey);
+      return `<button class="lookup-chip flex items-center px-2.5 py-1 rounded-full bg-slate-800/60 border border-slate-700/60 text-sm text-slate-400 hover:bg-slate-700 hover:text-slate-200 active:bg-slate-600 transition-colors" style="min-height:36px" data-chip-type="group" data-chip-name="${escapeHtml(item.name)}" data-chip-group="${item.groupKey}">${escapeHtml(item.name)}${badge}</button>`;
+    }
+
+    function pinButtonHtml(type, name, groupKey) {
+      const pinned = isPinned(type, name);
+      const gAttr = groupKey ? ` data-pin-group="${groupKey}"` : '';
+      const cls = pinned
+        ? 'border-amber-500/50 text-amber-300 bg-amber-900/20 hover:bg-amber-900/40'
+        : 'border-slate-600 text-slate-500 bg-slate-800 hover:bg-slate-700 hover:text-slate-300';
+      return `<button class="lookup-pin-btn text-xs px-2 py-1 rounded border ${cls} transition-colors" data-pin-type="${type}" data-pin-name="${escapeHtml(name)}"${gAttr}>${pinned ? '★ Pinned' : '☆ Pin'}</button>`;
+    }
+
+    // Render empty-state chips: pinned > recents > top-momentum data chips.
+    // Chips hide when input is non-empty or after any lookup result is shown.
+    function renderLookupChips() {
+      const el = document.getElementById('lookup-chips');
+      if (!el) return;
+      const raw = (document.getElementById('ticker-input')?.value || '').trim();
+      const { data, error, groupResult, loading, didYouMean } = state.lookup;
+      if (raw || loading || groupResult || data || error || didYouMean) {
+        el.classList.add('hidden'); return;
+      }
+      const pinned  = getPinned();
+      const recents = getRecents();
+      const hasSaved = pinned.length || recents.length;
+      const dataChips = hasSaved ? [] : topMomentumChips(5);
+      if (!pinned.length && !recents.length && !dataChips.length) {
+        el.classList.add('hidden'); return;
+      }
+      let sections = '';
+      if (pinned.length)
+        sections += `<div><p class="text-xs text-slate-500 mb-1.5">Pinned</p><div class="flex flex-wrap gap-2">${pinned.map(savedChipHtml).join('')}</div></div>`;
+      if (recents.length)
+        sections += `<div><p class="text-xs text-slate-500 mb-1.5">Recent</p><div class="flex flex-wrap gap-2">${recents.map(savedChipHtml).join('')}</div></div>`;
+      if (dataChips.length)
+        sections += `<div><p class="text-xs text-slate-500 mb-1.5">Top momentum today</p><div class="flex flex-wrap gap-2">${dataChips.map(dataChipHtml).join('')}</div></div>`;
+      el.innerHTML = `<div class="space-y-3">${sections}</div>`;
+      el.classList.remove('hidden');
+    }
+
+    // ── Lookup: fuzzy matching (Idea 6) ───────────────────────────────────────
+
+    // Standard Levenshtein distance (lowercase strings).
+    function levenshtein(a, b) {
+      const m = a.length, n = b.length;
+      const dp = Array.from({length: m + 1}, (_, i) =>
+        Array.from({length: n + 1}, (_, j) => i === 0 ? j : j === 0 ? i : 0));
+      for (let i = 1; i <= m; i++)
+        for (let j = 1; j <= n; j++)
+          dp[i][j] = a[i-1] === b[j-1]
+            ? dp[i-1][j-1]
+            : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
+      return dp[m][n];
+    }
+
+    // Check GROUP_SYNONYMS first; returns {name, groupKey} or null.
+    function resolveGroupSynonym(raw) {
+      if (!raw) return null;
+      const q = raw.trim().toLowerCase();
+      const target = GROUP_SYNONYMS[q];
+      if (!target) return null;
+      for (const groupKey of ['industries', 'sectors']) {
+        const match = (state.data[groupKey]?.snap || []).find(r => r.name === target);
+        if (match) return { name: match.name, groupKey };
+      }
+      return null;
+    }
+
+    // Fuzzy match raw input against all in-memory group names.
+    // Skips short ticker-like inputs (≤4 chars, no space) to avoid false positives.
+    // Returns {name, groupKey, dist} for best match within threshold, or null.
+    function findFuzzyGroupMatch(raw) {
+      if (!raw) return null;
+      const q = raw.trim().toLowerCase();
+      // Ticker heuristic: ≤4 chars, no space, only alphanum → skip fuzzy
+      if (q.length <= 4 && !q.includes(' ') && /^[a-z0-9]+$/.test(q)) return null;
+      let best = null, bestDist = Infinity;
+      for (const groupKey of ['industries', 'sectors']) {
+        for (const r of (state.data[groupKey]?.snap || [])) {
+          const nl = r.name.toLowerCase();
+          const d = levenshtein(q, nl);
+          if (d < bestDist && d / Math.max(q.length, nl.length) < 0.35) {
+            bestDist = d; best = { name: r.name, groupKey, dist: d };
+          }
+        }
+      }
+      return best;
+    }
+
     // Latest delta + snap row for a Finviz group name, plus group count n.
     // Compute rank for one group from today's snapshots: count(groups with higher
     // perf) + 1. Mirrors pandas rank(ascending=False, method='min'). Used so the
@@ -1597,8 +1792,10 @@
 
     function doGroupLookup(name, groupKey) {
       hideSuggestions();
-      state.lookup = { symbol: null, data: null, loading: false, error: null, groupResult: { name, groupKey } };
+      addRecent({ type: 'group', name, groupKey });
+      state.lookup = { symbol: null, data: null, loading: false, error: null, groupResult: { name, groupKey }, didYouMean: null };
       renderLookup();
+      renderLookupChips();
     }
 
     function groupScore(delta, snap, hasRow) {
@@ -1982,19 +2179,38 @@
     function renderLookup() {
       const el = document.getElementById('lookup-result');
       if (!el) return;
-      const { data, loading, error, groupResult } = state.lookup;
+      const { data, loading, error, groupResult, didYouMean } = state.lookup;
 
       if (loading) { el.innerHTML = lookupSkeleton(); return; }
+
+      // "Did you mean?" card (Idea 6): typo near-miss, user must confirm.
+      if (didYouMean) {
+        const { name, groupKey, dist } = didYouMean;
+        const label = groupKey === 'sectors' ? 'Sector' : 'Industry';
+        el.innerHTML = `<div class="rounded-xl p-3 bg-slate-800/60 border border-slate-700 text-sm flex items-center gap-2 flex-wrap">
+          <span class="text-slate-400">Did you mean</span>
+          <button class="lookup-dym-btn text-sky-400 font-medium hover:text-sky-300 underline" data-name="${escapeHtml(name)}" data-group="${groupKey}">${escapeHtml(name)}</button>
+          <span class="text-slate-500 text-xs">(${label})</span>
+        </div>`;
+        renderLookupChips();
+        return;
+      }
 
       // Group-name path (Ideas 1/2): resolved locally, no Worker call.
       if (groupResult) {
         const { name, groupKey } = groupResult;
         const label = groupKey === 'sectors' ? 'Sector' : 'Industry';
-        el.innerHTML = groupPerfCard(name, groupKey, label, true) + lookupGlossary();
+        const pinRow = `<div class="flex justify-end mb-1">${pinButtonHtml('group', name, groupKey)}</div>`;
+        el.innerHTML = pinRow + groupPerfCard(name, groupKey, label, true) + lookupGlossary();
+        renderLookupChips();
         return;
       }
 
-      if (!data && !error) { el.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">Enter a ticker or group name above.</p>'; return; }
+      if (!data && !error) {
+        renderLookupChips();
+        el.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">Enter a ticker or group name above.</p>';
+        return;
+      }
       if (error || (data && data.error)) {
         const code = error || data.error;
         const msg = code === 'ticker_not_found' ? 'Ticker not found. Verify it is a US-listed symbol.'
@@ -2028,9 +2244,12 @@
       let html = `
         <div class="flex gap-3 items-start">
           ${data.image ? `<img src="${escapeHtml(data.image)}" alt="" class="w-12 h-12 rounded-lg object-contain bg-white/5 flex-shrink-0" onerror="this.style.display='none'">` : ''}
-          <div class="min-w-0">
-            <div class="text-base font-semibold text-white">${escapeHtml(data.company_name || data.symbol)}
-              <span class="ml-1 text-xs px-1.5 py-0.5 rounded bg-slate-700 align-middle">${escapeHtml(data.symbol)}</span></div>
+          <div class="min-w-0 flex-1">
+            <div class="flex items-start justify-between gap-2">
+              <div class="text-base font-semibold text-white">${escapeHtml(data.company_name || data.symbol)}
+                <span class="ml-1 text-xs px-1.5 py-0.5 rounded bg-slate-700 align-middle">${escapeHtml(data.symbol)}</span></div>
+              ${pinButtonHtml('ticker', data.symbol, null)}
+            </div>
             ${meta ? `<div class="text-xs text-slate-400 mt-0.5">${meta}</div>` : ''}
             <div class="text-sm text-slate-200 mt-1">${escapeHtml(data.finviz_sector || '—')} › ${escapeHtml(data.finviz_industry || 'N/A')}${confBadge}</div>
             ${links}
@@ -2051,24 +2270,42 @@
       if (!raw) return;
       hideSuggestions();
 
-      // Try local group match first (case-insensitive, zero network calls).
+      // 1. Exact group name match (case-insensitive, zero network calls).
       const groupMatch = findGroupByName(raw);
       if (groupMatch) {
         doGroupLookup(groupMatch.name, groupMatch.groupKey);
         return;
       }
 
-      // Fall through to ticker path: uppercase for the Worker.
+      // 2. Colloquial synonym (e.g. "semis" → Semiconductors).
+      const synonym = resolveGroupSynonym(raw);
+      if (synonym) {
+        doGroupLookup(synonym.name, synonym.groupKey);
+        return;
+      }
+
+      // 3. Fuzzy / "did you mean" (typos, near-miss names) — pause for user confirmation.
+      const fuzzy = findFuzzyGroupMatch(raw);
+      if (fuzzy) {
+        state.lookup = { symbol: null, data: null, loading: false, error: null, groupResult: null, didYouMean: fuzzy };
+        renderLookup();
+        renderLookupChips();
+        return;
+      }
+
+      // 4. Fall through to ticker path: uppercase for the Worker.
       const sym = raw.toUpperCase();
-      state.lookup = { symbol: sym, data: null, loading: true, error: null, groupResult: null };
+      state.lookup = { symbol: sym, data: null, loading: true, error: null, groupResult: null, didYouMean: null };
       renderLookup();
       try {
         const data = await lookupTicker(sym);
-        state.lookup = { symbol: sym, data, loading: false, error: null, groupResult: null };
+        if (data && !data.error) addRecent({ type: 'ticker', name: sym });
+        state.lookup = { symbol: sym, data, loading: false, error: null, groupResult: null, didYouMean: null };
       } catch (e) {
-        state.lookup = { symbol: sym, data: null, loading: false, error: e.message || 'network_error', groupResult: null };
+        state.lookup = { symbol: sym, data: null, loading: false, error: e.message || 'network_error', groupResult: null, didYouMean: null };
       }
       renderLookup();
+      renderLookupChips();
     }
 
     function render() {
@@ -2077,7 +2314,7 @@
       if (state.tab === 'momentum') renderMomentum();
       if (state.tab === 'strength') renderStrength();
       if (state.tab === 'ai')       renderAI();
-      if (state.tab === 'lookup')   renderLookup();
+      if (state.tab === 'lookup')   { renderLookup(); renderLookupChips(); }
     }
 
     function setLoading(on) {
@@ -2484,8 +2721,9 @@
     });
     document.getElementById('ticker-input').addEventListener('input', function() {
       const raw = this.value.trim();
-      if (raw.length < 2) { hideSuggestions(); return; }
-      renderSuggestions(typeaheadSuggestions(raw), raw);
+      if (raw.length < 2) { hideSuggestions(); }
+      else renderSuggestions(typeaheadSuggestions(raw), raw);
+      renderLookupChips(); // hide chips while typing, show when cleared
     });
     // Delay hide to let click on suggestions fire first.
     document.getElementById('ticker-input').addEventListener('blur', () => setTimeout(hideSuggestions, 150));
@@ -2494,6 +2732,28 @@
       if (!btn) return;
       document.getElementById('ticker-input').value = btn.dataset.name;
       doGroupLookup(btn.dataset.name, btn.dataset.group);
+    });
+    // Chip click: run the saved/data chip lookup (Ideas 5+7)
+    document.getElementById('lookup-chips').addEventListener('click', e => {
+      const btn = e.target.closest('.lookup-chip');
+      if (!btn) return;
+      const type = btn.dataset.chipType;
+      const name = btn.dataset.chipName;
+      const groupKey = btn.dataset.chipGroup;
+      document.getElementById('ticker-input').value = name;
+      if (type === 'group' && groupKey) doGroupLookup(name, groupKey);
+      else { state.lookup.didYouMean = null; doLookup(); }
+    });
+    // Result-area delegation: pin/unpin + "did you mean" (Ideas 5+6)
+    document.getElementById('lookup-result').addEventListener('click', e => {
+      const dym = e.target.closest('.lookup-dym-btn');
+      if (dym) {
+        document.getElementById('ticker-input').value = dym.dataset.name;
+        doGroupLookup(dym.dataset.name, dym.dataset.group);
+        return;
+      }
+      const pin = e.target.closest('.lookup-pin-btn');
+      if (pin) togglePin(pin.dataset.pinType, pin.dataset.pinName, pin.dataset.pinGroup || null);
     });
     document.getElementById('ai-nav-prev').addEventListener('click', () => navigateAI('prev'));
     document.getElementById('ai-nav-next').addEventListener('click', () => navigateAI('next'));
