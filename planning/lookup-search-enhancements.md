@@ -1,6 +1,6 @@
 # Lookup Tab — Search Experience Enhancements
 
-> **Status: Sprint 1 (Ideas 1+2+4) and Sprint 2 (Idea 3) complete on `claude/ecstatic-davinci-fbtqsp`. Ideas 5–7 deferred.**
+> **Status: All ideas complete. Sprints 1–2 (Ideas 1–4) on `claude/ecstatic-davinci-fbtqsp` (PR #131). Sprints 4–6 (Ideas 5–7) on `claude/adoring-noether-xavk0g`.**
 > Supersedes the draft in PR #128 — that PR should be closed in favour of this one.
 >
 > Each idea below is self-contained: rationale, acceptance criteria, and a
