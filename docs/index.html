@@ -2228,11 +2228,32 @@
       const mktCap = pf(data.market_cap_b);
       const mktStr = mktCap !== null ? (mktCap >= 1000 ? `$${(mktCap/1000).toFixed(2)}T` : `$${mktCap.toFixed(0)}B`) : '';
       const meta = [escapeHtml(data.exchange || ''), mktStr].filter(Boolean).join(' · ');
+
+      // etf_kind absent/undefined = stale cache pre-deploy → treat as non-ETF (no regression).
+      const etfKind = data.etf_kind || null;
+
+      // Confidence badge only relevant when industry is from taxonomy (not ETF override).
       let confBadge = '';
-      if (data.finviz_industry && conf !== null) {
+      if (data.finviz_industry && conf !== null && !etfKind) {
         confBadge = conf < 0.5
           ? `<span class="ml-2 text-[0.65rem] px-1.5 py-0.5 rounded bg-amber-800 text-amber-200">Low confidence match</span>`
           : `<span class="ml-2 text-xs text-slate-500">${Math.round(conf*100)}% match</span>`;
+      }
+
+      // ETF kind badges.
+      const ETF_BADGE_THEMATIC = `<span class="ml-2 text-[0.65rem] px-1.5 py-0.5 rounded bg-sky-900 text-sky-200">ETF — classified by holdings theme</span>`;
+      const ETF_BADGE_SECTOR   = `<span class="ml-2 text-[0.65rem] px-1.5 py-0.5 rounded bg-sky-900 text-sky-200">Sector ETF — spans all industries within this sector</span>`;
+
+      // Classification line differs by ETF kind.
+      let classificationLine;
+      if (etfKind === 'thematic') {
+        classificationLine = `<div class="text-sm text-slate-200 mt-1">${escapeHtml(data.finviz_sector || '—')} › ${escapeHtml(data.finviz_industry)}${ETF_BADGE_THEMATIC}</div>`;
+      } else if (etfKind === 'sector') {
+        classificationLine = `<div class="text-sm text-slate-200 mt-1">${escapeHtml(data.finviz_sector || '—')}${ETF_BADGE_SECTOR}</div>`;
+      } else if (etfKind === 'diversified') {
+        classificationLine = `<div class="text-sm text-slate-400 mt-1">Broad market ETF — not a single rotation group</div>`;
+      } else {
+        classificationLine = `<div class="text-sm text-slate-200 mt-1">${escapeHtml(data.finviz_sector || '—')} › ${escapeHtml(data.finviz_industry || 'N/A')}${confBadge}</div>`;
       }
 
       const symEnc = encodeURIComponent(data.symbol);
@@ -2254,14 +2275,22 @@
               ${pinButtonHtml('ticker', data.symbol, null)}
             </div>
             ${meta ? `<div class="text-xs text-slate-400 mt-0.5">${meta}</div>` : ''}
-            <div class="text-sm text-slate-200 mt-1">${escapeHtml(data.finviz_sector || '—')} › ${escapeHtml(data.finviz_industry || 'N/A')}${confBadge}</div>
+            ${classificationLine}
             ${links}
           </div>
         </div>`;
 
-      if (data.finviz_industry) html += groupPerfCard(data.finviz_industry, 'industries', 'Industry', true);
-      if (data.finviz_sector)   html += groupPerfCard(data.finviz_sector, 'sectors', 'Sector', true);
-      html += contextSignalCard(data.finviz_industry, data.finviz_sector);
+      if (etfKind === 'diversified') {
+        // No single rotation group — show an informational card instead of empty group cards.
+        html += `<div class="rounded-xl p-3 mt-3 bg-slate-800/60 border border-slate-600 text-sm text-slate-300">
+          Broad market ETF — tracks the full market or a major index, not a single sector or industry in the rotation map.
+          Check the <strong>Today</strong> tab for a live view of all sectors.
+        </div>`;
+      } else {
+        if (data.finviz_industry) html += groupPerfCard(data.finviz_industry, 'industries', 'Industry', true);
+        if (data.finviz_sector)   html += groupPerfCard(data.finviz_sector, 'sectors', 'Sector', true);
+        html += contextSignalCard(data.finviz_industry, data.finviz_sector);
+      }
       html += lookupGlossary();
 
       el.innerHTML = html;

@@ -55,6 +55,8 @@ data/
   industries/
     snapshots.csv    # append-only; one row per (date, industry) ~150 rows/day
     deltas.csv       # append-only; one row per (date, industry) ~150 rows/day
+  benchmark/
+    snapshots.csv    # append-only; one SPY row per trading date; raw perf_* (never spread-only)
 ```
 
 ### snapshots.csv columns
@@ -73,7 +75,8 @@ data/
 
 `date, name, rank_day, rank_week, rank_month, rank_quarter, rank_half, rank_year, rank_ytd`,
 then for each window `W` in `5/10/20/50`: `rank_week_delta_Wd, rank_month_delta_Wd, rank_ytd_delta_Wd, perf_week_delta_Wd, perf_month_delta_Wd, perf_ytd_delta_Wd`,
-then the momentum columns: `momentum_score, momentum_confirmed, momentum_weighted_mid, momentum_weighted_fast, momentum_accel, regime_short_long, rank_trend_slope, rank_agreement`.
+then the momentum columns: `momentum_score, momentum_confirmed, momentum_weighted_mid, momentum_weighted_fast, momentum_accel, regime_short_long, rank_trend_slope, rank_agreement`,
+then the RS (relative-strength vs SPY) columns: `rs_day, rs_week, rs_month, rs_quarter, rs_half, rs_year, rs_ytd, rs_score, rs_agreement, rs_confirmed, rs_slope, rs_accel, rs_regime_short_long`.
 
 - `rank_*` values: rank 1 = best performer. Derived from `perf_*` values, never scraped.
 - `rank_*_delta_Wd`: positive = improved (rose in ranking). E.g., `+6` means 6 spots better than W trading sessions ago.
@@ -83,7 +86,12 @@ then the momentum columns: `momentum_score, momentum_confirmed, momentum_weighte
 - `momentum_accel`: change in `momentum_score` over `ACCEL_WINDOW` (10) sessions; positive = building.
 - `regime_short_long`: short- minus long-horizon percentile (range ~[-1,1]); positive = emerging leader, negative = fading. Short bucket: `perf_week + perf_month`. Long bucket: `perf_quarter + perf_half + perf_year`. Configured in `scripts/delta_config.py` as `REGIME_SHORT` / `REGIME_LONG`.
 - `rank_trend_slope`: negated least-squares slope of `rank_ytd` over the trailing window; positive = improving.
-- Delta/momentum columns are `NaN` until enough history exists (e.g., 50d deltas need 50+ sessions; accel needs 10).
+- `rs_day/week/month/…/ytd`: RS spread = `group_perf_X − SPY_perf_X`; positive = beating the market. NaN when `data/benchmark/snapshots.csv` has no row for that date.
+- `rs_score`: 0–1; mean percentile of RS spreads across all 7 timeframes. `RS_SLOPE_COL = "rs_month"` is the canonical RS line for `rs_slope`. `RS_AGREEMENT_COLS = ["rs_month","rs_quarter","rs_half"]` drive `rs_agreement`.
+- `rs_confirmed`: `rs_score × rs_agreement` (RS strength gated by cross-timeframe consistency).
+- `rs_slope`: LS slope of `rs_month` over `SLOPE_WINDOW` sessions; positive = outperformance building. `RS_REGIME_SHORT/LONG` configure `rs_regime_short_long` buckets.
+- `rs_accel`: change in `rs_score` over `ACCEL_WINDOW` sessions; positive = RS building.
+- Delta/momentum/RS columns are `NaN` until enough history exists (e.g., 50d deltas need 50+ sessions; accel/slope need 10).
 
 ### PWA display thresholds (in `docs/index.html` near top of `<script>`)
 
@@ -141,6 +149,34 @@ python scripts/export_db.py
 - `rel_volume` is always NaN — not served for this custom group URL. Expected.
 - Retry logic: 3 attempts, 30s / 60s / 120s backoff. Set `COLLECT_RETRY_DELAY=0` env var to skip waits during debugging.
 - Finviz URL pattern: `https://finviz.com/groups?g={sector|industry}&v=152&o=name&c=0,1,2,3,4,5,15,16,17,18,19,20,22,24,25,26`
+
+---
+
+## ETF override layer (worker/)
+
+ETF lookups use a curated override file (`data/etf_overrides.csv`) to correct FMP's
+legal-entity classification ("Asset Management") with the actual thematic exposure.
+
+**Source of truth:** `data/etf_overrides.csv` — columns `ticker, finviz_industry,
+finviz_sector, etf_name, kind, note`. Three `kind` values:
+- `thematic` — single industry (COPX→Copper, ITA→Aerospace & Defense, SMH→Semiconductors…)
+- `sector` — sector only, no single industry (XLE→Energy, XLK→Technology… all 11 SPDRs)
+- `diversified` — no group (SPY, QQQ, VTI, DIA, IWM; PWA shows an informational card)
+
+**Build step:** `npm run build:taxonomy` (in `worker/`) reads both `taxonomy_map.csv`
+and `etf_overrides.csv`, validates all Finviz names against live snapshot CSVs, and
+emits `worker/src/taxonomy_map.json` + `worker/src/etf_overrides.json`. Exits non-zero
+with a clear message on any unknown group name.
+
+**Runtime:** `lookupEtf(symbol)` in `taxonomy.js` checks `etf_overrides.json`. Applied
+in `index.js` when `isEtf: true`. Response adds `classification_source` ("etf_override"
+| "fmp_taxonomy") and `etf_kind` ("thematic" | "sector" | "diversified" | null).
+
+**Post-deploy cache bust:** existing KV entries don't have the new fields until TTL
+(30d). Bust manually with `DELETE /cache?t=TICKER` for each seed ETF — see
+`worker/README.md` for the one-liner.
+
+**ADR:** `knowledge/decisions/ADR-005-etf-classification-curated-first.md`
 
 ---
 
@@ -271,7 +307,7 @@ Note: there's no send_later tool in this session, so you can't auto-schedule the
 |-----------|---------|
 | `scripts/` | Data collection and processing scripts |
 | `dashboard/` | Streamlit dashboard |
-| `worker/` | Cloudflare Worker (ticker lookup + cache ops) — see `worker/README.md` |
+| `worker/` | Cloudflare Worker (ticker lookup + cache ops) — see `worker/README.md`. ETF lookups apply a curated override layer (`data/etf_overrides.csv`) when `isEtf: true` — see ADR-005 and §ETF override layer below. |
 | `docs/` | PWA (GitHub Pages) — `index.html`, `sw.js`, `manifest.json` |
 | `data/` | Append-only CSVs (sectors, industries) |
 | `planning/` | Implementation plans and feature designs |

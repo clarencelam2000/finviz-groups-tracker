@@ -21,6 +21,8 @@ Full plan: `planning/PLAN_ticker_lookup.md`
 | ~~TICKER-4~~ | ~~**Operations setup**~~ | — | — | ✅ **Done 2026-06-15.** Added FMP call counter (daily KV key `fmp_calls_YYYY-MM-DD`, 7d TTL), `/stats` endpoint returning `{date, fmp_calls_today}`, `DELETE /cache?t=TICKER` for manual cache busting. Counter incremented only on FMP cache misses, never on errors. 34 vitest tests pass. PR #90 merged. |
 | TICKER-5 | **[FUTURE] Sector/Industry → Stocks screener** | `worker/src/index.js` (add /stocks endpoint), `docs/index.html`, `dashboard/app.py` | M | New Worker endpoint `/stocks?finviz_sector=&finviz_industry=` calls FMP screener, returns top 25 by market cap, KV cache 7d. Both front-ends add "Show stocks" toggle on group cards. Do NOT start until TICKER-0 through TICKER-4 are validated in production. See Phase 7 in plan. |
 
+| ~~ETF-1~~ | ~~**Curated ETF→Finviz-group override layer (Lookup)**~~ | — | — | ✅ **Done 2026-06-20.** 31 curated ETF overrides (15 thematic/11 sector SPDRs/5 diversified). Build validation against snapshot CSVs. Runtime `lookupEtf()` + `fetchProfile()` wiring. PWA renders ETF kind badges + diversified informational card. ADR-005, worker/README, CLAUDE.md updated. 50 worker tests + 165 Python tests pass. Phase 2 (Finnhub holdings) deferred, design note in ADR-005. |
+
 > **Phase 0:** (1) FMP free account + API key ✅ done. (2) Cloudflare account + KV namespace ✅ done — Worker deployed 2026-06-14.
 
 > **Monthly recurring:** CF analytics check, FMP quota check, taxonomy validity spot-check. See plan Phase 5.
@@ -219,6 +221,7 @@ _(nothing)_
 
 | # | Task | Date |
 |---|------|------|
+| ETF-1 | Curated ETF→Finviz override layer: 31 overrides (thematic/sector/diversified), build validation, runtime wiring, PWA ETF badges | 2026-06-20 |
 | LB-FF1 | PWA full-dynamic lookback buttons derived from CSV header (`extractWindowsFromHeader`) (PR #110) | 2026-06-18 |
 | MOT-R1/A2, TOD-S3/P5, STR-C4 | Surface PR#105 momentum metrics in PWA: Rotation view, accel badge, slope glyph, confirmed sort, perf-delta row | 2026-06-18 |
 | LB-1..5 | Config-driven delta schema (`delta_config.py`), trading-day 5/10/20/50 lookbacks, momentum variants (confirmed, weighted-mid/fast, regime, accel ⊃ INS-4, rank-trend slope), PWA renumber, generate_ai repoint | 2026-06-17 |
