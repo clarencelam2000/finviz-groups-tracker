@@ -15,6 +15,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent))
 from delta_config import (
     ACCEL_WINDOW,
+    BENCH_CSV_COLUMNS,
     LOOKBACK_WINDOWS,
     MOMENTUM_COLS,
     PERF_DELTA_METRICS,
@@ -29,6 +30,7 @@ from delta_config import (
     RS_SLOPE_COL,
     RS_TIMEFRAMES,
     SLOPE_WINDOW,
+    SNAPSHOT_COLS,
     WEIGHTS_FAST,
     WEIGHTS_MID,
     delta_columns,
@@ -40,18 +42,6 @@ from delta_config import (
 
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
-
-BENCH_CSV_COLS = [
-    "date", "collected_at", "ticker",
-    "perf_day", "perf_week", "perf_month", "perf_quarter",
-    "perf_half", "perf_year", "perf_ytd",
-]
-
-SNAPSHOT_COLS = [
-    "date", "collected_at", "group_type", "name", "stocks", "market_cap",
-    "pe", "fwd_pe", "perf_day", "perf_week", "perf_month", "perf_quarter",
-    "perf_half", "perf_year", "perf_ytd", "avg_volume", "rel_volume", "change",
-]
 
 DELTA_COLUMNS = delta_columns()
 
@@ -327,10 +317,10 @@ def compute_rank_trend_slope(df_hist: pd.DataFrame, available_dates: list,
 def load_benchmark(csv_path: Path) -> pd.DataFrame:
     """Load benchmark (SPY) snapshots CSV. Returns empty DataFrame if missing."""
     if not csv_path.exists():
-        return pd.DataFrame(columns=BENCH_CSV_COLS)
+        return pd.DataFrame(columns=BENCH_CSV_COLUMNS)
     df = pd.read_csv(csv_path)
     if df.empty:
-        return pd.DataFrame(columns=BENCH_CSV_COLS)
+        return pd.DataFrame(columns=BENCH_CSV_COLUMNS)
     for col in ["perf_day", "perf_week", "perf_month", "perf_quarter",
                 "perf_half", "perf_year", "perf_ytd"]:
         if col in df.columns:

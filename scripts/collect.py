@@ -14,6 +14,9 @@ import pytz
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
+sys.path.insert(0, str(Path(__file__).parent))
+from delta_config import BENCH_CSV_COLUMNS, BENCH_PERF_COLS, SNAPSHOT_COLS
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -32,11 +35,7 @@ URLS = {
     ),
 }
 
-CSV_COLUMNS = [
-    "date", "collected_at", "group_type", "name", "stocks", "market_cap",
-    "pe", "fwd_pe", "perf_day", "perf_week", "perf_month", "perf_quarter",
-    "perf_half", "perf_year", "perf_ytd", "avg_volume", "rel_volume", "change",
-]
+CSV_COLUMNS = SNAPSHOT_COLS
 
 # Map Finviz header text → internal column name (None = skip)
 HEADER_MAP = {
@@ -75,11 +74,7 @@ PERF_COLS = {
 # (Azure IPs) or a local machine — it will 403 from Google Cloud IPs.
 SPY_URL = "https://finviz.com/stock?t=SPY&p=d"
 
-BENCH_CSV_COLUMNS = [
-    "date", "collected_at", "ticker",
-    "perf_day", "perf_week", "perf_month", "perf_quarter",
-    "perf_half", "perf_year", "perf_ytd",
-]
+# BENCH_CSV_COLUMNS and BENCH_PERF_COLS are imported from delta_config above.
 
 # Map Finviz quote-page performance label text → internal column name.
 # Multiple label forms accepted for resilience to Finviz wording changes.
@@ -504,6 +499,17 @@ def collect_spy(bench_path: Path = None):
     print(f"  fetch_html took {time.time() - t0:.1f}s")
 
     rec = parse_spy_quote(html, snapshot_date, collected_at)
+
+    # Validate parse completeness. SPY always has full perf history, so fewer
+    # than all 7 values means a Finviz label change or page-structure failure —
+    # not a legitimate data gap. Raise so the caller exits non-zero and GitHub
+    # Actions flags the run (groups success must not mask SPY parse failure).
+    parsed_count = sum(1 for c in BENCH_PERF_COLS if rec.get(c) is not None)
+    if parsed_count < len(BENCH_PERF_COLS):
+        raise RuntimeError(
+            f"SPY parse yielded only {parsed_count}/{len(BENCH_PERF_COLS)} perf values "
+            "— possible Finviz label change on quote page"
+        )
 
     with open(bench_path, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=BENCH_CSV_COLUMNS)

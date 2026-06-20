@@ -1,13 +1,44 @@
 """
-delta_config.py — Single source of truth for the deltas.csv schema.
+delta_config.py — Single source of truth for all CSV schemas and pipeline config.
 
-Defines the lookback windows, which metrics get per-window deltas, and the
-momentum/rank columns. compute_deltas.py, export_db.py, and dashboard/app.py
-all import from here so the schema is defined exactly once.
+Defines snapshot column lists, lookback windows, delta metrics, and composite
+column groups. collect.py (writer), compute_deltas.py, export_db.py, and
+dashboard/app.py all import from here so each schema is defined exactly once.
 
 To change the lookback windows (e.g. switch to 21/63 trading days), edit
 LOOKBACK_WINDOWS — every consumer derives its columns from delta_columns().
 """
+
+# ---------------------------------------------------------------------------
+# Snapshot CSV schemas
+# ---------------------------------------------------------------------------
+
+# data/sectors/snapshots.csv and data/industries/snapshots.csv columns.
+# collect.py is the writer; compute_deltas.py and export_db.py are readers.
+SNAPSHOT_COLS = [
+    "date", "collected_at", "group_type", "name", "stocks", "market_cap",
+    "pe", "fwd_pe", "perf_day", "perf_week", "perf_month", "perf_quarter",
+    "perf_half", "perf_year", "perf_ytd", "avg_volume", "rel_volume", "change",
+]
+
+# data/benchmark/snapshots.csv columns (one SPY row per trading date).
+# Raw perf_* values are stored here — never derived spreads. This is the
+# two-way-door invariant: rs_ratio and RRG axes are retroactively derivable
+# from raw perf_* without data loss. See ADR-005.
+BENCH_CSV_COLUMNS = [
+    "date", "collected_at", "ticker",
+    "perf_day", "perf_week", "perf_month", "perf_quarter",
+    "perf_half", "perf_year", "perf_ytd",
+]
+
+# The 7 performance columns within BENCH_CSV_COLUMNS. All 7 must parse
+# successfully for a SPY scrape to be valid — SPY always has full perf history,
+# so fewer than 7 means a Finviz label change or page-structure failure.
+BENCH_PERF_COLS = [c for c in BENCH_CSV_COLUMNS if c.startswith("perf_")]
+
+# ---------------------------------------------------------------------------
+# Deltas pipeline config
+# ---------------------------------------------------------------------------
 
 # Lookback windows, in *trading* days (sessions), not calendar days.
 LOOKBACK_WINDOWS = [5, 10, 20, 50]

@@ -251,25 +251,33 @@ class TestCollectSpy:
         assert len(rows) == 1
         assert rows[0]["perf_week"] == "1.99"
 
-    def test_none_values_stored_as_empty_string(self, tmp_path, monkeypatch):
+    def test_raises_when_partial_perf_cols_parsed(self, tmp_path, monkeypatch):
+        # FIXTURE_HTML_DASH_VALUES has 7 labels but 4 are "-"/N/A/empty → only
+        # 3 non-None values. collect_spy must raise rather than silently write
+        # a partial row (SPY always has full perf history; fewer than 7 = parser
+        # failure, e.g. Finviz label change on the quote page).
         bench_path = tmp_path / "benchmark" / "snapshots.csv"
         monkeypatch.setattr(
             "scripts.collect.fetch_html",
             lambda url, wait_selector=None: FIXTURE_HTML_DASH_VALUES,
         )
-        collect_module.collect_spy(bench_path=bench_path)
-        with open(bench_path, newline="") as f:
-            rows = list(csv.DictReader(f))
-        # perf_day was "-" → None → stored as ""
-        assert rows[0]["perf_day"] == ""
-        # perf_month was "2.34%" → stored as float value
-        assert rows[0]["perf_month"] == "2.34"
+        with pytest.raises(RuntimeError, match="perf values"):
+            collect_module.collect_spy(bench_path=bench_path)
+
+    def test_raises_when_no_perf_cols_parsed(self, tmp_path, monkeypatch):
+        bench_path = tmp_path / "benchmark" / "snapshots.csv"
+        monkeypatch.setattr(
+            "scripts.collect.fetch_html",
+            lambda url, wait_selector=None: FIXTURE_HTML_EMPTY,
+        )
+        with pytest.raises(RuntimeError, match="perf values"):
+            collect_module.collect_spy(bench_path=bench_path)
 
     def test_creates_benchmark_directory(self, tmp_path, monkeypatch):
         bench_path = tmp_path / "nested" / "dir" / "snapshots.csv"
         monkeypatch.setattr(
             "scripts.collect.fetch_html",
-            lambda url, wait_selector=None: FIXTURE_HTML_EMPTY,
+            lambda url, wait_selector=None: FIXTURE_HTML_FULL,
         )
         collect_module.collect_spy(bench_path=bench_path)
         assert bench_path.exists()
