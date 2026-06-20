@@ -110,7 +110,7 @@ stored raw SPY + group perf whenever greenlit.
 
 ## Implementation phases
 
-### Phase 0 — Commit & merge THIS plan, then PAUSE for approval  ⟵ gate
+### COMPLETED - Phase 0 — Commit & merge THIS plan, then PAUSE for approval  ⟵ gate
 
 1. Add this plan to the repo as `planning/PLAN_relative-strength-benchmark.md` (house style:
    `planning/PLAN_<slug>.md`; register in `planning/README.md` table with branch ref). It must
