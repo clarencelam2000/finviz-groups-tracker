@@ -15,6 +15,7 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent))
 from delta_config import (
     ACCEL_WINDOW,
+    BENCH_CSV_COLUMNS,
     LOOKBACK_WINDOWS,
     MOMENTUM_COLS,
     PERF_DELTA_METRICS,
@@ -22,7 +23,14 @@ from delta_config import (
     RANK_DELTA_METRICS,
     REGIME_LONG,
     REGIME_SHORT,
+    RS_AGREEMENT_COLS,
+    RS_COLS,
+    RS_REGIME_LONG,
+    RS_REGIME_SHORT,
+    RS_SLOPE_COL,
+    RS_TIMEFRAMES,
     SLOPE_WINDOW,
+    SNAPSHOT_COLS,
     WEIGHTS_FAST,
     WEIGHTS_MID,
     delta_columns,
@@ -34,12 +42,6 @@ from delta_config import (
 
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
-
-SNAPSHOT_COLS = [
-    "date", "collected_at", "group_type", "name", "stocks", "market_cap",
-    "pe", "fwd_pe", "perf_day", "perf_week", "perf_month", "perf_quarter",
-    "perf_half", "perf_year", "perf_ytd", "avg_volume", "rel_volume", "change",
-]
 
 DELTA_COLUMNS = delta_columns()
 
@@ -309,11 +311,160 @@ def compute_rank_trend_slope(df_hist: pd.DataFrame, available_dates: list,
 
 
 # ---------------------------------------------------------------------------
+# Benchmark helpers
+# ---------------------------------------------------------------------------
+
+def load_benchmark(csv_path: Path) -> pd.DataFrame:
+    """Load benchmark (SPY) snapshots CSV. Returns empty DataFrame if missing."""
+    if not csv_path.exists():
+        return pd.DataFrame(columns=BENCH_CSV_COLUMNS)
+    df = pd.read_csv(csv_path)
+    if df.empty:
+        return pd.DataFrame(columns=BENCH_CSV_COLUMNS)
+    for col in ["perf_day", "perf_week", "perf_month", "perf_quarter",
+                "perf_half", "perf_year", "perf_ytd"]:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
+    return df
+
+
+# ---------------------------------------------------------------------------
+# RS (relative-strength vs SPY) pure functions
+# ---------------------------------------------------------------------------
+
+def compute_rs_score(df_day: pd.DataFrame) -> pd.Series:
+    """RS score: mean percentile of each group's RS spread across all timeframes.
+
+    Analogous to momentum_score but using RS spreads (group − SPY) instead of
+    raw perf values. Score 1.0 = best relative strength across all timeframes.
+    NaN for single-row frames (percentile undefined with n=1).
+    """
+    n = len(df_day)
+    if n <= 1:
+        return pd.Series([float("nan")] * n, index=df_day.index)
+
+    scores = pd.DataFrame(index=df_day.index)
+    for col in RS_TIMEFRAMES:
+        if col in df_day.columns and df_day[col].notna().any():
+            ranks = df_day[col].rank(ascending=False, method="min", na_option="bottom")
+            scores[col] = (n - ranks) / (n - 1)
+
+    if scores.empty:
+        return pd.Series([float("nan")] * n, index=df_day.index)
+
+    return scores.mean(axis=1)
+
+
+def compute_rs_agreement(df_day: pd.DataFrame) -> pd.Series:
+    """RS agreement: cross-timeframe consistency of RS spreads.
+
+    Analogous to compute_rank_agreement but uses RS spreads for the medium
+    timeframes (month/quarter/half). Score 1.0 = all three timeframes show
+    the same relative-strength stance; 0.0 = maximum disagreement.
+    Returns NaN when fewer than 3 RS columns are available.
+    """
+    n = len(df_day)
+    if n <= 1:
+        return pd.Series([float("nan")] * n, index=df_day.index)
+
+    pct_df = pd.DataFrame(index=df_day.index)
+    for col in RS_AGREEMENT_COLS:
+        if col in df_day.columns and df_day[col].notna().any():
+            ranks = df_day[col].rank(ascending=False, method="min", na_option="bottom")
+            pct_df[col] = (n - ranks) / (n - 1)
+
+    if pct_df.shape[1] < 3:
+        return pd.Series([float("nan")] * n, index=df_day.index)
+
+    row_std = pct_df.std(axis=1, ddof=1)
+    return (1 - row_std / _MAX_STD_3).clip(lower=0.0, upper=1.0)
+
+
+def compute_rs_slope(df_hist: pd.DataFrame, bench_df: pd.DataFrame,
+                     available_dates: list, target_date,
+                     window: int = SLOPE_WINDOW) -> pd.Series:
+    """Slope of RS_SLOPE_COL (rs_month) spread over the last `window` sessions.
+
+    Positive = group's relative strength vs SPY is building (pulling further
+    ahead of the market). Unlike rank_trend_slope, no negation is needed:
+    higher rs_month = better RS.
+
+    Returns empty Series if target_date not in available_dates or
+    fewer than 2 sessions of SPY + group data overlap.
+    """
+    if target_date not in available_dates or bench_df is None or bench_df.empty:
+        return pd.Series(dtype=float)
+    end = available_dates.index(target_date)
+    start = max(0, end - window + 1)
+    sessions = available_dates[start:end + 1]
+    if len(sessions) < 2:
+        return pd.Series(dtype=float)
+
+    # perf column underlying RS_SLOPE_COL (e.g. rs_month → perf_month)
+    group_col = "perf_" + RS_SLOPE_COL[3:]
+
+    per_name: dict = {}
+    for x, d in enumerate(sessions):
+        day_groups = df_hist[df_hist["date"] == d]
+        spy_rows = bench_df[bench_df["date"] == d]
+        if spy_rows.empty:
+            continue
+        spy_val = spy_rows[group_col].iloc[0] if group_col in spy_rows.columns else float("nan")
+        if pd.isna(spy_val):
+            continue
+        for _, r in day_groups.iterrows():
+            g_val = r.get(group_col)
+            if pd.isna(g_val):
+                continue
+            per_name.setdefault(r["name"], []).append((x, float(g_val) - float(spy_val)))
+
+    slopes: dict = {}
+    for name, pts in per_name.items():
+        if len(pts) < 2:
+            slopes[name] = float("nan")
+            continue
+        xs, ys = [p[0] for p in pts], [p[1] for p in pts]
+        mx, my = sum(xs) / len(xs), sum(ys) / len(ys)
+        denom = sum((xi - mx) ** 2 for xi in xs)
+        if denom == 0:
+            slopes[name] = float("nan")
+            continue
+        slopes[name] = sum((xi - mx) * (yi - my) for xi, yi in zip(xs, ys)) / denom
+    return pd.Series(slopes)
+
+
+def compute_rs_regime(df_day: pd.DataFrame) -> pd.Series:
+    """Short-horizon RS percentile mean minus long-horizon RS percentile mean.
+
+    Positive = group is *newly* outperforming the market (short RS > long RS →
+    emerging RS leader). Negative = RS leadership is longer-term / potentially
+    late-cycle. Range roughly [−1, 1]; NaN if either bucket is unavailable.
+    """
+    n = len(df_day)
+    if n <= 1:
+        return pd.Series([float("nan")] * n, index=df_day.index)
+
+    pct = pd.DataFrame(index=df_day.index)
+    for col in RS_REGIME_SHORT + RS_REGIME_LONG:
+        if col in df_day.columns and df_day[col].notna().any():
+            ranks = df_day[col].rank(ascending=False, method="min", na_option="bottom")
+            pct[col] = (n - ranks) / (n - 1)
+
+    short_cols = [c for c in RS_REGIME_SHORT if c in pct.columns]
+    long_cols = [c for c in RS_REGIME_LONG if c in pct.columns]
+    if not short_cols or not long_cols:
+        return pd.Series([float("nan")] * n, index=df_day.index)
+    return pct[short_cols].mean(axis=1) - pct[long_cols].mean(axis=1)
+
+
+# ---------------------------------------------------------------------------
 # Core computation
 # ---------------------------------------------------------------------------
 
 def compute_for_group(group_type: str, target_date_str: str = None,
-                      snap_path: Path = None, delta_path: Path = None):
+                      snap_path: Path = None, delta_path: Path = None,
+                      bench_df: pd.DataFrame = None):
     subdir = "sectors" if group_type == "sector" else "industries"
     if snap_path is None:
         snap_path = DATA_DIR / subdir / "snapshots.csv"
@@ -390,6 +541,67 @@ def compute_for_group(group_type: str, target_date_str: str = None,
     else:
         df_today["momentum_accel"] = float("nan")
 
+    # RS signals: require SPY benchmark data for the target date.
+    # All RS columns are NaN when benchmark data is absent or missing for this date.
+    spy_rows = (
+        bench_df[bench_df["date"] == target_date]
+        if bench_df is not None and not bench_df.empty
+        else pd.DataFrame()
+    )
+
+    if not spy_rows.empty:
+        spy_row = spy_rows.iloc[0]
+
+        # Tier 1: raw RS spreads — group_perf_X − SPY_perf_X per timeframe.
+        for tf in RS_TIMEFRAMES:
+            group_col = "perf_" + tf[3:]  # e.g. rs_week → perf_week
+            spy_val = spy_row.get(group_col, float("nan"))
+            if not pd.isna(spy_val) and group_col in df_today.columns:
+                df_today[tf] = df_today[group_col] - float(spy_val)
+            else:
+                df_today[tf] = float("nan")
+
+        # Tier 2: aggregate RS — breadth and consistency of RS spreads.
+        df_today["rs_score"] = compute_rs_score(df_today)
+        df_today["rs_agreement"] = compute_rs_agreement(df_today)
+        df_today["rs_confirmed"] = df_today["rs_score"] * df_today["rs_agreement"]
+
+        # Tier 3: RS trend and acceleration.
+        rs_slope_s = compute_rs_slope(df, bench_df, available_dates, target_date)
+        df_today["rs_slope"] = df_today["name"].map(rs_slope_s)
+
+        rs_accel_date = find_trading_date_back(available_dates, target_date, ACCEL_WINDOW)
+        if rs_accel_date and rs_accel_date != target_date:
+            df_accel_groups = df[df["date"] == rs_accel_date].copy()
+            spy_accel = bench_df[bench_df["date"] == rs_accel_date]
+            if not df_accel_groups.empty and not spy_accel.empty:
+                spy_accel_row = spy_accel.iloc[0]
+                for tf in RS_TIMEFRAMES:
+                    group_col = "perf_" + tf[3:]
+                    a_val = spy_accel_row.get(group_col, float("nan"))
+                    if not pd.isna(a_val) and group_col in df_accel_groups.columns:
+                        df_accel_groups[tf] = df_accel_groups[group_col] - float(a_val)
+                    else:
+                        df_accel_groups[tf] = float("nan")
+                prior_rs = compute_rs_score(df_accel_groups)
+                prior_rs.index = df_accel_groups["name"].values
+                df_today["rs_accel"] = (
+                    df_today["rs_score"].values
+                    - df_today["name"].map(prior_rs).values
+                )
+            else:
+                df_today["rs_accel"] = float("nan")
+        else:
+            df_today["rs_accel"] = float("nan")
+
+        # Tier 4: RS regime — short-horizon vs long-horizon RS.
+        df_today["rs_regime_short_long"] = compute_rs_regime(df_today)
+
+    else:
+        # No SPY data for this date → all RS columns NaN.
+        for col in RS_COLS:
+            df_today[col] = float("nan")
+
     # Build output rows
     new_rows = []
     for _, row in df_today.iterrows():
@@ -439,6 +651,8 @@ def compute_for_group(group_type: str, target_date_str: str = None,
 
         for mcol in MOMENTUM_COLS:
             out[mcol] = _fmt(row.get(mcol))
+        for rs_col in RS_COLS:
+            out[rs_col] = _fmt(row.get(rs_col))
         new_rows.append(out)
 
     if not new_rows:
@@ -474,8 +688,13 @@ def main():
     parser.add_argument("--date", default=None, help="Target date YYYY-MM-DD (default: latest in snapshot)")
     args = parser.parse_args()
 
+    bench_path = DATA_DIR / "benchmark" / "snapshots.csv"
+    bench_df = load_benchmark(bench_path)
+    if bench_df.empty:
+        print("  [info] No benchmark data found — RS columns will be NaN.")
+
     for group_type in ("sector", "industry"):
-        compute_for_group(group_type, args.date)
+        compute_for_group(group_type, args.date, bench_df=bench_df)
 
     print("\nDone.")
 

@@ -579,3 +579,245 @@ class TestMomentumAccelIntegration:
         # Last date is 2026-01-12; A was weak 10 sessions earlier (2026-01-02).
         a_row = next(r for r in rows if r["date"] == "2026-01-12" and r["name"] == "A")
         assert float(a_row["momentum_accel"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# RS pure functions
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def rs_df():
+    """Three-row snapshot with rs_* spreads already computed."""
+    return pd.DataFrame({
+        "name": ["Alpha", "Beta", "Gamma"],
+        "rs_day":     [2.0, 0.0, -1.0],
+        "rs_week":    [3.0, 1.0, -2.0],
+        "rs_month":   [4.0, 0.5, -1.5],
+        "rs_quarter": [5.0, 1.0, -3.0],
+        "rs_half":    [6.0, 0.5, -2.5],
+        "rs_year":    [7.0, 1.0, -4.0],
+        "rs_ytd":     [3.5, 0.0, -2.0],
+    })
+
+
+class TestComputeRsScore:
+    def test_scores_in_0_1_range(self, rs_df):
+        s = cd.compute_rs_score(rs_df)
+        assert s.between(0.0, 1.0).all()
+
+    def test_best_rs_has_highest_score(self, rs_df):
+        s = cd.compute_rs_score(rs_df)
+        # Alpha dominates all timeframes → highest rs_score
+        assert s.idxmax() == 0
+
+    def test_worst_rs_has_lowest_score(self, rs_df):
+        s = cd.compute_rs_score(rs_df)
+        assert s.idxmin() == 2
+
+    def test_single_row_returns_nan(self):
+        df = pd.DataFrame({"name": ["A"], "rs_week": [1.0], "rs_month": [0.5]})
+        s = cd.compute_rs_score(df)
+        assert math.isnan(s.iloc[0])
+
+    def test_no_rs_columns_returns_nan(self):
+        df = pd.DataFrame({"name": ["A", "B"], "perf_week": [1.0, 2.0]})
+        s = cd.compute_rs_score(df)
+        assert s.isna().all()
+
+    def test_all_nan_rs_column_skipped(self):
+        df = pd.DataFrame({
+            "name": ["A", "B"],
+            "rs_week": [float("nan"), float("nan")],
+            "rs_month": [2.0, 1.0],
+        })
+        s = cd.compute_rs_score(df)
+        # rs_week all-NaN skipped; result from rs_month only — no crash
+        assert not s.isna().all()
+
+
+class TestComputeRsAgreement:
+    def test_perfect_agreement_scores_1(self):
+        # All three RS agreement cols rank the same way
+        df = pd.DataFrame({
+            "name": ["A", "B", "C"],
+            "rs_month":   [3.0, 2.0, 1.0],
+            "rs_quarter": [3.0, 2.0, 1.0],
+            "rs_half":    [3.0, 2.0, 1.0],
+        })
+        s = cd.compute_rs_agreement(df)
+        assert all(abs(v - 1.0) < 1e-9 for v in s)
+
+    def test_scores_in_0_1_range(self, rs_df):
+        s = cd.compute_rs_agreement(rs_df)
+        assert s.between(0.0, 1.0).all()
+
+    def test_single_row_returns_nan(self):
+        df = pd.DataFrame({
+            "name": ["A"],
+            "rs_month": [1.0], "rs_quarter": [1.0], "rs_half": [1.0],
+        })
+        s = cd.compute_rs_agreement(df)
+        assert math.isnan(s.iloc[0])
+
+    def test_missing_rs_agreement_cols_returns_nan(self):
+        df = pd.DataFrame({
+            "name": ["A", "B"],
+            "rs_month": [1.0, 2.0],
+        })
+        s = cd.compute_rs_agreement(df)
+        assert s.isna().all()
+
+
+class TestComputeRsSlope:
+    def _make_hist(self, dates, spy_perf_month, group_perf_months):
+        """Build a multi-date history and a bench_df for slope computation."""
+        group_rows = []
+        bench_rows = []
+        for d, spy_val, group_vals in zip(dates, spy_perf_month, group_perf_months):
+            bench_rows.append({"date": d, "perf_month": spy_val})
+            for name, gval in group_vals.items():
+                group_rows.append({"date": d, "name": name, "perf_month": gval})
+        return pd.DataFrame(group_rows), pd.DataFrame(bench_rows)
+
+    def test_positive_slope_when_rs_building(self):
+        # Group A's perf_month beat SPY by increasing amounts over 5 sessions.
+        dates = [date(2026, 1, i) for i in range(1, 6)]
+        spy = [1.0] * 5
+        groups = [{name: v for name, v in [("A", float(i)), ("B", 0.0)]}
+                  for i in range(1, 6)]
+        df_hist, bench = self._make_hist(dates, spy, groups)
+        s = cd.compute_rs_slope(df_hist, bench, dates, dates[-1])
+        assert s["A"] > 0
+
+    def test_negative_slope_when_rs_fading(self):
+        dates = [date(2026, 1, i) for i in range(1, 6)]
+        spy = [5.0] * 5  # SPY at 5; group A falls from 5 to 1 → RS worsens
+        groups = [{name: v for name, v in [("A", float(5 - i)), ("B", 0.0)]}
+                  for i in range(1, 6)]
+        df_hist, bench = self._make_hist(dates, spy, groups)
+        s = cd.compute_rs_slope(df_hist, bench, dates, dates[-1])
+        assert s["A"] < 0
+
+    def test_no_spy_data_returns_empty(self):
+        df_hist = pd.DataFrame({"date": [date(2026, 1, 1)], "name": ["A"], "perf_month": [1.0]})
+        bench = pd.DataFrame(columns=["date", "perf_month"])
+        s = cd.compute_rs_slope(df_hist, bench, [date(2026, 1, 1)], date(2026, 1, 1))
+        assert s.empty
+
+    def test_single_session_returns_empty(self):
+        dates = [date(2026, 1, 1)]
+        df_hist = pd.DataFrame({"date": dates, "name": ["A"], "perf_month": [1.0]})
+        bench = pd.DataFrame({"date": dates, "perf_month": [0.5]})
+        s = cd.compute_rs_slope(df_hist, bench, dates, dates[0])
+        assert s.empty
+
+
+class TestComputeRsRegime:
+    def test_positive_when_short_rs_leads(self):
+        # Alpha beats SPY on recent (week/month) but trails on long-term.
+        df = pd.DataFrame({
+            "name": ["Alpha", "Beta"],
+            "rs_week":    [3.0, 1.0],
+            "rs_month":   [2.0, 1.0],
+            "rs_quarter": [0.5, 1.0],
+            "rs_half":    [0.5, 1.0],
+            "rs_year":    [0.0, 1.0],
+        })
+        s = cd.compute_rs_regime(df)
+        assert s.iloc[0] > 0  # Alpha: short RS > long RS
+
+    def test_negative_when_long_rs_leads(self):
+        df = pd.DataFrame({
+            "name": ["Alpha", "Beta"],
+            "rs_week":    [0.0, 1.0],
+            "rs_month":   [0.0, 1.0],
+            "rs_quarter": [3.0, 1.0],
+            "rs_half":    [3.0, 1.0],
+            "rs_year":    [3.0, 1.0],
+        })
+        s = cd.compute_rs_regime(df)
+        assert s.iloc[0] < 0  # Alpha: long RS > short RS → fading
+
+    def test_single_row_returns_nan(self):
+        df = pd.DataFrame({
+            "name": ["A"], "rs_week": [1.0], "rs_month": [1.0],
+            "rs_quarter": [1.0], "rs_half": [1.0], "rs_year": [1.0],
+        })
+        assert math.isnan(cd.compute_rs_regime(df).iloc[0])
+
+    def test_missing_long_bucket_is_nan(self):
+        df = pd.DataFrame({
+            "name": ["A", "B"], "rs_week": [1.0, 2.0], "rs_month": [1.0, 2.0],
+        })
+        assert cd.compute_rs_regime(df).isna().all()
+
+
+class TestComputeForGroupRSColumns:
+    """End-to-end: RS columns populate correctly when SPY data is present."""
+
+    def _make_snapshot_csv(self, path, dates_perf):
+        cols = cd.SNAPSHOT_COLS
+        rows = []
+        for d, groups in dates_perf.items():
+            for name, p in groups.items():
+                row = {c: "" for c in cols}
+                row.update({"date": d, "name": name, "group_type": "sector"})
+                for k in ["perf_day", "perf_week", "perf_month", "perf_quarter",
+                          "perf_half", "perf_year", "perf_ytd"]:
+                    row[k] = p
+                rows.append(row)
+        import csv as _csv
+        with open(path, "w", newline="") as f:
+            w = _csv.DictWriter(f, fieldnames=cols)
+            w.writeheader()
+            w.writerows(rows)
+
+    def _make_bench_df(self, date_str, spy_perf=1.0):
+        return pd.DataFrame([{
+            "date": date(int(date_str[:4]), int(date_str[5:7]), int(date_str[8:])),
+            "perf_day": spy_perf, "perf_week": spy_perf, "perf_month": spy_perf,
+            "perf_quarter": spy_perf, "perf_half": spy_perf, "perf_year": spy_perf,
+            "perf_ytd": spy_perf,
+        }])
+
+    def test_rs_columns_present_when_spy_available(self, tmp_path):
+        snap = tmp_path / "snapshots.csv"
+        self._make_snapshot_csv(snap, {
+            "2026-06-09": {"Alpha": 3.0, "Beta": 1.0, "Gamma": -1.0}
+        })
+        bench_df = self._make_bench_df("2026-06-09", spy_perf=0.5)
+        delta = tmp_path / "deltas.csv"
+        cd.compute_for_group("sector", snap_path=snap, delta_path=delta, bench_df=bench_df)
+        with open(delta, newline="") as f:
+            rows = {r["name"]: r for r in __import__("csv").DictReader(f)}
+        # Alpha: perf_month = 3.0, SPY = 0.5 → rs_month = 2.5 (positive)
+        assert float(rows["Alpha"]["rs_month"]) == pytest.approx(2.5)
+        # Gamma: perf_month = -1.0, SPY = 0.5 → rs_month = -1.5 (negative)
+        assert float(rows["Gamma"]["rs_month"]) == pytest.approx(-1.5)
+
+    def test_rs_columns_blank_when_no_spy(self, tmp_path):
+        snap = tmp_path / "snapshots.csv"
+        self._make_snapshot_csv(snap, {
+            "2026-06-09": {"Alpha": 3.0, "Beta": 1.0}
+        })
+        delta = tmp_path / "deltas.csv"
+        cd.compute_for_group("sector", snap_path=snap, delta_path=delta, bench_df=None)
+        with open(delta, newline="") as f:
+            rows = {r["name"]: r for r in __import__("csv").DictReader(f)}
+        # No SPY → all RS columns empty
+        from scripts.delta_config import RS_COLS
+        assert all(rows["Alpha"][c] == "" for c in RS_COLS)
+
+    def test_rs_score_and_confirmed_in_0_1(self, tmp_path):
+        snap = tmp_path / "snapshots.csv"
+        self._make_snapshot_csv(snap, {
+            "2026-06-09": {"Alpha": 5.0, "Beta": 2.0, "Gamma": -1.0}
+        })
+        bench_df = self._make_bench_df("2026-06-09", spy_perf=1.0)
+        delta = tmp_path / "deltas.csv"
+        cd.compute_for_group("sector", snap_path=snap, delta_path=delta, bench_df=bench_df)
+        with open(delta, newline="") as f:
+            rows = {r["name"]: r for r in __import__("csv").DictReader(f)}
+        for name in ("Alpha", "Beta", "Gamma"):
+            assert 0.0 <= float(rows[name]["rs_score"]) <= 1.0
+            assert 0.0 <= float(rows[name]["rs_confirmed"]) <= 1.0

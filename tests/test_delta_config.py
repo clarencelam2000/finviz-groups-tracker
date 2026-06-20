@@ -29,16 +29,26 @@ def test_delta_columns_includes_every_window_metric_combo():
             assert f"{m}_delta_{w}d" in cols
 
 
-def test_delta_columns_ends_with_momentum_cols():
+def test_delta_columns_ends_with_rs_cols():
+    # RS_COLS are appended last; MOMENTUM_COLS precede them.
     cols = dc.delta_columns()
-    assert cols[-len(dc.MOMENTUM_COLS):] == dc.MOMENTUM_COLS
+    assert cols[-len(dc.RS_COLS):] == dc.RS_COLS
+
+
+def test_delta_columns_momentum_precedes_rs():
+    cols = dc.delta_columns()
+    mom_end = cols.index(dc.MOMENTUM_COLS[-1])
+    rs_start = cols.index(dc.RS_COLS[0])
+    assert mom_end < rs_start
 
 
 def test_delta_columns_count():
     n_delta = len(dc.LOOKBACK_WINDOWS) * (
         len(dc.RANK_DELTA_METRICS) + len(dc.PERF_DELTA_METRICS)
     )
-    expected = 2 + len(dc.RANK_COLS) + n_delta + len(dc.MOMENTUM_COLS)
+    expected = (
+        2 + len(dc.RANK_COLS) + n_delta + len(dc.MOMENTUM_COLS) + len(dc.RS_COLS)
+    )
     assert len(dc.delta_columns()) == expected
 
 
