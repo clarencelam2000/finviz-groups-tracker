@@ -10,6 +10,7 @@ Implementation plans and feature designs. One file per initiative.
 | `ai-architecture-revamp.md` | In progress | `claude/ai-processes-server-architecture-3mhys6` |
 | `ai-quota-exhaustion-fix.md` | Planning | `claude/ai-analysis-resource-exhausted-k5yjmo` |
 | `ai-tab-improvements.md` | Planning | `claude/ai-tab-improvements-gdi56v` |
+| `PLAN_relative-strength-benchmark.md` | Planning (Phase 0 — awaiting approval) | `claude/wonderful-hypatia-qeemic` |
 
 ## Naming convention
 
