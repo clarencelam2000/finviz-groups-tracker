@@ -21,6 +21,8 @@ Full plan: `planning/PLAN_ticker_lookup.md`
 | ~~TICKER-4~~ | ~~**Operations setup**~~ | — | — | ✅ **Done 2026-06-15.** Added FMP call counter (daily KV key `fmp_calls_YYYY-MM-DD`, 7d TTL), `/stats` endpoint returning `{date, fmp_calls_today}`, `DELETE /cache?t=TICKER` for manual cache busting. Counter incremented only on FMP cache misses, never on errors. 34 vitest tests pass. PR #90 merged. |
 | TICKER-5 | **[FUTURE] Sector/Industry → Stocks screener** | `worker/src/index.js` (add /stocks endpoint), `docs/index.html`, `dashboard/app.py` | M | New Worker endpoint `/stocks?finviz_sector=&finviz_industry=` calls FMP screener, returns top 25 by market cap, KV cache 7d. Both front-ends add "Show stocks" toggle on group cards. Do NOT start until TICKER-0 through TICKER-4 are validated in production. See Phase 7 in plan. |
 
+| ETF-1 | **Curated ETF→Finviz-group override layer (Lookup)** | `data/etf_overrides.csv`, `worker/scripts/build_taxonomy.js`, `worker/src/{taxonomy,index}.js`, `worker/src/etf_overrides.json`, `docs/index.html`, `worker/test/index.test.js`, `worker/README.md` | M | **Plan merged (Phase 0), Phase 1 not started.** ETFs (COPX, ITA…) currently all resolve to Financial/Asset Management because FMP classifies funds by legal business. Add a ticker-keyed curated override applied when `is_etf`, validated against tracked Finviz group names at build time. Finnhub holdings aggregation is the demand-gated Phase 2. Full plan: `planning/PLAN_etf_lookup_overrides.md`. |
+
 > **Phase 0:** (1) FMP free account + API key ✅ done. (2) Cloudflare account + KV namespace ✅ done — Worker deployed 2026-06-14.
 
 > **Monthly recurring:** CF analytics check, FMP quota check, taxonomy validity spot-check. See plan Phase 5.
