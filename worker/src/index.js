@@ -11,7 +11,7 @@
  * All errors return HTTP 200 with {error: "..."} so front-ends distinguish error
  * types without catching HTTP status codes.
  */
-import { lookupTaxonomy, lookupSector } from './taxonomy.js';
+import { lookupTaxonomy, lookupSector, lookupEtf } from './taxonomy.js';
 
 const FMP_PROFILE_URL = 'https://financialmodelingprep.com/stable/profile';
 const DEFAULT_TTL_SECONDS = 2592000; // 30 days
@@ -168,6 +168,23 @@ async function fetchProfile(symbol, env) {
   const rawCap = typeof p.marketCap === 'number' ? p.marketCap : Number(p.marketCap);
   const marketCapB = Number.isFinite(rawCap) ? rawCap / 1e9 : null;
 
+  // ETF override layer: curated group assignments take precedence over FMP taxonomy.
+  // Only applied when FMP signals isEtf; non-ETF path is unchanged.
+  let resolvedIndustry = tax.finviz_industry;
+  let resolvedSector = finvizSector;
+  let classificationSource = 'fmp_taxonomy';
+  let etfKind = null;
+
+  if (Boolean(p.isEtf)) {
+    const ov = lookupEtf(symbol);
+    if (ov) {
+      resolvedIndustry = ov.finviz_industry;   // blank for sector/diversified kinds
+      resolvedSector = ov.finviz_sector;        // blank for diversified kind
+      classificationSource = 'etf_override';
+      etfKind = ov.kind;
+    }
+  }
+
   return {
     data: {
       symbol: p.symbol || symbol,
@@ -181,9 +198,11 @@ async function fetchProfile(symbol, env) {
       website: p.website || '',
       fmp_sector: p.sector || '',
       fmp_industry: p.industry || '',
-      finviz_sector: finvizSector,
-      finviz_industry: tax.finviz_industry,
+      finviz_sector: resolvedSector,
+      finviz_industry: resolvedIndustry,
       industry_confidence: tax.confidence,
+      classification_source: classificationSource,
+      etf_kind: etfKind,
       is_etf: Boolean(p.isEtf),
       is_adr: Boolean(p.isAdr),
       is_fund: Boolean(p.isFund),

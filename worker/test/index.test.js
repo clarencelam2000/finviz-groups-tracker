@@ -236,6 +236,97 @@ describe('DELETE /cache', () => {
   });
 });
 
+describe('ETF override layer', () => {
+  it('COPX: thematic ETF → Copper / Basic Materials with etf_override source', async () => {
+    mockFetch(200, [fmpRecord({
+      symbol: 'COPX',
+      sector: 'Financial Services',
+      industry: 'Asset Management',
+      isEtf: true,
+    })]);
+    const body = await (await handleRequest(req('/lookup?t=COPX'), makeEnv())).json();
+    expect(body.finviz_industry).toBe('Copper');
+    expect(body.finviz_sector).toBe('Basic Materials');
+    expect(body.classification_source).toBe('etf_override');
+    expect(body.etf_kind).toBe('thematic');
+  });
+
+  it('ITA: thematic ETF → Aerospace & Defense / Industrials', async () => {
+    mockFetch(200, [fmpRecord({
+      symbol: 'ITA',
+      sector: 'Financial Services',
+      industry: 'Asset Management',
+      isEtf: true,
+    })]);
+    const body = await (await handleRequest(req('/lookup?t=ITA'), makeEnv())).json();
+    expect(body.finviz_industry).toBe('Aerospace & Defense');
+    expect(body.finviz_sector).toBe('Industrials');
+    expect(body.classification_source).toBe('etf_override');
+    expect(body.etf_kind).toBe('thematic');
+  });
+
+  it('XLE: sector ETF → Energy sector, blank finviz_industry', async () => {
+    mockFetch(200, [fmpRecord({
+      symbol: 'XLE',
+      sector: 'Financial Services',
+      industry: 'Asset Management',
+      isEtf: true,
+    })]);
+    const body = await (await handleRequest(req('/lookup?t=XLE'), makeEnv())).json();
+    expect(body.finviz_industry).toBe('');
+    expect(body.finviz_sector).toBe('Energy');
+    expect(body.classification_source).toBe('etf_override');
+    expect(body.etf_kind).toBe('sector');
+  });
+
+  it('SPY: diversified ETF → both fields blank with diversified kind', async () => {
+    mockFetch(200, [fmpRecord({
+      symbol: 'SPY',
+      sector: 'Financial Services',
+      industry: 'Asset Management',
+      isEtf: true,
+    })]);
+    const body = await (await handleRequest(req('/lookup?t=SPY'), makeEnv())).json();
+    expect(body.finviz_industry).toBe('');
+    expect(body.finviz_sector).toBe('');
+    expect(body.classification_source).toBe('etf_override');
+    expect(body.etf_kind).toBe('diversified');
+  });
+
+  it('AAPL (non-ETF): unchanged, classification_source = fmp_taxonomy', async () => {
+    mockFetch(200, [fmpRecord()]);
+    const body = await (await handleRequest(req('/lookup?t=AAPL'), makeEnv())).json();
+    expect(body.finviz_industry).toBe('Consumer Electronics');
+    expect(body.finviz_sector).toBe('Technology');
+    expect(body.classification_source).toBe('fmp_taxonomy');
+    expect(body.etf_kind).toBeNull();
+  });
+
+  it('unlisted ETF (isEtf:true but not in overrides) falls back to fmp_taxonomy', async () => {
+    mockFetch(200, [fmpRecord({
+      symbol: 'UNKNWNETF',
+      sector: 'Financial Services',
+      industry: 'Asset Management',
+      isEtf: true,
+    })]);
+    const body = await (await handleRequest(req('/lookup?t=UNKNWNETF'), makeEnv())).json();
+    expect(body.classification_source).toBe('fmp_taxonomy');
+    expect(body.etf_kind).toBeNull();
+  });
+
+  it('fmp_sector and fmp_industry raw fields are always present', async () => {
+    mockFetch(200, [fmpRecord({
+      symbol: 'COPX',
+      sector: 'Financial Services',
+      industry: 'Asset Management',
+      isEtf: true,
+    })]);
+    const body = await (await handleRequest(req('/lookup?t=COPX'), makeEnv())).json();
+    expect(body.fmp_sector).toBe('Financial Services');
+    expect(body.fmp_industry).toBe('Asset Management');
+  });
+});
+
 describe('FMP error handling', () => {
   it('unknown ticker (empty array) → ticker_not_found', async () => {
     mockFetch(200, []);
