@@ -55,8 +55,11 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   the last N trading sessions."
 
 ## perf_*_delta_Nd
-- Raw performance change vs N days ago — basis for an acceleration hint
-  (▲▲ accelerating / ▼ fading). Currently unused in the Lookup tab (backlog).
+- Raw performance change vs N trading sessions ago — basis for an acceleration
+  hint (▲▲ accelerating / ▼ fading). Surfaced on the Today tab's expanded card
+  as the "vs 20d ago" context row (wk and YTD perf change over ~1 month).
+- **User one-liner:** "How much this group's own return has changed versus N
+  trading sessions ago — positive means it's performing better than it was."
 
 ## rank_agreement
 - **Source:** `compute_rank_agreement` (L183). Converts month/quarter/half
@@ -149,3 +152,18 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   `knowledge/decisions/ADR-002-rank-floor-metric.md`.
 - **User one-liner:** "The lowest this group's ranking has dropped to across 1,
   3, and 6 months — its floor."
+
+## Rotation Phase (AI — sectors only)
+- **Definition:** an AI-generated read of where the broad market sits in its
+  cycle, labeled Early Cycle, Mid Cycle, Late Cycle, or Defensive, with a short
+  reasoning line. Generated nightly from the sector signals; shown on the AI tab
+  and summarized in the Phase History strip.
+- **User one-liner:** "An AI read of where the market is in its cycle — Early,
+  Mid, or Late Cycle, or Defensive — based on which sectors are leading."
+
+## AI Daily Note (AI)
+- **Definition:** the freeform plain-English briefing the AI writes each day, one
+  per group (sectors and industries). Built from the computed signals — sustained
+  strength, notable movers, momentum leaders and laggards, and divergences.
+- **User one-liner:** "A plain-English summary the AI writes each day for sectors
+  and industries, highlighting strength, movers, and divergences."

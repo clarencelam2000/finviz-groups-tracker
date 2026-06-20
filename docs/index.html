@@ -325,6 +325,9 @@
         { id: 'rank_delta', label: 'Rank change (Nd)',
           oneLiner: 'How many spots this group moved up (+) or down (−) over the last N trading sessions.',
           detail: 'N is measured in trading sessions (5 / 10 / 20 / 50), not calendar days. Positive = improved.' },
+        { id: 'perf_delta', label: 'Performance change (Nd)',
+          oneLiner: "How much this group's own return has changed versus N trading sessions ago — positive means it's performing better than it was.",
+          detail: 'Shown on an expanded Today card as the "vs 20d ago" row: week and YTD % change over ~1 month. Unlike rank change, this is the group vs. itself, not vs. other groups.' },
         { id: 'sustained_strength', label: 'Sustained strength',
           oneLiner: 'Strong across 1, 3, and 6 months at the same time — not just a recent flash.',
           detail: 'Top-N in rank_month AND rank_quarter AND rank_half simultaneously.' },
@@ -334,6 +337,12 @@
         { id: 'rank_floor', label: 'Rank floor',
           oneLiner: "The lowest this group's ranking has dropped to across 1, 3, and 6 months — its floor.",
           detail: 'Worst (numerically highest) rank across rank_month / quarter / half. "Never worse than #N."' },
+        { id: 'rotation_phase', label: 'Rotation phase (AI)',
+          oneLiner: 'An AI read of where the market is in its cycle — Early, Mid, or Late Cycle, or Defensive — based on which sectors are leading.',
+          detail: 'Generated nightly from the sector signals (sectors only). Shown on the AI tab with a reasoning line and summarized in the Phase History strip.' },
+        { id: 'ai_note', label: 'AI daily note',
+          oneLiner: 'A plain-English summary the AI writes each day for sectors and industries, highlighting strength, movers, and divergences.',
+          detail: 'Freeform briefing built from the computed signals — sustained strength, notable movers, momentum leaders and laggards, and divergences.' },
       ],
       howto: [
         'Each card is one group: a rank badge on the left, the selected timeframe’s % on the right, and momentum below the name.',
@@ -937,7 +946,7 @@
         const py20 = pf(d.perf_ytd_delta_20d);
         const perfDeltaRow = (pw20 !== null && py20 !== null) ? `
           <div class="border-t border-slate-700 pt-2 mt-1 text-xs text-center col-span-3">
-            <span class="text-slate-500">vs 20d ago: </span>
+            <span class="text-slate-500 active:text-sky-300 cursor-pointer" onclick="event.stopPropagation();__openHub('guide','perf_delta')">vs 20d ago ⓘ: </span>
             <span class="${pw20 > 0 ? 'text-emerald-400' : 'text-red-400'}">${fmtPp(pw20)} wk</span>
             <span class="text-slate-600"> · </span>
             <span class="${py20 > 0 ? 'text-emerald-400' : 'text-red-400'}">${fmtPp(py20)} YTD</span>
@@ -1349,6 +1358,7 @@
             <div class="flex items-center gap-2 mb-1">
               <div class="w-3.5 h-3.5 rounded-full flex-shrink-0" style="background-color:${pm.dot}"></div>
               <div class="text-sm font-bold ${pm.text}">Rotation Phase: ${escapeHtml(phaseLabel)}</div>
+              <button class="why-link ml-auto text-xs text-sky-400 active:text-sky-300 flex-shrink-0" onclick="__openHub('guide','rotation_phase')" title="What does this mean?">ⓘ</button>
             </div>
             ${phase.reasoning ? `<div class="text-xs text-slate-300 italic leading-relaxed">${escapeHtml(phase.reasoning)}</div>` : ''}
           </div>`;
