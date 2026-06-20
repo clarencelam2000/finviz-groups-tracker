@@ -1955,16 +1955,16 @@
     // Copy mirrors knowledge/moaty-metrics.md. Native <details> = no JS needed.
     function lookupGlossary() {
       const rows = [
-        [“rank (wk)”, “Where this group places among all groups on weekly performance — #1 is the best performer. The sparkline tracks it over time (a rising line = improving).”],
-        [“rank floor”, “The range of rankings across 1, 3, and 6 months — best to worst. A tight, low range means it held its standing consistently.”],
-        [“sustained / consistent”, “Sustained = top-quartile across 1/3/6mo at once (not a recent flash). Consistent = the three timeframes agree and it’s at least top-half.”],
-        [“momentum”, “Strength across every timeframe at once, 0–100% (a percentile across the seven perf windows).”],
-        [“breadth”, “Whether the group is positive across the major timeframes. “All green” gates on month/quarter/half/YTD; the day & week dots show context but don’t gate.”],
-        [“confirmed momentum”, “Momentum × rank_agreement — high only when the group is broadly strong AND its timeframes agree (not a one-timeframe pop).”],
-        [“acceleration”, “Whether momentum is building (▲) or fading (▼) over the last 10 sessions. Flat = momentum isn’t accelerating in either direction.”],
-        [“regime”, “Positive = recently accelerating vs. longer-term trend (emerging leader). Negative = fading. Uses short-horizon minus long-horizon percentile.”],
-        [“rank trend”, “↑↑/↑ = consistent improvement in YTD rank over the last 10 sessions. ↓↓/↓ = steady slide. ~ = flat.”],
-        [“YTD rank delta”, “How many spots this group’s YTD rank moved over the last N trading sessions. Positive = improved (lower rank number = better).”],
+        ["rank (wk)", "Where this group places among all groups on weekly performance — #1 is the best performer. The sparkline tracks it over time (a rising line = improving)."],
+        ["rank floor", "The range of rankings across 1, 3, and 6 months — best to worst. A tight, low range means it held its standing consistently."],
+        ["sustained / consistent", "Sustained = top-quartile across 1/3/6mo at once (not a recent flash). Consistent = the three timeframes agree and it’s at least top-half."],
+        ["momentum", "Strength across every timeframe at once, 0–100% (a percentile across the seven perf windows)."],
+        ["breadth", "Whether the group is positive across the major timeframes. “All green” gates on month/quarter/half/YTD; the day & week dots show context but don’t gate."],
+        ["confirmed momentum", "Momentum × rank_agreement — high only when the group is broadly strong AND its timeframes agree (not a one-timeframe pop)."],
+        ["acceleration", "Whether momentum is building (▲) or fading (▼) over the last 10 sessions. Flat = momentum isn’t accelerating in either direction."],
+        ["regime", "Positive = recently accelerating vs. longer-term trend (emerging leader). Negative = fading. Uses short-horizon minus long-horizon percentile."],
+        ["rank trend", "↑↑/↑ = consistent improvement in YTD rank over the last 10 sessions. ↓↓/↓ = steady slide. ~ = flat."],
+        ["YTD rank delta", "How many spots this group’s YTD rank moved over the last N trading sessions. Positive = improved (lower rank number = better)."],
       ];
       const items = rows.map(([t, d]) =>
         `<div><span class="text-slate-200 font-medium">${t}</span> — <span class="text-slate-400">${d}</span></div>`
@@ -2466,7 +2466,7 @@
       }
       if (visible && e.key === 'ArrowUp') {
         e.preventDefault();
-        _suggFocusIdx = (_suggFocusIdx - 1 + buttons.length) % buttons.length;
+        _suggFocusIdx = _suggFocusIdx <= 0 ? buttons.length - 1 : _suggFocusIdx - 1;
         updateSuggestionHighlight(); return;
       }
       if (e.key === 'Escape') { hideSuggestions(); return; }
