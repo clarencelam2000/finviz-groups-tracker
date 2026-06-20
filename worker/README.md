@@ -35,14 +35,34 @@ detail in `knowledge/fmp-api-findings.md`.
 | Path | Purpose |
 |------|---------|
 | `src/index.js` | Worker handler: routing, KV cache, FMP fetch, response shaping |
-| `src/taxonomy.js` | Runtime FMP→Finviz lookup (`lookupTaxonomy`, `lookupSector`) |
-| `src/taxonomy_map.json` | Generated map (industries + sector fallback). **Do not hand-edit.** |
-| `scripts/build_taxonomy.js` | Regenerates `taxonomy_map.json` from `../data/taxonomy_map.csv` |
+| `src/taxonomy.js` | Runtime FMP→Finviz lookup (`lookupTaxonomy`, `lookupSector`, `lookupEtf`) |
+| `src/taxonomy_map.json` | Generated industry/sector map. **Do not hand-edit.** |
+| `src/etf_overrides.json` | Generated ETF override map. **Do not hand-edit.** |
+| `scripts/build_taxonomy.js` | Regenerates both JSONs from the CSVs in one pass |
 | `test/*.test.js` | Vitest unit tests (no network, no real KV) |
 | `wrangler.toml` | Worker + KV binding config |
 
-The source of truth for the taxonomy is **`data/taxonomy_map.csv`** at the repo root
-(built in TICKER-0 / PR #66). After editing it, run `npm run build:taxonomy`.
+The sources of truth are both in the repo root:
+- **`data/taxonomy_map.csv`** — FMP→Finviz industry/sector map (built in TICKER-0).
+- **`data/etf_overrides.csv`** — curated ETF→Finviz-group map (ETF-1). Columns:
+  `ticker, finviz_industry, finviz_sector, etf_name, kind, note`.
+  Three `kind` values: `thematic` (exact industry+sector), `sector` (sector only, blank
+  industry), `diversified` (both blank — broad market, not a single rotation group).
+
+After editing either CSV, run `npm run build:taxonomy`.
+
+### Build-time validation
+
+`build_taxonomy.js` validates every non-blank `finviz_industry` / `finviz_sector`
+in `etf_overrides.csv` against the canonical names from the live snapshot CSVs.
+The build exits non-zero with a clear message on any unknown name:
+
+```
+ETF override validation FAILED — unknown Finviz group names:
+  Row 2 (BOGUS): unknown finviz_industry "Copper Miners" — not found in data/industries/snapshots.csv
+```
+
+This prevents silent typos like "Aerospace and Defense" vs "Aerospace & Defense".
 
 ---
 
@@ -88,9 +108,9 @@ echo "$FMP_API_KEY" | npx wrangler secret put FMP_API_KEY   # headless; or omit 
 ## Build, test, deploy
 
 ```bash
-npm test                 # 34 unit tests, all offline
-npm run build:taxonomy   # regenerate src/taxonomy_map.json from the CSV
-npm run deploy           # builds taxonomy, then `wrangler deploy`
+npm test                 # 50 unit tests, all offline
+npm run build:taxonomy   # regenerate src/taxonomy_map.json + src/etf_overrides.json from CSVs
+npm run deploy           # builds taxonomy + overrides, then `wrangler deploy`
 ```
 
 After deploy, Wrangler prints your Worker URL
@@ -136,6 +156,8 @@ npx wrangler dev
   "finviz_sector": "Technology",
   "finviz_industry": "Consumer Electronics",
   "industry_confidence": 1.0,
+  "classification_source": "fmp_taxonomy",
+  "etf_kind": null,
   "is_etf": false,
   "is_adr": false,
   "is_fund": false,
@@ -147,6 +169,34 @@ npx wrangler dev
 `finviz_industry` is `""` (empty string, not null) when the industry isn't in the map;
 in that case `finviz_sector` still resolves via the sector fallback so the sector card
 renders.
+
+### ETF classification fields
+
+`classification_source` is either `"fmp_taxonomy"` (standard path) or `"etf_override"`
+(curated override from `data/etf_overrides.csv` applied because `isEtf: true`).
+
+`etf_kind` is one of:
+- `null` — not an ETF override (standard taxonomy path or unlisted ETF)
+- `"thematic"` — tracks a single Finviz industry theme (e.g. COPX→Copper, SMH→Semiconductors)
+- `"sector"` — spans all industries in one sector (e.g. XLE→Energy, XLK→Technology);
+  `finviz_industry` is blank, `finviz_sector` is set
+- `"diversified"` — broad market ETF (e.g. SPY, QQQ); both `finviz_industry` and
+  `finviz_sector` are blank; front-end shows an informational card instead
+
+Raw `fmp_sector` and `fmp_industry` are always present regardless of override, so
+callers can compare what FMP returned vs. what the override resolved to.
+
+### Post-deploy cache bust (after first deploy with ETF override)
+
+KV entries cached before this deploy have no `classification_source`/`etf_kind`.
+Stale-cached ETF entries will show no badge until their 30-day TTL expires.
+To immediately correct the seed set, bust each ETF manually:
+
+```bash
+for t in COPX ITA SMH SOXX XBI IBB GDX GDXJ URA TAN JETS XOP OIH KRE KBE XLE XLF XLI XLK XLV XLP XLY XLU XLB XLRE XLC SPY QQQ VTI DIA IWM; do
+  curl -X DELETE "https://finviz-ticker-lookup.salmonbaby8.workers.dev/cache?t=$t"
+done
+```
 
 ---
 
