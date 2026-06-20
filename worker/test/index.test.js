@@ -249,6 +249,7 @@ describe('ETF override layer', () => {
     expect(body.finviz_sector).toBe('Basic Materials');
     expect(body.classification_source).toBe('etf_override');
     expect(body.etf_kind).toBe('thematic');
+    expect(body.industry_confidence).toBeNull();
   });
 
   it('ITA: thematic ETF → Aerospace & Defense / Industrials', async () => {
@@ -300,6 +301,7 @@ describe('ETF override layer', () => {
     expect(body.finviz_sector).toBe('Technology');
     expect(body.classification_source).toBe('fmp_taxonomy');
     expect(body.etf_kind).toBeNull();
+    expect(body.industry_confidence).not.toBeNull();
   });
 
   it('unlisted ETF (isEtf:true but not in overrides) falls back to fmp_taxonomy', async () => {
@@ -312,6 +314,7 @@ describe('ETF override layer', () => {
     const body = await (await handleRequest(req('/lookup?t=UNKNWNETF'), makeEnv())).json();
     expect(body.classification_source).toBe('fmp_taxonomy');
     expect(body.etf_kind).toBeNull();
+    expect(body.industry_confidence).not.toBeNull();
   });
 
   it('fmp_sector and fmp_industry raw fields are always present', async () => {

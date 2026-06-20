@@ -200,7 +200,7 @@ async function fetchProfile(symbol, env) {
       fmp_industry: p.industry || '',
       finviz_sector: resolvedSector,
       finviz_industry: resolvedIndustry,
-      industry_confidence: tax.confidence,
+      industry_confidence: etfKind ? null : tax.confidence,
       classification_source: classificationSource,
       etf_kind: etfKind,
       is_etf: Boolean(p.isEtf),
