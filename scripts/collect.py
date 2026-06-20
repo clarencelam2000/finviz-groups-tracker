@@ -1,6 +1,6 @@
 """
 collect.py — Fetch Finviz Groups data (sectors + industries) using Playwright
-and append to append-only snapshot CSVs.
+and append to append-only snapshot CSVs. Also scrapes SPY benchmark data.
 """
 
 import csv
@@ -64,6 +64,36 @@ HEADER_MAP = {
 PERF_COLS = {
     "perf_day", "perf_week", "perf_month", "perf_quarter",
     "perf_half", "perf_year", "perf_ytd", "change",
+}
+
+# ---------------------------------------------------------------------------
+# Benchmark (SPY) config
+# ---------------------------------------------------------------------------
+
+# Finviz SPY quote page. The &p=d parameter selects the daily chart view.
+# NOTE: this URL is Cloudflare-gated. collect_spy() requires GitHub Actions
+# (Azure IPs) or a local machine — it will 403 from Google Cloud IPs.
+SPY_URL = "https://finviz.com/stock?t=SPY&p=d"
+
+BENCH_CSV_COLUMNS = [
+    "date", "collected_at", "ticker",
+    "perf_day", "perf_week", "perf_month", "perf_quarter",
+    "perf_half", "perf_year", "perf_ytd",
+]
+
+# Map Finviz quote-page performance label text → internal column name.
+# Multiple label forms accepted for resilience to Finviz wording changes.
+SPY_LABEL_MAP = {
+    "Change": "perf_day",
+    "Perf Day": "perf_day",
+    "Perf Week": "perf_week",
+    "Perf Month": "perf_month",
+    "Perf Quart": "perf_quarter",
+    "Perf Quarter": "perf_quarter",
+    "Perf Half Y": "perf_half",
+    "Perf Half": "perf_half",
+    "Perf Year": "perf_year",
+    "Perf YTD": "perf_ytd",
 }
 
 USER_AGENT = (
@@ -147,8 +177,14 @@ def parse_float(val: str):
 # Scraping
 # ---------------------------------------------------------------------------
 
-def fetch_html(url: str) -> str:
-    """Fetch page HTML using Playwright with retry logic."""
+def fetch_html(url: str, wait_selector: str = ".groups_table") -> str:
+    """Fetch page HTML using Playwright with retry logic.
+
+    wait_selector: CSS selector that must appear before capturing HTML.
+    Groups pages use the default '.groups_table'; the SPY quote page uses
+    '.snapshot-table2'. If the selector is never found, the attempt raises
+    a timeout and retry logic fires.
+    """
     _rd = os.environ.get("COLLECT_RETRY_DELAY")
     delays = [int(_rd)] * 3 if _rd is not None else [30, 60, 120]
     last_exc = None
@@ -163,7 +199,7 @@ def fetch_html(url: str) -> str:
                 page = context.new_page()
                 print(f"  Fetching {url} (attempt {attempt + 1}/3) …")
                 page.goto(url, timeout=60_000, wait_until="domcontentloaded")
-                page.wait_for_selector(".groups_table", timeout=30_000)
+                page.wait_for_selector(wait_selector, timeout=30_000)
                 html = page.content()
                 browser.close()
                 return html
@@ -374,6 +410,109 @@ def trading_date(now_et: datetime) -> str:
     return d.strftime("%Y-%m-%d")
 
 
+def parse_spy_quote(html: str, snapshot_date: str, collected_at: str) -> dict:
+    """Parse Finviz SPY quote page HTML and return a benchmark row dict.
+
+    Scans all <td> elements for known performance labels; the next sibling <td>
+    holds the value. Robust to different table structures on the quote page.
+    Any missing label leaves the corresponding column as None.
+    """
+    soup = BeautifulSoup(html, "lxml")
+
+    rec: dict = {
+        "date": snapshot_date,
+        "collected_at": collected_at,
+        "ticker": "SPY",
+        "perf_day": None,
+        "perf_week": None,
+        "perf_month": None,
+        "perf_quarter": None,
+        "perf_half": None,
+        "perf_year": None,
+        "perf_ytd": None,
+    }
+
+    for td in soup.find_all("td"):
+        label = td.get_text(strip=True)
+        if label in SPY_LABEL_MAP:
+            col = SPY_LABEL_MAP[label]
+            value_td = td.find_next_sibling("td")
+            if value_td:
+                rec[col] = parse_perf(value_td.get_text(strip=True))
+
+    return rec
+
+
+def _evict_bench_row(csv_path: Path, date_str: str) -> int:
+    """Remove the SPY row for date_str from benchmark CSV (atomic rewrite).
+
+    Returns the number of rows removed (0 or 1 in normal operation).
+    """
+    if not csv_path.exists():
+        return 0
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        all_rows = list(reader)
+    kept = [r for r in all_rows if r.get("date") != date_str]
+    evicted = len(all_rows) - len(kept)
+    if evicted == 0:
+        return 0
+    tmp = csv_path.with_suffix(".tmp")
+    with open(tmp, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=BENCH_CSV_COLUMNS)
+        writer.writeheader()
+        for row in kept:
+            writer.writerow({col: row.get(col, "") for col in BENCH_CSV_COLUMNS})
+    tmp.replace(csv_path)
+    return evicted
+
+
+def collect_spy(bench_path: Path = None):
+    """Fetch SPY quote page and append/overwrite in data/benchmark/snapshots.csv.
+
+    Last-write-wins per date: a later run on the same trading day replaces the
+    earlier one. If the scrape fails after all retries, raises RuntimeError —
+    the caller is responsible for logging the warning and exiting non-zero.
+
+    bench_path: override for the benchmark CSV path (default: data/benchmark/snapshots.csv).
+    Exposed for testability — tests pass a tmp_path here.
+    """
+    if bench_path is None:
+        bench_path = DATA_DIR / "benchmark" / "snapshots.csv"
+
+    eastern = pytz.timezone("US/Eastern")
+    now_utc = datetime.now(timezone.utc)
+    snapshot_date = trading_date(datetime.now(eastern))
+    collected_at = now_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    if not bench_path.exists():
+        bench_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(bench_path, "w", newline="", encoding="utf-8") as f:
+            csv.DictWriter(f, fieldnames=BENCH_CSV_COLUMNS).writeheader()
+        print(f"  Created {bench_path}")
+
+    evicted = _evict_bench_row(bench_path, snapshot_date)
+    if evicted:
+        print(f"  Evicted {evicted} existing SPY row(s) for {snapshot_date} (last-write-wins).")
+
+    print(f"\n[benchmark/SPY] snapshot_date={snapshot_date}")
+
+    # The SPY quote page uses '.snapshot-table2' (not '.groups_table').
+    # Selector verified against live Finviz via GitHub Actions (Azure IPs).
+    t0 = time.time()
+    html = fetch_html(SPY_URL, wait_selector=".snapshot-table2")
+    print(f"  fetch_html took {time.time() - t0:.1f}s")
+
+    rec = parse_spy_quote(html, snapshot_date, collected_at)
+
+    with open(bench_path, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=BENCH_CSV_COLUMNS)
+        writer.writerow(
+            {col: ("" if rec.get(col) is None else rec[col]) for col in BENCH_CSV_COLUMNS}
+        )
+    print(f"  Wrote SPY benchmark row for {snapshot_date} to {bench_path}")
+
+
 def collect(group_type: str):
     """Fetch and store one group type."""
     subdir = "sectors" if group_type == "sector" else "industries"
@@ -425,7 +564,23 @@ def collect(group_type: str):
 def main():
     for group_type in ("sector", "industry"):
         collect(group_type)
+
+    # SPY benchmark — must not silently fail. Groups success does not mask SPY failure.
+    spy_failed = False
+    try:
+        collect_spy()
+    except Exception as exc:
+        eastern = pytz.timezone("US/Eastern")
+        date_str = trading_date(datetime.now(eastern))
+        print(
+            f"[WARN] SPY scrape failed for {date_str} — RS will be NaN: {exc}",
+            file=sys.stderr,
+        )
+        spy_failed = True
+
     print("\nDone.")
+    if spy_failed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
