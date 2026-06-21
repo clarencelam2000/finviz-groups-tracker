@@ -230,6 +230,7 @@ _(nothing)_
 
 | # | Task | Date |
 |---|------|------|
+| ONBOARD | Start Here onboarding: WELCOME constant, 5-slide first-run carousel, hub "Start Here" section, fvt_intro_seen_v1, anti-drift tests, canonical copy in product-intro-copy.md, release cut | 2026-06-21 |
 | ETF-1 | Curated ETF→Finviz override layer: 31 overrides (thematic/sector/diversified), build validation, runtime wiring, PWA ETF badges | 2026-06-20 |
 | LB-FF1 | PWA full-dynamic lookback buttons derived from CSV header (`extractWindowsFromHeader`) (PR #110) | 2026-06-18 |
 | MOT-R1/A2, TOD-S3/P5, STR-C4 | Surface PR#105 momentum metrics in PWA: Rotation view, accel badge, slope glyph, confirmed sort, perf-delta row | 2026-06-18 |

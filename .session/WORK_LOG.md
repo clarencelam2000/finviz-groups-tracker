@@ -163,6 +163,17 @@ SPRINT; no app behavior change yet.
 
 ---
 
+## 2026-06-21 — Start Here onboarding intro shipped (3 commits on claude/dreamy-archimedes-3q6ag1)
+
+5-slide first-run carousel + persistent "Start Here" hub section. WELCOME constant (mirrors GUIDE
+pattern) drives both surfaces from one array. First-visit auto-opens carousel once via
+`fvt_intro_seen_v1` localStorage key; re-openable anytime via ⓘ hub. Cites O'Neil/IBD 37%+12%
+stat inline. "Replay intro" button in hub re-opens the carousel. Anti-drift tests guard tab IDs
+and verbatim copy sync with `knowledge/product-intro-copy.md`. 212 non-Playwright tests pass.
+ONBOARD-DL-UX (deep-link dismiss UX) tracked as a revisit candidate in SPRINT.md.
+
+---
+
 ## Open Questions / Future Ideas
 
 - [ ] Confirm Finviz data finalization time (probe intraday)

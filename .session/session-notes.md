@@ -6,6 +6,27 @@
 
 ## Current Status
 
+**Status (2026-06-21) — START HERE ONBOARDING (ONBOARD): COMPLETE on `claude/dreamy-archimedes-3q6ag1`.** 3 commits: `caebb73` (WELCOME constant + hub section + anti-drift tests), `702cc78` (carousel overlay + `fvt_intro_seen_v1` first-run + Playwright tests), `6b3114a` (release cut + README + CLAUDE.md docs). All 212 non-Playwright tests pass. PR open targeting `claude/elegant-babbage-hlxnfy`. Deferred: ONBOARD-DL-UX (carousel deep-link dismiss UX, tracked in SPRINT.md), PWATEST-LOOKBACK (3 pre-existing Playwright failures, unrelated). **Safe to close.**
+
+---
+
+## Session: 2026-06-21 — Start Here onboarding intro (branch claude/dreamy-archimedes-3q6ag1)
+
+**What happened:** Implemented `planning/start-here-onboarding.md` in full per plan §7 commit slicing.
+
+**Changes (3 commits):**
+- `caebb73` — WELCOME constant (5-slide array, mirrors GUIDE pattern), "Start Here" hub section (3rd button in hub switcher), `renderWelcome('hub')` with "Replay intro" affordance. Anti-drift tests in `tests/test_pwa_intro.py`: tab-ID guard (exactly 6 valid tab ids), copy-sync guard (every body/desc appears verbatim in `knowledge/product-intro-copy.md`), intro release-entry validity.
+- `702cc78` — `#intro-overlay` full-screen carousel, `renderWelcome('carousel')`, `fvt_intro_seen_v1` localStorage key, `showIntroOverlay`/`hideIntroOverlay`/`_buildCarouselSlides`/`_wireIntroControls`. Auto-opens once on first visit; Skip and "Get started →" dismiss. "Open →" per slide calls `switchTab()` + dismisses (ONBOARD-DL-UX two-way-door decision). `TestPWAIntro` Playwright class (6 tests: auto-open, skip, persist-dismissed, pre-seeded-seen, hub Start Here renders, Replay intro).
+- `6b3114a` — `knowledge/product-intro-copy.md` (canonical O'Neil/IBD citation + all copy), README "Start Here intro" section, CLAUDE.md subsection, `docs/releases.json` entry (2026.06.21), `docs/sw.js` CACHE → v19, `planning/start-here-onboarding.md` status → ✅ Implemented.
+
+**Test results:** 212 non-Playwright tests pass (3 pre-existing TestPWALookbackWindows failures unrelated, tracked as PWATEST-LOOKBACK).
+
+**Deferred:**
+- ONBOARD-DL-UX: carousel "Open →" currently dismisses immediately; revisit if users want to browse back mid-tour (comment in code, task in SPRINT.md).
+- PWATEST-LOOKBACK: pre-existing Playwright failures unrelated to this feature.
+
+**Next:** PR open on `claude/dreamy-archimedes-3q6ag1` targeting `claude/elegant-babbage-hlxnfy`.
+
 **Status (2026-06-20) — ETF LOOKUP OVERRIDES (ETF-1): COMPLETE on `claude/trusting-einstein-f1h4bo`.** PR #137 merged. All 50 worker + 165 Python tests pass. Changes: (1) `data/etf_overrides.csv` — 31 curated ETFs across thematic/sector/diversified kinds. (2) `build_taxonomy.js` extended to emit `etf_overrides.json` with build-time validation against snapshot CSVs. (3) `lookupEtf()` in `taxonomy.js` + wiring in `index.js` — applied when `isEtf:true`. (4) PWA `renderLookup()` updated — thematic badge, sector-only card, diversified informational card. (5) ADR-005, worker/README, CLAUDE.md updated. (6) releases.json 2026.06.20 updated with ETF fix notes; SW cache v17→v18. Post-deploy action needed: bust KV cache for seed ETFs (one-liner in worker/README.md). **Safe to close once PR merged.**
 
 **Status (2026-06-20) — LOOKUP SEARCH ENHANCEMENTS (Ideas 5–7): COMPLETE on `claude/adoring-noether-xavk0g`.** PR #134 open (draft). All 165 tests pass. Changes: (1) Recent searches — last 8 lookups in `fvg_lookup_recent`, shown as chips when input empty; (2) Pinned favorites — ☆ Pin button on every result card, `fvg_lookup_pinned` survives recents cap; (3) Empty-state momentum chips — top 5 groups by `momentum_score` when no history (Idea 7); (4) Synonym map — GROUP_SYNONYMS resolves colloquial names (semis, pharma, banks, biotech…) before network; (5) Fuzzy "did you mean" — Levenshtein ratio 0.35 threshold catches typos ≥5-char, short tickers bypassed; SW cache v17→v18, releases.json 2026.06.21 entry added. **Safe to close once PR merged.**
