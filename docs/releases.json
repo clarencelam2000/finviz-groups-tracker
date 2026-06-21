@@ -1,6 +1,19 @@
 {
-  "current": "2026.06.21.2",
+  "current": "2026.06.21.3",
   "releases": [
+    {
+      "version": "2026.06.21.3",
+      "date": "2026-06-21",
+      "title": "Strength cards show 'beats N/7' vs S&P",
+      "tag": "feature",
+      "tab": "strength",
+      "notes": [
+        "Sustained and All Green cards now carry a 'beats N/7' chip showing how many of the 7 timeframes the group is outperforming the S&P 500.",
+        "The chip is colored by RS Score (green = broadly beating the market, red = broadly lagging), so you can tell a true market-beater from a group that's only riding a broad rally.",
+        "The chip is hidden when there's no S&P benchmark row for the date — a group is never mislabeled as confirmed when RS data is missing.",
+        "Uses existing rs_score / beats_benchmark columns — no pipeline changes."
+      ]
+    },
     {
       "version": "2026.06.21.2",
       "date": "2026-06-21",
