@@ -27,6 +27,7 @@ from delta_config import (
     RS_BEAT_TIMEFRAMES,
     RS_COLS,
     RS_CROSS_WINDOW,
+    RS_NEW_HIGH_MIN_SESSIONS,
     RS_NEW_HIGH_WINDOW,
     RS_REGIME_LONG,
     RS_REGIME_SHORT,
@@ -530,12 +531,16 @@ def _build_rs_history(df_hist: pd.DataFrame, bench_df: pd.DataFrame,
 
 def compute_rs_new_high(df_hist: pd.DataFrame, bench_df: pd.DataFrame,
                         available_dates: list, target_date,
-                        window: int = RS_NEW_HIGH_WINDOW) -> pd.Series:
+                        window: int = RS_NEW_HIGH_WINDOW,
+                        min_sessions: int = RS_NEW_HIGH_MIN_SESSIONS) -> pd.Series:
     """1 if today's rs_month is at its RS_NEW_HIGH_WINDOW-session high; 0 otherwise.
 
     Uses RS_SLOPE_COL (rs_month) as the canonical RS line — consistent with
-    rs_slope and rs_accel. NaN when fewer than 2 sessions of overlapping
-    group + SPY data exist in the window.
+    rs_slope and rs_accel. NaN when a group has fewer than ``min_sessions``
+    distinct sessions of overlapping group + SPY data in the window — without
+    that gate, a "20-session high" over only a few early sessions flags ~100% of
+    groups in an up-trending tape (every rising group is trivially at its
+    highest-ever RS). See RS_NEW_HIGH_MIN_SESSIONS in delta_config.py.
     """
     per_name = _build_rs_history(df_hist, bench_df, available_dates, target_date, window)
     if not per_name:
@@ -549,6 +554,11 @@ def compute_rs_new_high(df_hist: pd.DataFrame, bench_df: pd.DataFrame,
     for name, pts in per_name.items():
         today_vals = [v for x, v in pts if x == last_x]
         if not today_vals:
+            result[name] = float("nan")
+            continue
+        # Gate: require enough distinct sessions of history, else the "high" is
+        # over too short a window to be meaningful (flags ~everything early on).
+        if len({x for x, _ in pts}) < min_sessions:
             result[name] = float("nan")
             continue
         today_rs = today_vals[0]

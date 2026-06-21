@@ -35,9 +35,9 @@
   <header class="sticky top-0 z-20 bg-slate-900/95 backdrop-blur-sm border-b border-slate-700 px-4 pb-2"
           style="padding-top: calc(env(safe-area-inset-top) + 0.6rem)">
     <div class="flex items-center justify-between">
-      <div>
+      <div class="min-w-0 flex-1 pr-2">
         <h1 class="text-lg font-bold text-white leading-tight cursor-pointer" id="title-scroll-top">Finviz Tracker</h1>
-        <p id="last-updated" class="text-xs text-slate-400">Loading…</p>
+        <p id="last-updated" class="text-xs text-slate-400 truncate">Loading…</p>
       </div>
       <div class="flex items-center gap-2">
         <button id="hub-btn"
@@ -702,7 +702,7 @@
     function rsNewHighBadge(v) {
       if (v === null || v === undefined || v === '' || isNaN(+v)) return '';
       return +v === 1
-        ? '<span class="text-amber-400 text-xs font-semibold whitespace-nowrap border border-amber-600 rounded px-1">NH</span>'
+        ? '<span title="RS new high — relative strength vs the S&amp;P is at a fresh 20-session high" class="text-amber-400 text-xs font-semibold whitespace-nowrap border border-amber-600 rounded px-1">NH</span>'
         : '';
     }
 
@@ -710,7 +710,7 @@
     function rsCrossBadge(v) {
       if (v === null || v === undefined || v === '' || isNaN(+v)) return '';
       return +v === 1
-        ? '<span class="text-sky-400 text-xs font-semibold whitespace-nowrap border border-sky-600 rounded px-1">↑ cross</span>'
+        ? '<span title="RS cross — just flipped from lagging to beating the S&amp;P (monthly RS crossed above 0)" class="text-sky-400 text-xs font-semibold whitespace-nowrap border border-sky-600 rounded px-1">↑ cross</span>'
         : '';
     }
 
@@ -1553,7 +1553,7 @@
       }
 
       if (state.vsMarketView === 'regime') {
-        if (descEl) descEl.textContent = 'Short-horizon RS minus long-horizon RS. Positive = newly beating the market; negative = long-established RS leader or laggard.';
+        if (descEl) descEl.textContent = 'Short-horizon RS breadth minus long-horizon RS breadth. Positive = relative strength improving recently vs its longer trend (emerging); negative = long-term RS stronger than short-term (established leader, or fading). Not an absolute “beats the market” read — check RS Score for that.';
         if (whyEl)  { whyEl.textContent = 'ⓘ What is the RS regime? →'; whyEl.onclick = () => __openHub('guide','rs_regime_short_long'); }
         renderRsRegime(delta, container);
       } else {
@@ -1655,7 +1655,7 @@
           <div class="rounded-xl p-3 bg-slate-800 border border-slate-700">
             <div class="flex items-center justify-between gap-1">
               <div class="text-sm font-medium text-white">${row.name}</div>
-              <div class="flex items-center gap-1 flex-shrink-0">${discreteBadges}<span class="text-xs font-mono ${regimeColor} ml-1">${sign}${regime.toFixed(2)}</span></div>
+              <div class="flex items-center gap-1 flex-shrink-0">${discreteBadges}<span class="text-[10px] uppercase tracking-wide text-slate-500">regime</span><span class="text-xs font-mono ${regimeColor}">${sign}${regime.toFixed(2)}</span></div>
             </div>
             ${rsBar(regime)}
             ${sub ? `<div class="text-xs text-slate-400">${sub}</div>` : ''}
@@ -1671,9 +1671,9 @@
         : '';
 
       container.innerHTML =
-        section(emerging,    '🌱 Emerging — freshly beating the market',  'text-emerald-400') +
-        section(established, '→ Established — consistent RS vs market',   'text-slate-400') +
-        section(fading,      '📉 Fading — RS advantage narrowing',        'text-red-400') +
+        section(emerging,    '🌱 Emerging — short-term RS improving vs long-term', 'text-emerald-400') +
+        section(established, '→ Established — short- and long-term RS in line',     'text-slate-400') +
+        section(fading,      '📉 Fading — short-term RS weakening vs long-term',    'text-red-400') +
         noHistory;
     }
 

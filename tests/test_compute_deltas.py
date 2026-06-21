@@ -906,22 +906,39 @@ def rs_history_4sessions():
 class TestComputeRsNewHigh:
     def test_at_window_high_returns_1(self, rs_history_4sessions):
         dates, bench, hist = rs_history_4sessions
-        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4)
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4, min_sessions=4)
         assert s["Tech"] == 1
 
     def test_not_at_window_high_returns_0(self, rs_history_4sessions):
         dates, bench, hist = rs_history_4sessions
-        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4)
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4, min_sessions=4)
         # Energy's max rs_month was +0.5 early; today is +0.2 → not a new high
         assert s["Energy"] == 0
 
     def test_declining_returns_0(self, rs_history_4sessions):
         dates, bench, hist = rs_history_4sessions
-        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4)
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4, min_sessions=4)
         # Finance's highest was session 0 (+3.0); today is +1.5 → not a new high
         assert s["Finance"] == 0
 
+    def test_insufficient_history_returns_nan(self, rs_history_4sessions):
+        # Only 4 sessions exist but the gate demands more → every group is NaN,
+        # not a spurious 1. This is the fix for the "NH on 100% of cards" bug.
+        dates, bench, hist = rs_history_4sessions
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4, min_sessions=20)
+        assert s.isna().all()
+
+    def test_exactly_min_sessions_emits_signal(self, rs_history_4sessions):
+        # Boundary: 4 distinct sessions with min_sessions=4 is enough → real 0/1,
+        # not NaN. Guards the >= edge of the gate.
+        dates, bench, hist = rs_history_4sessions
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4, min_sessions=4)
+        assert s["Tech"] == 1
+        assert not s.isna().any()
+
     def test_single_session_returns_empty(self, rs_history_4sessions):
+        # window=1 trips the len<2 guard in _build_rs_history before the
+        # min_sessions gate is ever reached, so the result is an empty Series.
         dates, bench, hist = rs_history_4sessions
         s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=1)
         assert len(s) == 0

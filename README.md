@@ -261,6 +261,7 @@ All pipeline parameters live in `scripts/delta_config.py`. Edit that file to cha
 | `RS_REGIME_SHORT` / `RS_REGIME_LONG` | wk+month / qtr+half+year | Buckets for `rs_regime_short_long` (RS analog of `regime_short_long`). |
 | `RS_BEAT_TIMEFRAMES` | `["day","week","month","quarter","half","year","ytd"]` | Timeframe suffixes that get a `beats_benchmark_X` boolean column. Changing this adds or removes columns from the delta schema; auto-migrated by `ensure_deltas_csv()`. |
 | `RS_NEW_HIGH_WINDOW` | `20` | Trading sessions looked back for `rs_new_high`. 20 ≈ 1 trading month — classic IBD RS-new-high window. Must be ≥ 2. |
+| `RS_NEW_HIGH_MIN_SESSIONS` | `RS_NEW_HIGH_WINDOW` (20) | Minimum distinct sessions of history before `rs_new_high` emits 0/1; below it stays blank (NaN). Prevents a "20-session high" over only a few early sessions from flagging ~100% of groups (every rising group is trivially at its highest-ever RS). Range 2..`RS_NEW_HIGH_WINDOW`; the window cap is the strictest meaningful value. |
 | `RS_CROSS_WINDOW` | `5` | Trading sessions looked back for `rs_cross`. 5 ≈ 1 trading week — tight window to catch fresh rotations and filter noise. Must be ≥ 2. |
 
 > **To change lookback windows:** edit `LOOKBACK_WINDOWS`, then re-run `compute_deltas.py --date <d>` for each existing date to populate the new columns. `ensure_deltas_csv()` auto-migrates the CSV header on the next run (old columns drop, new columns appear empty).

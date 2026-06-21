@@ -95,7 +95,7 @@ then the RS discrete flags: `beats_benchmark_day, beats_benchmark_week, beats_be
 - `rs_accel`: change in `rs_score` over `ACCEL_WINDOW` sessions; positive = more timeframes flipping positive vs SPY.
 - `rs_regime_short_long`: short-horizon RS breadth (fraction of rs_week/rs_month > 0) minus long-horizon breadth (rs_quarter/rs_half/rs_year). Range [−1, 1]; positive = emerging RS leader.
 - `beats_benchmark_{day,week,month,quarter,half,year,ytd}`: 1 when `rs_X > 0`, 0 when `rs_X ≤ 0`, blank when SPY absent. `RS_BEAT_TIMEFRAMES` lists the suffixes.
-- `rs_new_high`: 1 when `rs_month` equals or exceeds its trailing `RS_NEW_HIGH_WINDOW = 20` session maximum (IBD-style RS-new-high flag). NaN if < 2 sessions of overlapping data.
+- `rs_new_high`: 1 when `rs_month` equals or exceeds its trailing `RS_NEW_HIGH_WINDOW = 20` session maximum (IBD-style RS-new-high flag). NaN until a group has at least `RS_NEW_HIGH_MIN_SESSIONS = RS_NEW_HIGH_WINDOW` (20) distinct sessions of overlapping group+SPY history — without this gate, a "20-session high" computed over only a few early sessions flags ~100% of groups in an up-trending tape (every rising group is trivially at its highest-ever RS), making the PWA "NH" badge pure noise.
 - `rs_cross`: 1 when `rs_month` crossed from ≤ 0 to > 0 within the last `RS_CROSS_WINDOW = 5` sessions (rotation trigger). 0 if today's RS is non-positive or group was already above 0 throughout window.
 - Delta/momentum/RS columns are `NaN` until enough history exists (e.g., 50d deltas need 50+ sessions; accel/slope need 10).
 
