@@ -171,13 +171,16 @@ stored raw SPY + group perf whenever greenlit.
 - **`dashboard/app.py`** + **`docs/index.html`** pick up new columns automatically via
   `delta_columns()` / `extractWindowsFromHeader`; no UI yet beyond data availability.
 
-### Phase 3 — Surface in PWA (Tiers 4–5)
+### COMPLETED (Tiers 4 + core; Tier 5 discrete flags deferred) - Phase 3 — Surface in PWA (Tiers 4–5)
 
 - RS badge/chip on existing cards ("+2.3% vs SPY", green/red) — cheapest visible win.
 - New **"vs Market"** view sorted by `rs_score` / `rs_slope` (the "pulling away from the market"
   board), following the existing tab pattern (`docs/index.html` `#tab-bar`, `renderCard`).
-- **Tier 5 discrete flags** (`beats_benchmark_X`, `rs_new_high`, `rs_cross`) — cheap to
-  render alongside existing card badges; ship in this phase since PWA work is already open.
+- **Tier 5 discrete flags** (`beats_benchmark_X`, `rs_new_high`, `rs_cross`) — **deferred to
+  Phase 5.** These require new compute columns in `scripts/compute_deltas.py` (not added in
+  Phase 2), making them a pipeline + UI workstream rather than a pure surface-layer change.
+  Tracked in `.session/SPRINT.md § RS-4`. The Tier 4 signals (rs_slope glyph, Emerging/Fading
+  regime view, rs_score leaderboard) fully satisfy the rotation signal goal of Phase 3.
 - New threshold constants (`RS_STRONG`, `RS_SLIGHT`) beside `ACCEL_*`/`SLOPE_*`, documented in
   all three places. Units: RS spread is in percentage points, so proposed defaults are
   `RS_STRONG = 2.0` (beating/lagging market by ≥2pp) and `RS_SLIGHT = 0.5` (≥0.5pp);

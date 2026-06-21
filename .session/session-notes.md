@@ -6,7 +6,9 @@
 
 ## Current Status
 
-**Status (2026-06-21) — START HERE ONBOARDING (ONBOARD): COMPLETE on `claude/dreamy-archimedes-3q6ag1`.** 3 commits: `caebb73` (WELCOME constant + hub section + anti-drift tests), `702cc78` (carousel overlay + `fvt_intro_seen_v1` first-run + Playwright tests), `6b3114a` (release cut + README + CLAUDE.md docs). All 212 non-Playwright tests pass. PR open targeting `claude/elegant-babbage-hlxnfy`. Deferred: ONBOARD-DL-UX (carousel deep-link dismiss UX, tracked in SPRINT.md), PWATEST-LOOKBACK (3 pre-existing Playwright failures, unrelated). **Safe to close.**
+**Status (2026-06-21) — RS vs S&P 500 PWA SURFACE (Phase 3): COMPLETE on `claude/festive-curie-soa3ua`.** PR #139 open (ready for review). All 77 Python tests pass. Changes: (1) New "vs Mkt" tab — RS Score leaderboard + Emerging/Fading regime sub-views. (2) RS Score cards show rs_slope glyph (↑↑/↑/~/↓/↓↓). (3) Today cards show `+X.Xpp vs S&P` chip for any non-null rs_month (grey = neutral). (4) RS_STRONG (2.0) + RS_SLIGHT (0.5) constants documented in README/CLAUDE.md. (5) GUIDE: 6 new RS metric entries. (6) Release triplet: releases.json 2026.06.21.1 (vs Market), sw.js CACHE → finviz-v20 (base used v19 for Start Here). Rebased on top of PR #143 (Start Here). RS signals show NaN until first SPY scrape runs via GitHub Actions. **Safe to close once PR #139 merged.**
+
+**Status (2026-06-21) — START HERE ONBOARDING (ONBOARD): COMPLETE on `claude/dreamy-archimedes-3q6ag1`.** PR #143 merged. All 212 non-Playwright tests pass. Changes: WELCOME constant + hub section + anti-drift tests, carousel overlay + fvt_intro_seen_v1, release cut (releases.json 2026.06.21, sw.js CACHE → v19). Deferred: ONBOARD-DL-UX (carousel deep-link dismiss UX, tracked in SPRINT.md), PWATEST-LOOKBACK (3 pre-existing Playwright failures). **Merged.**
 
 ---
 
@@ -24,8 +26,6 @@
 **Deferred:**
 - ONBOARD-DL-UX: carousel "Open →" currently dismisses immediately; revisit if users want to browse back mid-tour (comment in code, task in SPRINT.md).
 - PWATEST-LOOKBACK: pre-existing Playwright failures unrelated to this feature.
-
-**Next:** PR open on `claude/dreamy-archimedes-3q6ag1` targeting `claude/elegant-babbage-hlxnfy`.
 
 **Status (2026-06-20) — ETF LOOKUP OVERRIDES (ETF-1): COMPLETE on `claude/trusting-einstein-f1h4bo`.** PR #137 merged. All 50 worker + 165 Python tests pass. Changes: (1) `data/etf_overrides.csv` — 31 curated ETFs across thematic/sector/diversified kinds. (2) `build_taxonomy.js` extended to emit `etf_overrides.json` with build-time validation against snapshot CSVs. (3) `lookupEtf()` in `taxonomy.js` + wiring in `index.js` — applied when `isEtf:true`. (4) PWA `renderLookup()` updated — thematic badge, sector-only card, diversified informational card. (5) ADR-005, worker/README, CLAUDE.md updated. (6) releases.json 2026.06.20 updated with ETF fix notes; SW cache v17→v18. Post-deploy action needed: bust KV cache for seed ETFs (one-liner in worker/README.md). **Safe to close once PR merged.**
 

@@ -1,6 +1,20 @@
 {
-  "current": "2026.06.21",
+  "current": "2026.06.21.1",
   "releases": [
+    {
+      "version": "2026.06.21.1",
+      "date": "2026-06-21",
+      "title": "vs Market tab — RS vs S&P 500",
+      "tag": "feature",
+      "tab": "vsmarket",
+      "notes": [
+        "New 'vs Mkt' tab shows each sector and industry's relative strength versus the S&P 500, not just versus its peers.",
+        "RS Score view ranks groups by how broadly they beat the market across all 7 timeframes (like Momentum Score, but vs SPY instead of vs each other).",
+        "Emerging / Fading view surfaces groups whose market-relative edge is freshly building (short-horizon RS outpacing long-horizon) versus those where the RS advantage is stalling.",
+        "Today cards now show a '+X.Xpp vs S&P' chip for any non-null RS spread (green/emerald when meaningful, grey when neutral).",
+        "RS signals populate automatically once the daily scraper runs — they appear as NaN until the first SPY benchmark snapshot is collected."
+      ]
+    },
     {
       "version": "2026.06.21",
       "date": "2026-06-21",
