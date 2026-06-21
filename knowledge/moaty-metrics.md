@@ -17,7 +17,7 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
 
 | Metric | Where | What it is |
 |--------|-------|-----------|
-| `momentum_score` | deltas.csv | 0–1; avg percentile rank across all 7 perf timeframes |
+| `momentum_score` | deltas.csv | 0–1; avg percentile rank across 6 perf timeframes (week → YTD) |
 | `momentum_confirmed` | deltas.csv | momentum_score × rank_agreement; strength gated by consistency |
 | `momentum_accel` | deltas.csv | change in momentum_score over 10 sessions; positive = building |
 | `regime_short_long` | deltas.csv | short-horizon minus long-horizon percentile; positive = emerging |

@@ -77,3 +77,22 @@ class TestComputeMomentum:
         scores = compute_momentum(df)
         assert (scores >= 0.0).all()
         assert (scores <= 1.0).all()
+
+    def test_perf_day_does_not_influence_score(self):
+        # Day is excluded from momentum scoring (too noisy). A big red day for the
+        # otherwise-strongest group must not change its score — it should still
+        # lead on the 6 durable timeframes.
+        base = {
+            "name": ["A", "B", "C"],
+            "perf_week":    [3.0, 2.0, 1.0],
+            "perf_month":   [3.0, 2.0, 1.0],
+            "perf_quarter": [3.0, 2.0, 1.0],
+            "perf_half":    [3.0, 2.0, 1.0],
+            "perf_year":    [3.0, 2.0, 1.0],
+            "perf_ytd":     [3.0, 2.0, 1.0],
+        }
+        without_day = compute_momentum(pd.DataFrame(base))
+        with_red_day = compute_momentum(pd.DataFrame({**base, "perf_day": [-99.0, 5.0, 5.0]}))
+        # Adding perf_day (even a catastrophic one for A) leaves scores identical.
+        assert list(without_day) == pytest.approx(list(with_red_day))
+        assert with_red_day.iloc[0] == pytest.approx(1.0)  # A still tops the score

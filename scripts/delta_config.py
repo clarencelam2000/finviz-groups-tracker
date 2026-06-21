@@ -155,7 +155,7 @@ RS_BEAT_TIMEFRAMES = ["day", "week", "month", "quarter", "half", "year", "ytd"]
 
 # All RS-derived columns appended after MOMENTUM_COLS in the deltas schema.
 RS_COLS = RS_TIMEFRAMES + [
-    "rs_score",           # 0–1; fraction of 7 timeframes where group beats SPY (rs_X > 0)
+    "rs_score",           # 0–1; fraction of 6 timeframes (wk→ytd, day excluded) where group beats SPY
     "rs_agreement",       # 0–1; sign consistency of rs_month/quarter/half (1.0 = all same direction)
     "rs_confirmed",       # rs_score × rs_agreement; breadth gated by directional consistency
     "rs_slope",           # LS slope of rs_month over SLOPE_WINDOW; positive = building

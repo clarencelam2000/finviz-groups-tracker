@@ -1,6 +1,19 @@
 {
-  "current": "2026.06.21.2",
+  "current": "2026.06.21.3",
   "releases": [
+    {
+      "version": "2026.06.21.3",
+      "date": "2026-06-21",
+      "title": "Quieter scores: single-day noise removed",
+      "tag": "improvement",
+      "tab": "momentum",
+      "notes": [
+        "Momentum Score now averages 6 timeframes (week → YTD) instead of 7 — the single-day move is excluded because one noisy session could knock a true leader down ~14% for no real reason. Scores are now ~40% steadier day-to-day.",
+        "RS Score and the 'beats N tf' count drop the single-day spread the same way (now 'beats N/6 tf'). A red day vs the S&P no longer dents a group that's beating the market across every durable horizon.",
+        "The day's RS spread is still shown for context — on the vs Market card it now sits behind the 1-month figure rather than leading it.",
+        "No action needed: scores recompute automatically."
+      ]
+    },
     {
       "version": "2026.06.21.2",
       "date": "2026-06-21",

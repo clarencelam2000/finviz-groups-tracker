@@ -19,7 +19,7 @@ and how *consistent* the strength is — a daily derived layer that's the real
 moat. Every metric is documented in
 [`knowledge/moaty-metrics.md`](knowledge/moaty-metrics.md).
 
-- **Momentum score** — broad strength across all 7 timeframes at once (0–100%).
+- **Momentum score** — broad strength across 6 timeframes (week → YTD) at once (0–100%).
 - **Momentum confirmed** — `momentum_score × rank_agreement`: broad strength gated by cross-timeframe consistency. High only when the trend is corroborated across 1/3/6-month.
 - **Momentum weighted** — two weighted variants: `momentum_weighted_mid` (heavier on 1mo/3mo trend) and `momentum_weighted_fast` (heavier on day/week) for different rotation detection speeds.
 - **Momentum acceleration** — `momentum_accel`: change in `momentum_score` over the past 10 sessions. Positive = broad momentum is building.
@@ -194,7 +194,7 @@ No server required — it fetches the latest CSVs directly from GitHub on every 
 **Movers** — The biggest rank climbers and fallers over 5 / 10 / 20 / 50 trading sessions. A "data accumulating" placeholder is shown until enough history exists (5-session deltas arrive after the 6th trading day). Each row shows how many ranking spots the group gained or lost. Green left border = gainer, red = loser.
 
 **Momentum** — Two sub-views selectable via a toggle at the top:
-- **Momentum view** (default) — Composite breadth leaderboard sorted by `momentum_score`. Shows which groups are consistently strong across all 7 timeframes at once. Includes a mini progress bar and an acceleration badge (▲▲ building / ▼▼ fading) once 10 sessions of history exist (~June 23). Works from day one.
+- **Momentum view** (default) — Composite breadth leaderboard sorted by `momentum_score`. Shows which groups are consistently strong across 6 timeframes (week → YTD) at once. Includes a mini progress bar and an acceleration badge (▲▲ building / ▼▼ fading) once 10 sessions of history exist (~June 23). Works from day one.
 - **Rotation view** — Groups ranked by `regime_short_long`: how much recent short-term strength (week + month) is outpacing or lagging long-term strength (3-month + 6-month + year). Split into three sections: 🌱 Emerging (rotating in), → Established (balanced), 📉 Fading (rotating out). Each card shows the 0-centered regime bar, short vs. long % context, and momentum score. Works from day one.
 
 **Strength** — Two sub-views: Sustained Strength (top-N across all three medium-term timeframes: month / quarter / half-year simultaneously, sorted by `momentum_confirmed` = `momentum_score × rank_agreement`, rewarding groups that are both strong and consistent) and All Green (all perf timeframes positive, shown as an emoji dot matrix). Each Sustained card shows "Confirmed X% · Agree X%" so you can see the raw conviction level at a glance.

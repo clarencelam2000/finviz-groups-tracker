@@ -81,14 +81,14 @@ then the RS discrete flags: `beats_benchmark_day, beats_benchmark_week, beats_be
 
 - `rank_*` values: rank 1 = best performer. Derived from `perf_*` values, never scraped.
 - `rank_*_delta_Wd`: positive = improved (rose in ranking). E.g., `+6` means 6 spots better than W trading sessions ago.
-- `momentum_score`: 0–1 float; average percentile rank across all 7 perf timeframes. Higher = stronger broad momentum.
+- `momentum_score`: 0–1 float; average percentile rank across 6 perf timeframes (week → YTD; day excluded as too noisy). Higher = stronger broad momentum.
 - `momentum_confirmed`: `momentum_score × rank_agreement` (strength gated by cross-timeframe consistency).
 - `momentum_weighted_mid` / `_fast`: percentile means weighted toward 1mo/3mo / day-week respectively.
 - `momentum_accel`: change in `momentum_score` over `ACCEL_WINDOW` (10) sessions; positive = building.
 - `regime_short_long`: short- minus long-horizon percentile (range ~[-1,1]); positive = emerging leader, negative = fading. Short bucket: `perf_week + perf_month`. Long bucket: `perf_quarter + perf_half + perf_year`. Configured in `scripts/delta_config.py` as `REGIME_SHORT` / `REGIME_LONG`.
 - `rank_trend_slope`: negated least-squares slope of `rank_ytd` over the trailing window; positive = improving.
 - `rs_day/week/month/…/ytd`: RS spread = `group_perf_X − SPY_perf_X`; positive = beating the market. NaN when `data/benchmark/snapshots.csv` has no row for that date.
-- `rs_score`: 0–1; fraction of the 7 timeframes where the group's RS spread (group_perf_X − SPY_perf_X) is positive. Unlike `momentum_score` (cross-sectional peer rank), this is an absolute signal — a rising tide does not inflate it. `RS_SLOPE_COL = "rs_month"` is the canonical RS line for `rs_slope`. `RS_AGREEMENT_COLS = ["rs_month","rs_quarter","rs_half"]` drive `rs_agreement`.
+- `rs_score`: 0–1; fraction of 6 timeframes (week → YTD; day excluded as too noisy) where the group's RS spread (group_perf_X − SPY_perf_X) is positive. Unlike `momentum_score` (cross-sectional peer rank), this is an absolute signal — a rising tide does not inflate it. `RS_SLOPE_COL = "rs_month"` is the canonical RS line for `rs_slope`. `RS_AGREEMENT_COLS = ["rs_month","rs_quarter","rs_half"]` drive `rs_agreement`.
 - `rs_agreement`: 0–1; sign consistency of RS spreads across mo/qtr/half. Computed as |mean(sign)| where sign = +1 if rs > 0, −1 if rs < 0. 1.0 = all three same direction.
 - `rs_confirmed`: `rs_score × rs_agreement` (breadth of outperformance gated by directional consistency).
 - `rs_slope`: LS slope of `rs_month` over `SLOPE_WINDOW` sessions; positive = outperformance building. `RS_REGIME_SHORT/LONG` configure `rs_regime_short_long` buckets.
