@@ -164,24 +164,28 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   timeframe — positive means it outperformed the market."
 
 ## rs_score
-- **Source:** `compute_rs_score` (`scripts/compute_deltas.py`). Mean percentile of
-  each group's RS spread across all 7 timeframes. Analogous to `momentum_score` but
-  versus the market instead of versus peers. Range 0–1. NaN for single-row frames.
+- **Source:** `compute_rs_score` (`scripts/compute_deltas.py`). Fraction of the 7
+  timeframes (day/wk/mo/qtr/6mo/yr/ytd) where the group's RS spread (group perf −
+  SPY perf) is positive. Score 1.0 = beating SPY in every horizon; 0.0 = trailing
+  in all. This is an absolute signal — a rising tide lifting all groups does not
+  inflate the score (unlike `momentum_score`, which is a cross-sectional peer rank).
 - **User one-liner:** "How broadly this group beats the S&P 500 across every
   timeframe at once, from 0 to 100%."
 
 ## rs_agreement
-- **Source:** `compute_rs_agreement` (`scripts/compute_deltas.py`). Cross-timeframe
-  consistency of RS spreads across `rs_month`, `rs_quarter`, `rs_half`. Analogous to
-  `rank_agreement` but for RS. Score 1.0 = all three medium-term horizons agree the
-  group beats the market; 0.0 = maximum disagreement.
+- **Source:** `compute_rs_agreement` (`scripts/compute_deltas.py`). Sign consistency
+  of RS spreads across `rs_month`, `rs_quarter`, `rs_half`. Computed as |mean(sign)|
+  where sign = +1 if rs > 0, −1 if rs < 0. Score 1.0 = all three medium-term horizons
+  agree on direction (all positive or all negative); lower = mixed signals.
 - **User one-liner:** "How much the 1-, 3-, and 6-month RS readings agree — high
   means consistently beating the market, not a one-timeframe fluke."
 
 ## rs_confirmed
 - **Source:** `df_today["rs_confirmed"] = df_today["rs_score"] * df_today["rs_agreement"]`.
   Product of two 0–1 scores. High only when the group is *broadly* outperforming (high
-  rs_score) AND that outperformance is consistent across timeframes (high rs_agreement).
+  rs_score — many timeframes positive) AND the medium-term timeframes agree on direction
+  (high rs_agreement). A group beating SPY in 6 of 7 timeframes but with mixed 1/3/6mo
+  signals is discounted.
 - **User one-liner:** "Market-beating strength filtered by consistency — high only
   when the group beats SPY across timeframes AND those timeframes agree."
 
@@ -196,16 +200,17 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
 
 ## rs_accel
 - **Source:** change in `rs_score` over `ACCEL_WINDOW = 10` sessions. Positive =
-  relative strength is building (more timeframes flipping positive vs SPY). Earliest-
-  warning RS rotation signal. NaN if fewer than 10 sessions of history exist.
+  more timeframes flipping to positive RS vs SPY (breadth of outperformance is growing).
+  Earliest-warning RS rotation signal. NaN if fewer than 10 sessions of history exist.
 - **User one-liner:** "How fast this group's advantage over the market is building (+)
   or fading (−) over the last 10 trading sessions."
 
 ## rs_regime_short_long
 - **Source:** `compute_rs_regime` (`scripts/compute_deltas.py`). Short-horizon RS
-  percentile mean (`rs_week`, `rs_month`) minus long-horizon RS percentile mean
-  (`rs_quarter`, `rs_half`, `rs_year`). Positive = *newly* beating the market (emerging
-  RS leader); negative = RS strength is longer-established / potentially late-cycle.
+  breadth (`rs_week`, `rs_month`: fraction > 0) minus long-horizon RS breadth
+  (`rs_quarter`, `rs_half`, `rs_year`: fraction > 0). Positive = beating SPY recently
+  but not historically (freshly emerging RS leader); negative = established RS leader
+  (or a long-term laggard whose short-term RS has faded). Range [−1, 1].
   Configured via `RS_REGIME_SHORT` / `RS_REGIME_LONG` in `scripts/delta_config.py`.
 - **User one-liner:** "Whether this group is a new market-beater (+) or a long-established one (−) — positive means relative strength is freshly emerging."
 

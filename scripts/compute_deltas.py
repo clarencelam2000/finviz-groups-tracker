@@ -334,21 +334,22 @@ def load_benchmark(csv_path: Path) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 def compute_rs_score(df_day: pd.DataFrame) -> pd.Series:
-    """RS score: mean percentile of each group's RS spread across all timeframes.
+    """RS score: fraction of the 7 timeframes where the group beats SPY (rs_X > 0).
 
-    Analogous to momentum_score but using RS spreads (group − SPY) instead of
-    raw perf values. Score 1.0 = best relative strength across all timeframes.
-    NaN for single-row frames (percentile undefined with n=1).
+    Score 1.0 = outperforming S&P 500 in every timeframe; 0.0 = trailing in all.
+    Unlike momentum_score (cross-sectional peer rank), this is an absolute signal
+    — a rising tide lifting all groups does not inflate the score.
+    NaN when no RS spread columns have valid data.
     """
     n = len(df_day)
-    if n <= 1:
-        return pd.Series([float("nan")] * n, index=df_day.index)
+    if n == 0:
+        return pd.Series([], dtype=float)
 
     scores = pd.DataFrame(index=df_day.index)
     for col in RS_TIMEFRAMES:
         if col in df_day.columns and df_day[col].notna().any():
-            ranks = df_day[col].rank(ascending=False, method="min", na_option="bottom")
-            scores[col] = (n - ranks) / (n - 1)
+            # 1.0 where rs > 0, 0.0 where rs <= 0, NaN preserved for mean(skipna)
+            scores[col] = (df_day[col] > 0).astype(float).where(df_day[col].notna())
 
     if scores.empty:
         return pd.Series([float("nan")] * n, index=df_day.index)
@@ -357,28 +358,30 @@ def compute_rs_score(df_day: pd.DataFrame) -> pd.Series:
 
 
 def compute_rs_agreement(df_day: pd.DataFrame) -> pd.Series:
-    """RS agreement: cross-timeframe consistency of RS spreads.
+    """RS agreement: sign consistency of RS spreads across medium timeframes.
 
-    Analogous to compute_rank_agreement but uses RS spreads for the medium
-    timeframes (month/quarter/half). Score 1.0 = all three timeframes show
-    the same relative-strength stance; 0.0 = maximum disagreement.
-    Returns NaN when fewer than 3 RS columns are available.
+    Uses rs_month, rs_quarter, rs_half. Score 1.0 = all three agree on direction
+    (consistently beating or consistently lagging SPY); lower = mixed signals.
+    Computed as |mean(sign)| where sign = +1 if rs > 0, −1 if rs < 0, 0 if exact zero.
+    Returns NaN when fewer than 3 RS agreement columns have valid data.
     """
     n = len(df_day)
-    if n <= 1:
-        return pd.Series([float("nan")] * n, index=df_day.index)
+    if n == 0:
+        return pd.Series([], dtype=float)
 
-    pct_df = pd.DataFrame(index=df_day.index)
+    sign_df = pd.DataFrame(index=df_day.index)
     for col in RS_AGREEMENT_COLS:
         if col in df_day.columns and df_day[col].notna().any():
-            ranks = df_day[col].rank(ascending=False, method="min", na_option="bottom")
-            pct_df[col] = (n - ranks) / (n - 1)
+            # +1 if > 0, -1 if < 0, 0 if exactly zero; NaN preserved
+            sign_df[col] = df_day[col].apply(
+                lambda x: float("nan") if (isinstance(x, float) and math.isnan(x))
+                else (1.0 if x > 0 else (-1.0 if x < 0 else 0.0))
+            )
 
-    if pct_df.shape[1] < 3:
+    if sign_df.shape[1] < 3:
         return pd.Series([float("nan")] * n, index=df_day.index)
 
-    row_std = pct_df.std(axis=1, ddof=1)
-    return (1 - row_std / _MAX_STD_3).clip(lower=0.0, upper=1.0)
+    return sign_df.mean(axis=1).abs()
 
 
 def compute_rs_slope(df_hist: pd.DataFrame, bench_df: pd.DataFrame,
@@ -435,27 +438,33 @@ def compute_rs_slope(df_hist: pd.DataFrame, bench_df: pd.DataFrame,
 
 
 def compute_rs_regime(df_day: pd.DataFrame) -> pd.Series:
-    """Short-horizon RS percentile mean minus long-horizon RS percentile mean.
+    """Short-horizon RS breadth minus long-horizon RS breadth.
 
-    Positive = group is *newly* outperforming the market (short RS > long RS →
-    emerging RS leader). Negative = RS leadership is longer-term / potentially
-    late-cycle. Range roughly [−1, 1]; NaN if either bucket is unavailable.
+    Short bucket (rs_week, rs_month): fraction of timeframes where the group beats SPY.
+    Long bucket (rs_quarter, rs_half, rs_year): same.
+    Result = short_breadth − long_breadth. Range [−1, 1].
+
+    Positive = emerging RS leader: beating the market recently, not historically.
+    Negative = established RS leader (or its reverse, a long-term laggard now fading).
+    NaN if either bucket has no valid RS columns.
     """
     n = len(df_day)
-    if n <= 1:
-        return pd.Series([float("nan")] * n, index=df_day.index)
+    if n == 0:
+        return pd.Series([], dtype=float)
 
-    pct = pd.DataFrame(index=df_day.index)
-    for col in RS_REGIME_SHORT + RS_REGIME_LONG:
-        if col in df_day.columns and df_day[col].notna().any():
-            ranks = df_day[col].rank(ascending=False, method="min", na_option="bottom")
-            pct[col] = (n - ranks) / (n - 1)
+    def _breadth(cols: list) -> pd.Series:
+        vals = pd.DataFrame(index=df_day.index)
+        for col in cols:
+            if col in df_day.columns and df_day[col].notna().any():
+                vals[col] = (df_day[col] > 0).astype(float).where(df_day[col].notna())
+        if vals.empty:
+            return pd.Series([float("nan")] * n, index=df_day.index)
+        return vals.mean(axis=1)
 
-    short_cols = [c for c in RS_REGIME_SHORT if c in pct.columns]
-    long_cols = [c for c in RS_REGIME_LONG if c in pct.columns]
-    if not short_cols or not long_cols:
-        return pd.Series([float("nan")] * n, index=df_day.index)
-    return pct[short_cols].mean(axis=1) - pct[long_cols].mean(axis=1)
+    short = _breadth(RS_REGIME_SHORT)
+    long_ = _breadth(RS_REGIME_LONG)
+    result = short - long_
+    return result.where(short.notna() & long_.notna())
 
 
 # ---------------------------------------------------------------------------
