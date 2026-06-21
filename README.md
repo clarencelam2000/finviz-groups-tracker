@@ -299,7 +299,7 @@ The PWA's ℹ️ hub shows release notes from `docs/releases.json` and flags uns
 
 | Item | Convention | Notes |
 |------|-----------|-------|
-| Version | `YYYY.MM.DD` | Human-scannable, monotonic, no semver. `current` must equal the newest entry's `version`. |
+| Version | `YYYY.MM.DD` (or `YYYY.MM.DD.N` for same-day releases) | Human-scannable, monotonic, no semver. `current` must equal the newest entry's `version`. |
 | `tag` | `feature` / `fix` / `data` / `improvement` | Colors the entry badge. |
 | `tab` (optional) | a PWA tab id (e.g. `momentum`) | Adds an "Open {tab} →" deep-link to the entry. |
 | Unseen tracking | `localStorage` key `fvt_seen_release_v1` | First visit seeds to `current` (no backlog nag); dot clears on opening the hub. |
