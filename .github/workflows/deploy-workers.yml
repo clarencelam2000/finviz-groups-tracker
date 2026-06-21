@@ -28,6 +28,11 @@ jobs:
         run: npm ci
       - name: Build taxonomy
         working-directory: worker
+        # Regenerates taxonomy_map.json and etf_overrides.json from the committed CSVs.
+        # If this step fails it is a DATA VALIDATION error, not a worker code error —
+        # an entry in data/etf_overrides.csv references a Finviz group name that no
+        # longer exists in data/industries/ or data/sectors/snapshots.csv.
+        # Fix: correct the name in data/etf_overrides.csv and re-push.
         run: npm run build:taxonomy
       - name: Run tests
         working-directory: worker
