@@ -231,6 +231,28 @@
 
   </main>
 
+  <!-- First-run intro carousel overlay (z-50 sits above the hub at z-40) -->
+  <div id="intro-overlay" class="fixed inset-0 z-50 bg-slate-900 hidden flex-col">
+    <div class="flex items-center justify-between px-4 pt-4 pb-2 flex-shrink-0"
+         style="padding-top: calc(env(safe-area-inset-top) + 1rem)">
+      <!-- Progress dots -->
+      <div id="intro-dots" class="flex gap-2"></div>
+      <button id="intro-skip" class="text-sm text-slate-500 active:text-slate-300 px-2 py-1">Skip</button>
+    </div>
+    <!-- Slide content area (horizontal scroll-snap) -->
+    <div id="intro-slides-wrap"
+         class="flex-1 overflow-x-scroll scrollbar-none"
+         style="scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;">
+      <div id="intro-slides" class="flex h-full"></div>
+    </div>
+    <!-- Back / Next navigation -->
+    <div class="flex items-center justify-between px-4 py-4 flex-shrink-0"
+         style="padding-bottom: calc(env(safe-area-inset-bottom) + 1rem)">
+      <button id="intro-back" class="px-4 py-2 rounded-lg bg-slate-800 text-slate-400 text-sm font-medium disabled:opacity-0" disabled>← Back</button>
+      <button id="intro-next" class="px-5 py-2 rounded-lg bg-sky-600 text-white text-sm font-medium active:bg-sky-500">Next →</button>
+    </div>
+  </div>
+
   <!-- Guide & What's New hub (slide-up sheet) -->
   <div id="hub-overlay" class="fixed inset-0 z-40 hidden">
     <div id="hub-backdrop" class="absolute inset-0 bg-black/60"></div>
@@ -2675,6 +2697,110 @@
       });
     }
 
+    // ── First-run intro carousel ───────────────────────────────────────────────
+
+    const INTRO_KEY = 'fvt_intro_seen_v1';
+    function getIntroSeen() { try { return localStorage.getItem(INTRO_KEY) === 'true'; } catch(e) { return false; } }
+    function setIntroSeen() { try { localStorage.setItem(INTRO_KEY, 'true'); } catch(e) {} }
+
+    let _introSlide = 0;
+
+    function showIntroOverlay() {
+      const overlay = document.getElementById('intro-overlay');
+      if (!overlay) return;
+      _introSlide = 0;
+      _buildCarouselSlides();
+      overlay.classList.remove('hidden');
+      overlay.classList.add('flex');
+      _updateIntroDots();
+      _updateIntroButtons();
+      // Scroll to first slide immediately (no animation on open)
+      const wrap = document.getElementById('intro-slides-wrap');
+      if (wrap) wrap.scrollLeft = 0;
+    }
+
+    function hideIntroOverlay() {
+      const overlay = document.getElementById('intro-overlay');
+      if (!overlay) return;
+      setIntroSeen();
+      overlay.classList.add('hidden');
+      overlay.classList.remove('flex');
+    }
+
+    function _buildCarouselSlides() {
+      const container = document.getElementById('intro-slides');
+      if (!container) return;
+      const slideContents = renderWelcome('carousel');
+      container.innerHTML = slideContents.map(inner =>
+        `<div class="flex-shrink-0 flex flex-col justify-center px-6 py-4"
+              style="width:100vw;min-height:0;scroll-snap-align:start;">
+          <div class="space-y-3">${inner}</div>
+        </div>`
+      ).join('');
+    }
+
+    function _updateIntroDots() {
+      const dots = document.getElementById('intro-dots');
+      if (!dots) return;
+      dots.innerHTML = WELCOME.map((_, i) =>
+        `<span class="w-2 h-2 rounded-full transition-colors ${i === _introSlide ? 'bg-sky-400' : 'bg-slate-700'}"></span>`
+      ).join('');
+    }
+
+    function _updateIntroButtons() {
+      const back = document.getElementById('intro-back');
+      const next = document.getElementById('intro-next');
+      if (!back || !next) return;
+      back.disabled = _introSlide === 0;
+      const isLast = _introSlide === WELCOME.length - 1;
+      // On the last slide, the Get started button inside the slide handles dismiss;
+      // hide the bottom Next button so it doesn't double-up.
+      next.classList.toggle('hidden', isLast);
+    }
+
+    function _scrollToSlide(idx) {
+      const wrap = document.getElementById('intro-slides-wrap');
+      if (!wrap) return;
+      wrap.scrollTo({ left: idx * wrap.clientWidth, behavior: 'smooth' });
+      _introSlide = idx;
+      _updateIntroDots();
+      _updateIntroButtons();
+    }
+
+    // Wire carousel controls after DOM ready (called from boot section)
+    function _wireIntroControls() {
+      const skip = document.getElementById('intro-skip');
+      const back = document.getElementById('intro-back');
+      const next = document.getElementById('intro-next');
+      const wrap = document.getElementById('intro-slides-wrap');
+      if (skip) skip.addEventListener('click', hideIntroOverlay);
+      if (back) back.addEventListener('click', () => {
+        if (_introSlide > 0) _scrollToSlide(_introSlide - 1);
+      });
+      if (next) next.addEventListener('click', () => {
+        if (_introSlide < WELCOME.length - 1) _scrollToSlide(_introSlide + 1);
+      });
+      // Keep dot/button state in sync when user swipes manually.
+      if (wrap) {
+        let _debounce;
+        wrap.addEventListener('scroll', () => {
+          clearTimeout(_debounce);
+          _debounce = setTimeout(() => {
+            const idx = Math.round(wrap.scrollLeft / wrap.clientWidth);
+            if (idx !== _introSlide) {
+              _introSlide = idx;
+              _updateIntroDots();
+              _updateIntroButtons();
+            }
+          }, 80);
+        }, { passive: true });
+      }
+    }
+
+    // Expose for renderWelcome's "Get started" onclick and the hub Replay button.
+    window.showIntroOverlay = showIntroOverlay;
+    window.hideIntroOverlay = hideIntroOverlay;
+
     // Legend reads the LIVE threshold constants so it can never drift from behavior.
     function buildLegend() {
       const bar = (cls) => `<span class="inline-block w-3 h-4 rounded-sm ${cls} align-middle"></span>`;
@@ -2989,6 +3115,9 @@
     initUIFromState();
     loadAndRender();
     loadReleases();
+    _wireIntroControls();
+    // Show first-run carousel once; fvt_intro_seen_v1 persists across reloads.
+    if (!getIntroSeen()) showIntroOverlay();
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

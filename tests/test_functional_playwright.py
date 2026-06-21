@@ -335,6 +335,222 @@ class TestPWALookbackWindows:
 
 
 # ---------------------------------------------------------------------------
+# PWA intro / onboarding tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.functional
+class TestPWAIntro:
+    """Verify the first-run intro carousel and hub Start Here section.
+
+    Uses the local-server + route-intercept pattern from CLAUDE.md
+    "What Playwright in cloud unlocks". Port 8184 to avoid conflicts.
+    """
+
+    PORT = 8184
+
+    def _make_page(self, p, snap_body, delta_body, *, clear_intro=True):
+        """Return a configured Playwright page with CSV routes mocked."""
+        docs_dir = Path(__file__).parent.parent / "docs"
+        server = subprocess.Popen(
+            ["python3", "-m", "http.server", str(self.PORT), "--directory", str(docs_dir)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        time.sleep(1)
+        browser = p.chromium.launch(headless=True)
+        ctx = browser.new_context()
+        page = ctx.new_page()
+
+        # Pre-set or clear the intro localStorage key before the page loads.
+        # We intercept the first about:blank load to inject storage state.
+        if not clear_intro:
+            ctx.add_init_script("localStorage.setItem('fvt_intro_seen_v1','true');")
+
+        for pattern in [
+            "**/raw.githubusercontent.com/**snapshots.csv",
+            "**/raw.githubusercontent.com/**sectors/snapshots.csv",
+            "**/raw.githubusercontent.com/**industries/snapshots.csv",
+        ]:
+            page.route(pattern, lambda r: r.fulfill(body=snap_body, content_type="text/plain"))
+        for pattern in [
+            "**/raw.githubusercontent.com/**deltas.csv",
+            "**/raw.githubusercontent.com/**sectors/deltas.csv",
+            "**/raw.githubusercontent.com/**industries/deltas.csv",
+        ]:
+            page.route(pattern, lambda r: r.fulfill(body=delta_body, content_type="text/plain"))
+        page.route("**/data/fetch_log.csv",
+                   lambda r: r.fulfill(body="", content_type="text/plain"))
+        page.route("**/data/ai/**", lambda r: r.fulfill(status=404))
+
+        return server, browser, ctx, page
+
+    def test_carousel_auto_opens_on_first_visit(self):
+        """fvt_intro_seen_v1 unset → carousel auto-opens on load."""
+        from playwright.sync_api import sync_playwright
+        snap_body = _snapshot_csv()
+        delta_body = _delta_csv()
+        server = None
+        try:
+            with sync_playwright() as p:
+                server, browser, ctx, page = self._make_page(
+                    p, snap_body, delta_body, clear_intro=True
+                )
+                page.goto(f"http://localhost:{self.PORT}/", wait_until="networkidle",
+                          timeout=15000)
+                overlay = page.locator("#intro-overlay")
+                assert overlay.count() > 0, "#intro-overlay element missing"
+                # Should be visible (flex, not hidden)
+                assert overlay.is_visible(), "intro overlay should be visible on first visit"
+                ctx.close()
+                browser.close()
+        finally:
+            if server:
+                server.terminate()
+                server.wait()
+
+    def test_skip_dismisses_carousel(self):
+        """Clicking Skip hides the carousel."""
+        from playwright.sync_api import sync_playwright
+        snap_body = _snapshot_csv()
+        delta_body = _delta_csv()
+        server = None
+        try:
+            with sync_playwright() as p:
+                server, browser, ctx, page = self._make_page(
+                    p, snap_body, delta_body, clear_intro=True
+                )
+                page.goto(f"http://localhost:{self.PORT}/", wait_until="networkidle",
+                          timeout=15000)
+                page.locator("#intro-skip").click()
+                page.wait_for_timeout(200)
+                overlay = page.locator("#intro-overlay")
+                assert not overlay.is_visible(), "carousel should be hidden after Skip"
+                ctx.close()
+                browser.close()
+        finally:
+            if server:
+                server.terminate()
+                server.wait()
+
+    def test_carousel_stays_dismissed_after_reload(self):
+        """After Skip, localStorage persists — carousel must not reopen on reload."""
+        from playwright.sync_api import sync_playwright
+        snap_body = _snapshot_csv()
+        delta_body = _delta_csv()
+        server = None
+        try:
+            with sync_playwright() as p:
+                server, browser, ctx, page = self._make_page(
+                    p, snap_body, delta_body, clear_intro=True
+                )
+                page.goto(f"http://localhost:{self.PORT}/", wait_until="networkidle",
+                          timeout=15000)
+                page.locator("#intro-skip").click()
+                page.wait_for_timeout(200)
+                # Reload the page in the same context (localStorage persists).
+                page.reload(wait_until="networkidle", timeout=15000)
+                page.wait_for_timeout(500)
+                overlay = page.locator("#intro-overlay")
+                assert not overlay.is_visible(), (
+                    "carousel should stay hidden after reload when localStorage is set"
+                )
+                ctx.close()
+                browser.close()
+        finally:
+            if server:
+                server.terminate()
+                server.wait()
+
+    def test_carousel_not_shown_when_already_seen(self):
+        """fvt_intro_seen_v1 already set → no carousel on load."""
+        from playwright.sync_api import sync_playwright
+        snap_body = _snapshot_csv()
+        delta_body = _delta_csv()
+        server = None
+        try:
+            with sync_playwright() as p:
+                server, browser, ctx, page = self._make_page(
+                    p, snap_body, delta_body, clear_intro=False  # pre-seeds localStorage
+                )
+                page.goto(f"http://localhost:{self.PORT}/", wait_until="networkidle",
+                          timeout=15000)
+                page.wait_for_timeout(300)
+                overlay = page.locator("#intro-overlay")
+                assert not overlay.is_visible(), (
+                    "carousel must not auto-open when fvt_intro_seen_v1 is already set"
+                )
+                ctx.close()
+                browser.close()
+        finally:
+            if server:
+                server.terminate()
+                server.wait()
+
+    def test_hub_start_here_section_renders(self):
+        """Hub 'Start Here' button opens the welcome section with slide content."""
+        from playwright.sync_api import sync_playwright
+        snap_body = _snapshot_csv()
+        delta_body = _delta_csv()
+        server = None
+        try:
+            with sync_playwright() as p:
+                server, browser, ctx, page = self._make_page(
+                    p, snap_body, delta_body, clear_intro=False
+                )
+                page.goto(f"http://localhost:{self.PORT}/", wait_until="networkidle",
+                          timeout=15000)
+                # Open the hub via the ⓘ button
+                page.locator("#hub-btn").click()
+                page.wait_for_timeout(400)
+                # Click "Start Here"
+                page.locator(".hub-section-btn[data-section='welcome']").click()
+                page.wait_for_timeout(200)
+                hub_body = page.locator("#hub-body")
+                # Should contain at least one slide title
+                assert "Welcome to Finviz Tracker" in hub_body.inner_text() or \
+                       "Why groups matter" in hub_body.inner_text(), (
+                    "Start Here hub section should render WELCOME slide titles"
+                )
+                ctx.close()
+                browser.close()
+        finally:
+            if server:
+                server.terminate()
+                server.wait()
+
+    def test_replay_intro_reopens_carousel(self):
+        """Hub Start Here section 'Replay intro' button re-opens the carousel."""
+        from playwright.sync_api import sync_playwright
+        snap_body = _snapshot_csv()
+        delta_body = _delta_csv()
+        server = None
+        try:
+            with sync_playwright() as p:
+                server, browser, ctx, page = self._make_page(
+                    p, snap_body, delta_body, clear_intro=False
+                )
+                page.goto(f"http://localhost:{self.PORT}/", wait_until="networkidle",
+                          timeout=15000)
+                # Open hub → Start Here
+                page.locator("#hub-btn").click()
+                page.wait_for_timeout(400)
+                page.locator(".hub-section-btn[data-section='welcome']").click()
+                page.wait_for_timeout(200)
+                # Click Replay intro
+                page.locator("#hub-body button:has-text('Replay intro')").click()
+                page.wait_for_timeout(300)
+                overlay = page.locator("#intro-overlay")
+                assert overlay.is_visible(), (
+                    "clicking 'Replay intro' in the hub should re-open the intro carousel"
+                )
+                ctx.close()
+                browser.close()
+        finally:
+            if server:
+                server.terminate()
+                server.wait()
+
+
+# ---------------------------------------------------------------------------
 # Streamlit functional tests
 # ---------------------------------------------------------------------------
 
