@@ -1,0 +1,55 @@
+name: Deploy Cloudflare Workers
+
+on:
+  push:
+    branches: [claude/elegant-babbage-hlxnfy]
+    paths:
+      - 'worker/**'
+      - 'worker-cron/**'
+      - '.github/workflows/deploy-workers.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy-ticker-lookup:
+    name: Deploy finviz-ticker-lookup
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        working-directory: worker
+        run: npm ci
+      - name: Run tests
+        working-directory: worker
+        run: npm test
+      - name: Deploy
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy
+
+  deploy-cron-dispatcher:
+    name: Deploy finviz-cron-dispatcher
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        working-directory: worker-cron
+        run: npm ci
+      - name: Run tests
+        working-directory: worker-cron
+        run: npm test
+      - name: Deploy
+        working-directory: worker-cron
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy

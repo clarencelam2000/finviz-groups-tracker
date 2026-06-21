@@ -233,6 +233,7 @@ _(nothing)_
 
 | # | Task | Date |
 |---|------|------|
+| CF-DEPLOY | Auto-deploy Cloudflare Workers on push: `.github/workflows/deploy-workers.yml` — two independent jobs (ticker-lookup + cron-dispatcher), test-gated, path-filtered, `workflow_dispatch` available | 2026-06-21 |
 | ONBOARD | Start Here onboarding: WELCOME constant, 5-slide first-run carousel, hub "Start Here" section, fvt_intro_seen_v1, anti-drift tests, canonical copy in product-intro-copy.md, release cut | 2026-06-21 |
 | ETF-1 | Curated ETF→Finviz override layer: 31 overrides (thematic/sector/diversified), build validation, runtime wiring, PWA ETF badges | 2026-06-20 |
 | LB-FF1 | PWA full-dynamic lookback buttons derived from CSV header (`extractWindowsFromHeader`) (PR #110) | 2026-06-18 |
