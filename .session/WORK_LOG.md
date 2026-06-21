@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-06-21 — CF Worker auto-deploy live (PR #152)
+
+`.github/workflows/deploy-workers.yml` shipped. Both Cloudflare Workers (finviz-ticker-lookup, finviz-cron-dispatcher) now auto-deploy on push to default branch when their source changes. `build:taxonomy` runs before tests (validates ETF override names against snapshot CSVs). No more manual `npm run deploy`. Post-merge: trigger `workflow_dispatch` to smoke-test both deploy jobs.
+
+---
+
 ## Data Collection Milestones
 
 | Date | Milestone | Notes |

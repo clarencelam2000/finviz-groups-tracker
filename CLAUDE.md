@@ -268,6 +268,17 @@ There is no need for a conditional or auto-detection — just run it when you ne
 - Workflow: `.github/workflows/collect.yml`
 - Trigger: `workflow_dispatch` also available for manual runs.
 - On failure: GitHub emails automatically. Retry 3x before failing.
+- **Worker auto-deploy: `.github/workflows/deploy-workers.yml`** — triggers on push to the
+  default branch when `worker/**` or `worker-cron/**` change. Runs `build:taxonomy` + tests
+  before deploying; two independent jobs (one per worker). Also triggerable manually via
+  `workflow_dispatch`. **No manual `npm run deploy` needed after merging worker changes.**
+  - If the `Build taxonomy` step fails in CI: it is a **data validation error**, not a code
+    error. An entry in `data/etf_overrides.csv` references a Finviz group name that doesn't
+    exist in the snapshot CSVs. Fix: correct the name in `etf_overrides.csv` and re-push.
+  - `wrangler deploy` does **not** touch secrets (FMP_API_KEY, GITHUB_DISPATCH_TOKEN), KV
+    data, or cron expressions unless `wrangler.toml` changes.
+  - TODO(D1): update `branches:` in the workflow to `[main]` when the default branch is
+    renamed; also update `DISPATCH_REF` in `worker-cron/wrangler.toml` at the same time.
 - `collect.py` and `compute_deltas.py` are **last-write-wins** per `date`: a later run on the same
   trading day evicts and rewrites that date's snapshot *and* delta rows, so the EOD run's ranks win
   over an earlier intraday run's.

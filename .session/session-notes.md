@@ -6,6 +6,8 @@
 
 ## Current Status
 
+**Status (2026-06-21) — CF-DEPLOY (worker auto-deploy): COMPLETE.** PR #152 merged. `.github/workflows/deploy-workers.yml` ships: two independent jobs (deploy-ticker-lookup, deploy-cron-dispatcher), path-filtered, test-gated, `build:taxonomy` runs before tests. CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID confirmed in secrets. **Post-merge action: trigger `workflow_dispatch` to verify both workers deploy successfully, then hit `/health` on both worker URLs.** CLAUDE.md Automation section updated. No more manual `npm run deploy` needed.
+
 **Status (2026-06-21) — RS DISCRETE FLAGS (RS-4 / Phase 3 Tier 5): COMPLETE on `claude/wonderful-brown-dahc9q`.** PR open (draft → ready for review). 206 non-Playwright tests pass. Changes: (1) Pipeline: beats_benchmark_{day..ytd}, rs_new_high, rs_cross added to delta schema (9 new columns), compute_deltas.py has 3 new pure functions; (2) PWA: NH (amber) + ↑ cross (sky) badges on vs-Market cards, "beats N/7 tf" sub-line; (3) GUIDE: 3 new entries; (4) moaty-metrics.md, README, CLAUDE.md updated; (5) release triplet: releases.json 2026.06.21.2, sw.js CACHE → finviz-v21. All plan phases Phases 0-3 now complete. Phases 4+5 remain deferred. **Safe to close once PR merged.**
 
 **Status (2026-06-21) — START HERE ONBOARDING (ONBOARD): COMPLETE on `claude/dreamy-archimedes-3q6ag1`.** PR #143 merged. All 212 non-Playwright tests pass. Changes: WELCOME constant + hub section + anti-drift tests, carousel overlay + fvt_intro_seen_v1, release cut (releases.json 2026.06.21, sw.js CACHE → v19). Deferred: ONBOARD-DL-UX (carousel deep-link dismiss UX, tracked in SPRINT.md), PWATEST-LOOKBACK (3 pre-existing Playwright failures). **Merged.**
