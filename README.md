@@ -273,6 +273,8 @@ These constants control when visual indicators appear or change state. All are n
 | `ACCEL_SLIGHT` | `0.02` | `momentum_accel` threshold for the single-arrow badge (▲ / ▼). Values within ±0.02 show no badge. |
 | `SLOPE_STRONG` | `0.05` | `rank_trend_slope` threshold for the double-arrow glyph (↑↑ / ↓↓) on Today cards. |
 | `SLOPE_SLIGHT` | `0.01` | `rank_trend_slope` threshold for the single-arrow glyph (↑ / ↓). Values within ±0.01 show `~`. |
+| `RS_STRONG` | `2.0` | RS spread (pp vs S&P) threshold for the strong badge (deep green / deep red) in the vs Market tab and Today cards. |
+| `RS_SLIGHT` | `0.5` | RS spread threshold for the mild badge (green / orange). Within ±0.5pp → neutral chip. |
 
 > The Guide's **legend** renders these thresholds live (read from JS scope), so the in-app explanation can never drift from the numbers above.
 

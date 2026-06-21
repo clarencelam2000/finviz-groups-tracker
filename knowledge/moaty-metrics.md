@@ -207,8 +207,7 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   (`rs_quarter`, `rs_half`, `rs_year`). Positive = *newly* beating the market (emerging
   RS leader); negative = RS strength is longer-established / potentially late-cycle.
   Configured via `RS_REGIME_SHORT` / `RS_REGIME_LONG` in `scripts/delta_config.py`.
-- **User one-liner:** "Whether this group is a new market-beater (+) or a long-
-  established one (−) — positive means relative strength is freshly emerging."
+- **User one-liner:** "Whether this group is a new market-beater (+) or a long-established one (−) — positive means relative strength is freshly emerging."
 
 ## Rotation Phase (AI — sectors only)
 - **Definition:** an AI-generated read of where the broad market sits in its

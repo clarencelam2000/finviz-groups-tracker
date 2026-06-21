@@ -171,7 +171,7 @@ stored raw SPY + group perf whenever greenlit.
 - **`dashboard/app.py`** + **`docs/index.html`** pick up new columns automatically via
   `delta_columns()` / `extractWindowsFromHeader`; no UI yet beyond data availability.
 
-### Phase 3 — Surface in PWA (Tiers 4–5)
+### COMPLETED - Phase 3 — Surface in PWA (Tiers 4–5)
 
 - RS badge/chip on existing cards ("+2.3% vs SPY", green/red) — cheapest visible win.
 - New **"vs Market"** view sorted by `rs_score` / `rs_slope` (the "pulling away from the market"

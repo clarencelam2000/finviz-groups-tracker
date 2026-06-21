@@ -82,6 +82,7 @@
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="movers">Movers</button>
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="momentum">Momentum</button>
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="strength">Strength</button>
+    <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="vsmarket">vs Mkt</button>
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="ai">AI</button>
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="lookup">Lookup</button>
   </nav>
@@ -180,6 +181,22 @@
       </div>
       <button class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','sustained_strength')">ⓘ What counts as "sustained"? →</button>
       <div id="strength-list" class="space-y-2"></div>
+    </section>
+
+    <!-- TAB: vs Market -->
+    <section id="tab-vsmarket" class="px-3 pt-3 pb-24 hidden">
+      <div class="flex bg-slate-800 rounded-lg p-1 mb-3">
+        <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-group="sectors">Sectors</button>
+        <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-group="industries">Industries</button>
+      </div>
+      <!-- RS Score / Emerging-Fading sub-toggle -->
+      <div class="flex bg-slate-800 rounded-lg p-1 mb-3">
+        <button class="vsmarket-view-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-mview="score">RS Score</button>
+        <button class="vsmarket-view-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-mview="regime">Emerging / Fading</button>
+      </div>
+      <p id="vsmarket-tab-desc" class="text-xs text-slate-500 mb-3">How broadly this group beats the S&amp;P 500 across all 7 timeframes. 100% = outperforming in every horizon.</p>
+      <button id="vsmarket-why-link" class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','rs_score')">ⓘ What is RS Score? →</button>
+      <div id="vsmarket-list" class="space-y-2"></div>
     </section>
 
     <!-- TAB: AI Insights -->
@@ -320,6 +337,7 @@
       sortMetric: 'perf_week',
       strengthView: 'sustained',
       momentumView: 'momentum',
+      vsMarketView: 'score',
       topN: 20,
       data: {
         sectors:    { snap: null, delta: null, deltaAll: null },
@@ -349,6 +367,12 @@
     // Thresholds for the rank_trend_slope glyph on Today cards.
     const SLOPE_STRONG = 0.05;   // ↑↑ / ↓↓
     const SLOPE_SLIGHT = 0.01;   // ↑ / ↓
+
+    // Thresholds for the RS vs S&P 500 badge on Today and vs-Market cards.
+    // Units are percentage points (pp): RS spread = group_perf − SPY_perf.
+    // Defaults chosen conservatively — adjust after observing live distributions.
+    const RS_STRONG = 2.0;   // ≥ 2pp vs SPY → deep green / deep red badge
+    const RS_SLIGHT = 0.5;   // ≥ 0.5pp → mild badge; within ±0.5pp → neutral
 
     // ── Guide / Glossary content ───────────────────────────────────────────
     // The metric `oneLiner` strings are copied VERBATIM from the "User one-liner"
@@ -401,6 +425,24 @@
         { id: 'ai_note', label: 'AI daily note', tabs: ['ai'],
           oneLiner: 'A plain-English summary the AI writes each day for sectors and industries, highlighting strength, movers, and divergences.',
           detail: 'Freeform briefing built from the computed signals — sustained strength, notable movers, momentum leaders and laggards, and divergences.' },
+        { id: 'rs_score', label: 'RS Score (vs S&P 500)', tabs: ['vsmarket', 'lookup'],
+          oneLiner: 'How broadly this group beats the S&P 500 across every timeframe at once, from 0 to 100%.',
+          detail: 'Mean percentile of the group\'s RS spreads (group perf − SPY perf) across all 7 timeframes. Higher = beating the market in more horizons.' },
+        { id: 'rs_confirmed', label: 'Confirmed RS', tabs: ['vsmarket', 'lookup'],
+          oneLiner: 'Market-beating strength filtered by consistency — high only when the group beats SPY across timeframes AND those timeframes agree.',
+          detail: 'rs_score × rs_agreement. An outperformer with only one timeframe firing gets discounted.' },
+        { id: 'rs_slope', label: 'RS trend', tabs: ['vsmarket'],
+          oneLiner: "Whether this group's edge over the S&P 500 is widening (↑) or narrowing (↓) over the last 10 sessions.",
+          detail: 'Least-squares slope of rs_month over 10 sessions. Positive = outperformance building.' },
+        { id: 'rs_accel', label: 'RS acceleration', tabs: ['vsmarket'],
+          oneLiner: "How fast this group's advantage over the market is building (+) or fading (−) over the last 10 trading sessions.",
+          detail: 'Change in rs_score over 10 sessions. Drives the ▲▲/▲/▼/▼▼ badges on vs-Market cards.' },
+        { id: 'rs_regime_short_long', label: 'RS regime (emerging / fading)', tabs: ['vsmarket'],
+          oneLiner: 'Whether this group is a new market-beater (+) or a long-established one (−) — positive means relative strength is freshly emerging.',
+          detail: 'Short-horizon RS (week+month) minus long-horizon RS (3mo+6mo+yr). Positive = newly beating the market, not a multi-year laggard rebounding.' },
+        { id: 'rs_spreads', label: 'RS spreads (day / wk / mo / …)', tabs: ['vsmarket', 'lookup'],
+          oneLiner: 'How much this group beat or lagged the S&P 500 over each timeframe — positive means it outperformed the market.',
+          detail: 'group_perf_X − SPY_perf_X per matching timeframe. Positive = outperforming; negative = lagging. NaN until the first SPY benchmark snapshot is collected.' },
       ],
       howto: [
         'Each card is one group: a rank badge on the left, the selected timeframe’s % on the right, and momentum below the name.',
@@ -467,7 +509,8 @@
       { id: 'today',    label: 'Today'    },
       { id: 'movers',   label: 'Movers'   },
       { id: 'momentum', label: 'Momentum' },
-      { id: 'strength', label: 'Strength' },
+      { id: 'strength',  label: 'Strength' },
+      { id: 'vsmarket', label: 'vs Mkt'  },
       { id: 'ai',       label: 'AI'       },
       { id: 'lookup',   label: 'Lookup'   },
     ];
@@ -486,7 +529,7 @@
       try {
         localStorage.setItem(PREFS_KEY, JSON.stringify({
           group: state.group, sortMetric: state.sortMetric, lookback: state.lookback,
-          momentumView: state.momentumView,
+          momentumView: state.momentumView, vsMarketView: state.vsMarketView,
         }));
       } catch(e) {}
     }
@@ -499,6 +542,7 @@
         // Accept any Nd pattern; corrected against actual windows after CSV loads.
         if (p.lookback && /^\d+d$/.test(p.lookback)) state.lookback = p.lookback;
         if (['momentum','rotation'].includes(p.momentumView)) state.momentumView = p.momentumView;
+        if (['score','regime'].includes(p.vsMarketView)) state.vsMarketView = p.vsMarketView;
       } catch(e) {}
     }
 
@@ -517,6 +561,12 @@
       });
       document.querySelectorAll('.momentum-view-btn').forEach(btn => {
         const active = btn.dataset.mview === state.momentumView;
+        btn.classList.toggle('bg-slate-600', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('text-slate-400', !active);
+      });
+      document.querySelectorAll('.vsmarket-view-btn').forEach(btn => {
+        const active = btn.dataset.mview === state.vsMarketView;
         btn.classList.toggle('bg-slate-600', active);
         btn.classList.toggle('text-white', active);
         btn.classList.toggle('text-slate-400', !active);
@@ -614,6 +664,24 @@
       if (accel > -ACCEL_SLIGHT) return '';
       if (accel > -ACCEL_STRONG) return '<span class="text-red-400 text-xs">▼</span>';
       return '<span class="text-red-400 text-xs whitespace-nowrap">▼▼ fading</span>';
+    }
+
+    // Returns a Tailwind color class for an RS spread value (in percentage points).
+    function rsColor(v) {
+      if (v === null || v === undefined) return 'text-slate-500';
+      if (v >=  RS_STRONG) return 'text-emerald-400';
+      if (v >=  RS_SLIGHT) return 'text-green-400';
+      if (v <= -RS_STRONG) return 'text-red-400';
+      if (v <= -RS_SLIGHT) return 'text-orange-400';
+      return 'text-slate-400';
+    }
+
+    // Inline RS chip: "+2.3pp vs S&P" or "-1.1pp vs S&P". Returns '' when null.
+    function rsChip(v) {
+      if (v === null || v === undefined) return '';
+      const color = rsColor(v);
+      const sign = v >= 0 ? '+' : '';
+      return `<span class="${color} text-xs whitespace-nowrap">${sign}${v.toFixed(1)}pp vs S&P</span>`;
     }
 
     // Returns a small HTML glyph for rank_trend_slope (10-session LS slope of rank_ytd,
@@ -1064,6 +1132,9 @@
         const subMetrics = ALL_METRICS.filter(m => m.key !== metric).slice(0, 2);
         const subLine = subMetrics.map(m => `<span>${m.label}: ${fmtPct(row[m.key])}</span>`).join('');
 
+        // RS vs S&P chip (rs_month spread, mid-frequency signal). Hidden until SPY data exists.
+        const rsMonthChip = rsChip(pf(d.rs_month));
+
         const isExpanded = state.expandedName === row.name;
         const q = pf(row.perf_quarter), h = pf(row.perf_half), y = pf(row.perf_year);
         const pe = pf(row.pe), cap = pf(row.market_cap);
@@ -1106,6 +1177,7 @@
                 <div class="flex gap-3 mt-0.5 text-xs flex-wrap">
                   ${subLine}
                   ${momStr}
+                  ${rsMonthChip}
                 </div>
               </div>
               <div class="text-right flex-shrink-0">
@@ -1411,6 +1483,147 @@
               }).join('')
           }`;
       }
+    }
+
+    // ── Render: vs Market (RS vs S&P 500) ────────────────────────────────────
+
+    function renderVsMarket() {
+      const delta = state.data[state.group].delta || [];
+      const snap  = state.data[state.group].snap  || [];
+      const container = document.getElementById('vsmarket-list');
+      const descEl    = document.getElementById('vsmarket-tab-desc');
+      const whyEl     = document.getElementById('vsmarket-why-link');
+
+      if (delta.length === 0) {
+        container.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">No data available.</p>';
+        return;
+      }
+
+      // RS columns are NaN until the first SPY benchmark snapshot is collected.
+      // Show a friendly placeholder instead of an empty list.
+      const hasRsData = delta.some(r => r.rs_score !== '' && r.rs_score !== undefined && r.rs_score !== null);
+      if (!hasRsData) {
+        container.innerHTML = `
+          <div class="rounded-xl p-6 bg-slate-800 border border-slate-700 text-center space-y-2">
+            <p class="text-slate-300 text-sm font-medium">Waiting for benchmark data</p>
+            <p class="text-slate-500 text-xs">RS signals appear after the first SPY snapshot is collected by the daily scraper. Check back after the next market close.</p>
+          </div>`;
+        return;
+      }
+
+      if (state.vsMarketView === 'regime') {
+        if (descEl) descEl.textContent = 'Short-horizon RS minus long-horizon RS. Positive = newly beating the market; negative = long-established RS leader or laggard.';
+        if (whyEl)  { whyEl.textContent = 'ⓘ What is the RS regime? →'; whyEl.onclick = () => __openHub('guide','rs_regime_short_long'); }
+        renderRsRegime(delta, snap, container);
+      } else {
+        if (descEl) descEl.textContent = 'How broadly this group beats the S&P 500 across all 7 timeframes. 100% = outperforming in every horizon.';
+        if (whyEl)  { whyEl.textContent = 'ⓘ What is RS Score? →'; whyEl.onclick = () => __openHub('guide','rs_score'); }
+        renderRsScore(delta, container);
+      }
+    }
+
+    function renderRsScore(delta, container) {
+      const sorted = [...delta]
+        .filter(r => r.rs_score !== '' && r.rs_score !== undefined && r.rs_score !== null)
+        .sort((a, b) => (pf(b.rs_score) ?? 0) - (pf(a.rs_score) ?? 0));
+
+      if (sorted.length === 0) {
+        container.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">No RS data yet.</p>';
+        return;
+      }
+
+      container.innerHTML = sorted.map((row, i) => {
+        const score   = pf(row.rs_score) ?? 0;
+        const style   = momentumStyle(score);
+        const pct     = (score * 100).toFixed(0);
+        const rsDay   = pf(row.rs_day);
+        const rsMo    = pf(row.rs_month);
+        const accel   = pf(row.rs_accel);
+        const badge   = accelBadge(accel);
+
+        const subParts = [
+          rsDay !== null ? `Day: ${rsDay >= 0 ? '+' : ''}${rsDay.toFixed(1)}pp` : null,
+          rsMo  !== null ? `Mo: ${rsMo  >= 0 ? '+' : ''}${rsMo.toFixed(1)}pp`  : null,
+        ].filter(Boolean).join(' · ');
+
+        return `
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 flex items-center gap-3">
+            <span class="text-sm font-bold text-slate-500 w-5 text-right flex-shrink-0">${i+1}</span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between gap-1">
+                <div class="text-sm font-medium text-white truncate">${row.name}</div>
+                ${badge}
+              </div>
+              ${subParts ? `<div class="text-xs text-slate-400 mt-0.5">${subParts}</div>` : ''}
+            </div>
+            <div class="flex-shrink-0 w-16 text-right">
+              <div class="text-sm font-bold ${style.text}">${pct}%</div>
+              <div class="h-1.5 rounded-full bg-slate-700 mt-1 overflow-hidden">
+                <div class="h-full rounded-full ${style.bar}" style="width:${pct}%"></div>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    function renderRsRegime(delta, snap, container) {
+      const snapMap    = Object.fromEntries((snap || []).map(r => [r.name, r]));
+      const withRegime = delta.map(r => ({ ...r, _rs_regime: pf(r.rs_regime_short_long) }));
+      const valid      = withRegime.filter(r => r._rs_regime !== null).sort((a, b) => b._rs_regime - a._rs_regime);
+      const invalid    = withRegime.filter(r => r._rs_regime === null);
+
+      const emerging    = valid.filter(r => r._rs_regime >  REGIME_THRESHOLD);
+      const established = valid.filter(r => r._rs_regime >= -REGIME_THRESHOLD && r._rs_regime <= REGIME_THRESHOLD);
+      const fading      = valid.filter(r => r._rs_regime <  -REGIME_THRESHOLD);
+
+      const rsBar = (v) => {
+        const pct  = Math.min(Math.abs(v) * 50, 50).toFixed(1);
+        const fill = v > 0
+          ? `<div class="absolute top-0 h-full bg-emerald-500" style="left:50%;width:${pct}%"></div>`
+          : `<div class="absolute top-0 h-full bg-red-500" style="right:50%;width:${pct}%"></div>`;
+        return `
+          <div class="relative w-full h-1.5 rounded-full bg-slate-700 overflow-hidden my-1">
+            <div class="absolute top-0 left-1/2 w-px h-full bg-slate-500"></div>
+            ${fill}
+          </div>`;
+      };
+
+      const renderCard = (row) => {
+        const regime    = row._rs_regime;
+        const rsMo      = pf(row.rs_month);
+        const rsHalf    = pf(row.rs_half);
+        const rsScore   = pf(row.rs_score);
+        const sign      = regime > 0 ? '+' : '';
+        const regimeColor = regime > REGIME_THRESHOLD ? 'text-emerald-400' : regime < -REGIME_THRESHOLD ? 'text-red-400' : 'text-slate-400';
+        const sub = [
+          rsMo    !== null ? `Short RS: Mo ${rsMo    >= 0 ? '+' : ''}${rsMo.toFixed(1)}pp`    : null,
+          rsHalf  !== null ? `Long RS: 6mo ${rsHalf  >= 0 ? '+' : ''}${rsHalf.toFixed(1)}pp`  : null,
+          rsScore !== null ? `RS Score ${(rsScore*100).toFixed(0)}%` : null,
+        ].filter(Boolean).join('  ·  ');
+        return `
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700">
+            <div class="flex items-center justify-between">
+              <div class="text-sm font-medium text-white">${row.name}</div>
+              <div class="text-xs font-mono ${regimeColor} flex-shrink-0 ml-2">${sign}${regime.toFixed(2)}</div>
+            </div>
+            ${rsBar(regime)}
+            ${sub ? `<div class="text-xs text-slate-400">${sub}</div>` : ''}
+          </div>`;
+      };
+
+      const section = (rows, label, labelClass) => rows.length === 0 ? '' : `
+        <h3 class="text-xs font-semibold ${labelClass} uppercase tracking-wider mb-2 mt-4 first:mt-0">${label} (${rows.length})</h3>
+        <div class="space-y-2">${rows.map(renderCard).join('')}</div>`;
+
+      const noHistory = invalid.length > 0
+        ? `<p class="text-xs text-slate-600 text-center mt-4">Insufficient RS history for ${invalid.length} group${invalid.length > 1 ? 's' : ''}</p>`
+        : '';
+
+      container.innerHTML =
+        section(emerging,    '🌱 Emerging — freshly beating the market',  'text-emerald-400') +
+        section(established, '→ Established — consistent RS vs market',   'text-slate-400') +
+        section(fading,      '📉 Fading — RS advantage narrowing',        'text-red-400') +
+        noHistory;
     }
 
     // ── Render: AI Insights ────────────────────────────────────────────────
@@ -2415,6 +2628,7 @@
       if (state.tab === 'movers')   renderMovers();
       if (state.tab === 'momentum') renderMomentum();
       if (state.tab === 'strength') renderStrength();
+      if (state.tab === 'vsmarket') renderVsMarket();
       if (state.tab === 'ai')       renderAI();
       if (state.tab === 'lookup')   { renderLookup(); renderLookupChips(); }
     }
@@ -2822,6 +3036,14 @@
         row('<span class="text-emerald-400">▲▲ ▲</span> <span class="text-red-400">▼ ▼▼</span>', `Acceleration: double past ±${ACCEL_STRONG}, single past ±${ACCEL_SLIGHT}.`),
         head('Rotation buckets'),
         row('', `Emerging / Established / Fading split at regime ±${REGIME_THRESHOLD}.`),
+        head('RS vs S&P 500 badge (Today cards, vs-Market tab)'),
+        row(`<span class="text-emerald-400">+Xpp</span>`, `Emerald — beating market by ≥${RS_STRONG}pp.`),
+        row(`<span class="text-green-400">+Xpp</span>`, `Green — outperforming by ${RS_SLIGHT}–${RS_STRONG}pp.`),
+        row(`<span class="text-slate-400">+Xpp</span>`, `Grey — within ±${RS_SLIGHT}pp of market (neutral).`),
+        row(`<span class="text-orange-400">−Xpp</span>`, `Orange — lagging by ${RS_SLIGHT}–${RS_STRONG}pp.`),
+        row(`<span class="text-red-400">−Xpp</span>`, `Red — lagging by ≥${RS_STRONG}pp.`),
+        head('vs-Market Regime buckets'),
+        row('', `Emerging / Established / Fading split at rs_regime ±${REGIME_THRESHOLD} (same threshold as Rotation view).`),
       ].join('');
     }
 
@@ -3048,6 +3270,19 @@
           b.classList.toggle('text-slate-400', !active);
         });
         renderStrength();
+      }));
+
+    document.querySelectorAll('.vsmarket-view-btn').forEach(btn =>
+      btn.addEventListener('click', () => {
+        state.vsMarketView = btn.dataset.mview;
+        document.querySelectorAll('.vsmarket-view-btn').forEach(b => {
+          const active = b.dataset.mview === state.vsMarketView;
+          b.classList.toggle('bg-slate-600', active);
+          b.classList.toggle('text-white', active);
+          b.classList.toggle('text-slate-400', !active);
+        });
+        savePrefs();
+        renderVsMarket();
       }));
 
     document.querySelectorAll('.topn-btn').forEach(btn =>

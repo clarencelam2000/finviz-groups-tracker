@@ -23,7 +23,7 @@ METRICS_MD = ROOT / "knowledge" / "moaty-metrics.md"
 VALID_TAGS = {"feature", "fix", "data", "improvement"}
 
 # Mirrors the data-tab values in the PWA tab bar (#tab-bar in index.html).
-VALID_GUIDE_TABS = {"today", "movers", "momentum", "strength", "ai", "lookup"}
+VALID_GUIDE_TABS = {"today", "movers", "momentum", "strength", "vsmarket", "ai", "lookup"}
 
 
 def _index_html():
