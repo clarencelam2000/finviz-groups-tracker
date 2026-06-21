@@ -129,6 +129,23 @@ RS_AGREEMENT_COLS = ["rs_month", "rs_quarter", "rs_half"]
 RS_REGIME_SHORT = ["rs_week", "rs_month"]
 RS_REGIME_LONG = ["rs_quarter", "rs_half", "rs_year"]
 
+# Window (trading sessions) for rs_new_high: is today's RS spread at its
+# highest in the trailing RS_NEW_HIGH_WINDOW sessions? 20 sessions ≈ 1 trading
+# month — classic "RS new high" leadership flag from the IBD methodology.
+# Must be ≥ 2 to produce a meaningful signal; ideally matches a LOOKBACK_WINDOWS
+# entry (currently LOOKBACK_WINDOWS[2] = 20) so no extra compute_ranks pass.
+RS_NEW_HIGH_WINDOW = 20
+
+# Window (trading sessions) for rs_cross: did rs_month flip from ≤ 0 to > 0
+# within the last RS_CROSS_WINDOW sessions? 5 sessions ≈ 1 trading week — a
+# tight window catches fresh rotations while filtering noise. Using
+# LOOKBACK_WINDOWS[0] = 5 so history is already loaded by the delta loop.
+RS_CROSS_WINDOW = 5
+
+# Timeframe suffixes for beats_benchmark_X columns — aligned with RS_TIMEFRAMES
+# so beats_benchmark_{suffix} is the boolean form of rs_{suffix} > 0.
+RS_BEAT_TIMEFRAMES = ["day", "week", "month", "quarter", "half", "year", "ytd"]
+
 # All RS-derived columns appended after MOMENTUM_COLS in the deltas schema.
 RS_COLS = RS_TIMEFRAMES + [
     "rs_score",           # 0–1; fraction of 7 timeframes where group beats SPY (rs_X > 0)
@@ -137,6 +154,9 @@ RS_COLS = RS_TIMEFRAMES + [
     "rs_slope",           # LS slope of rs_month over SLOPE_WINDOW; positive = building
     "rs_accel",           # change in rs_score over ACCEL_WINDOW; positive = RS building
     "rs_regime_short_long",  # short-horizon RS breadth − long-horizon RS breadth; positive = emerging
+] + [f"beats_benchmark_{tf}" for tf in RS_BEAT_TIMEFRAMES] + [
+    "rs_new_high",   # 1 if rs_month is at its RS_NEW_HIGH_WINDOW-session high; 0 otherwise
+    "rs_cross",      # 1 if rs_month crossed from ≤ 0 to > 0 within RS_CROSS_WINDOW sessions
 ]
 
 

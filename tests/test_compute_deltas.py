@@ -828,3 +828,204 @@ class TestComputeForGroupRSColumns:
         for name in ("Alpha", "Beta", "Gamma"):
             assert 0.0 <= float(rows[name]["rs_score"]) <= 1.0
             assert 0.0 <= float(rows[name]["rs_confirmed"]) <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# Tier 5: compute_beats_benchmark
+# ---------------------------------------------------------------------------
+
+class TestComputeBeatsBenchmark:
+    def _df(self):
+        return pd.DataFrame({
+            "name": ["Alpha", "Beta", "Gamma"],
+            "rs_day":     [1.5, -0.5, float("nan")],
+            "rs_week":    [2.0, -1.0, 0.5],
+            "rs_month":   [3.0, -2.0, 0.0],
+            "rs_quarter": [1.0, -1.0, 0.0],
+            "rs_half":    [0.5, -0.5, 0.0],
+            "rs_year":    [4.0, -4.0, 0.1],
+            "rs_ytd":     [3.5, -3.5, 0.0],
+        })
+
+    def test_positive_rs_gives_1(self):
+        bb = cd.compute_beats_benchmark(self._df())
+        assert bb["beats_benchmark_day"].iloc[0] == 1
+
+    def test_negative_rs_gives_0(self):
+        bb = cd.compute_beats_benchmark(self._df())
+        assert bb["beats_benchmark_day"].iloc[1] == 0
+
+    def test_nan_rs_gives_nan(self):
+        bb = cd.compute_beats_benchmark(self._df())
+        assert math.isnan(bb["beats_benchmark_day"].iloc[2])
+
+    def test_zero_rs_gives_0(self):
+        bb = cd.compute_beats_benchmark(self._df())
+        # rs_month for Gamma = 0.0 → beats_benchmark_month = 0
+        assert bb["beats_benchmark_month"].iloc[2] == 0
+
+    def test_all_7_columns_present(self):
+        bb = cd.compute_beats_benchmark(self._df())
+        from scripts.delta_config import RS_BEAT_TIMEFRAMES
+        for tf in RS_BEAT_TIMEFRAMES:
+            assert "beats_benchmark_" + tf in bb.columns
+
+    def test_missing_rs_column_produces_nan(self):
+        df = pd.DataFrame({"name": ["A", "B"], "rs_week": [1.0, -1.0]})
+        bb = cd.compute_beats_benchmark(df)
+        assert bb["beats_benchmark_day"].isna().all()
+
+
+# ---------------------------------------------------------------------------
+# Tier 5: compute_rs_new_high and compute_rs_cross
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def rs_history_4sessions():
+    """4 sessions of group + SPY data for rs_new_high / rs_cross tests."""
+    dates = [date(2026, 6, 9), date(2026, 6, 10), date(2026, 6, 11), date(2026, 6, 12)]
+    bench = pd.DataFrame({
+        "date": dates,
+        "perf_month": [1.0, 1.0, 1.0, 1.0],
+    })
+    # Tech rs_month: [0.5, 0.8, 1.0, 1.2] — building to new high
+    # Energy rs_month: [0.5, -0.5, -0.2, 0.2] — crossed from neg to pos
+    # Finance rs_month: [3.0, 2.5, 2.0, 1.5] — declining, past high at start
+    hist = pd.DataFrame({
+        "date": dates * 3,
+        "name": ["Tech"] * 4 + ["Energy"] * 4 + ["Finance"] * 4,
+        "perf_month": [
+            1.5, 1.8, 2.0, 2.2,   # Tech:    +0.5, +0.8, +1.0, +1.2 vs SPY
+            1.5, 0.5, 0.8, 1.2,   # Energy:  +0.5, -0.5, -0.2, +0.2 vs SPY
+            4.0, 3.5, 3.0, 2.5,   # Finance: +3.0, +2.5, +2.0, +1.5 vs SPY
+        ],
+    })
+    return dates, bench, hist
+
+
+class TestComputeRsNewHigh:
+    def test_at_window_high_returns_1(self, rs_history_4sessions):
+        dates, bench, hist = rs_history_4sessions
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4)
+        assert s["Tech"] == 1
+
+    def test_not_at_window_high_returns_0(self, rs_history_4sessions):
+        dates, bench, hist = rs_history_4sessions
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4)
+        # Energy's max rs_month was +0.5 early; today is +0.2 → not a new high
+        assert s["Energy"] == 0
+
+    def test_declining_returns_0(self, rs_history_4sessions):
+        dates, bench, hist = rs_history_4sessions
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4)
+        # Finance's highest was session 0 (+3.0); today is +1.5 → not a new high
+        assert s["Finance"] == 0
+
+    def test_single_session_returns_empty(self, rs_history_4sessions):
+        dates, bench, hist = rs_history_4sessions
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=1)
+        assert len(s) == 0
+
+    def test_no_spy_data_returns_empty(self, rs_history_4sessions):
+        dates, _, hist = rs_history_4sessions
+        s = cd.compute_rs_new_high(hist, pd.DataFrame(), dates, date(2026, 6, 12))
+        assert len(s) == 0
+
+    def test_date_not_in_available_returns_empty(self, rs_history_4sessions):
+        dates, bench, hist = rs_history_4sessions
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 13))
+        assert len(s) == 0
+
+
+class TestComputeRsCross:
+    def test_crossed_from_negative_returns_1(self, rs_history_4sessions):
+        dates, bench, hist = rs_history_4sessions
+        s = cd.compute_rs_cross(hist, bench, dates, date(2026, 6, 12), window=4)
+        # Energy was negative, now positive → rs_cross = 1
+        assert s["Energy"] == 1
+
+    def test_consistently_positive_returns_0(self, rs_history_4sessions):
+        dates, bench, hist = rs_history_4sessions
+        s = cd.compute_rs_cross(hist, bench, dates, date(2026, 6, 12), window=4)
+        # Tech was always positive → rs_cross = 0
+        assert s["Tech"] == 0
+
+    def test_currently_negative_returns_0(self):
+        dates = [date(2026, 6, 9), date(2026, 6, 10)]
+        bench = pd.DataFrame({"date": dates, "perf_month": [1.0, 1.0]})
+        hist = pd.DataFrame({
+            "date": dates * 2,
+            "name": ["A", "A", "B", "B"],
+            "perf_month": [2.0, 0.5, 1.5, 0.8],  # A: rs_month +1, -0.5; B: +0.5, -0.2
+        })
+        s = cd.compute_rs_cross(hist, bench, dates, date(2026, 6, 10), window=2)
+        # Both end negative → rs_cross = 0
+        assert s["A"] == 0
+        assert s["B"] == 0
+
+    def test_single_session_returns_empty(self, rs_history_4sessions):
+        dates, bench, hist = rs_history_4sessions
+        s = cd.compute_rs_cross(hist, bench, dates, date(2026, 6, 12), window=1)
+        assert len(s) == 0
+
+    def test_no_spy_data_returns_empty(self, rs_history_4sessions):
+        dates, _, hist = rs_history_4sessions
+        s = cd.compute_rs_cross(hist, pd.DataFrame(), dates, date(2026, 6, 12))
+        assert len(s) == 0
+
+
+class TestBeatsAndDiscreteInComputeForGroup:
+    """beats_benchmark_X, rs_new_high, rs_cross appear in end-to-end output."""
+
+    def _make_snapshot(self, path, dates_groups):
+        import csv as _csv
+        cols = cd.SNAPSHOT_COLS
+        rows = []
+        for d, groups in dates_groups.items():
+            for name, p in groups.items():
+                row = {c: "" for c in cols}
+                row.update({"date": d, "name": name, "group_type": "sector"})
+                for k in ["perf_day", "perf_week", "perf_month", "perf_quarter",
+                          "perf_half", "perf_year", "perf_ytd"]:
+                    row[k] = p
+                rows.append(row)
+        with open(path, "w", newline="") as f:
+            w = _csv.DictWriter(f, fieldnames=cols)
+            w.writeheader()
+            w.writerows(rows)
+
+    def _make_bench_df(self, dates_perf: dict):
+        rows = []
+        for d_str, p in dates_perf.items():
+            rows.append({
+                "date": date(int(d_str[:4]), int(d_str[5:7]), int(d_str[8:])),
+                "perf_day": p, "perf_week": p, "perf_month": p,
+                "perf_quarter": p, "perf_half": p, "perf_year": p, "perf_ytd": p,
+            })
+        return pd.DataFrame(rows)
+
+    def test_beats_benchmark_month_correct(self, tmp_path):
+        snap = tmp_path / "snapshots.csv"
+        self._make_snapshot(snap, {"2026-06-09": {"Alpha": 3.0, "Beta": 0.5}})
+        bench_df = self._make_bench_df({"2026-06-09": 1.0})
+        delta = tmp_path / "deltas.csv"
+        cd.compute_for_group("sector", snap_path=snap, delta_path=delta, bench_df=bench_df)
+        import csv as _csv
+        with open(delta, newline="") as f:
+            rows = {r["name"]: r for r in _csv.DictReader(f)}
+        # Alpha: perf_month 3.0, SPY 1.0 → rs_month +2.0 → beats = 1
+        assert rows["Alpha"]["beats_benchmark_month"] == "1"
+        # Beta: perf_month 0.5, SPY 1.0 → rs_month -0.5 → beats = 0
+        assert rows["Beta"]["beats_benchmark_month"] == "0"
+
+    def test_discrete_columns_blank_when_no_spy(self, tmp_path):
+        snap = tmp_path / "snapshots.csv"
+        self._make_snapshot(snap, {"2026-06-09": {"Alpha": 3.0}})
+        delta = tmp_path / "deltas.csv"
+        cd.compute_for_group("sector", snap_path=snap, delta_path=delta, bench_df=None)
+        import csv as _csv
+        with open(delta, newline="") as f:
+            rows = {r["name"]: r for r in _csv.DictReader(f)}
+        assert rows["Alpha"]["beats_benchmark_month"] == ""
+        assert rows["Alpha"]["rs_new_high"] == ""
+        assert rows["Alpha"]["rs_cross"] == ""

@@ -24,7 +24,10 @@ from delta_config import (
     REGIME_LONG,
     REGIME_SHORT,
     RS_AGREEMENT_COLS,
+    RS_BEAT_TIMEFRAMES,
     RS_COLS,
+    RS_CROSS_WINDOW,
+    RS_NEW_HIGH_WINDOW,
     RS_REGIME_LONG,
     RS_REGIME_SHORT,
     RS_SLOPE_COL,
@@ -468,6 +471,128 @@ def compute_rs_regime(df_day: pd.DataFrame) -> pd.Series:
 
 
 # ---------------------------------------------------------------------------
+# RS discrete flag pure functions (Tier 5)
+# ---------------------------------------------------------------------------
+
+def compute_beats_benchmark(df_today: pd.DataFrame) -> pd.DataFrame:
+    """Boolean columns: does each group beat SPY for each timeframe?
+
+    beats_benchmark_X = 1 when rs_X > 0, 0 when rs_X ≤ 0, NaN when rs_X is NaN.
+    The 7 columns parallel RS_BEAT_TIMEFRAMES; their presence in df_today is
+    gated upstream (rs_* are NaN when no SPY data exists for the date).
+    """
+    out = pd.DataFrame(index=df_today.index)
+    for tf in RS_BEAT_TIMEFRAMES:
+        rs_col = "rs_" + tf
+        bb_col = "beats_benchmark_" + tf
+        if rs_col in df_today.columns:
+            out[bb_col] = df_today[rs_col].apply(
+                lambda v: float("nan") if pd.isna(v) else (1 if v > 0 else 0)
+            )
+        else:
+            out[bb_col] = float("nan")
+    return out
+
+
+def _build_rs_history(df_hist: pd.DataFrame, bench_df: pd.DataFrame,
+                      available_dates: list, target_date,
+                      window: int) -> dict:
+    """Shared helper: build {name: [(session_x, rs_month_val), ...]} for the window.
+
+    Returns a dict of (session_index, rs_month_spread) pairs per group name.
+    Sessions where SPY data is absent are skipped; names with no data are absent.
+    The session index (x) ranges 0..len(sessions)-1 with target_date at the end.
+    """
+    if target_date not in available_dates or bench_df is None or bench_df.empty:
+        return {}
+    end = available_dates.index(target_date)
+    start = max(0, end - window + 1)
+    sessions = available_dates[start:end + 1]
+    if len(sessions) < 2:
+        return {}
+
+    group_col = "perf_" + RS_SLOPE_COL[3:]  # perf_month for RS_SLOPE_COL = "rs_month"
+    per_name: dict = {}
+    for x, d in enumerate(sessions):
+        day_groups = df_hist[df_hist["date"] == d]
+        spy_rows = bench_df[bench_df["date"] == d]
+        if spy_rows.empty:
+            continue
+        spy_val = spy_rows[group_col].iloc[0] if group_col in spy_rows.columns else float("nan")
+        if pd.isna(spy_val):
+            continue
+        for _, r in day_groups.iterrows():
+            g_val = r.get(group_col)
+            if not pd.isna(g_val):
+                per_name.setdefault(r["name"], []).append((x, float(g_val) - float(spy_val)))
+    return per_name
+
+
+def compute_rs_new_high(df_hist: pd.DataFrame, bench_df: pd.DataFrame,
+                        available_dates: list, target_date,
+                        window: int = RS_NEW_HIGH_WINDOW) -> pd.Series:
+    """1 if today's rs_month is at its RS_NEW_HIGH_WINDOW-session high; 0 otherwise.
+
+    Uses RS_SLOPE_COL (rs_month) as the canonical RS line — consistent with
+    rs_slope and rs_accel. NaN when fewer than 2 sessions of overlapping
+    group + SPY data exist in the window.
+    """
+    per_name = _build_rs_history(df_hist, bench_df, available_dates, target_date, window)
+    if not per_name:
+        return pd.Series(dtype=float)
+
+    end = available_dates.index(target_date)
+    start = max(0, end - window + 1)
+    last_x = len(available_dates[start:end + 1]) - 1
+
+    result = {}
+    for name, pts in per_name.items():
+        today_vals = [v for x, v in pts if x == last_x]
+        if not today_vals:
+            result[name] = float("nan")
+            continue
+        today_rs = today_vals[0]
+        window_max = max(v for _, v in pts)
+        result[name] = 1 if today_rs >= window_max else 0
+    return pd.Series(result)
+
+
+def compute_rs_cross(df_hist: pd.DataFrame, bench_df: pd.DataFrame,
+                     available_dates: list, target_date,
+                     window: int = RS_CROSS_WINDOW) -> pd.Series:
+    """1 if rs_month crossed from ≤ 0 to > 0 within the last RS_CROSS_WINDOW sessions.
+
+    Classic rotation-trigger signal: the group just flipped from lagging to
+    beating the market. Requires today's rs_month > 0 AND at least one prior
+    session in the window where rs_month ≤ 0. Returns 0 when today's RS is
+    non-positive, or when the group has been above 0 throughout the window.
+    NaN when fewer than 2 sessions of overlapping data exist.
+    """
+    per_name = _build_rs_history(df_hist, bench_df, available_dates, target_date, window)
+    if not per_name:
+        return pd.Series(dtype=float)
+
+    end = available_dates.index(target_date)
+    start = max(0, end - window + 1)
+    last_x = len(available_dates[start:end + 1]) - 1
+
+    result = {}
+    for name, pts in per_name.items():
+        sorted_pts = sorted(pts, key=lambda p: p[0])
+        today_vals = [v for x, v in sorted_pts if x == last_x]
+        if not today_vals:
+            result[name] = float("nan")
+            continue
+        today_rs = today_vals[0]
+        if today_rs > 0:
+            prior_values = [v for x, v in sorted_pts if x < last_x]
+            result[name] = 1 if any(v <= 0 for v in prior_values) else 0
+        else:
+            result[name] = 0
+    return pd.Series(result)
+
+
+# ---------------------------------------------------------------------------
 # Core computation
 # ---------------------------------------------------------------------------
 
@@ -605,6 +730,17 @@ def compute_for_group(group_type: str, target_date_str: str = None,
 
         # Tier 4: RS regime — short-horizon vs long-horizon RS.
         df_today["rs_regime_short_long"] = compute_rs_regime(df_today)
+
+        # Tier 5: discrete flags — beats_benchmark_X, rs_new_high, rs_cross.
+        bb_df = compute_beats_benchmark(df_today)
+        for bb_col in bb_df.columns:
+            df_today[bb_col] = bb_df[bb_col]
+
+        new_high_s = compute_rs_new_high(df, bench_df, available_dates, target_date)
+        df_today["rs_new_high"] = df_today["name"].map(new_high_s)
+
+        cross_s = compute_rs_cross(df, bench_df, available_dates, target_date)
+        df_today["rs_cross"] = df_today["name"].map(cross_s)
 
     else:
         # No SPY data for this date → all RS columns NaN.
