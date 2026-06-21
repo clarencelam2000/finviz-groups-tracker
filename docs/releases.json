@@ -1,6 +1,18 @@
 {
-  "current": "2026.06.21.2",
+  "current": "2026.06.21.3",
   "releases": [
+    {
+      "version": "2026.06.21.3",
+      "date": "2026-06-21",
+      "title": "Today tab card polish",
+      "tag": "improvement",
+      "tab": "today",
+      "notes": [
+        "Rank badge now reflects the active sort metric — sort by Week % and the badge shows your week rank, not your 6-month rank.",
+        "Momentum score on Today cards is now color-coded (emerald/sky/amber/red) matching the Momentum tab, instead of flat gray.",
+        "Removed the redundant 5-day trend arrow next to sector names — the 10-session slope glyph (↑↑/↑/~/↓/↓↓) is strictly more informative and now stands alone."
+      ]
+    },
     {
       "version": "2026.06.21.2",
       "date": "2026-06-21",

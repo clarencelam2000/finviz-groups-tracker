@@ -1142,13 +1142,14 @@
 
       container.innerHTML = sorted.map((row, i) => {
         const d = deltaMap[row.name] || {};
-        const rank = pf(d.rank_half);
+        const rankCol = { perf_week:'rank_week', perf_month:'rank_month', perf_quarter:'rank_quarter', perf_half:'rank_half', perf_year:'rank_year', perf_ytd:'rank_ytd', perf_day:'rank_day' }[metric] || 'rank_half';
+        const rank = pf(d[rankCol]);
         const rankBadge = rank !== null
           ? `<span class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-slate-300 flex-shrink-0">${rank}</span>`
           : `<span class="w-7 h-7 rounded-full bg-slate-800 flex items-center justify-center text-xs text-slate-600 flex-shrink-0">${i+1}</span>`;
 
         const mom = pf(d.momentum_score);
-        const momStr = mom !== null ? `<span class="text-slate-500 text-xs">Mom ${(mom*100).toFixed(0)}%</span>` : '';
+        const momStr = mom !== null ? `<span class="${momentumStyle(mom).text} text-xs">Mom ${(mom*100).toFixed(0)}%</span>` : '';
 
         const mainVal = pf(row[metric]);
         const mainColor = mainVal !== null ? perfColor(mainVal) : 'text-slate-400';
@@ -1161,13 +1162,8 @@
           : mainVal < -2 ? 'border-l-red-500'
           :                'border-l-red-700';
 
-        // YTD delta for the shortest available window — consistent momentum signal regardless of sort metric
-        const trendDelta = pf(d[`rank_ytd_delta_${state.windows[0] || '5d'}`]);
-        const trendArrow = trendDelta !== null && trendDelta !== 0
-          ? `<span class="${trendDelta > 0 ? 'text-emerald-400' : 'text-red-400'} text-xs ml-1">${trendDelta > 0 ? '↑' : '↓'}</span>`
-          : '';
-        // 10-session LS slope of rank_ytd; more reliable than a single-window diff.
-        // Falls back to showing nothing when NaN (first 10 sessions).
+        // 10-session LS slope of rank_ytd (5 states: ↑↑/↑/~/↓/↓↓). More reliable than
+        // a single-window delta; falls back to nothing when NaN (first 10 sessions).
         const slopeHtml = slopeGlyph(pf(d.rank_trend_slope));
 
         const subMetrics = ALL_METRICS.filter(m => m.key !== metric).slice(0, 2);
@@ -1214,7 +1210,7 @@
             <div class="p-3 flex items-center gap-3">
               ${rankBadge}
               <div class="flex-1 min-w-0">
-                <div class="font-medium text-sm text-white truncate">${row.name}${trendArrow}${slopeHtml}</div>
+                <div class="font-medium text-sm text-white truncate">${row.name}${slopeHtml}</div>
                 <div class="flex gap-3 mt-0.5 text-xs flex-wrap">
                   ${subLine}
                   ${momStr}
