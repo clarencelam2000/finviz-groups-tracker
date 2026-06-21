@@ -2,6 +2,8 @@ name: Deploy Cloudflare Workers
 
 on:
   push:
+    # TODO(D1): change to [main] when default branch is renamed;
+    # also update DISPATCH_REF in worker-cron/wrangler.toml at the same time.
     branches: [claude/elegant-babbage-hlxnfy]
     paths:
       - 'worker/**'
@@ -19,9 +21,14 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: worker/package-lock.json
       - name: Install dependencies
         working-directory: worker
         run: npm ci
+      - name: Build taxonomy
+        working-directory: worker
+        run: npm run build:taxonomy
       - name: Run tests
         working-directory: worker
         run: npm test
@@ -30,7 +37,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: npm run deploy
+        # build:taxonomy already ran above; call wrangler directly to avoid re-running it
+        run: npx wrangler deploy
 
   deploy-cron-dispatcher:
     name: Deploy finviz-cron-dispatcher
@@ -41,6 +49,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: worker-cron/package-lock.json
       - name: Install dependencies
         working-directory: worker-cron
         run: npm ci
