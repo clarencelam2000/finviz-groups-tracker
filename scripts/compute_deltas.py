@@ -552,6 +552,7 @@ def compute_rs_new_high(df_hist: pd.DataFrame, bench_df: pd.DataFrame,
             result[name] = float("nan")
             continue
         today_rs = today_vals[0]
+        # pts includes today, so window_max >= today_rs always; >= is equivalent to == window_max
         window_max = max(v for _, v in pts)
         result[name] = 1 if today_rs >= window_max else 0
     return pd.Series(result)
