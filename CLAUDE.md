@@ -276,11 +276,13 @@ There is no need for a conditional or auto-detection — just run it when you ne
 ### Cutting a release ("What's New") — 3 steps, always together
 
 The PWA's **What's New** hub reads `docs/releases.json`. Release versions use the
-`YYYY.MM.DD` convention (human-scannable, monotonic, no semver to maintain). When you
-ship a user-facing change, do **all three** of these in the same PR:
+`YYYY.MM.DD` convention (human-scannable, monotonic, no semver to maintain). For multiple
+releases on the same calendar day, append `.N` (e.g. `2026.06.21.1`, `2026.06.21.2`).
+When you ship a user-facing change, do **all three** of these in the same PR:
 
 1. **Prepend** a new entry to `releases.json` `releases[]` (newest-first): `version`
-   (`YYYY.MM.DD`), `date`, `title`, `tag` (`feature|fix|data|improvement`), optional
+   (`YYYY.MM.DD` or `YYYY.MM.DD.N` for same-day releases), `date`, `title`, `tag`
+   (`feature|fix|data|improvement`), optional
    `tab` (deep-links the entry to a tab), and a short user-facing `notes[]`.
 2. **Update** the top-level `current` to the new `version` (this drives the unseen-update
    dot). `tests/test_guide_releases.py` asserts `current === releases[0].version`.

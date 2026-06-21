@@ -48,8 +48,8 @@ When a PR ships a user-facing change, update the release surface in the **same P
 three together, or the unseen-update dot and cache will desync:
 
 1. Prepend an entry to `docs/releases.json` `releases[]` (newest-first), `version` =
-   `YYYY.MM.DD`, with `title`, `tag` (`feature|fix|data|improvement`), optional `tab`, and
-   user-facing `notes[]`.
+   `YYYY.MM.DD` (or `YYYY.MM.DD.N` for a second/third release on the same calendar day),
+   with `title`, `tag` (`feature|fix|data|improvement`), optional `tab`, and `notes[]`.
 2. Set top-level `current` to the new `version`.
 3. Bump `CACHE` in `docs/sw.js`.
 
