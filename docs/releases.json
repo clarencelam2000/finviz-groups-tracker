@@ -1,6 +1,20 @@
 {
-  "current": "2026.06.21.1",
+  "current": "2026.06.21.2",
   "releases": [
+    {
+      "version": "2026.06.21.2",
+      "date": "2026-06-21",
+      "title": "RS discrete flags: NH, ↑ cross, beats SPY",
+      "tag": "feature",
+      "tab": "vsmarket",
+      "notes": [
+        "vs Market cards now show an 'NH' (amber) badge when a group's 1-month RS spread vs SPY is at its 20-session high — the classic IBD RS-new-high leadership signal.",
+        "'↑ cross' (sky) badge appears when a group just flipped from lagging to beating the market within the last 5 sessions — the earliest-stage rotation trigger.",
+        "Sub-line now shows 'beats N/7 tf': how many of the 7 standard timeframes the group is currently outperforming the S&P 500 on.",
+        "Both badges appear in the RS Score leaderboard and the Emerging/Fading regime view.",
+        "Pipeline: beats_benchmark_{day..ytd}, rs_new_high, rs_cross columns added to deltas.csv — auto-migrates on next compute_deltas.py run."
+      ]
+    },
     {
       "version": "2026.06.21.1",
       "date": "2026-06-21",

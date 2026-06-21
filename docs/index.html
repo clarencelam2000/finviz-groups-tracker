@@ -443,6 +443,15 @@
         { id: 'rs_spreads', label: 'RS spreads (day / wk / mo / …)', tabs: ['vsmarket', 'lookup'],
           oneLiner: 'How much this group beat or lagged the S&P 500 over each timeframe — positive means it outperformed the market.',
           detail: 'group_perf_X − SPY_perf_X per matching timeframe. Positive = outperforming; negative = lagging. NaN until the first SPY benchmark snapshot is collected.' },
+        { id: 'beats_benchmark', label: 'Beats SPY count', tabs: ['vsmarket'],
+          oneLiner: 'How many of the 7 standard timeframes this group is currently outperforming the S&P 500 on — shown as "beats N/7 tf" on cards.',
+          detail: '1 per timeframe where rs_X > 0 (group perf exceeded SPY). 7/7 = outperforming across every horizon; 0/7 = lagging everywhere.' },
+        { id: 'rs_new_high', label: 'RS new high (NH)', tabs: ['vsmarket'],
+          oneLiner: 'The group\'s RS spread vs SPY is at its highest point in the last 20 sessions — a classic IBD-style leadership signal.',
+          detail: '1 when today\'s rs_month (1-month RS spread) equals or exceeds its maximum over the trailing 20 trading sessions. Based on rs_month as the canonical mid-frequency RS line. NaN until 2+ sessions of SPY data exist.' },
+        { id: 'rs_cross', label: 'RS cross (↑ cross)', tabs: ['vsmarket'],
+          oneLiner: 'This group\'s RS spread just flipped from lagging to beating the market within the last 5 sessions — a rotation trigger.',
+          detail: '1 when rs_month crossed from ≤ 0 to > 0 within the last 5 trading sessions. Today must be positive; at least one prior session in the window must have been ≤ 0. 0 if the group has been above 0 throughout, or if today\'s RS is non-positive.' },
       ],
       howto: [
         'Each card is one group: a rank badge on the left, the selected timeframe’s % on the right, and momentum below the name.',
@@ -685,6 +694,35 @@
       const color = rsColor(v);
       const sign = v >= 0 ? '+' : '';
       return `<span class="${color} text-xs whitespace-nowrap">${sign}${v.toFixed(1)}pp vs S&P</span>`;
+    }
+
+    // Tier 5 RS discrete-flag helpers ----------------------------------------
+
+    // "NH" chip when rs_new_high == 1 (group's RS at its 20-session high).
+    function rsNewHighBadge(v) {
+      if (v === null || v === undefined || v === '' || isNaN(+v)) return '';
+      return +v === 1
+        ? '<span class="text-amber-400 text-xs font-semibold whitespace-nowrap border border-amber-600 rounded px-1">NH</span>'
+        : '';
+    }
+
+    // "↑ cross" chip when rs_cross == 1 (rs_month just crossed from ≤ 0 to > 0).
+    function rsCrossBadge(v) {
+      if (v === null || v === undefined || v === '' || isNaN(+v)) return '';
+      return +v === 1
+        ? '<span class="text-sky-400 text-xs font-semibold whitespace-nowrap border border-sky-600 rounded px-1">↑ cross</span>'
+        : '';
+    }
+
+    // "beats N/7" sub-label: how many timeframes is the group ahead of SPY.
+    // Returns null when no beats_benchmark columns are available.
+    function beatsCount(row) {
+      const tfs = ['day','week','month','quarter','half','year','ytd'];
+      const vals = tfs.map(tf => row['beats_benchmark_' + tf]);
+      const known = vals.filter(v => v !== '' && v !== undefined && v !== null);
+      if (known.length === 0) return null;
+      const beats = known.filter(v => +v === 1).length;
+      return beats + '/' + known.length;
     }
 
     // Returns a small HTML glyph for rank_trend_slope (10-session LS slope of rank_ytd,
@@ -1545,11 +1583,17 @@
         const badge     = accelBadge(accel);
         const slope     = pf(row.rs_slope);
         const slopeHtml = slopeGlyph(slope);   // ↑↑/↑/~/↓/↓↓ — RS trend (10-session LS slope)
+        const nhBadge   = rsNewHighBadge(row.rs_new_high);
+        const crossBadge = rsCrossBadge(row.rs_cross);
+        const bc        = beatsCount(row);
 
         const subParts = [
           rsDay !== null ? `Day: ${rsDay >= 0 ? '+' : ''}${rsDay.toFixed(1)}pp` : null,
           rsMo  !== null ? `Mo: ${rsMo  >= 0 ? '+' : ''}${rsMo.toFixed(1)}pp`  : null,
+          bc    !== null ? `beats ${bc} tf` : null,
         ].filter(Boolean).join(' · ');
+
+        const discreteBadges = [nhBadge, crossBadge].filter(Boolean).join(' ');
 
         return `
           <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 flex items-center gap-3">
@@ -1557,7 +1601,7 @@
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between gap-1">
                 <div class="text-sm font-medium text-white truncate">${row.name}${slopeHtml}</div>
-                ${badge}
+                <div class="flex items-center gap-1 flex-shrink-0">${discreteBadges}${badge}</div>
               </div>
               ${subParts ? `<div class="text-xs text-slate-400 mt-0.5">${subParts}</div>` : ''}
             </div>
@@ -1599,6 +1643,9 @@
         const rsScore   = pf(row.rs_score);
         const sign      = regime > 0 ? '+' : '';
         const regimeColor = regime > REGIME_THRESHOLD ? 'text-emerald-400' : regime < -REGIME_THRESHOLD ? 'text-red-400' : 'text-slate-400';
+        const nhBadge   = rsNewHighBadge(row.rs_new_high);
+        const crossBadge = rsCrossBadge(row.rs_cross);
+        const discreteBadges = [nhBadge, crossBadge].filter(Boolean).join(' ');
         const sub = [
           rsMo    !== null ? `Short RS: Mo ${rsMo    >= 0 ? '+' : ''}${rsMo.toFixed(1)}pp`    : null,
           rsHalf  !== null ? `Long RS: 6mo ${rsHalf  >= 0 ? '+' : ''}${rsHalf.toFixed(1)}pp`  : null,
@@ -1606,9 +1653,9 @@
         ].filter(Boolean).join('  ·  ');
         return `
           <div class="rounded-xl p-3 bg-slate-800 border border-slate-700">
-            <div class="flex items-center justify-between">
+            <div class="flex items-center justify-between gap-1">
               <div class="text-sm font-medium text-white">${row.name}</div>
-              <div class="text-xs font-mono ${regimeColor} flex-shrink-0 ml-2">${sign}${regime.toFixed(2)}</div>
+              <div class="flex items-center gap-1 flex-shrink-0">${discreteBadges}<span class="text-xs font-mono ${regimeColor} ml-1">${sign}${regime.toFixed(2)}</span></div>
             </div>
             ${rsBar(regime)}
             ${sub ? `<div class="text-xs text-slate-400">${sub}</div>` : ''}

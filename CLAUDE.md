@@ -76,7 +76,8 @@ data/
 `date, name, rank_day, rank_week, rank_month, rank_quarter, rank_half, rank_year, rank_ytd`,
 then for each window `W` in `5/10/20/50`: `rank_week_delta_Wd, rank_month_delta_Wd, rank_ytd_delta_Wd, perf_week_delta_Wd, perf_month_delta_Wd, perf_ytd_delta_Wd`,
 then the momentum columns: `momentum_score, momentum_confirmed, momentum_weighted_mid, momentum_weighted_fast, momentum_accel, regime_short_long, rank_trend_slope, rank_agreement`,
-then the RS (relative-strength vs SPY) columns: `rs_day, rs_week, rs_month, rs_quarter, rs_half, rs_year, rs_ytd, rs_score, rs_agreement, rs_confirmed, rs_slope, rs_accel, rs_regime_short_long`.
+then the RS (relative-strength vs SPY) columns: `rs_day, rs_week, rs_month, rs_quarter, rs_half, rs_year, rs_ytd, rs_score, rs_agreement, rs_confirmed, rs_slope, rs_accel, rs_regime_short_long`,
+then the RS discrete flags: `beats_benchmark_day, beats_benchmark_week, beats_benchmark_month, beats_benchmark_quarter, beats_benchmark_half, beats_benchmark_year, beats_benchmark_ytd, rs_new_high, rs_cross`.
 
 - `rank_*` values: rank 1 = best performer. Derived from `perf_*` values, never scraped.
 - `rank_*_delta_Wd`: positive = improved (rose in ranking). E.g., `+6` means 6 spots better than W trading sessions ago.
@@ -93,6 +94,9 @@ then the RS (relative-strength vs SPY) columns: `rs_day, rs_week, rs_month, rs_q
 - `rs_slope`: LS slope of `rs_month` over `SLOPE_WINDOW` sessions; positive = outperformance building. `RS_REGIME_SHORT/LONG` configure `rs_regime_short_long` buckets.
 - `rs_accel`: change in `rs_score` over `ACCEL_WINDOW` sessions; positive = more timeframes flipping positive vs SPY.
 - `rs_regime_short_long`: short-horizon RS breadth (fraction of rs_week/rs_month > 0) minus long-horizon breadth (rs_quarter/rs_half/rs_year). Range [−1, 1]; positive = emerging RS leader.
+- `beats_benchmark_{day,week,month,quarter,half,year,ytd}`: 1 when `rs_X > 0`, 0 when `rs_X ≤ 0`, blank when SPY absent. `RS_BEAT_TIMEFRAMES` lists the suffixes.
+- `rs_new_high`: 1 when `rs_month` equals or exceeds its trailing `RS_NEW_HIGH_WINDOW = 20` session maximum (IBD-style RS-new-high flag). NaN if < 2 sessions of overlapping data.
+- `rs_cross`: 1 when `rs_month` crossed from ≤ 0 to > 0 within the last `RS_CROSS_WINDOW = 5` sessions (rotation trigger). 0 if today's RS is non-positive or group was already above 0 throughout window.
 - Delta/momentum/RS columns are `NaN` until enough history exists (e.g., 50d deltas need 50+ sessions; accel/slope need 10).
 
 ### PWA display thresholds (in `docs/index.html` near top of `<script>`)
