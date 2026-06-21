@@ -1,8 +1,8 @@
 # Plan: "Start Here" intro / onboarding for the PWA
 
-> **Status:** 📋 **Approved, not yet implemented.** This document is the complete plan of
-> record. Implementation lands in follow-up PR(s) on branch `claude/focused-curie-1rbub7`.
-> Sibling doc: `planning/whats-new-and-guide.md` (the hub this builds on).
+> **Status:** ✅ **Implemented** (2026-06-21) on branch `claude/dreamy-archimedes-3q6ag1`.
+> Commits: caebb73 (WELCOME constant + hub section + tests), 702cc78 (carousel + Playwright tests),
+> and the docs/release commit in the same PR. Sibling doc: `planning/whats-new-and-guide.md`.
 
 ---
 

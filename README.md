@@ -304,6 +304,19 @@ The PWA's ℹ️ hub shows release notes from `docs/releases.json` and flags uns
 > The glossary copy in the `GUIDE` constant (`docs/index.html`) is kept verbatim-synced with the
 > User one-liners in `knowledge/moaty-metrics.md`; `tests/test_guide_releases.py` enforces both.
 
+### Start Here intro (`WELCOME` constant)
+
+The "Start Here" hub section and first-run carousel draw from the `WELCOME` array in `docs/index.html` (near the `GUIDE` constant). Each entry is `{id, title, body, items?}`.
+
+| Item | Notes |
+|------|-------|
+| Content source | `knowledge/product-intro-copy.md` — the canonical copy for all body/desc strings. Keep verbatim-synced with `WELCOME`. |
+| First-run behavior | On first page load (no `fvt_intro_seen_v1` in `localStorage`), the 5-slide carousel auto-opens. Dismissing (Skip / Get started) sets the key. |
+| Re-opening | Hub ⓘ → Start Here → "Replay intro" button; or call `showIntroOverlay()`. |
+| `fvt_intro_seen_v1` | `localStorage` key that tracks carousel dismissal. Bump the suffix to `v2` only when content changes enough to re-show it to existing users (e.g. a new tab added). Minor copy edits do **not** warrant a bump. |
+| Tab deep-links | Each item in the tabs-tour slide has a `tab` field — a `switchTab()` call. Add to `VALID_TAB_IDS` in `tests/test_pwa_intro.py` whenever a new tab is added. |
+| Anti-drift tests | `tests/test_pwa_intro.py` — tab ID guard + body/desc verbatim-sync check (mirrors `test_guide_releases.py`). |
+
 ---
 
 ## GitHub Actions

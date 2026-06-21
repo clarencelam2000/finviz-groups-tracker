@@ -285,6 +285,33 @@ ship a user-facing change, do **all three** of these in the same PR:
 > drift. If you add a metric, add its `GUIDE` entry too — the anti-drift test enforces that
 > every "why this matters" link targets a real `GUIDE` id.
 
+### "Start Here" intro — `WELCOME` constant and first-run carousel
+
+The **Start Here** hub section and the first-run full-screen carousel both draw from the
+`WELCOME` array constant in `docs/index.html` (defined near `GUIDE`). The two surfaces
+share one content source; `renderWelcome(mode)` switches rendering between hub ('hub')
+and carousel ('carousel') modes.
+
+**Canonical copy source:** `knowledge/product-intro-copy.md` — all `body` and `desc`
+strings in `WELCOME` must appear verbatim there. `tests/test_pwa_intro.py` enforces the
+sync (same discipline as `moaty-metrics.md` ↔ `GUIDE`).
+
+**First-run behavior:** on page boot, if `localStorage.getItem('fvt_intro_seen_v1')` is
+not `'true'`, the carousel auto-opens. Dismissing (Skip / Get started) calls
+`setIntroSeen()` which sets the key. Re-openable anytime: hub ⓘ → Start Here → Replay
+intro.
+
+**`fvt_intro_seen_v1` key versioning:** bump the suffix to `v2` only when the intro
+content changes substantially enough that existing users should see it again (e.g. a new
+tab added, a major rewrite). Minor copy edits do **not** warrant a bump — they don't
+justify re-nagging users who already dismissed it. Record any bump as a `feat:` commit
+with an explicit rationale; do not bump silently.
+
+**Tab deep-links:** each item in the tabs-tour slide carries a `tab` field (one of the
+6 real tab ids). Adding a 7th tab requires updating `WELCOME` + `product-intro-copy.md`
++ `VALID_TAB_IDS` in `tests/test_pwa_intro.py` — the anti-drift test will catch the
+mismatch.
+
 ## Session continuity (Claude Code web)
 
 > These are instructions for future Claude instances, not the user. The user runs Claude Code on the web (code.claude.com), not the CLI.

@@ -64,6 +64,27 @@ def test_welcome_tab_ids_are_valid():
     assert not missing, f"WELCOME items are missing a tour entry for tabs: {missing}"
 
 
+def test_intro_release_entry_valid():
+    """The Start Here intro release entry exists in releases.json with required fields."""
+    data = json.loads(RELEASES.read_text(encoding="utf-8"))
+    releases = data.get("releases", [])
+    # The intro release must exist somewhere in the list (newest entry at index 0).
+    intro = next(
+        (r for r in releases if "Start Here" in r.get("title", "")),
+        None,
+    )
+    assert intro is not None, (
+        "No 'Start Here' release entry found in releases.json. "
+        "Add one when shipping the intro feature (see CLAUDE.md § Cutting a release)."
+    )
+    for field in ("version", "date", "title", "tag", "notes"):
+        assert field in intro, f"Start Here release entry missing field: {field}"
+    assert intro["tag"] in {"feature", "fix", "data", "improvement"}, (
+        f"Unexpected tag value: {intro['tag']}"
+    )
+    assert intro["notes"], "Start Here release entry must have non-empty notes"
+
+
 def test_welcome_body_strings_in_product_intro_copy():
     """Each non-empty body and desc string in WELCOME must appear verbatim in
     knowledge/product-intro-copy.md, the canonical copy source.
