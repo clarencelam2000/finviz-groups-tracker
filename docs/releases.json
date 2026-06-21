@@ -1,6 +1,20 @@
 {
-  "current": "2026.06.21.2",
+  "current": "2026.06.21.3",
   "releases": [
+    {
+      "version": "2026.06.21.3",
+      "date": "2026-06-21",
+      "title": "vs Market fixes: clearer regime labels, quieter NH badge",
+      "tag": "fix",
+      "tab": "vsmarket",
+      "notes": [
+        "The 'NH' (RS new high) badge no longer appears on nearly every card — it now stays hidden until a group has a full 20 sessions of history, so it can't trivially flag every rising group as an all-time RS high in the early weeks of data.",
+        "Emerging/Fading section headers no longer claim a group is 'freshly beating the market' — they now read 'short-term RS improving/weakening vs long-term', which is what the regime metric actually measures (a relative read, not an absolute one). Check RS Score for absolute outperformance.",
+        "The regime number on each card is now labelled 'regime' so it isn't a bare unexplained figure.",
+        "NH and ↑ cross badges now carry hover descriptions of what they mean.",
+        "Fixed the header subtitle overlapping the tab bar when the 'collected' timestamp wrapped to a second line."
+      ]
+    },
     {
       "version": "2026.06.21.2",
       "date": "2026-06-21",
