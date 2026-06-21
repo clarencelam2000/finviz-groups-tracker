@@ -363,36 +363,93 @@ def serialize_divergences(snap_df: pd.DataFrame, delta_df: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
-def serialize_rotation_pairs(delta_df: pd.DataFrame, n: int = 5) -> str:
-    """Capital-flow framing: the biggest rank decliners (capital leaving) paired
-    against the biggest improvers (capital arriving), plus regime context so the
-    model can phrase rotation as OUT-of / INTO. Feeds the Rotation Map section."""
+def _perf_lookup(snap_df: pd.DataFrame, cols):
+    """name -> {col: value} map for the requested perf columns (empty if absent)."""
+    if snap_df is None or snap_df.empty or "name" not in snap_df.columns:
+        return {}
+    have = [c for c in cols if c in snap_df.columns]
+    if not have:
+        return {}
+    out = {}
+    for _, r in snap_df.drop_duplicates("name").iterrows():
+        out[r["name"]] = {c: r.get(c) for c in have}
+    return out
+
+
+def serialize_breadth_metrics(snap_df: pd.DataFrame, delta_df: pd.DataFrame) -> str:
+    """Quantified market-state numbers for the Conviction call so the model rates
+    conviction from real figures, not a guess: all-green breadth %, mean rank
+    agreement, and the momentum-accel build/fade split."""
+    if snap_df.empty or "name" not in snap_df.columns:
+        return "MARKET STATE:\n  Not enough data yet."
+    merged = _strength_frame(snap_df, delta_df)
+    mask, available = _all_green_mask(merged)
+    n_total = len(merged)
+    lines = ["MARKET STATE (quantified — use these to set the Conviction level):"]
+    if mask is not None and n_total:
+        n_green = int(mask.sum())
+        lines.append(
+            f"  All-green breadth: {n_green}/{n_total} ({100 * n_green / n_total:.0f}%) "
+            f"positive across {', '.join(tf.replace('perf_', '') for tf in available)}."
+        )
+    if delta_df is not None and not delta_df.empty and "rank_agreement" in delta_df.columns:
+        agree = pd.to_numeric(delta_df["rank_agreement"], errors="coerce").dropna()
+        if not agree.empty:
+            lines.append(
+                f"  Mean rank agreement: {agree.mean():.2f} "
+                f"(1 = timeframes unanimous, 0 = conflicting)."
+            )
+    if delta_df is not None and not delta_df.empty and "momentum_accel" in delta_df.columns:
+        acc = pd.to_numeric(delta_df["momentum_accel"], errors="coerce").dropna()
+        if not acc.empty:
+            building = int((acc > 0.02).sum())
+            fading = int((acc < -0.02).sum())
+            lines.append(
+                f"  Momentum accel: {building} groups building, {fading} fading "
+                f"(of {len(acc)} with data)."
+            )
+    return "\n".join(lines)
+
+
+def serialize_rotation_pairs(snap_df: pd.DataFrame, delta_df: pd.DataFrame, n: int = 5) -> str:
+    """Capital-flow framing with the metric context the model needs to assert a
+    REAL out->in pairing instead of inventing one: each leaving/arriving group is
+    annotated with its week/month perf, rs_slope, regime, and any RS cross."""
     if delta_df.empty or SHORT_DELTA_COL not in delta_df.columns:
         return "ROTATION FLOW:\n  Not enough history for rotation signals yet."
     d = delta_df.copy()
     d[SHORT_DELTA_COL] = pd.to_numeric(d[SHORT_DELTA_COL], errors="coerce")
+    perf = _perf_lookup(snap_df, ["perf_week", "perf_month"])
     valid = d.dropna(subset=[SHORT_DELTA_COL])
     if valid.empty:
         return "ROTATION FLOW:\n  Not enough history for rotation signals yet."
 
-    has_regime = "regime_short_long" in valid.columns
-
-    def _regime(r):
-        if not has_regime or pd.isna(r.get("regime_short_long")):
-            return ""
-        return f", regime {r['regime_short_long']:+.2f}"
+    def _metrics(r):
+        bits = []
+        pm = perf.get(r["name"], {})
+        for col, lbl in (("perf_week", "wk"), ("perf_month", "mo")):
+            v = pm.get(col)
+            if pd.notna(v):
+                bits.append(f"{lbl}={v:+.1f}%")
+        if "rs_slope" in r and pd.notna(r.get("rs_slope")):
+            bits.append(f"rs_slope={r['rs_slope']:+.3f}")
+        if "regime_short_long" in r and pd.notna(r.get("regime_short_long")):
+            bits.append(f"regime={r['regime_short_long']:+.2f}")
+        if "rs_cross" in r and pd.notna(r.get("rs_cross")) and float(r["rs_cross"]) > 0:
+            bits.append("RS-cross-up")
+        return (", " + ", ".join(bits)) if bits else ""
 
     take = min(n, len(valid))
     leaving = valid.nsmallest(take, SHORT_DELTA_COL)   # rank slipping = capital leaving
     arriving = valid.nlargest(take, SHORT_DELTA_COL)   # rank rising = capital arriving
     lines = [f"ROTATION FLOW (rank change over {SHORT_WIN} sessions; "
              f"regime>0 = short-horizon leader, <0 = fading):"]
-    lines.append("  Capital LEAVING (rank slipping):")
+    lines.append("  OUTFLOWS — capital leaving (rank slipping):")
     for _, r in leaving.iterrows():
-        lines.append(f"    {r['name']}: {r[SHORT_DELTA_COL]:+.0f} spots{_regime(r)}")
-    lines.append("  Capital ARRIVING (rank rising):")
+        lines.append(f"    {r['name']}: {r[SHORT_DELTA_COL]:+.0f} spots{_metrics(r)}")
+    lines.append("  INFLOWS — capital arriving (rank rising):")
     for _, r in arriving.iterrows():
-        lines.append(f"    {r['name']}: {r[SHORT_DELTA_COL]:+.0f} spots{_regime(r)}")
+        lines.append(f"    {r['name']}: {r[SHORT_DELTA_COL]:+.0f} spots{_metrics(r)}")
     return "\n".join(lines)
 
 
@@ -404,9 +461,9 @@ _RS_BEAT_COLS = ["beats_benchmark_week", "beats_benchmark_month",
 
 
 def serialize_rs_signals(delta_df: pd.DataFrame, n: int = 6) -> str:
-    """Absolute outperformance vs the S&P 500: rs_score leaders, how many of the 7
-    timeframes each beats SPY on, plus fresh RS new-highs and RS crosses (rotation
-    triggers). Unlike peer-rank, a rising tide does NOT inflate these."""
+    """Absolute outperformance vs the S&P 500: rs_score AND rs_confirmed (breadth
+    gated by directional consistency), how many of the 7 timeframes each beats SPY
+    on, plus fresh RS new-highs and RS crosses. A rising tide does NOT inflate these."""
     if delta_df.empty or "rs_score" not in delta_df.columns:
         return "RELATIVE STRENGTH vs S&P:\n  No benchmark (SPY) data available for this date."
     d = delta_df.copy()
@@ -416,6 +473,7 @@ def serialize_rs_signals(delta_df: pd.DataFrame, n: int = 6) -> str:
         return "RELATIVE STRENGTH vs S&P:\n  No benchmark (SPY) data available for this date."
 
     beat_cols = [c for c in _RS_BEAT_COLS if c in valid.columns]
+    has_conf = "rs_confirmed" in valid.columns
 
     def _beats(r):
         if not beat_cols:
@@ -423,10 +481,12 @@ def serialize_rs_signals(delta_df: pd.DataFrame, n: int = 6) -> str:
         cnt = sum(1 for c in beat_cols if pd.notna(r.get(c)) and float(r[c]) > 0)
         return f"{cnt}/{len(beat_cols)} timeframes"
 
-    lines = ["RELATIVE STRENGTH vs S&P (rs_score = fraction of 7 timeframes beating SPY):"]
+    lines = ["RELATIVE STRENGTH vs S&P (rs_score = fraction of 7 timeframes beating SPY; "
+             "rs_confirmed gates that by directional consistency):"]
     leaders = valid.sort_values("rs_score", ascending=False).head(n)
     for _, r in leaders.iterrows():
-        lines.append(f"  {r['name']}: rs_score {r['rs_score']:.2f}, beats SPY on {_beats(r)}")
+        conf = f", rs_confirmed {r['rs_confirmed']:.2f}" if has_conf and pd.notna(r.get("rs_confirmed")) else ""
+        lines.append(f"  {r['name']}: rs_score {r['rs_score']:.2f}{conf}, beats SPY on {_beats(r)}")
 
     if "rs_new_high" in valid.columns:
         nh = valid[pd.to_numeric(valid["rs_new_high"], errors="coerce") > 0]
@@ -439,119 +499,223 @@ def serialize_rs_signals(delta_df: pd.DataFrame, n: int = 6) -> str:
     return "\n".join(lines)
 
 
-def build_briefing_prompt(group_type: str, snap_df: pd.DataFrame,
-                          delta_df: pd.DataFrame, date_str: str) -> str:
-    """Structured multi-section desk briefing. Returns a STRICT markdown template
-    parsed by parse_briefing_response into headline/conviction/rotation_map/
-    watchlist/relative_strength/risks. One API call delivers six AI-tab cards."""
+def serialize_watchlist_candidates(snap_df: pd.DataFrame, delta_df: pd.DataFrame,
+                                   n: int = 8) -> str:
+    """Pre-labelled watch candidates, each tagged with its TRIGGER TYPE so the model
+    names the specific reason instead of a generic 'watch for confirmation'. Triggers,
+    in priority order: RS cross, RS new high, emerging divergence, fading divergence."""
+    if delta_df.empty:
+        return "WATCHLIST CANDIDATES:\n  Not enough data yet."
+    d = delta_df.copy()
+    for c in (SHORT_DELTA_COL, "momentum_score", "momentum_accel", "rank_trend_slope",
+              "rs_cross", "rs_new_high"):
+        if c in d.columns:
+            d[c] = pd.to_numeric(d[c], errors="coerce")
+
+    picked = {}  # name -> label (first/highest-priority trigger wins)
+
+    # Per-category cap so one common trigger (e.g. RS new highs in a broad rally)
+    # can't flood the list and crowd out the rarer emerging/fading signals.
+    _PER_TRIGGER_CAP = 3
+
+    def _add(name, label):
+        if name not in picked:
+            picked[name] = label
+
+    if "rs_cross" in d.columns:
+        for _, r in d[d["rs_cross"] > 0].head(_PER_TRIGGER_CAP).iterrows():
+            _add(r["name"], "rs_cross: RS just flipped positive vs SPY (earliest rotation trigger)")
+    if "rs_new_high" in d.columns:
+        for _, r in d[d["rs_new_high"] > 0].head(_PER_TRIGGER_CAP).iterrows():
+            _add(r["name"], "rs_new_high: RS at a 20-session high (IBD-style leadership)")
+
+    if "momentum_score" in d.columns and SHORT_DELTA_COL in d.columns:
+        valid = d.dropna(subset=["momentum_score"])
+        if not valid.empty:
+            med = valid["momentum_score"].median()
+            emerging = valid[(valid[SHORT_DELTA_COL] >= _RANK_JUMP_SHORT)
+                             & (valid["momentum_score"] < med)]
+            for _, r in emerging.sort_values(SHORT_DELTA_COL, ascending=False).head(_PER_TRIGGER_CAP).iterrows():
+                accel = f", accel {r['momentum_accel']:+.2f}" if "momentum_accel" in r and pd.notna(r.get("momentum_accel")) else ""
+                _add(r["name"], f"emerging: rank {r[SHORT_DELTA_COL]:+.0f} in {SHORT_WIN}d but momentum still {r['momentum_score']:.2f}{accel}")
+
+            fading = valid[(valid["momentum_score"] >= _STRONG_MOMENTUM)
+                           & (valid[SHORT_DELTA_COL] < 0)]
+            for _, r in fading.sort_values(SHORT_DELTA_COL).head(_PER_TRIGGER_CAP).iterrows():
+                slope = f", trend_slope {r['rank_trend_slope']:+.3f}" if "rank_trend_slope" in r and pd.notna(r.get("rank_trend_slope")) else ""
+                _add(r["name"], f"fading: strong momentum {r['momentum_score']:.2f} but rank {r[SHORT_DELTA_COL]:+.0f} in {SHORT_WIN}d{slope}")
+
+    if not picked:
+        return "WATCHLIST CANDIDATES:\n  No standout triggers today."
+    lines = ["WATCHLIST CANDIDATES (each tagged with its trigger type):"]
+    for name, label in list(picked.items())[:n]:
+        lines.append(f"  - {name} [{label}]")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Focused briefing prompts (one job each — better adherence than one mega-prompt)
+# ---------------------------------------------------------------------------
+
+def build_pulse_prompt(group_type: str, snap_df: pd.DataFrame,
+                       delta_df: pd.DataFrame, date_str: str) -> str:
+    """Headline + Conviction. Fed quantified breadth so the rating is grounded."""
     group_name = "sectors" if group_type == "sector" else "industries"
-    strength = serialize_strength_signals(snap_df, delta_df)
-    rotation = serialize_rotation_pairs(delta_df, n=5)
-    rs = serialize_rs_signals(delta_df, n=6)
+    state = serialize_breadth_metrics(snap_df, delta_df)
+    movers = serialize_top_movers(delta_df, n=5)
     divergences = serialize_divergences(snap_df, delta_df)
-    return f"""You are a markets strategist writing a structured desk briefing on US {group_name} for {date_str}.
+    return f"""You are a markets strategist summarizing US {group_name} for {date_str}.
 
-Use ONLY the computed signals below. Do not invent numbers or {group_name} not present in the data. Name specific {group_name} and cite numbers.
+Use ONLY the data below. Do not invent numbers or {group_name} not present.
 
-Respond in Markdown using EXACTLY these six `##` sections, in this order, with these exact titles. Do not add a preamble, intro, or any text before the first `##` header. Do not use `###`.
+Respond in Markdown with EXACTLY these two `##` sections, in order, nothing before the first header, no `###`:
 
 ## Headline
-A single punchy line, 12 words or fewer, capturing today's most important {group_name} takeaway. No bullet, no bold.
+One punchy line, 12 words or fewer, capturing today's single most important {group_name} takeaway. No bullet, no bold.
 
 ## Conviction
 Exactly two lines:
 Level: <one of High, Medium, Low>
-Why: <one sentence — judge conviction from breadth, cross-timeframe agreement, and how many divergences are present>
+Why: <one sentence citing the breadth %, mean agreement, and divergence count>
 
-## Rotation Map
-2-4 bullets, each `- OUT: <group> -> IN: <group> - <short reason>`, using the ROTATION FLOW signal (capital leaving the rank-slipping {group_name}, arriving at the rank-rising ones).
+Set the level by these thresholds (use the MARKET STATE numbers):
+- High: all-green breadth >55% AND mean rank agreement >0.65 AND few divergences.
+- Low: all-green breadth <30% OR many fading divergences.
+- Medium: anything in between.
 
-## Watchlist
-3-5 bullets, each `- <group> - <the specific trigger to watch>`, drawn from divergences, RS crosses, and RS new highs. Pick names that are actionable, not already-obvious leaders.
+DATA:
+{state}
+
+{movers}
+
+{divergences}"""
+
+
+def build_rotation_map_prompt(group_type: str, snap_df: pd.DataFrame,
+                              delta_df: pd.DataFrame, date_str: str) -> str:
+    """Rotation Map only — with a strict pairing guardrail and an escape hatch."""
+    group_name = "sectors" if group_type == "sector" else "industries"
+    rotation = serialize_rotation_pairs(snap_df, delta_df, n=5)
+    return f"""You are a sector-rotation analyst describing capital flow across US {group_name} for {date_str}.
+
+Use ONLY the ROTATION FLOW data below. Do not invent numbers or {group_name} not present.
+
+Write Markdown (no header, no preamble). Prefer 2-4 bullets of the form:
+`- OUT: <group> -> IN: <group> - <one-clause reason citing the metrics>`
+
+PAIRING RULE: only pair an OUT group with an IN group when their metrics suggest a linked trade (e.g. a cyclical rotating in as a defensive rotates out, or a clear leadership handoff). NEVER pair {group_name} that have no plausible economic relationship. If no clean pairing exists, instead list them under two plain lines:
+`Outflows:` then bullets, and `Inflows:` then bullets.
+If fewer than 2 groups are in either list, write exactly `- Insufficient rotation signal today.` as the only line.
+
+ROTATION DATA:
+{rotation}"""
+
+
+def build_watchlist_prompt(group_type: str, snap_df: pd.DataFrame,
+                           delta_df: pd.DataFrame, date_str: str) -> str:
+    """Watchlist only — fed pre-labelled candidates so triggers stay specific."""
+    group_name = "sectors" if group_type == "sector" else "industries"
+    candidates = serialize_watchlist_candidates(snap_df, delta_df, n=8)
+    return f"""You are building a watchlist of US {group_name} to monitor into the next session, dated {date_str}.
+
+Use ONLY the candidates below — do not add {group_name} that are not listed. Pick the 3-5 most actionable.
+
+Write 3-5 Markdown bullets, each `- <group> - <the specific thing to watch, naming the trigger type and what would confirm or invalidate it>`. Name the trigger explicitly (RS cross, RS new high, emerging, or fading). Do not restate already-obvious leaders without a fresh trigger. If there are no candidates, write exactly `- No standout watch candidates today.`
+
+WATCHLIST CANDIDATES:
+{candidates}"""
+
+
+def build_risk_radar_prompt(group_type: str, snap_df: pd.DataFrame,
+                            delta_df: pd.DataFrame, date_str: str) -> str:
+    """Relative Strength summary + Risks & Fragility, both from RS + divergence data."""
+    group_name = "sectors" if group_type == "sector" else "industries"
+    rs = serialize_rs_signals(delta_df, n=6)
+    divergences = serialize_divergences(snap_df, delta_df)
+    return f"""You are a risk-aware markets analyst covering US {group_name} for {date_str}.
+
+Use ONLY the data below. Do not invent numbers or {group_name} not present.
+
+Respond in Markdown with EXACTLY these two `##` sections, in order, nothing before the first header, no `###`:
 
 ## Relative Strength
-1-2 sentences on which {group_name} are beating the S&P 500 (use rs_score and the beats-SPY timeframe counts, and call out any RS new highs or crosses). If no benchmark data is available, say so in one line.
+1-2 sentences on which {group_name} are genuinely beating the S&P 500 — cite rs_score / rs_confirmed and the beats-SPY timeframe counts, and call out any RS new highs or crosses. If no benchmark data is available, say so in one line.
 
 ## Risks
-2-4 bullets on fragile or fading setups: strong names with slipping ranks, all-green {group_name} with low rank agreement, or crowded leadership. If none, say "No notable risks today." as a single bullet.
+2-4 bullets on fragile or fading setups: strong momentum with a slipping rank, all-green {group_name} with low rank agreement, or crowded leadership. Cite the numbers. If none, write exactly `- No notable risks today.`
 
-COMPUTED SIGNALS:
-{strength}
-
-{rotation}
-
+DATA:
 {rs}
 
 {divergences}"""
 
 
 # ---------------------------------------------------------------------------
-# Briefing response parser
+# Briefing response parsers — tolerant markdown-section splitters
 # ---------------------------------------------------------------------------
 
-# Canonical section keys, in render order, with the header aliases each accepts.
-# Tolerant by design: a malformed/renamed/missing header must never break the
-# whole briefing — missing sections are simply absent keys (not empty strings),
-# so the frontend can distinguish "model skipped it" from "" and the file is
-# still considered complete once a non-empty briefing dict exists.
-_BRIEFING_SECTIONS = [
-    ("headline", ("headline", "daily headline", "tl;dr")),
-    ("conviction", ("conviction", "conviction meter")),
-    ("rotation_map", ("rotation map", "rotation", "rotation flow")),
-    ("watchlist", ("watchlist", "watch list", "actionable watchlist")),
-    ("relative_strength", ("relative strength", "relative strength vs s&p", "rs", "vs market")),
-    ("risks", ("risks", "risks & fragility", "risks and fragility", "fragility")),
-]
-
-
-def _briefing_key_for(title: str):
-    t = title.strip().lower().rstrip(":").strip()
-    for key, aliases in _BRIEFING_SECTIONS:
-        if t in aliases:
-            return key
-    return None
-
-
-def parse_briefing_response(text: str) -> dict:
-    """Split the structured briefing markdown into a section dict. Tolerant of
-    `###` headers, preamble before the first header, and renamed/missing sections.
-    Returns absent keys for sections the model omitted. `conviction` is parsed into
-    {level, why}; all other sections are stored as their raw markdown body."""
+def _split_markdown_sections(text: str, alias_map) -> dict:
+    """Split `## `-delimited markdown into {canonical_key: body}. Tolerant of
+    `###`/`####`, preamble before the first header, and renamed headers (via the
+    alias_map). Omitted sections are simply absent keys (never empty strings)."""
+    import re  # noqa: PLC0415 — local; only needed here
     text = (text or "").strip()
     if not text:
         return {}
-    # Normalize ### / #### down to ## so the splitter sees one header level.
-    import re  # noqa: PLC0415 — local; only needed here
-    normalized = re.sub(r"^#{3,}\s+", "## ", text, flags=re.MULTILINE)
-
-    sections: dict = {}
-    current_key = None
-    buf: list = []
+    # Build reverse alias -> key lookup.
+    rev = {}
+    for key, aliases in alias_map:
+        for a in aliases:
+            rev[a] = key
+    normalized = re.sub(r"^#{2,}\s+", "## ", text, flags=re.MULTILINE)
+    sections, current, buf = {}, None, []
 
     def _flush():
-        if current_key and buf:
+        if current and buf:
             body = "\n".join(buf).strip()
             if body:
-                sections[current_key] = body
+                sections[current] = body
 
     for line in normalized.split("\n"):
         m = re.match(r"^##\s+(.*)$", line.strip())
         if m:
             _flush()
             buf = []
-            current_key = _briefing_key_for(m.group(1))
-        elif current_key:
+            current = rev.get(m.group(1).strip().lower().rstrip(":").strip())
+        elif current:
             buf.append(line)
     _flush()
+    return sections
 
+
+_PULSE_ALIASES = [
+    ("headline", ("headline", "daily headline", "tl;dr")),
+    ("conviction", ("conviction", "conviction meter")),
+]
+_RISK_ALIASES = [
+    ("relative_strength", ("relative strength", "relative strength vs s&p", "rs", "vs market")),
+    ("risks", ("risks", "risks & fragility", "risks and fragility", "fragility")),
+]
+
+
+def parse_pulse_response(text: str) -> dict:
+    """Parse the pulse call into {headline, conviction:{level,why}}."""
+    sections = _split_markdown_sections(text, _PULSE_ALIASES)
     if "conviction" in sections:
         sections["conviction"] = _parse_conviction(sections["conviction"])
     return sections
 
 
+def parse_risk_radar_response(text: str) -> dict:
+    """Parse the risk-radar call into {relative_strength, risks}."""
+    return _split_markdown_sections(text, _RISK_ALIASES)
+
+
 def _parse_conviction(body: str) -> dict:
     """Parse the conviction body into {level, why}. Tolerant of missing prefixes:
-    falls back to scanning for a High/Medium/Low token and using the rest as why."""
+    falls back to a word-boundary scan for a High/Medium/Low token (so a phrase
+    like 'Medium-term risk' in a Why line does NOT get mistaken for the level)."""
+    import re  # noqa: PLC0415 — local; only needed here
     result = {"level": "", "why": ""}
     for line in body.split("\n"):
         low = line.strip().lower()
@@ -560,12 +724,15 @@ def _parse_conviction(body: str) -> dict:
         elif low.startswith("why:") or low.startswith("reasoning:"):
             result["why"] = line.split(":", 1)[1].strip()
     if not result["level"]:
-        for token in ("High", "Medium", "Low"):
-            if token.lower() in body.lower():
-                result["level"] = token
+        # Only scan lines that aren't the Why line, with word boundaries.
+        for line in body.split("\n"):
+            if line.strip().lower().startswith("why:"):
+                continue
+            m = re.search(r"\b(High|Medium|Low)\b", line, re.IGNORECASE)
+            if m:
+                result["level"] = m.group(1).capitalize()
                 break
     if not result["why"]:
-        # Use the first non-level line as the rationale.
         for line in body.split("\n"):
             s = line.strip()
             if s and not s.lower().startswith("level:"):
@@ -683,15 +850,39 @@ TASK_SPECS = [
         "build_prompt": build_phase_prompt,
         "generation_config": {"temperature": 0.2},
     },
+    # Focused briefing tasks — one job per call (replaces the old single mega-call).
+    # On Vertex AI there is no per-day request ceiling, so splitting buys much better
+    # per-section adherence and isolates failures. Low temps on the structural tasks
+    # keep the bullet/label syntax stable; the pulse/risk calls allow a little more.
     {
-        # Structured six-section desk briefing. max_output_tokens caps rambling on
-        # the larger industries set (~150 groups) so a retry can't blow per-minute
-        # limits; 2000 comfortably fits six tight sections.
-        "name": "briefing",
+        "name": "pulse",  # headline + conviction -> {headline, conviction:{level,why}}
         "group_types": ("sector", "industry"),
-        "build_prompt": build_briefing_prompt,
+        "build_prompt": build_pulse_prompt,
         "pass_group_type": True,
-        "generation_config": {"temperature": 0.5, "max_output_tokens": 2000},
+        "parse": parse_pulse_response,
+        "generation_config": {"temperature": 0.4},
+    },
+    {
+        "name": "rotation_map",  # markdown string (OUT->IN bullets or Outflows/Inflows)
+        "group_types": ("sector", "industry"),
+        "build_prompt": build_rotation_map_prompt,
+        "pass_group_type": True,
+        "generation_config": {"temperature": 0.25},
+    },
+    {
+        "name": "watchlist",  # markdown string (3-5 tagged-trigger bullets)
+        "group_types": ("sector", "industry"),
+        "build_prompt": build_watchlist_prompt,
+        "pass_group_type": True,
+        "generation_config": {"temperature": 0.25},
+    },
+    {
+        "name": "risk_radar",  # relative strength + risks -> {relative_strength, risks}
+        "group_types": ("sector", "industry"),
+        "build_prompt": build_risk_radar_prompt,
+        "pass_group_type": True,
+        "parse": parse_risk_radar_response,
+        "generation_config": {"temperature": 0.4},
     },
 ]
 
@@ -812,15 +1003,15 @@ def generate_for_group(client, group_type: str, date_str: str, existing=None) ->
             )
             if spec["name"] == "rotation_phase":
                 result["rotation_phase"] = parse_phase_response(raw)
-            elif spec["name"] == "briefing":
-                # Structured: store the parsed section dict, not the raw text, so
-                # the frontend can read .headline/.watchlist/etc. A non-empty dict
-                # also keeps _is_complete honest (empty parse won't mark complete).
-                parsed = parse_briefing_response(raw)
+            elif spec.get("parse"):
+                # Structured task: store the parsed section dict, not raw text, so
+                # the frontend reads typed fields. A non-empty result also keeps
+                # _is_complete honest (an empty parse must not mark the field done).
+                parsed = spec["parse"](raw)
                 if not parsed:
-                    raise ValueError("briefing response parsed to no sections")
-                result["briefing"] = parsed
-            else:  # "note" — freeform markdown, stored verbatim
+                    raise ValueError(f"{spec['name']} response parsed to no sections")
+                result[spec["name"]] = parsed
+            else:  # freeform markdown (note, rotation_map, watchlist) — stored verbatim
                 result[spec["name"]] = raw.strip()
             _record_field(fkey, "ok", was_new=True, elapsed=time.monotonic() - t0)
         except DailyQuotaExhaustedError:

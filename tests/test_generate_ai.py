@@ -363,6 +363,42 @@ def _make_client(responses):
     return client
 
 
+def _make_routed_client(routes):
+    """Return a fake client that routes responses by a substring found in the
+    prompt, so tests don't depend on TASK_SPECS ordering. `routes` is a list of
+    (marker, response) pairs; the first marker contained in the prompt wins."""
+    from unittest.mock import MagicMock
+
+    def _generate_content(**kwargs):
+        prompt = kwargs.get("contents", "") or ""
+        for marker, resp in routes:
+            if marker in prompt:
+                mock_resp = MagicMock()
+                mock_resp.text = resp
+                return mock_resp
+        raise AssertionError(f"no route matched prompt: {prompt[:120]}")
+
+    client = MagicMock()
+    client.models.generate_content.side_effect = _generate_content
+    return client
+
+
+# Markers uniquely identifying each task's prompt (for _make_routed_client).
+_PULSE_MARK = "Set the level by these thresholds"
+_ROTMAP_MARK = "PAIRING RULE"
+_WATCH_MARK = "WATCHLIST CANDIDATES"
+_RISK_MARK = "risk-aware markets analyst"
+_PHASE_MARK = "Classic phases"
+_NOTE_MARK = "concise daily note"
+
+_BRIEFING_ROUTES = [
+    (_PULSE_MARK, "## Headline\nEnergy leads broadly\n## Conviction\nLevel: High\nWhy: Broad breadth."),
+    (_ROTMAP_MARK, "- OUT: Utilities -> IN: Energy - momentum handoff"),
+    (_WATCH_MARK, "- Energy - rs_cross: watch for RS confirmation"),
+    (_RISK_MARK, "## Relative Strength\nEnergy beats SPY on 6/7.\n## Risks\n- No notable risks today."),
+]
+
+
 def test_gemini_model_is_pinned_version():
     assert generate_ai.GEMINI_MODEL == "gemini-3.5-flash"
 
@@ -394,23 +430,23 @@ def test_generate_for_group_stores_note_string(monkeypatch):
     monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
 
     note_md = "**TL;DR:** Energy leads.\n\n## Strength\n- Energy all-green"
-    briefing_md = (
-        "## Headline\nEnergy leads broadly\n"
-        "## Conviction\nLevel: High\nWhy: Broad breadth.\n"
-        "## Rotation Map\n- OUT: Utilities -> IN: Energy - momentum\n"
-        "## Watchlist\n- Energy - watch RS new high\n"
-        "## Relative Strength\nEnergy beats SPY on 6/7.\n"
-        "## Risks\n- No notable risks today."
-    )
-    client = _make_client([note_md, "Label: Late Cycle\nWhy: Energy leads.", briefing_md])
+    routes = [
+        (_NOTE_MARK, note_md),
+        (_PHASE_MARK, "Label: Late Cycle\nWhy: Energy leads."),
+    ] + _BRIEFING_ROUTES
+    client = _make_routed_client(routes)
     result = generate_ai.generate_for_group(client, "sector", "2026-06-11")
 
     assert result["note"] == note_md
     assert isinstance(result["note"], str)
     assert result["rotation_phase"] == {"label": "Late Cycle", "reasoning": "Energy leads."}
-    assert isinstance(result["briefing"], dict)
-    assert result["briefing"]["headline"] == "Energy leads broadly"
-    assert result["briefing"]["conviction"]["level"] == "High"
+    # Focused briefing fields
+    assert result["pulse"]["headline"] == "Energy leads broadly"
+    assert result["pulse"]["conviction"]["level"] == "High"
+    assert isinstance(result["rotation_map"], str) and "Energy" in result["rotation_map"]
+    assert isinstance(result["watchlist"], str)
+    assert result["risk_radar"]["relative_strength"].startswith("Energy beats")
+    assert "No notable risks" in result["risk_radar"]["risks"]
 
 
 def test_generate_for_group_industry_note_only(monkeypatch):
@@ -435,14 +471,16 @@ def test_generate_for_group_industry_note_only(monkeypatch):
     monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
     monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
 
-    briefing_md = "## Headline\nTrucking leads\n## Conviction\nLevel: Medium\nWhy: Narrow.\n## Risks\n- No notable risks today."
-    client = _make_client(["**TL;DR:** Trucking leads industries.", briefing_md])
+    routes = [(_NOTE_MARK, "**TL;DR:** Trucking leads industries.")] + _BRIEFING_ROUTES
+    client = _make_routed_client(routes)
     result = generate_ai.generate_for_group(client, "industry", "2026-06-11")
 
     assert result["note"].startswith("**TL;DR:**")
-    assert "rotation_phase" not in result
-    assert isinstance(result["briefing"], dict)
-    assert client.models.generate_content.call_count == 2
+    assert "rotation_phase" not in result  # sectors-only
+    assert result["pulse"]["conviction"]["level"] == "High"
+    assert "rotation_map" in result and "watchlist" in result and "risk_radar" in result
+    # note + pulse + rotation_map + watchlist + risk_radar = 5 calls (no phase)
+    assert client.models.generate_content.call_count == 5
 
 
 # ---------------------------------------------------------------------------
@@ -451,15 +489,22 @@ def test_generate_for_group_industry_note_only(monkeypatch):
 
 def test_task_specs_has_expected_names():
     names = {s["name"] for s in generate_ai.TASK_SPECS}
-    assert names == {"note", "rotation_phase", "briefing"}
+    assert names == {"note", "rotation_phase", "pulse", "rotation_map",
+                     "watchlist", "risk_radar"}
 
 
-def test_task_specs_briefing_covers_both_group_types():
-    spec = next(s for s in generate_ai.TASK_SPECS if s["name"] == "briefing")
-    assert "sector" in spec["group_types"]
-    assert "industry" in spec["group_types"]
-    assert spec.get("pass_group_type") is True
-    assert spec["generation_config"].get("max_output_tokens")
+def test_task_specs_focused_briefing_tasks_cover_both_groups():
+    for name in ("pulse", "rotation_map", "watchlist", "risk_radar"):
+        spec = next(s for s in generate_ai.TASK_SPECS if s["name"] == name)
+        assert "sector" in spec["group_types"]
+        assert "industry" in spec["group_types"]
+        assert spec.get("pass_group_type") is True
+
+
+def test_task_specs_structured_tasks_have_parsers():
+    for name in ("pulse", "risk_radar"):
+        spec = next(s for s in generate_ai.TASK_SPECS if s["name"] == name)
+        assert callable(spec.get("parse"))
 
 
 def test_task_specs_note_covers_both_group_types():
@@ -478,14 +523,13 @@ def test_task_specs_rotation_phase_sector_only():
     assert "response_schema" not in spec
 
 
-def test_expected_fields_includes_briefing_for_both_groups():
+def test_expected_fields_includes_focused_briefing_for_both_groups():
     fields = set(generate_ai._expected_fields())
     assert fields == {
-        "sectors.note",
-        "sectors.rotation_phase",
-        "sectors.briefing",
-        "industries.note",
-        "industries.briefing",
+        "sectors.note", "sectors.rotation_phase", "sectors.pulse",
+        "sectors.rotation_map", "sectors.watchlist", "sectors.risk_radar",
+        "industries.note", "industries.pulse", "industries.rotation_map",
+        "industries.watchlist", "industries.risk_radar",
     }
 
 
@@ -789,13 +833,15 @@ def test_main_does_not_write_file_when_all_calls_fail(monkeypatch, tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_is_complete_returns_true_for_full_data():
+    _briefing = {"pulse": {"headline": "x"}, "rotation_map": "r",
+                 "watchlist": "w", "risk_radar": {"risks": "k"}}
     data = {
         "sectors": {
             "note": "Some markdown note",
             "rotation_phase": {"label": "Defensive", "reasoning": "..."},
-            "briefing": {"headline": "x"},
+            **_briefing,
         },
-        "industries": {"note": "Industry note", "briefing": {"headline": "y"}},
+        "industries": {"note": "Industry note", **_briefing},
     }
     assert generate_ai._is_complete(data) is True
 
@@ -834,8 +880,10 @@ def test_is_complete_returns_false_for_actual_partial_file():
 def test_missing_fields_empty_data():
     missing = generate_ai._missing_fields({})
     assert set(missing) == {
-        "sectors.note", "sectors.rotation_phase", "sectors.briefing",
-        "industries.note", "industries.briefing",
+        "sectors.note", "sectors.rotation_phase", "sectors.pulse",
+        "sectors.rotation_map", "sectors.watchlist", "sectors.risk_radar",
+        "industries.note", "industries.pulse", "industries.rotation_map",
+        "industries.watchlist", "industries.risk_radar",
     }
 
 
@@ -851,13 +899,15 @@ def test_missing_fields_partial_file():
 
 
 def test_missing_fields_complete_data():
+    _briefing = {"pulse": {"headline": "h"}, "rotation_map": "r",
+                 "watchlist": "w", "risk_radar": {"risks": "k"}}
     data = {
         "sectors": {
             "note": "text",
             "rotation_phase": {"label": "Defensive", "reasoning": "..."},
-            "briefing": {"headline": "h"},
+            **_briefing,
         },
-        "industries": {"note": "text", "briefing": {"headline": "h"}},
+        "industries": {"note": "text", **_briefing},
     }
     assert generate_ai._missing_fields(data) == []
 
@@ -874,8 +924,12 @@ def test_generate_for_group_skips_existing_note(monkeypatch):
     mock_genai = MagicMock()
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
-    # Supply existing note + briefing so the API is only called for rotation_phase
-    existing = {"note": "Already written note", "briefing": {"headline": "h"}}
+    # Supply every field except rotation_phase so only that one call is made
+    existing = {
+        "note": "Already written note",
+        "pulse": {"headline": "h"}, "rotation_map": "x",
+        "watchlist": "y", "risk_radar": {"risks": "z"},
+    }
     client = _make_client(["Label: Late Cycle\nWhy: Energy leads."])
 
     snap = pd.DataFrame({
@@ -931,13 +985,15 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
     call_log = []
     def fake_generate(client, group_type, date_str, existing=None):
         call_log.append((group_type, list(existing.keys()) if existing else []))
+        _b = {"pulse": {"headline": "h"}, "rotation_map": "r",
+              "watchlist": "w", "risk_radar": {"risks": "k"}}
         if group_type == "sector":
             return {
                 "note": "Sector note",
                 "rotation_phase": {"label": "Defensive", "reasoning": "test"},
-                "briefing": {"headline": "h"},
+                **_b,
             }
-        return {"note": "Industry note", "briefing": {"headline": "h"}}
+        return {"note": "Industry note", **_b}
 
     monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
     mock_genai = MagicMock()
@@ -997,14 +1053,16 @@ def test_main_force_regenerates_complete_file(monkeypatch, tmp_path):
     def mock_generate(*_, **__):
         generate_called.append(True)
         # Return full data so outcome is "complete" not "failed"
+        _b = {"pulse": {"headline": "h"}, "rotation_map": "r",
+              "watchlist": "w", "risk_radar": {"risks": "k"}}
         if len(generate_called) == 1:  # sector call
             return {
                 "note": "Sector content",
                 "rotation_phase": {"label": "Early Cycle", "reasoning": "test"},
-                "briefing": {"headline": "h"},
+                **_b,
             }
         else:  # industry call
-            return {"note": "Industry content", "briefing": {"headline": "h"}}
+            return {"note": "Industry content", **_b}
     monkeypatch.setattr(generate_ai, "generate_for_group", mock_generate)
     # Mock both parent and child so import succeeds even without google-genai installed.
     mock_genai = MagicMock()
@@ -1232,11 +1290,12 @@ def test_main_regenerates_complete_file_fresh(monkeypatch, tmp_path):
     import datetime as _dt
     today = _dt.date.today().isoformat()
     (tmp_path / "ai").mkdir(parents=True)
+    _b = {"pulse": {"headline": "h"}, "rotation_map": "r",
+          "watchlist": "w", "risk_radar": {"risks": "k"}}
     complete = {
         "date": today,
-        "sectors": {"note": "old", "rotation_phase": {"label": "Defensive", "reasoning": "x"},
-                    "briefing": {"headline": "h"}},
-        "industries": {"note": "old", "briefing": {"headline": "h"}},
+        "sectors": {"note": "old", "rotation_phase": {"label": "Defensive", "reasoning": "x"}, **_b},
+        "industries": {"note": "old", **_b},
     }
     (tmp_path / "ai" / f"{today}.json").write_text(json.dumps(complete))
 
@@ -1558,76 +1617,132 @@ def test_run_log_includes_backend_field(monkeypatch, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Briefing: parse_briefing_response + serializers
+# Briefing: focused parsers + serializers
 # ---------------------------------------------------------------------------
 
-def test_parse_briefing_full_template():
+def test_parse_pulse_full_template():
     text = (
         "## Headline\nEnergy leads the tape\n"
         "## Conviction\nLevel: High\nWhy: Broad breadth across timeframes.\n"
-        "## Rotation Map\n- OUT: Utilities -> IN: Energy - momentum building\n"
-        "## Watchlist\n- Semiconductors - watch for RS new high\n"
-        "## Relative Strength\nEnergy beats SPY on 6/7 timeframes.\n"
-        "## Risks\n- Tech fragile: all-green but low agreement"
     )
-    out = generate_ai.parse_briefing_response(text)
+    out = generate_ai.parse_pulse_response(text)
     assert out["headline"] == "Energy leads the tape"
     assert out["conviction"] == {"level": "High", "why": "Broad breadth across timeframes."}
-    assert "Utilities" in out["rotation_map"]
-    assert "Semiconductors" in out["watchlist"]
-    assert "6/7" in out["relative_strength"]
-    assert "fragile" in out["risks"]
 
 
-def test_parse_briefing_tolerates_hashhashhash_and_preamble():
+def test_parse_pulse_tolerates_hashhashhash_and_preamble():
     """### headers normalize to ##, and any preamble before the first header is dropped."""
     text = (
-        "Here is your briefing:\n\n"
+        "Here is your pulse:\n\n"
         "### Headline\nNarrow rally\n"
         "### Conviction\nLevel: Low\nWhy: Only two groups green.\n"
     )
-    out = generate_ai.parse_briefing_response(text)
+    out = generate_ai.parse_pulse_response(text)
     assert out["headline"] == "Narrow rally"
     assert out["conviction"]["level"] == "Low"
 
 
-def test_parse_briefing_missing_sections_are_absent_keys():
+def test_parse_pulse_missing_sections_are_absent_keys():
     """Omitted sections must be absent (not empty strings) so callers can tell."""
-    out = generate_ai.parse_briefing_response("## Headline\nJust a headline")
+    out = generate_ai.parse_pulse_response("## Headline\nJust a headline")
     assert out["headline"] == "Just a headline"
-    assert "watchlist" not in out
-    assert "risks" not in out
+    assert "conviction" not in out
 
 
-def test_parse_briefing_empty_returns_empty_dict():
-    assert generate_ai.parse_briefing_response("") == {}
-    assert generate_ai.parse_briefing_response(None) == {}
+def test_parse_pulse_empty_returns_empty_dict():
+    assert generate_ai.parse_pulse_response("") == {}
+    assert generate_ai.parse_pulse_response(None) == {}
 
 
-def test_parse_briefing_conviction_fallback_without_prefixes():
-    """No Level:/Why: prefixes — scan for a level token and use the rest as why."""
-    out = generate_ai.parse_briefing_response(
+def test_parse_risk_radar_splits_rs_and_risks():
+    text = (
+        "## Relative Strength\nTechnology beats SPY on 7/7.\n"
+        "## Risks\n- Tech fragile: all-green but low agreement"
+    )
+    out = generate_ai.parse_risk_radar_response(text)
+    assert "7/7" in out["relative_strength"]
+    assert "fragile" in out["risks"]
+
+
+def test_parse_conviction_level_token_not_fooled_by_why_line():
+    """Regression: 'Medium-term' in a Why line must NOT be read as the level."""
+    out = generate_ai.parse_pulse_response(
+        "## Conviction\nWhy: Medium-term uncertainty keeps breadth mixed."
+    )
+    # Level was never stated, and the Why-line 'Medium-term' must not leak in.
+    assert out["conviction"]["level"] == ""
+    assert out["conviction"]["why"].startswith("Medium-term")
+
+
+def test_parse_conviction_fallback_without_prefixes():
+    """No Level:/Why: prefixes — word-boundary scan finds the level token."""
+    out = generate_ai.parse_pulse_response(
         "## Conviction\nMedium conviction; breadth is mixed today."
     )
     assert out["conviction"]["level"] == "Medium"
     assert out["conviction"]["why"]
 
 
-def test_serialize_rotation_pairs_includes_both_directions():
+def test_serialize_rotation_pairs_includes_both_directions_and_metrics():
+    snap = pd.DataFrame({
+        "name": ["Energy", "Utilities", "Tech"],
+        "perf_week": [2.1, -0.8, 0.5], "perf_month": [4.0, -1.0, 1.2],
+    })
     delta = pd.DataFrame({
         "name": ["Energy", "Utilities", "Tech"],
         "rank_ytd_delta_5d": [8.0, -7.0, 1.0],
         "regime_short_long": [0.4, -0.3, 0.0],
+        "rs_slope": [0.05, -0.03, 0.0],
+        "rs_cross": [1, 0, 0],
     })
-    out = generate_ai.serialize_rotation_pairs(delta, n=2)
-    assert "Capital LEAVING" in out and "Capital ARRIVING" in out
+    out = generate_ai.serialize_rotation_pairs(snap, delta, n=2)
+    assert "OUTFLOWS" in out and "INFLOWS" in out
     assert "Utilities" in out and "Energy" in out
-    assert "regime" in out
+    assert "regime" in out and "rs_slope" in out
+    assert "wk=" in out  # perf context merged from snapshot
+    assert "RS-cross-up" in out
 
 
 def test_serialize_rotation_pairs_empty():
-    out = generate_ai.serialize_rotation_pairs(pd.DataFrame())
+    out = generate_ai.serialize_rotation_pairs(pd.DataFrame(), pd.DataFrame())
     assert "Not enough history" in out
+
+
+def test_serialize_breadth_metrics_quantifies_state():
+    snap = pd.DataFrame({
+        "name": ["A", "B"],
+        "perf_week": [1.0, -1.0], "perf_month": [2.0, -2.0],
+        "perf_quarter": [1.0, -1.0], "perf_half": [1.0, -1.0], "perf_ytd": [1.0, -1.0],
+    })
+    delta = pd.DataFrame({
+        "name": ["A", "B"], "rank_agreement": [0.9, 0.3], "momentum_accel": [0.05, -0.05],
+    })
+    out = generate_ai.serialize_breadth_metrics(snap, delta)
+    assert "All-green breadth" in out and "%" in out
+    assert "Mean rank agreement" in out
+    assert "Momentum accel" in out
+
+
+def test_serialize_watchlist_candidates_labels_triggers():
+    delta = pd.DataFrame({
+        "name": ["Copper", "Aero", "Energy", "Boring"],
+        "rs_cross": [1, 0, 0, 0],
+        "rs_new_high": [0, 1, 0, 0],
+        "rank_ytd_delta_5d": [0.0, 0.0, 6.0, 0.0],
+        "momentum_score": [0.5, 0.5, 0.2, 0.5],
+        "momentum_accel": [0.0, 0.0, 0.03, 0.0],
+    })
+    out = generate_ai.serialize_watchlist_candidates(delta, delta)
+    assert "Copper" in out and "rs_cross" in out
+    assert "Aero" in out and "rs_new_high" in out
+    assert "Energy" in out and "emerging" in out
+
+
+def test_serialize_watchlist_candidates_no_triggers():
+    delta = pd.DataFrame({"name": ["X"], "rs_cross": [0], "rs_new_high": [0],
+                          "rank_ytd_delta_5d": [0.0], "momentum_score": [0.5]})
+    out = generate_ai.serialize_watchlist_candidates(delta, delta)
+    assert "No standout triggers" in out
 
 
 def test_serialize_rs_signals_reports_score_and_flags():

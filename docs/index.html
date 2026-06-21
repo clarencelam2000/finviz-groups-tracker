@@ -845,12 +845,10 @@
 
       const lines = [`Finviz AI Note — ${dateStr} (${groupLabel})`];
       // Lead the share with the briefing headline when present (newer JSON files).
-      const headline = group.briefing && typeof group.briefing.headline === 'string'
-        ? group.briefing.headline.trim() : '';
+      const headline = group.pulse && typeof group.pulse.headline === 'string'
+        ? group.pulse.headline.trim() : '';
       if (headline) lines.push(headline);
-      const noteText = group.note
-        || (typeof group.briefing === 'string' ? group.briefing : group.briefing?.briefing)
-        || '';
+      const noteText = group.note || '';
       if (noteText) {
         const snippet = noteText.length > 600 ? noteText.slice(0, 600) + '…' : noteText;
         lines.push(snippet);
@@ -1741,20 +1739,20 @@
       const shareBtn = document.getElementById('ai-share-btn');
       if (shareBtn) shareBtn.disabled = false;
 
-      // Structured briefing (added 2026.06.21) — degrade gracefully on older
-      // JSON files that predate it: `briefing` will simply be undefined.
-      const briefing = activeGroup.briefing || null;
+      // Focused briefing fields (added 2026.06.21) — each is independent and may
+      // be absent on older JSON files, so every block guards before rendering.
+      const pulse = activeGroup.pulse || null;
 
       // Headline hero — punchy one-liner at the very top.
-      if (briefing && typeof briefing.headline === 'string' && briefing.headline.trim()) {
+      if (pulse && typeof pulse.headline === 'string' && pulse.headline.trim()) {
         html += `<div class="rounded-xl p-4 mb-3 bg-gradient-to-br from-sky-900/50 to-slate-800 border border-sky-700/50">
-          <div class="text-base font-bold text-white leading-snug">${escapeHtml(briefing.headline.trim())}</div>
+          <div class="text-base font-bold text-white leading-snug">${escapeHtml(pulse.headline.trim())}</div>
         </div>`;
       }
 
       // Conviction badge — High / Medium / Low with one-line rationale.
-      if (briefing && briefing.conviction && briefing.conviction.level) {
-        const lvl = briefing.conviction.level;
+      if (pulse && pulse.conviction && pulse.conviction.level) {
+        const lvl = pulse.conviction.level;
         const cm = {
           'High':   { bg: 'bg-emerald-900/40', border: 'border-emerald-600/50', text: 'text-emerald-300', dot: '#22c55e' },
           'Medium': { bg: 'bg-yellow-900/40',  border: 'border-yellow-600/50',  text: 'text-yellow-300', dot: '#eab308' },
@@ -1765,7 +1763,7 @@
             <div class="w-3.5 h-3.5 rounded-full flex-shrink-0" style="background-color:${cm.dot}"></div>
             <div class="text-sm font-bold ${cm.text}">Conviction: ${escapeHtml(lvl)}</div>
           </div>
-          ${briefing.conviction.why ? `<div class="text-xs text-slate-300 italic leading-relaxed">${escapeHtml(briefing.conviction.why)}</div>` : ''}
+          ${pulse.conviction.why ? `<div class="text-xs text-slate-300 italic leading-relaxed">${escapeHtml(pulse.conviction.why)}</div>` : ''}
         </div>`;
       }
 
@@ -1796,9 +1794,7 @@
 
       // Daily note — group-toggle-aware freeform markdown
       const groupLabel = state.group === 'sectors' ? 'Sectors' : 'Industries';
-      const note = activeGroup.note
-        || (typeof activeGroup.briefing === 'string' ? activeGroup.briefing : activeGroup.briefing?.briefing)
-        || '';
+      const note = activeGroup.note || '';
 
       html += `<div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Daily Note — ${groupLabel}</div>`;
       if (note && typeof note === 'string' && note.trim()) {
@@ -1814,19 +1810,20 @@
         </div>`;
       }
 
-      // Structured briefing section cards — each guarded so missing sections
-      // (or old JSON entirely) simply render nothing rather than throwing.
-      if (briefing) {
-        const sectionCard = (key, label, accent) => {
-          const body = briefing[key];
-          if (!body || typeof body !== 'string' || !body.trim()) return;
-          html += `<div class="text-xs font-semibold ${accent} uppercase tracking-wider mt-4 mb-2">${label}</div>
-            <div class="rounded-xl p-4 bg-slate-800 border border-slate-700">${renderMarkdown(body)}</div>`;
-        };
-        sectionCard('rotation_map', 'Rotation Map — From → To', 'text-violet-300');
-        sectionCard('watchlist', 'Watchlist', 'text-sky-300');
-        sectionCard('relative_strength', 'Relative Strength vs S&P', 'text-emerald-300');
-        sectionCard('risks', 'Risks & Fragility', 'text-rose-300');
+      // Briefing section cards — each guarded so a missing field (or old JSON
+      // entirely) simply renders nothing rather than throwing. renderMarkdown
+      // runs all model text through escapeHtml, so card bodies are XSS-safe.
+      const briefingCard = (body, label, accent) => {
+        if (!body || typeof body !== 'string' || !body.trim()) return;
+        html += `<div class="text-xs font-semibold ${accent} uppercase tracking-wider mt-4 mb-2">${label}</div>
+          <div class="rounded-xl p-4 bg-slate-800 border border-slate-700">${renderMarkdown(body)}</div>`;
+      };
+      briefingCard(activeGroup.rotation_map, 'Rotation Map — From → To', 'text-violet-300');
+      briefingCard(activeGroup.watchlist, 'Watchlist', 'text-sky-300');
+      const riskRadar = activeGroup.risk_radar || null;
+      if (riskRadar) {
+        briefingCard(riskRadar.relative_strength, 'Relative Strength vs S&P', 'text-emerald-300');
+        briefingCard(riskRadar.risks, 'Risks & Fragility', 'text-rose-300');
       }
 
       container.innerHTML = html;
