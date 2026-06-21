@@ -614,10 +614,12 @@ class TestComputeRsScore:
         s = cd.compute_rs_score(rs_df)
         assert s.idxmin() == 2
 
-    def test_single_row_returns_nan(self):
+    def test_single_row_returns_valid_score(self):
+        # Breadth is per-group, not cross-sectional — single row is meaningful
         df = pd.DataFrame({"name": ["A"], "rs_week": [1.0], "rs_month": [0.5]})
         s = cd.compute_rs_score(df)
-        assert math.isnan(s.iloc[0])
+        assert not math.isnan(s.iloc[0])
+        assert s.iloc[0] == 1.0  # both cols positive → 100% breadth
 
     def test_no_rs_columns_returns_nan(self):
         df = pd.DataFrame({"name": ["A", "B"], "perf_week": [1.0, 2.0]})
@@ -651,13 +653,15 @@ class TestComputeRsAgreement:
         s = cd.compute_rs_agreement(rs_df)
         assert s.between(0.0, 1.0).all()
 
-    def test_single_row_returns_nan(self):
+    def test_single_row_returns_valid_score(self):
+        # Sign consistency is per-group across timeframes — single row is meaningful
         df = pd.DataFrame({
             "name": ["A"],
             "rs_month": [1.0], "rs_quarter": [1.0], "rs_half": [1.0],
         })
         s = cd.compute_rs_agreement(df)
-        assert math.isnan(s.iloc[0])
+        assert not math.isnan(s.iloc[0])
+        assert abs(s.iloc[0] - 1.0) < 1e-9  # all same sign → perfect agreement
 
     def test_missing_rs_agreement_cols_returns_nan(self):
         df = pd.DataFrame({
@@ -738,12 +742,15 @@ class TestComputeRsRegime:
         s = cd.compute_rs_regime(df)
         assert s.iloc[0] < 0  # Alpha: long RS > short RS → fading
 
-    def test_single_row_returns_nan(self):
+    def test_single_row_returns_valid_score(self):
+        # Breadth is per-group — single row is meaningful (all positive → regime=0)
         df = pd.DataFrame({
             "name": ["A"], "rs_week": [1.0], "rs_month": [1.0],
             "rs_quarter": [1.0], "rs_half": [1.0], "rs_year": [1.0],
         })
-        assert math.isnan(cd.compute_rs_regime(df).iloc[0])
+        result = cd.compute_rs_regime(df).iloc[0]
+        assert not math.isnan(result)
+        assert result == 0.0  # short breadth (1.0) - long breadth (1.0) = 0
 
     def test_missing_long_bucket_is_nan(self):
         df = pd.DataFrame({

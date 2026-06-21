@@ -131,12 +131,12 @@ RS_REGIME_LONG = ["rs_quarter", "rs_half", "rs_year"]
 
 # All RS-derived columns appended after MOMENTUM_COLS in the deltas schema.
 RS_COLS = RS_TIMEFRAMES + [
-    "rs_score",           # 0–1; mean percentile of RS spreads across all 7 timeframes
-    "rs_agreement",       # 0–1; cross-timeframe consistency of RS spreads (mo/qtr/half)
-    "rs_confirmed",       # rs_score × rs_agreement; strength gated by consistency
+    "rs_score",           # 0–1; fraction of 7 timeframes where group beats SPY (rs_X > 0)
+    "rs_agreement",       # 0–1; sign consistency of rs_month/quarter/half (1.0 = all same direction)
+    "rs_confirmed",       # rs_score × rs_agreement; breadth gated by directional consistency
     "rs_slope",           # LS slope of rs_month over SLOPE_WINDOW; positive = building
     "rs_accel",           # change in rs_score over ACCEL_WINDOW; positive = RS building
-    "rs_regime_short_long",  # short-horizon RS − long-horizon RS; positive = emerging leader
+    "rs_regime_short_long",  # short-horizon RS breadth − long-horizon RS breadth; positive = emerging
 ]
 
 

@@ -87,10 +87,12 @@ then the RS (relative-strength vs SPY) columns: `rs_day, rs_week, rs_month, rs_q
 - `regime_short_long`: short- minus long-horizon percentile (range ~[-1,1]); positive = emerging leader, negative = fading. Short bucket: `perf_week + perf_month`. Long bucket: `perf_quarter + perf_half + perf_year`. Configured in `scripts/delta_config.py` as `REGIME_SHORT` / `REGIME_LONG`.
 - `rank_trend_slope`: negated least-squares slope of `rank_ytd` over the trailing window; positive = improving.
 - `rs_day/week/month/…/ytd`: RS spread = `group_perf_X − SPY_perf_X`; positive = beating the market. NaN when `data/benchmark/snapshots.csv` has no row for that date.
-- `rs_score`: 0–1; mean percentile of RS spreads across all 7 timeframes. `RS_SLOPE_COL = "rs_month"` is the canonical RS line for `rs_slope`. `RS_AGREEMENT_COLS = ["rs_month","rs_quarter","rs_half"]` drive `rs_agreement`.
-- `rs_confirmed`: `rs_score × rs_agreement` (RS strength gated by cross-timeframe consistency).
+- `rs_score`: 0–1; fraction of the 7 timeframes where the group's RS spread (group_perf_X − SPY_perf_X) is positive. Unlike `momentum_score` (cross-sectional peer rank), this is an absolute signal — a rising tide does not inflate it. `RS_SLOPE_COL = "rs_month"` is the canonical RS line for `rs_slope`. `RS_AGREEMENT_COLS = ["rs_month","rs_quarter","rs_half"]` drive `rs_agreement`.
+- `rs_agreement`: 0–1; sign consistency of RS spreads across mo/qtr/half. Computed as |mean(sign)| where sign = +1 if rs > 0, −1 if rs < 0. 1.0 = all three same direction.
+- `rs_confirmed`: `rs_score × rs_agreement` (breadth of outperformance gated by directional consistency).
 - `rs_slope`: LS slope of `rs_month` over `SLOPE_WINDOW` sessions; positive = outperformance building. `RS_REGIME_SHORT/LONG` configure `rs_regime_short_long` buckets.
-- `rs_accel`: change in `rs_score` over `ACCEL_WINDOW` sessions; positive = RS building.
+- `rs_accel`: change in `rs_score` over `ACCEL_WINDOW` sessions; positive = more timeframes flipping positive vs SPY.
+- `rs_regime_short_long`: short-horizon RS breadth (fraction of rs_week/rs_month > 0) minus long-horizon breadth (rs_quarter/rs_half/rs_year). Range [−1, 1]; positive = emerging RS leader.
 - Delta/momentum/RS columns are `NaN` until enough history exists (e.g., 50d deltas need 50+ sessions; accel/slope need 10).
 
 ### PWA display thresholds (in `docs/index.html` near top of `<script>`)
