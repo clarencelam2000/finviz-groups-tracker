@@ -67,20 +67,22 @@ MOMENTUM_COLS = [
 ]
 
 # Perf metrics ranked for momentum percentile scoring (best=1).
+# Day excluded: a single session's move is too noisy to be a consistent
+# momentum input. Shortest timeframe is now week.
 PERF_RANK_METRICS = [
-    "perf_day", "perf_week", "perf_month", "perf_quarter",
+    "perf_week", "perf_month", "perf_quarter",
     "perf_half", "perf_year", "perf_ytd",
 ]
 
 # Weighted-momentum profiles. Keys are perf metrics; missing metrics default
-# to weight 1.0. "mid" leans on the 1-month/3-month trend; "fast" leans on the
-# day/week trend to catch fresh rotation.
+# to weight 1.0. "mid" leans on the 1-month/3-month trend; "fast" leans on
+# the week trend to catch fresh rotation. Day excluded from both (too noisy).
 WEIGHTS_MID = {
-    "perf_day": 0.5, "perf_week": 1.0, "perf_month": 2.0, "perf_quarter": 2.0,
+    "perf_week": 1.0, "perf_month": 2.0, "perf_quarter": 2.0,
     "perf_half": 1.0, "perf_year": 1.0, "perf_ytd": 1.0,
 }
 WEIGHTS_FAST = {
-    "perf_day": 2.0, "perf_week": 2.0, "perf_month": 1.0, "perf_quarter": 0.5,
+    "perf_week": 2.0, "perf_month": 1.0, "perf_quarter": 0.5,
     "perf_half": 0.5, "perf_year": 0.5, "perf_ytd": 0.5,
 }
 
@@ -112,6 +114,11 @@ SLOPE_WINDOW = 10
 RS_TIMEFRAMES = [
     "rs_day", "rs_week", "rs_month", "rs_quarter", "rs_half", "rs_year", "rs_ytd",
 ]
+
+# Timeframes counted in rs_score. Excludes rs_day — a single session's spread
+# is too noisy to count toward the breadth score. rs_day is still stored and
+# displayed so the "held up on a down day" signal remains visible.
+RS_SCORE_TIMEFRAMES = [t for t in RS_TIMEFRAMES if t != "rs_day"]
 
 # Canonical RS line used for rs_slope computation (least-squares slope of
 # this spread over SLOPE_WINDOW sessions). rs_month is chosen because it is

@@ -131,13 +131,22 @@ class TestComputeMomentum:
         scores = cd.compute_momentum(snapshot_3)
         assert scores.between(0.0, 1.0).all()
 
-    def test_best_performer_has_highest_score(self, snapshot_3):
-        # Tech leads perf_week/perf_year/perf_day; should score high overall
-        scores = cd.compute_momentum(snapshot_3)
-        snapshot_3 = snapshot_3.copy()
-        snapshot_3["score"] = scores
-        # Just verify no score is exactly equal across the board (all different)
+    def test_best_performer_has_highest_score(self):
+        # snapshot_3 is symmetric across 6 metrics (all tie at 0.5); use an
+        # unambiguous fixture where one group leads every durable timeframe.
+        df = pd.DataFrame({
+            "name": ["Leader", "Middle", "Laggard"],
+            "perf_week":    [3.0, 2.0, 1.0],
+            "perf_month":   [3.0, 2.0, 1.0],
+            "perf_quarter": [3.0, 2.0, 1.0],
+            "perf_half":    [3.0, 2.0, 1.0],
+            "perf_year":    [3.0, 2.0, 1.0],
+            "perf_ytd":     [3.0, 2.0, 1.0],
+        })
+        scores = cd.compute_momentum(df)
         assert scores.nunique() > 1
+        assert scores.idxmax() == 0   # Leader
+        assert scores.idxmin() == 2   # Laggard
 
     def test_single_row_returns_nan(self):
         df = pd.DataFrame({
@@ -450,13 +459,14 @@ class TestWeightedMomentum:
         assert math.isnan(cd.weighted_momentum(df, cd.WEIGHTS_FAST).iloc[0])
 
     def test_all_nan_column_excluded(self):
+        # perf_month all-NaN should drop out; result driven entirely by perf_week.
         df = pd.DataFrame({
             "name": ["A", "B"],
-            "perf_day": [1.0, 2.0],
-            "perf_week": [float("nan"), float("nan")],
+            "perf_week": [1.0, 2.0],
+            "perf_month": [float("nan"), float("nan")],
         })
-        s = cd.weighted_momentum(df, {"perf_day": 1.0, "perf_week": 5.0})
-        # perf_week all-NaN drops out; result driven entirely by perf_day.
+        s = cd.weighted_momentum(df, {"perf_week": 1.0, "perf_month": 5.0})
+        # perf_month all-NaN drops out; result driven entirely by perf_week.
         assert s.between(0.0, 1.0).all()
         assert not s.isna().any()
 
@@ -635,6 +645,23 @@ class TestComputeRsScore:
         s = cd.compute_rs_score(df)
         # rs_week all-NaN skipped; result from rs_month only — no crash
         assert not s.isna().all()
+
+    def test_rs_day_excluded_from_score(self):
+        # rs_day must NOT affect rs_score — a red day should not lower the score
+        # for a group that beats SPY across all durable timeframes (week → YTD).
+        df = pd.DataFrame({
+            "name": ["A"],
+            "rs_day":     [-5.0],   # big red day vs SPY
+            "rs_week":    [1.0],
+            "rs_month":   [1.0],
+            "rs_quarter": [1.0],
+            "rs_half":    [1.0],
+            "rs_year":    [1.0],
+            "rs_ytd":     [1.0],
+        })
+        s = cd.compute_rs_score(df)
+        # All 6 non-day timeframes positive → score should be 1.0, not reduced by rs_day
+        assert s.iloc[0] == pytest.approx(1.0)
 
 
 class TestComputeRsAgreement:

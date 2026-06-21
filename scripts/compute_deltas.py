@@ -30,6 +30,7 @@ from delta_config import (
     RS_NEW_HIGH_WINDOW,
     RS_REGIME_LONG,
     RS_REGIME_SHORT,
+    RS_SCORE_TIMEFRAMES,
     RS_SLOPE_COL,
     RS_TIMEFRAMES,
     SLOPE_WINDOW,
@@ -176,7 +177,7 @@ def compute_ranks(df_day: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_momentum(df_day: pd.DataFrame) -> pd.Series:
-    """Compute momentum_score: mean percentile across all 7 perf metrics."""
+    """Compute momentum_score: mean percentile across 6 perf metrics (week → YTD)."""
     n = len(df_day)
     if n <= 1:
         return pd.Series([float("nan")] * n, index=df_day.index)
@@ -337,9 +338,12 @@ def load_benchmark(csv_path: Path) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 def compute_rs_score(df_day: pd.DataFrame) -> pd.Series:
-    """RS score: fraction of the 7 timeframes where the group beats SPY (rs_X > 0).
+    """RS score: fraction of 6 timeframes (week → YTD) where the group beats SPY.
 
-    Score 1.0 = outperforming S&P 500 in every timeframe; 0.0 = trailing in all.
+    Day excluded from the score — a single session's spread is too noisy.
+    rs_day is still stored and surfaced for context (the 'held up on a down day'
+    signal), but does not count toward the breadth score.
+    Score 1.0 = outperforming S&P 500 in every counted timeframe; 0.0 = trailing.
     Unlike momentum_score (cross-sectional peer rank), this is an absolute signal
     — a rising tide lifting all groups does not inflate the score.
     NaN when no RS spread columns have valid data.
@@ -349,7 +353,7 @@ def compute_rs_score(df_day: pd.DataFrame) -> pd.Series:
         return pd.Series([], dtype=float)
 
     scores = pd.DataFrame(index=df_day.index)
-    for col in RS_TIMEFRAMES:
+    for col in RS_SCORE_TIMEFRAMES:
         if col in df_day.columns and df_day[col].notna().any():
             # 1.0 where rs > 0, 0.0 where rs <= 0, NaN preserved for mean(skipna)
             scores[col] = (df_day[col] > 0).astype(float).where(df_day[col].notna())
