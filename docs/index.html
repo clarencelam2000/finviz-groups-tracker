@@ -239,6 +239,7 @@
          style="padding-bottom: env(safe-area-inset-bottom)">
       <div class="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-700">
         <div class="flex bg-slate-800 rounded-lg p-1 text-sm font-medium">
+          <button class="hub-section-btn px-3 py-1.5 rounded-md text-slate-400" data-section="welcome">Start Here</button>
           <button class="hub-section-btn px-3 py-1.5 rounded-md text-slate-400" data-section="whatsnew">What's New</button>
           <button class="hub-section-btn px-3 py-1.5 rounded-md text-slate-400" data-section="guide">Guide</button>
         </div>
@@ -387,6 +388,53 @@
       ],
       // The legend is built from the live threshold constants — see buildLegend().
     };
+
+    // ── Onboarding intro content ───────────────────────────────────────────────
+    // Kept VERBATIM-SYNCED with knowledge/product-intro-copy.md (the canonical
+    // copy + O'Neil citation source). Edit body/desc strings here only if you
+    // edit them there too. See CLAUDE.md § Code quality for the sync rule.
+    // tests/test_pwa_intro.py::test_welcome_body_strings_in_product_intro_copy
+    // enforces the sync automatically.
+    //
+    // fvt_intro_seen_v1: localStorage key tracking first-run carousel dismissal.
+    // Bump the suffix to v2 only when content changes enough that existing users
+    // should see the intro again (e.g. a new tab added to the tour). Minor copy
+    // edits do NOT warrant a bump.
+    const WELCOME = [
+      {
+        id: 'welcome',
+        title: 'Welcome to Finviz Tracker',
+        body: "See where the market's money is actually moving — every sector and industry group, ranked daily, with history to show what's rising before it's obvious.",
+      },
+      {
+        id: 'why-groups',
+        title: 'Why groups matter',
+        body: "About half of any stock's price move comes from its industry group and sector — 37% from the group, 12% from the sector (William O'Neil / IBD). The highest-leverage question isn't whether the company is good — it's whether its group is strong.",
+      },
+      {
+        id: 'what-different',
+        title: "What's different from Finviz",
+        body: "Finviz shows today's snapshot — who's winning right now. We keep the history and track how the rankings change over time, so you can spot capital rotating into a group before the headline numbers move. That derived layer — momentum, rotation, and relative strength vs the S&P 500 — is what you won't find on Finviz.",
+      },
+      {
+        id: 'tabs-tour',
+        title: 'Your 6 tabs',
+        body: '',
+        items: [
+          { label: 'Today',    tab: 'today',    desc: 'Every group ranked by current strength.' },
+          { label: 'Movers',   tab: 'movers',   desc: 'Biggest rank climbers and fallers.' },
+          { label: 'Momentum', tab: 'momentum', desc: 'Broad strength scores and the Rotation view.' },
+          { label: 'Strength', tab: 'strength', desc: 'Proven, sustained leaders.' },
+          { label: 'AI',       tab: 'ai',       desc: 'A plain-English daily rotation briefing.' },
+          { label: 'Lookup',   tab: 'lookup',   desc: 'Type any ticker — see if its group is a tailwind or headwind.' },
+        ],
+      },
+      {
+        id: 'get-started',
+        title: "You're set",
+        body: 'Tap the ⓘ icon anytime to open the Guide (what every number means) or replay this intro.',
+      },
+    ];
 
     // Guide tab-filter chips. Order mirrors the main tab bar; 'all' shows every
     // metric. Each GUIDE metric carries a `tabs: [...]` array (see metrics above);
@@ -2532,7 +2580,13 @@
         }
       }
       const body = document.getElementById('hub-body');
-      body.innerHTML = section === 'guide' ? renderGuideSheet() : renderWhatsNew();
+      if (section === 'guide') {
+        body.innerHTML = renderGuideSheet();
+      } else if (section === 'welcome') {
+        body.innerHTML = renderWelcome('hub');
+      } else {
+        body.innerHTML = renderWhatsNew();
+      }
       body.scrollTop = 0;
       if (section === 'guide') {
         wireGuideSearch();
@@ -2564,6 +2618,61 @@
           ${jump}
         </div>`;
       }).join('');
+    }
+
+    // Renders the "Start Here" intro content.
+    // mode = 'hub'  → vertical prose sections inside the hub sheet
+    // mode = 'carousel' → used by the first-run overlay (see showIntroOverlay)
+    function renderWelcome(mode) {
+      if (mode === 'hub') {
+        const slides = WELCOME.map(slide => {
+          let content = '';
+          if (slide.body) {
+            content += `<p class="text-sm text-slate-300 leading-relaxed mb-3">${escapeHtml(slide.body)}</p>`;
+          }
+          if (slide.items) {
+            const rows = slide.items.map(item =>
+              `<div class="flex items-start gap-3 py-2 border-b border-slate-800 last:border-0">
+                <span class="text-sky-400 text-xs font-semibold mt-0.5 w-16 flex-shrink-0">${escapeHtml(item.label)}</span>
+                <span class="text-sm text-slate-300 flex-1">${escapeHtml(item.desc)}
+                  <button class="ml-1 text-xs text-sky-400 active:text-sky-300 whitespace-nowrap"
+                          onclick="__hubJump('${escapeHtml(item.tab)}')">Open →</button>
+                </span>
+              </div>`
+            ).join('');
+            content += `<div class="rounded-xl bg-slate-800/50 border border-slate-700/50 px-3 py-1">${rows}</div>`;
+          }
+          return `<div class="mb-6 pb-6 border-b border-slate-800 last:border-0 last:mb-0 last:pb-0">
+            <h3 class="text-white font-semibold text-base mb-2">${escapeHtml(slide.title)}</h3>
+            ${content}
+          </div>`;
+        }).join('');
+        // Replay intro affordance: calls showIntroOverlay() defined in the carousel section.
+        const replay = `<button class="w-full mt-2 py-2.5 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 text-sm active:bg-slate-700"
+          onclick="if(typeof showIntroOverlay==='function')showIntroOverlay()">↺ Replay intro</button>`;
+        return slides + replay;
+      }
+      // carousel mode: returns array of slide HTML strings (built by buildCarouselSlides)
+      return WELCOME.map(slide => {
+        const isLast = slide.id === 'get-started';
+        let inner = `<h2 class="text-xl font-bold text-white mb-3">${escapeHtml(slide.title)}</h2>`;
+        if (slide.body) {
+          inner += `<p class="text-sm text-slate-300 leading-relaxed">${escapeHtml(slide.body)}</p>`;
+        }
+        if (slide.items) {
+          inner += '<div class="space-y-2 mt-1">' + slide.items.map(item =>
+            `<div class="flex items-start gap-3">
+              <span class="text-sky-400 text-xs font-semibold mt-0.5 w-16 flex-shrink-0">${escapeHtml(item.label)}</span>
+              <span class="text-sm text-slate-300">${escapeHtml(item.desc)}</span>
+            </div>`
+          ).join('') + '</div>';
+        }
+        if (isLast) {
+          inner += `<button class="mt-4 w-full py-3 rounded-xl bg-sky-600 text-white font-semibold text-sm active:bg-sky-500"
+            onclick="hideIntroOverlay()">Get started →</button>`;
+        }
+        return inner;
+      });
     }
 
     // Legend reads the LIVE threshold constants so it can never drift from behavior.
