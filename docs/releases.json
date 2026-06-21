@@ -1,6 +1,21 @@
 {
-  "current": "2026.06.21.2",
+  "current": "2026.06.21.3",
   "releases": [
+    {
+      "version": "2026.06.21.3",
+      "date": "2026-06-21",
+      "title": "AI tab: structured desk briefing",
+      "tag": "feature",
+      "tab": "ai",
+      "notes": [
+        "The AI tab now leads with a one-line Headline and a Conviction badge (High / Medium / Low) judging how broad and consistent today's read is.",
+        "New Rotation Map card spells out capital flow as 'OUT of X → IN to Y' pairs — the core rotation thesis, stated literally.",
+        "New Watchlist card surfaces 3–5 specific groups to watch with the exact trigger (RS cross, RS new high, or rank/momentum divergence).",
+        "New Relative Strength card calls out which groups are actually beating the S&P 500 (not just leading their peers).",
+        "New Risks & Fragility card flags strong-but-slipping and all-green-but-unstable setups so the bullish read stays honest.",
+        "All six sections come from a single new generation call per group, so cost and quota use stay low. Older dates without a briefing still render fine."
+      ]
+    },
     {
       "version": "2026.06.21.2",
       "date": "2026-06-21",

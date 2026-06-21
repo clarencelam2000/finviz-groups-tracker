@@ -363,6 +363,217 @@ def serialize_divergences(snap_df: pd.DataFrame, delta_df: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+def serialize_rotation_pairs(delta_df: pd.DataFrame, n: int = 5) -> str:
+    """Capital-flow framing: the biggest rank decliners (capital leaving) paired
+    against the biggest improvers (capital arriving), plus regime context so the
+    model can phrase rotation as OUT-of / INTO. Feeds the Rotation Map section."""
+    if delta_df.empty or SHORT_DELTA_COL not in delta_df.columns:
+        return "ROTATION FLOW:\n  Not enough history for rotation signals yet."
+    d = delta_df.copy()
+    d[SHORT_DELTA_COL] = pd.to_numeric(d[SHORT_DELTA_COL], errors="coerce")
+    valid = d.dropna(subset=[SHORT_DELTA_COL])
+    if valid.empty:
+        return "ROTATION FLOW:\n  Not enough history for rotation signals yet."
+
+    has_regime = "regime_short_long" in valid.columns
+
+    def _regime(r):
+        if not has_regime or pd.isna(r.get("regime_short_long")):
+            return ""
+        return f", regime {r['regime_short_long']:+.2f}"
+
+    take = min(n, len(valid))
+    leaving = valid.nsmallest(take, SHORT_DELTA_COL)   # rank slipping = capital leaving
+    arriving = valid.nlargest(take, SHORT_DELTA_COL)   # rank rising = capital arriving
+    lines = [f"ROTATION FLOW (rank change over {SHORT_WIN} sessions; "
+             f"regime>0 = short-horizon leader, <0 = fading):"]
+    lines.append("  Capital LEAVING (rank slipping):")
+    for _, r in leaving.iterrows():
+        lines.append(f"    {r['name']}: {r[SHORT_DELTA_COL]:+.0f} spots{_regime(r)}")
+    lines.append("  Capital ARRIVING (rank rising):")
+    for _, r in arriving.iterrows():
+        lines.append(f"    {r['name']}: {r[SHORT_DELTA_COL]:+.0f} spots{_regime(r)}")
+    return "\n".join(lines)
+
+
+# RS (relative-strength vs SPY) columns produced by compute_deltas. NaN when the
+# benchmark snapshot lacks a row for the date — handled gracefully below.
+_RS_BEAT_COLS = ["beats_benchmark_week", "beats_benchmark_month",
+                 "beats_benchmark_quarter", "beats_benchmark_half",
+                 "beats_benchmark_year", "beats_benchmark_ytd", "beats_benchmark_day"]
+
+
+def serialize_rs_signals(delta_df: pd.DataFrame, n: int = 6) -> str:
+    """Absolute outperformance vs the S&P 500: rs_score leaders, how many of the 7
+    timeframes each beats SPY on, plus fresh RS new-highs and RS crosses (rotation
+    triggers). Unlike peer-rank, a rising tide does NOT inflate these."""
+    if delta_df.empty or "rs_score" not in delta_df.columns:
+        return "RELATIVE STRENGTH vs S&P:\n  No benchmark (SPY) data available for this date."
+    d = delta_df.copy()
+    d["rs_score"] = pd.to_numeric(d["rs_score"], errors="coerce")
+    valid = d.dropna(subset=["rs_score"])
+    if valid.empty:
+        return "RELATIVE STRENGTH vs S&P:\n  No benchmark (SPY) data available for this date."
+
+    beat_cols = [c for c in _RS_BEAT_COLS if c in valid.columns]
+
+    def _beats(r):
+        if not beat_cols:
+            return "N/A"
+        cnt = sum(1 for c in beat_cols if pd.notna(r.get(c)) and float(r[c]) > 0)
+        return f"{cnt}/{len(beat_cols)} timeframes"
+
+    lines = ["RELATIVE STRENGTH vs S&P (rs_score = fraction of 7 timeframes beating SPY):"]
+    leaders = valid.sort_values("rs_score", ascending=False).head(n)
+    for _, r in leaders.iterrows():
+        lines.append(f"  {r['name']}: rs_score {r['rs_score']:.2f}, beats SPY on {_beats(r)}")
+
+    if "rs_new_high" in valid.columns:
+        nh = valid[pd.to_numeric(valid["rs_new_high"], errors="coerce") > 0]
+        if not nh.empty:
+            lines.append("  RS new highs (20-session): " + ", ".join(nh["name"].head(8)))
+    if "rs_cross" in valid.columns:
+        cx = valid[pd.to_numeric(valid["rs_cross"], errors="coerce") > 0]
+        if not cx.empty:
+            lines.append("  RS crosses (just turned positive vs SPY): " + ", ".join(cx["name"].head(8)))
+    return "\n".join(lines)
+
+
+def build_briefing_prompt(group_type: str, snap_df: pd.DataFrame,
+                          delta_df: pd.DataFrame, date_str: str) -> str:
+    """Structured multi-section desk briefing. Returns a STRICT markdown template
+    parsed by parse_briefing_response into headline/conviction/rotation_map/
+    watchlist/relative_strength/risks. One API call delivers six AI-tab cards."""
+    group_name = "sectors" if group_type == "sector" else "industries"
+    strength = serialize_strength_signals(snap_df, delta_df)
+    rotation = serialize_rotation_pairs(delta_df, n=5)
+    rs = serialize_rs_signals(delta_df, n=6)
+    divergences = serialize_divergences(snap_df, delta_df)
+    return f"""You are a markets strategist writing a structured desk briefing on US {group_name} for {date_str}.
+
+Use ONLY the computed signals below. Do not invent numbers or {group_name} not present in the data. Name specific {group_name} and cite numbers.
+
+Respond in Markdown using EXACTLY these six `##` sections, in this order, with these exact titles. Do not add a preamble, intro, or any text before the first `##` header. Do not use `###`.
+
+## Headline
+A single punchy line, 12 words or fewer, capturing today's most important {group_name} takeaway. No bullet, no bold.
+
+## Conviction
+Exactly two lines:
+Level: <one of High, Medium, Low>
+Why: <one sentence — judge conviction from breadth, cross-timeframe agreement, and how many divergences are present>
+
+## Rotation Map
+2-4 bullets, each `- OUT: <group> -> IN: <group> - <short reason>`, using the ROTATION FLOW signal (capital leaving the rank-slipping {group_name}, arriving at the rank-rising ones).
+
+## Watchlist
+3-5 bullets, each `- <group> - <the specific trigger to watch>`, drawn from divergences, RS crosses, and RS new highs. Pick names that are actionable, not already-obvious leaders.
+
+## Relative Strength
+1-2 sentences on which {group_name} are beating the S&P 500 (use rs_score and the beats-SPY timeframe counts, and call out any RS new highs or crosses). If no benchmark data is available, say so in one line.
+
+## Risks
+2-4 bullets on fragile or fading setups: strong names with slipping ranks, all-green {group_name} with low rank agreement, or crowded leadership. If none, say "No notable risks today." as a single bullet.
+
+COMPUTED SIGNALS:
+{strength}
+
+{rotation}
+
+{rs}
+
+{divergences}"""
+
+
+# ---------------------------------------------------------------------------
+# Briefing response parser
+# ---------------------------------------------------------------------------
+
+# Canonical section keys, in render order, with the header aliases each accepts.
+# Tolerant by design: a malformed/renamed/missing header must never break the
+# whole briefing — missing sections are simply absent keys (not empty strings),
+# so the frontend can distinguish "model skipped it" from "" and the file is
+# still considered complete once a non-empty briefing dict exists.
+_BRIEFING_SECTIONS = [
+    ("headline", ("headline", "daily headline", "tl;dr")),
+    ("conviction", ("conviction", "conviction meter")),
+    ("rotation_map", ("rotation map", "rotation", "rotation flow")),
+    ("watchlist", ("watchlist", "watch list", "actionable watchlist")),
+    ("relative_strength", ("relative strength", "relative strength vs s&p", "rs", "vs market")),
+    ("risks", ("risks", "risks & fragility", "risks and fragility", "fragility")),
+]
+
+
+def _briefing_key_for(title: str):
+    t = title.strip().lower().rstrip(":").strip()
+    for key, aliases in _BRIEFING_SECTIONS:
+        if t in aliases:
+            return key
+    return None
+
+
+def parse_briefing_response(text: str) -> dict:
+    """Split the structured briefing markdown into a section dict. Tolerant of
+    `###` headers, preamble before the first header, and renamed/missing sections.
+    Returns absent keys for sections the model omitted. `conviction` is parsed into
+    {level, why}; all other sections are stored as their raw markdown body."""
+    text = (text or "").strip()
+    if not text:
+        return {}
+    # Normalize ### / #### down to ## so the splitter sees one header level.
+    import re  # noqa: PLC0415 — local; only needed here
+    normalized = re.sub(r"^#{3,}\s+", "## ", text, flags=re.MULTILINE)
+
+    sections: dict = {}
+    current_key = None
+    buf: list = []
+
+    def _flush():
+        if current_key and buf:
+            body = "\n".join(buf).strip()
+            if body:
+                sections[current_key] = body
+
+    for line in normalized.split("\n"):
+        m = re.match(r"^##\s+(.*)$", line.strip())
+        if m:
+            _flush()
+            buf = []
+            current_key = _briefing_key_for(m.group(1))
+        elif current_key:
+            buf.append(line)
+    _flush()
+
+    if "conviction" in sections:
+        sections["conviction"] = _parse_conviction(sections["conviction"])
+    return sections
+
+
+def _parse_conviction(body: str) -> dict:
+    """Parse the conviction body into {level, why}. Tolerant of missing prefixes:
+    falls back to scanning for a High/Medium/Low token and using the rest as why."""
+    result = {"level": "", "why": ""}
+    for line in body.split("\n"):
+        low = line.strip().lower()
+        if low.startswith("level:"):
+            result["level"] = line.split(":", 1)[1].strip()
+        elif low.startswith("why:") or low.startswith("reasoning:"):
+            result["why"] = line.split(":", 1)[1].strip()
+    if not result["level"]:
+        for token in ("High", "Medium", "Low"):
+            if token.lower() in body.lower():
+                result["level"] = token
+                break
+    if not result["why"]:
+        # Use the first non-level line as the rationale.
+        for line in body.split("\n"):
+            s = line.strip()
+            if s and not s.lower().startswith("level:"):
+                result["why"] = s
+                break
+    return result
+
+
 def build_note_prompt(group_type: str, snap_df: pd.DataFrame,
                       delta_df: pd.DataFrame, date_str: str) -> str:
     """The single combined prompt: a freeform markdown daily note built ONLY from
@@ -472,6 +683,16 @@ TASK_SPECS = [
         "build_prompt": build_phase_prompt,
         "generation_config": {"temperature": 0.2},
     },
+    {
+        # Structured six-section desk briefing. max_output_tokens caps rambling on
+        # the larger industries set (~150 groups) so a retry can't blow per-minute
+        # limits; 2000 comfortably fits six tight sections.
+        "name": "briefing",
+        "group_types": ("sector", "industry"),
+        "build_prompt": build_briefing_prompt,
+        "pass_group_type": True,
+        "generation_config": {"temperature": 0.5, "max_output_tokens": 2000},
+    },
 ]
 
 
@@ -519,9 +740,10 @@ def _call_api(client, prompt: str, max_retries: int = 3,
     extra = {}
     if generation_config:
         from google.genai import types  # noqa: PLC0415 — lazy; google-genai only required at runtime
-        extra["config"] = types.GenerateContentConfig(
-            temperature=generation_config.get("temperature", 0.6),
-        )
+        cfg_kwargs = {"temperature": generation_config.get("temperature", 0.6)}
+        if generation_config.get("max_output_tokens"):
+            cfg_kwargs["max_output_tokens"] = generation_config["max_output_tokens"]
+        extra["config"] = types.GenerateContentConfig(**cfg_kwargs)
 
     _api_call_count += 1
     for attempt in range(max_retries + 1):
@@ -590,6 +812,14 @@ def generate_for_group(client, group_type: str, date_str: str, existing=None) ->
             )
             if spec["name"] == "rotation_phase":
                 result["rotation_phase"] = parse_phase_response(raw)
+            elif spec["name"] == "briefing":
+                # Structured: store the parsed section dict, not the raw text, so
+                # the frontend can read .headline/.watchlist/etc. A non-empty dict
+                # also keeps _is_complete honest (empty parse won't mark complete).
+                parsed = parse_briefing_response(raw)
+                if not parsed:
+                    raise ValueError("briefing response parsed to no sections")
+                result["briefing"] = parsed
             else:  # "note" — freeform markdown, stored verbatim
                 result[spec["name"]] = raw.strip()
             _record_field(fkey, "ok", was_new=True, elapsed=time.monotonic() - t0)

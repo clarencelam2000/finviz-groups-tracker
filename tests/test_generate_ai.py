@@ -394,18 +394,27 @@ def test_generate_for_group_stores_note_string(monkeypatch):
     monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
 
     note_md = "**TL;DR:** Energy leads.\n\n## Strength\n- Energy all-green"
-    client = _make_client([note_md, "Label: Late Cycle\nWhy: Energy leads."])
+    briefing_md = (
+        "## Headline\nEnergy leads broadly\n"
+        "## Conviction\nLevel: High\nWhy: Broad breadth.\n"
+        "## Rotation Map\n- OUT: Utilities -> IN: Energy - momentum\n"
+        "## Watchlist\n- Energy - watch RS new high\n"
+        "## Relative Strength\nEnergy beats SPY on 6/7.\n"
+        "## Risks\n- No notable risks today."
+    )
+    client = _make_client([note_md, "Label: Late Cycle\nWhy: Energy leads.", briefing_md])
     result = generate_ai.generate_for_group(client, "sector", "2026-06-11")
 
     assert result["note"] == note_md
     assert isinstance(result["note"], str)
     assert result["rotation_phase"] == {"label": "Late Cycle", "reasoning": "Energy leads."}
-    assert "key_signals" not in result
-    assert "watchlist" not in result
+    assert isinstance(result["briefing"], dict)
+    assert result["briefing"]["headline"] == "Energy leads broadly"
+    assert result["briefing"]["conviction"]["level"] == "High"
 
 
 def test_generate_for_group_industry_note_only(monkeypatch):
-    """Industries get a note but no rotation_phase (sectors-only) — one API call."""
+    """Industries get a note + briefing but no rotation_phase (sectors-only)."""
     from unittest.mock import MagicMock
     monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
     monkeypatch.setattr("time.sleep", lambda _: None)
@@ -426,12 +435,14 @@ def test_generate_for_group_industry_note_only(monkeypatch):
     monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
     monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
 
-    client = _make_client(["**TL;DR:** Trucking leads industries."])
+    briefing_md = "## Headline\nTrucking leads\n## Conviction\nLevel: Medium\nWhy: Narrow.\n## Risks\n- No notable risks today."
+    client = _make_client(["**TL;DR:** Trucking leads industries.", briefing_md])
     result = generate_ai.generate_for_group(client, "industry", "2026-06-11")
 
     assert result["note"].startswith("**TL;DR:**")
     assert "rotation_phase" not in result
-    assert client.models.generate_content.call_count == 1
+    assert isinstance(result["briefing"], dict)
+    assert client.models.generate_content.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -440,7 +451,15 @@ def test_generate_for_group_industry_note_only(monkeypatch):
 
 def test_task_specs_has_expected_names():
     names = {s["name"] for s in generate_ai.TASK_SPECS}
-    assert names == {"note", "rotation_phase"}
+    assert names == {"note", "rotation_phase", "briefing"}
+
+
+def test_task_specs_briefing_covers_both_group_types():
+    spec = next(s for s in generate_ai.TASK_SPECS if s["name"] == "briefing")
+    assert "sector" in spec["group_types"]
+    assert "industry" in spec["group_types"]
+    assert spec.get("pass_group_type") is True
+    assert spec["generation_config"].get("max_output_tokens")
 
 
 def test_task_specs_note_covers_both_group_types():
@@ -459,12 +478,14 @@ def test_task_specs_rotation_phase_sector_only():
     assert "response_schema" not in spec
 
 
-def test_expected_fields_returns_three():
+def test_expected_fields_includes_briefing_for_both_groups():
     fields = set(generate_ai._expected_fields())
     assert fields == {
         "sectors.note",
         "sectors.rotation_phase",
+        "sectors.briefing",
         "industries.note",
+        "industries.briefing",
     }
 
 
@@ -772,8 +793,9 @@ def test_is_complete_returns_true_for_full_data():
         "sectors": {
             "note": "Some markdown note",
             "rotation_phase": {"label": "Defensive", "reasoning": "..."},
+            "briefing": {"headline": "x"},
         },
-        "industries": {"note": "Industry note"},
+        "industries": {"note": "Industry note", "briefing": {"headline": "y"}},
     }
     assert generate_ai._is_complete(data) is True
 
@@ -812,7 +834,8 @@ def test_is_complete_returns_false_for_actual_partial_file():
 def test_missing_fields_empty_data():
     missing = generate_ai._missing_fields({})
     assert set(missing) == {
-        "sectors.note", "sectors.rotation_phase", "industries.note",
+        "sectors.note", "sectors.rotation_phase", "sectors.briefing",
+        "industries.note", "industries.briefing",
     }
 
 
@@ -832,8 +855,9 @@ def test_missing_fields_complete_data():
         "sectors": {
             "note": "text",
             "rotation_phase": {"label": "Defensive", "reasoning": "..."},
+            "briefing": {"headline": "h"},
         },
-        "industries": {"note": "text"},
+        "industries": {"note": "text", "briefing": {"headline": "h"}},
     }
     assert generate_ai._missing_fields(data) == []
 
@@ -850,8 +874,8 @@ def test_generate_for_group_skips_existing_note(monkeypatch):
     mock_genai = MagicMock()
     monkeypatch.setitem(sys.modules, "google.genai", mock_genai)
 
-    # Supply existing note so the API should NOT be called for it
-    existing = {"note": "Already written note"}
+    # Supply existing note + briefing so the API is only called for rotation_phase
+    existing = {"note": "Already written note", "briefing": {"headline": "h"}}
     client = _make_client(["Label: Late Cycle\nWhy: Energy leads."])
 
     snap = pd.DataFrame({
@@ -911,8 +935,9 @@ def test_main_completes_partial_file(monkeypatch, tmp_path):
             return {
                 "note": "Sector note",
                 "rotation_phase": {"label": "Defensive", "reasoning": "test"},
+                "briefing": {"headline": "h"},
             }
-        return {"note": "Industry note"}
+        return {"note": "Industry note", "briefing": {"headline": "h"}}
 
     monkeypatch.setattr(generate_ai, "generate_for_group", fake_generate)
     mock_genai = MagicMock()
@@ -976,9 +1001,10 @@ def test_main_force_regenerates_complete_file(monkeypatch, tmp_path):
             return {
                 "note": "Sector content",
                 "rotation_phase": {"label": "Early Cycle", "reasoning": "test"},
+                "briefing": {"headline": "h"},
             }
         else:  # industry call
-            return {"note": "Industry content"}
+            return {"note": "Industry content", "briefing": {"headline": "h"}}
     monkeypatch.setattr(generate_ai, "generate_for_group", mock_generate)
     # Mock both parent and child so import succeeds even without google-genai installed.
     mock_genai = MagicMock()
@@ -1208,8 +1234,9 @@ def test_main_regenerates_complete_file_fresh(monkeypatch, tmp_path):
     (tmp_path / "ai").mkdir(parents=True)
     complete = {
         "date": today,
-        "sectors": {"note": "old", "rotation_phase": {"label": "Defensive", "reasoning": "x"}},
-        "industries": {"note": "old"},
+        "sectors": {"note": "old", "rotation_phase": {"label": "Defensive", "reasoning": "x"},
+                    "briefing": {"headline": "h"}},
+        "industries": {"note": "old", "briefing": {"headline": "h"}},
     }
     (tmp_path / "ai" / f"{today}.json").write_text(json.dumps(complete))
 
@@ -1528,3 +1555,96 @@ def test_run_log_includes_backend_field(monkeypatch, tmp_path):
     generate_ai._write_run_artifacts("complete", False, 1.0, "2026-06-14")
     log_entry = json.loads((tmp_path / "ai_run_log.jsonl").read_text().strip())
     assert log_entry["backend"] == "vertex_ai"
+
+
+# ---------------------------------------------------------------------------
+# Briefing: parse_briefing_response + serializers
+# ---------------------------------------------------------------------------
+
+def test_parse_briefing_full_template():
+    text = (
+        "## Headline\nEnergy leads the tape\n"
+        "## Conviction\nLevel: High\nWhy: Broad breadth across timeframes.\n"
+        "## Rotation Map\n- OUT: Utilities -> IN: Energy - momentum building\n"
+        "## Watchlist\n- Semiconductors - watch for RS new high\n"
+        "## Relative Strength\nEnergy beats SPY on 6/7 timeframes.\n"
+        "## Risks\n- Tech fragile: all-green but low agreement"
+    )
+    out = generate_ai.parse_briefing_response(text)
+    assert out["headline"] == "Energy leads the tape"
+    assert out["conviction"] == {"level": "High", "why": "Broad breadth across timeframes."}
+    assert "Utilities" in out["rotation_map"]
+    assert "Semiconductors" in out["watchlist"]
+    assert "6/7" in out["relative_strength"]
+    assert "fragile" in out["risks"]
+
+
+def test_parse_briefing_tolerates_hashhashhash_and_preamble():
+    """### headers normalize to ##, and any preamble before the first header is dropped."""
+    text = (
+        "Here is your briefing:\n\n"
+        "### Headline\nNarrow rally\n"
+        "### Conviction\nLevel: Low\nWhy: Only two groups green.\n"
+    )
+    out = generate_ai.parse_briefing_response(text)
+    assert out["headline"] == "Narrow rally"
+    assert out["conviction"]["level"] == "Low"
+
+
+def test_parse_briefing_missing_sections_are_absent_keys():
+    """Omitted sections must be absent (not empty strings) so callers can tell."""
+    out = generate_ai.parse_briefing_response("## Headline\nJust a headline")
+    assert out["headline"] == "Just a headline"
+    assert "watchlist" not in out
+    assert "risks" not in out
+
+
+def test_parse_briefing_empty_returns_empty_dict():
+    assert generate_ai.parse_briefing_response("") == {}
+    assert generate_ai.parse_briefing_response(None) == {}
+
+
+def test_parse_briefing_conviction_fallback_without_prefixes():
+    """No Level:/Why: prefixes — scan for a level token and use the rest as why."""
+    out = generate_ai.parse_briefing_response(
+        "## Conviction\nMedium conviction; breadth is mixed today."
+    )
+    assert out["conviction"]["level"] == "Medium"
+    assert out["conviction"]["why"]
+
+
+def test_serialize_rotation_pairs_includes_both_directions():
+    delta = pd.DataFrame({
+        "name": ["Energy", "Utilities", "Tech"],
+        "rank_ytd_delta_5d": [8.0, -7.0, 1.0],
+        "regime_short_long": [0.4, -0.3, 0.0],
+    })
+    out = generate_ai.serialize_rotation_pairs(delta, n=2)
+    assert "Capital LEAVING" in out and "Capital ARRIVING" in out
+    assert "Utilities" in out and "Energy" in out
+    assert "regime" in out
+
+
+def test_serialize_rotation_pairs_empty():
+    out = generate_ai.serialize_rotation_pairs(pd.DataFrame())
+    assert "Not enough history" in out
+
+
+def test_serialize_rs_signals_reports_score_and_flags():
+    delta = pd.DataFrame({
+        "name": ["Energy", "Tech"],
+        "rs_score": [0.85, 0.20],
+        "beats_benchmark_week": [1, 0],
+        "beats_benchmark_month": [1, 0],
+        "rs_new_high": [1, 0],
+        "rs_cross": [0, 1],
+    })
+    out = generate_ai.serialize_rs_signals(delta)
+    assert "Energy" in out and "rs_score" in out
+    assert "RS new highs" in out
+    assert "RS crosses" in out
+
+
+def test_serialize_rs_signals_no_benchmark():
+    out = generate_ai.serialize_rs_signals(pd.DataFrame({"name": ["X"]}))
+    assert "No benchmark" in out

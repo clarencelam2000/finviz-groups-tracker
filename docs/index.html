@@ -844,6 +844,10 @@
       const dateStr = data.date || new Date().toISOString().slice(0, 10);
 
       const lines = [`Finviz AI Note — ${dateStr} (${groupLabel})`];
+      // Lead the share with the briefing headline when present (newer JSON files).
+      const headline = group.briefing && typeof group.briefing.headline === 'string'
+        ? group.briefing.headline.trim() : '';
+      if (headline) lines.push(headline);
       const noteText = group.note
         || (typeof group.briefing === 'string' ? group.briefing : group.briefing?.briefing)
         || '';
@@ -1737,6 +1741,34 @@
       const shareBtn = document.getElementById('ai-share-btn');
       if (shareBtn) shareBtn.disabled = false;
 
+      // Structured briefing (added 2026.06.21) — degrade gracefully on older
+      // JSON files that predate it: `briefing` will simply be undefined.
+      const briefing = activeGroup.briefing || null;
+
+      // Headline hero — punchy one-liner at the very top.
+      if (briefing && typeof briefing.headline === 'string' && briefing.headline.trim()) {
+        html += `<div class="rounded-xl p-4 mb-3 bg-gradient-to-br from-sky-900/50 to-slate-800 border border-sky-700/50">
+          <div class="text-base font-bold text-white leading-snug">${escapeHtml(briefing.headline.trim())}</div>
+        </div>`;
+      }
+
+      // Conviction badge — High / Medium / Low with one-line rationale.
+      if (briefing && briefing.conviction && briefing.conviction.level) {
+        const lvl = briefing.conviction.level;
+        const cm = {
+          'High':   { bg: 'bg-emerald-900/40', border: 'border-emerald-600/50', text: 'text-emerald-300', dot: '#22c55e' },
+          'Medium': { bg: 'bg-yellow-900/40',  border: 'border-yellow-600/50',  text: 'text-yellow-300', dot: '#eab308' },
+          'Low':    { bg: 'bg-rose-900/40',     border: 'border-rose-600/50',    text: 'text-rose-300',   dot: '#f43f5e' },
+        }[lvl] || { bg: 'bg-slate-800', border: 'border-slate-600', text: 'text-slate-300', dot: '#64748b' };
+        html += `<div class="rounded-xl p-4 ${cm.bg} border ${cm.border} mb-3">
+          <div class="flex items-center gap-2 mb-1">
+            <div class="w-3.5 h-3.5 rounded-full flex-shrink-0" style="background-color:${cm.dot}"></div>
+            <div class="text-sm font-bold ${cm.text}">Conviction: ${escapeHtml(lvl)}</div>
+          </div>
+          ${briefing.conviction.why ? `<div class="text-xs text-slate-300 italic leading-relaxed">${escapeHtml(briefing.conviction.why)}</div>` : ''}
+        </div>`;
+      }
+
       // Rotation phase — sectors only. Skip empty / "Unknown" labels.
       const phase = activeGroup.rotation_phase;
       const phaseLabel = phase && phase.label && phase.label !== 'Unknown' ? phase.label : '';
@@ -1780,6 +1812,21 @@
             ? '<p class="text-slate-500 text-xs mt-1">Switch to Sectors for the available note.</p>'
             : ''}
         </div>`;
+      }
+
+      // Structured briefing section cards — each guarded so missing sections
+      // (or old JSON entirely) simply render nothing rather than throwing.
+      if (briefing) {
+        const sectionCard = (key, label, accent) => {
+          const body = briefing[key];
+          if (!body || typeof body !== 'string' || !body.trim()) return;
+          html += `<div class="text-xs font-semibold ${accent} uppercase tracking-wider mt-4 mb-2">${label}</div>
+            <div class="rounded-xl p-4 bg-slate-800 border border-slate-700">${renderMarkdown(body)}</div>`;
+        };
+        sectionCard('rotation_map', 'Rotation Map — From → To', 'text-violet-300');
+        sectionCard('watchlist', 'Watchlist', 'text-sky-300');
+        sectionCard('relative_strength', 'Relative Strength vs S&P', 'text-emerald-300');
+        sectionCard('risks', 'Risks & Fragility', 'text-rose-300');
       }
 
       container.innerHTML = html;
