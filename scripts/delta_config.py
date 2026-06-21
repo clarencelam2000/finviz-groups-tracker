@@ -136,6 +136,17 @@ RS_REGIME_LONG = ["rs_quarter", "rs_half", "rs_year"]
 # entry (currently LOOKBACK_WINDOWS[2] = 20) so no extra compute_ranks pass.
 RS_NEW_HIGH_WINDOW = 20
 
+# Minimum distinct sessions of overlapping group+SPY history required before
+# rs_new_high will emit a 0/1 flag; below this it stays NaN (blank in CSV).
+# Without this gate a "20-session high" computed over only a handful of early
+# sessions flags ~100% of groups in an up-trending tape — every rising group is
+# trivially at its highest-ever RS, making the PWA "NH" badge pure noise. Require
+# the full window so the flag means what it says (a true RS_NEW_HIGH_WINDOW high).
+# Range: 2..RS_NEW_HIGH_WINDOW. Lower = earlier (noisier) signal; the window cap
+# is the strictest meaningful value. Counts distinct sessions, so holiday/weekend
+# gaps don't relax it.
+RS_NEW_HIGH_MIN_SESSIONS = RS_NEW_HIGH_WINDOW
+
 # Window (trading sessions) for rs_cross: did rs_month flip from ≤ 0 to > 0
 # within the last RS_CROSS_WINDOW sessions? 5 sessions ≈ 1 trading week — a
 # tight window catches fresh rotations while filtering noise. Using

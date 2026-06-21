@@ -906,20 +906,27 @@ def rs_history_4sessions():
 class TestComputeRsNewHigh:
     def test_at_window_high_returns_1(self, rs_history_4sessions):
         dates, bench, hist = rs_history_4sessions
-        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4)
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4, min_sessions=4)
         assert s["Tech"] == 1
 
     def test_not_at_window_high_returns_0(self, rs_history_4sessions):
         dates, bench, hist = rs_history_4sessions
-        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4)
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4, min_sessions=4)
         # Energy's max rs_month was +0.5 early; today is +0.2 → not a new high
         assert s["Energy"] == 0
 
     def test_declining_returns_0(self, rs_history_4sessions):
         dates, bench, hist = rs_history_4sessions
-        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4)
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4, min_sessions=4)
         # Finance's highest was session 0 (+3.0); today is +1.5 → not a new high
         assert s["Finance"] == 0
+
+    def test_insufficient_history_returns_nan(self, rs_history_4sessions):
+        # Only 4 sessions exist but the gate demands more → every group is NaN,
+        # not a spurious 1. This is the fix for the "NH on 100% of cards" bug.
+        dates, bench, hist = rs_history_4sessions
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4, min_sessions=20)
+        assert s.isna().all()
 
     def test_single_session_returns_empty(self, rs_history_4sessions):
         dates, bench, hist = rs_history_4sessions
