@@ -677,6 +677,9 @@
     }
 
     // Inline RS chip: "+2.3pp vs S&P" or "-1.1pp vs S&P". Returns '' when null.
+    // Shows chip for ALL non-null values, including within ±RS_SLIGHT (rendered grey = neutral).
+    // Grey signals "SPY data confirmed; spread is small." Option A — suppress neutral chips by
+    // adding `if (Math.abs(v) < RS_SLIGHT) return '';` — tracked in SPRINT.md § RS-4b.
     function rsChip(v) {
       if (v === null || v === undefined) return '';
       const color = rsColor(v);
@@ -1514,7 +1517,7 @@
       if (state.vsMarketView === 'regime') {
         if (descEl) descEl.textContent = 'Short-horizon RS minus long-horizon RS. Positive = newly beating the market; negative = long-established RS leader or laggard.';
         if (whyEl)  { whyEl.textContent = 'ⓘ What is the RS regime? →'; whyEl.onclick = () => __openHub('guide','rs_regime_short_long'); }
-        renderRsRegime(delta, snap, container);
+        renderRsRegime(delta, container);
       } else {
         if (descEl) descEl.textContent = 'How broadly this group beats the S&P 500 across all 7 timeframes. 100% = outperforming in every horizon.';
         if (whyEl)  { whyEl.textContent = 'ⓘ What is RS Score? →'; whyEl.onclick = () => __openHub('guide','rs_score'); }
@@ -1538,8 +1541,10 @@
         const pct     = (score * 100).toFixed(0);
         const rsDay   = pf(row.rs_day);
         const rsMo    = pf(row.rs_month);
-        const accel   = pf(row.rs_accel);
-        const badge   = accelBadge(accel);
+        const accel     = pf(row.rs_accel);
+        const badge     = accelBadge(accel);
+        const slope     = pf(row.rs_slope);
+        const slopeHtml = slopeGlyph(slope);   // ↑↑/↑/~/↓/↓↓ — RS trend (10-session LS slope)
 
         const subParts = [
           rsDay !== null ? `Day: ${rsDay >= 0 ? '+' : ''}${rsDay.toFixed(1)}pp` : null,
@@ -1551,7 +1556,7 @@
             <span class="text-sm font-bold text-slate-500 w-5 text-right flex-shrink-0">${i+1}</span>
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between gap-1">
-                <div class="text-sm font-medium text-white truncate">${row.name}</div>
+                <div class="text-sm font-medium text-white truncate">${row.name}${slopeHtml}</div>
                 ${badge}
               </div>
               ${subParts ? `<div class="text-xs text-slate-400 mt-0.5">${subParts}</div>` : ''}
@@ -1566,8 +1571,7 @@
       }).join('');
     }
 
-    function renderRsRegime(delta, snap, container) {
-      const snapMap    = Object.fromEntries((snap || []).map(r => [r.name, r]));
+    function renderRsRegime(delta, container) {
       const withRegime = delta.map(r => ({ ...r, _rs_regime: pf(r.rs_regime_short_long) }));
       const valid      = withRegime.filter(r => r._rs_regime !== null).sort((a, b) => b._rs_regime - a._rs_regime);
       const invalid    = withRegime.filter(r => r._rs_regime === null);
