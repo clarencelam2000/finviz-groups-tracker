@@ -928,7 +928,17 @@ class TestComputeRsNewHigh:
         s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4, min_sessions=20)
         assert s.isna().all()
 
+    def test_exactly_min_sessions_emits_signal(self, rs_history_4sessions):
+        # Boundary: 4 distinct sessions with min_sessions=4 is enough → real 0/1,
+        # not NaN. Guards the >= edge of the gate.
+        dates, bench, hist = rs_history_4sessions
+        s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=4, min_sessions=4)
+        assert s["Tech"] == 1
+        assert not s.isna().any()
+
     def test_single_session_returns_empty(self, rs_history_4sessions):
+        # window=1 trips the len<2 guard in _build_rs_history before the
+        # min_sessions gate is ever reached, so the result is an empty Series.
         dates, bench, hist = rs_history_4sessions
         s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 12), window=1)
         assert len(s) == 0
