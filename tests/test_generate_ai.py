@@ -384,6 +384,19 @@ def _make_routed_client(routes):
 
 
 # Markers uniquely identifying each task's prompt (for _make_routed_client).
+#
+# Each marker is a short literal substring that appears exactly once in its
+# prompt template.  If you rename a phrase in a prompt, update the matching
+# marker here too — otherwise _make_routed_client will throw AssertionError
+# ("no route matched prompt") and the test will fail with a confusing message.
+#
+# Where each marker lives in generate_ai.py:
+#   _PULSE_MARK   → build_pulse_prompt()      "Set the level by these thresholds"
+#   _ROTMAP_MARK  → build_rotation_map_prompt() "PAIRING RULE:"
+#   _WATCH_MARK   → build_watchlist_prompt()  "WATCHLIST CANDIDATES:"  (section header)
+#   _RISK_MARK    → build_risk_radar_prompt() "risk-aware markets analyst"
+#   _PHASE_MARK   → build_phase_prompt()      "Classic phases"
+#   _NOTE_MARK    → build_note_prompt()       "concise daily note"
 _PULSE_MARK = "Set the level by these thresholds"
 _ROTMAP_MARK = "PAIRING RULE"
 _WATCH_MARK = "WATCHLIST CANDIDATES"

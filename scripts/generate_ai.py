@@ -14,6 +14,7 @@ Exits 0 silently when the selected backend is not configured.
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from datetime import date, datetime, timezone
@@ -364,16 +365,21 @@ def serialize_divergences(snap_df: pd.DataFrame, delta_df: pd.DataFrame) -> str:
 
 
 def _perf_lookup(snap_df: pd.DataFrame, cols):
-    """name -> {col: value} map for the requested perf columns (empty if absent)."""
+    """name -> {col: value} map for the requested perf columns (empty if absent).
+
+    Uses set_index/to_dict instead of iterrows; no behaviour change, but avoids
+    the O(n) Python loop over DataFrame rows.
+    """
     if snap_df is None or snap_df.empty or "name" not in snap_df.columns:
         return {}
     have = [c for c in cols if c in snap_df.columns]
     if not have:
         return {}
-    out = {}
-    for _, r in snap_df.drop_duplicates("name").iterrows():
-        out[r["name"]] = {c: r.get(c) for c in have}
-    return out
+    return (
+        snap_df.drop_duplicates("name")
+        .set_index("name")[have]
+        .to_dict("index")
+    )
 
 
 def serialize_breadth_metrics(snap_df: pd.DataFrame, delta_df: pd.DataFrame) -> str:
@@ -657,8 +663,11 @@ DATA:
 def _split_markdown_sections(text: str, alias_map) -> dict:
     """Split `## `-delimited markdown into {canonical_key: body}. Tolerant of
     `###`/`####`, preamble before the first header, and renamed headers (via the
-    alias_map). Omitted sections are simply absent keys (never empty strings)."""
-    import re  # noqa: PLC0415 — local; only needed here
+    alias_map). Omitted sections are simply absent keys (never empty strings).
+
+    alias_map: list of (canonical_key, tuple_of_lowercase_aliases) pairs, e.g.:
+        [("headline", ("headline", "tl;dr")), ("conviction", ("conviction",))]
+    """
     text = (text or "").strip()
     if not text:
         return {}
@@ -715,7 +724,6 @@ def _parse_conviction(body: str) -> dict:
     """Parse the conviction body into {level, why}. Tolerant of missing prefixes:
     falls back to a word-boundary scan for a High/Medium/Low token (so a phrase
     like 'Medium-term risk' in a Why line does NOT get mistaken for the level)."""
-    import re  # noqa: PLC0415 — local; only needed here
     result = {"level": "", "why": ""}
     for line in body.split("\n"):
         low = line.strip().lower()
@@ -836,6 +844,24 @@ def _build_prompt(spec: dict, group_type: str, snap_df, delta_df, date_str: str)
     return fn(snap_df, delta_df, date_str)
 
 
+# TASK_SPECS — one entry per AI call.  Each entry drives one Gemini call per
+# group type listed in "group_types".  Total call count per daily run:
+#
+#   note          × 2 (sector + industry)  = 2 calls
+#   rotation_phase × 1 (sector only)       = 1 call
+#   pulse          × 2                     = 2 calls
+#   rotation_map   × 2                     = 2 calls
+#   watchlist      × 2                     = 2 calls
+#   risk_radar     × 2                     = 2 calls
+#                                  TOTAL   = 11 calls/run × 3 runs/day = ~33/day
+#
+# This is intentionally more calls than the original single-call design.  Each
+# task has its own focused prompt and purpose-curated input, so adherence and
+# output quality are much better.  The cost increase is acceptable on Vertex AI
+# (no per-day request ceiling; pay-per-token).  If budget becomes a concern,
+# the four briefing tasks (pulse/rotation_map/watchlist/risk_radar) can be
+# collapsed back into one call by merging their prompts and re-adding a combined
+# parser — see git history for the pre-refactor design.
 TASK_SPECS = [
     {
         "name": "note",
@@ -846,16 +872,21 @@ TASK_SPECS = [
     },
     {
         "name": "rotation_phase",
-        "group_types": ("sector",),
+        "group_types": ("sector",),   # sectors only — no industry-level phase
         "build_prompt": build_phase_prompt,
         "generation_config": {"temperature": 0.2},
     },
-    # Focused briefing tasks — one job per call (replaces the old single mega-call).
-    # On Vertex AI there is no per-day request ceiling, so splitting buys much better
-    # per-section adherence and isolates failures. Low temps on the structural tasks
-    # keep the bullet/label syntax stable; the pulse/risk calls allow a little more.
+    # ---- Focused briefing tasks (one job per call) ---------------------------
+    # On Vertex AI there is no per-day request ceiling, so the single mega-call
+    # is split into four: pulse (headline+conviction), rotation_map, watchlist,
+    # and risk_radar (RS+risks).  Each prompt does one job, which dramatically
+    # improves section adherence and isolates failures (a bad watchlist response
+    # doesn't corrupt the rotation map).  Low temps on structural tasks keep the
+    # bullet/label syntax stable; pulse/risk allow a little more creativity.
     {
-        "name": "pulse",  # headline + conviction -> {headline, conviction:{level,why}}
+        "name": "pulse",
+        # headline: one punchy line. conviction: High/Med/Low + one-sentence why.
+        # Parsed into {headline: str, conviction: {level: str, why: str}}.
         "group_types": ("sector", "industry"),
         "build_prompt": build_pulse_prompt,
         "pass_group_type": True,
@@ -863,21 +894,27 @@ TASK_SPECS = [
         "generation_config": {"temperature": 0.4},
     },
     {
-        "name": "rotation_map",  # markdown string (OUT->IN bullets or Outflows/Inflows)
+        "name": "rotation_map",
+        # Freeform markdown string — OUT->IN pairing bullets, or plain
+        # Outflows/Inflows lists when no clean economic pairing exists.
         "group_types": ("sector", "industry"),
         "build_prompt": build_rotation_map_prompt,
         "pass_group_type": True,
         "generation_config": {"temperature": 0.25},
     },
     {
-        "name": "watchlist",  # markdown string (3-5 tagged-trigger bullets)
+        "name": "watchlist",
+        # Freeform markdown — 3-5 bullets, each group tagged with its trigger
+        # type (rs_cross / rs_new_high / emerging / fading).
         "group_types": ("sector", "industry"),
         "build_prompt": build_watchlist_prompt,
         "pass_group_type": True,
         "generation_config": {"temperature": 0.25},
     },
     {
-        "name": "risk_radar",  # relative strength + risks -> {relative_strength, risks}
+        "name": "risk_radar",
+        # Parsed into {relative_strength: str, risks: str} — two sections from
+        # one call since they both draw on RS + divergence data.
         "group_types": ("sector", "industry"),
         "build_prompt": build_risk_radar_prompt,
         "pass_group_type": True,
