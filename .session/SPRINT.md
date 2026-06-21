@@ -154,6 +154,15 @@ _Dependency:_ None. Works today.
 
 ---
 
+#### Start Here Onboarding — deferred items
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| PWATEST-LOOKBACK | **Fix 3 pre-existing `TestPWALookbackWindows` failures** | `tests/test_functional_playwright.py` | S | These failures pre-date the Start Here feature and are unrelated to it. Tracked here so they don't get waved off permanently. Likely covered by PWA-TEST-GAP work — resolve together. Do not block Start Here commits on this. |
+| ONBOARD-DL-UX | **Revisit carousel deep-link dismiss behavior** | `docs/index.html` | S | Current decision (two-way door): "Open →" on a mid-tour slide calls `switchTab()` + dismisses the carousel immediately (sets `fvt_intro_seen_v1`). Rationale: user chose to navigate; leaving carousel open behind would be confusing; they can re-open via hub "Start Here". Revisit if user feedback shows they want to browse back mid-tour without losing their slide position. Code is marked with `// ONBOARD-DL-UX` comment. |
+
+---
+
 #### Lookback config + momentum variants
 
 Plan: `planning/compute-deltas-lookbacks-and-momentum.md`. Slices 1–5 landed on
