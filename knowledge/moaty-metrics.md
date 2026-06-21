@@ -214,6 +214,35 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   Configured via `RS_REGIME_SHORT` / `RS_REGIME_LONG` in `scripts/delta_config.py`.
 - **User one-liner:** "Whether this group is a new market-beater (+) or a long-established one (−) — positive means relative strength is freshly emerging."
 
+## beats_benchmark_X (beats_benchmark_day / _week / _month / … / _ytd)
+- **Source:** `compute_beats_benchmark` (`scripts/compute_deltas.py`). Boolean per
+  timeframe: 1 when `rs_X > 0` (the group beats SPY for that horizon), 0 otherwise.
+  Blank when SPY data is absent. The 7 columns parallel `RS_BEAT_TIMEFRAMES`.
+- **Signals:** the count of 1s across all 7 timeframes ("beats N/7 tf") gives a
+  quick breadth-of-outperformance read distinct from `rs_score` (which uses percentile
+  ranking of spreads). 7/7 = outperforming across every horizon.
+- **User one-liner:** "How many of the 7 standard timeframes this group is currently outperforming the S&P 500 on — shown as "beats N/7 tf" on cards."
+
+## rs_new_high
+- **Source:** `compute_rs_new_high` (`scripts/compute_deltas.py`). 1 when today's
+  `rs_month` (canonical RS line, `RS_SLOPE_COL`) equals or exceeds its maximum over
+  the trailing `RS_NEW_HIGH_WINDOW = 20` trading sessions; 0 otherwise. NaN when fewer
+  than 2 sessions of overlapping SPY + group data exist in the window.
+- **Signals:** classic IBD-style RS-new-high flag. A group posting a new RS high while
+  its absolute trend is still rising is among the strongest leadership signals.
+- **User one-liner:** "The group's RS spread vs SPY is at its highest point in the last 20 sessions — a classic IBD-style leadership signal."
+
+## rs_cross
+- **Source:** `compute_rs_cross` (`scripts/compute_deltas.py`). 1 when `rs_month`
+  crossed from ≤ 0 to > 0 within the last `RS_CROSS_WINDOW = 5` trading sessions
+  (today must be > 0; at least one prior session in the window must be ≤ 0). 0 when
+  today's RS is non-positive, or the group has been above 0 throughout the window.
+  NaN when fewer than 2 sessions of overlapping data exist.
+- **Signals:** discrete rotation trigger. A fresh cross above 0 means the group has
+  only *just* begun beating the market — earlier-stage than a group posting RS new
+  highs. The 5-session window keeps it tight so it doesn't fire on noise.
+- **User one-liner:** "This group's RS spread just flipped from lagging to beating the market within the last 5 sessions — a rotation trigger."
+
 ## Rotation Phase (AI — sectors only)
 - **Definition:** an AI-generated read of where the broad market sits in its
   cycle, labeled Early Cycle, Mid Cycle, Late Cycle, or Defensive, with a short
