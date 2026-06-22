@@ -13,6 +13,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <style>
+    :root {
+      --safe-area-inset-top: env(safe-area-inset-top);
+    }
     body {
       padding-top: env(safe-area-inset-top);
       padding-bottom: env(safe-area-inset-bottom);
@@ -32,7 +35,7 @@
 <body class="bg-slate-900 text-slate-100 min-h-screen font-sans select-none">
 
   <!-- Header -->
-  <header class="sticky top-0 z-20 bg-slate-900/95 backdrop-blur-sm border-b border-slate-700 px-4 pb-2"
+  <header id="header" class="sticky top-0 z-20 bg-slate-900/95 backdrop-blur-sm border-b border-slate-700 px-4 pb-2"
           style="padding-top: calc(env(safe-area-inset-top) + 0.6rem)">
     <div class="flex items-center justify-between">
       <div>
@@ -62,7 +65,7 @@
   </header>
 
   <!-- One-time post-update banner (shown by applyUnseenIndicator when a release is unseen) -->
-  <div id="update-banner" class="hidden bg-sky-900/60 border-b border-sky-700 px-4 py-2 flex items-center justify-between gap-3 text-sm">
+  <div id="update-banner" class="hidden relative z-30 bg-sky-900/60 border-b border-sky-700 px-4 py-2 flex items-center justify-between gap-3 text-sm">
     <span id="update-banner-text" class="text-sky-100 truncate">What's new</span>
     <div class="flex items-center gap-2 flex-shrink-0">
       <button id="update-banner-see" class="text-xs font-medium px-2 py-1 rounded bg-sky-700 text-sky-100 active:bg-sky-600">See what's new</button>
@@ -2972,12 +2975,27 @@
     function getSeenRelease() { try { return localStorage.getItem(SEEN_RELEASE_KEY); } catch(e) { return null; } }
     function setSeenRelease(v) { try { localStorage.setItem(SEEN_RELEASE_KEY, v); } catch(e) {} }
 
+    function updateTabBarPosition() {
+      const header = document.getElementById('header');
+      const banner = document.getElementById('update-banner');
+      const tabBar = document.getElementById('tab-bar');
+      if (!tabBar) return;
+      const headerHeight = header ? header.offsetHeight : 58;
+      const bannerVisible = banner && !banner.classList.contains('hidden');
+      const bannerHeight = bannerVisible ? banner.offsetHeight : 0;
+      const rootStyles = getComputedStyle(document.documentElement);
+      const safeAreaStr = rootStyles.getPropertyValue('--safe-area-inset-top').trim();
+      const safeAreaTop = safeAreaStr.includes('px') ? parseInt(safeAreaStr) : 0;
+      tabBar.style.top = `${safeAreaTop + headerHeight + bannerHeight}px`;
+    }
+
     function clearUnseen() {
       if (RELEASES && RELEASES.current) setSeenRelease(RELEASES.current);
       const dot = document.getElementById('hub-dot');
       if (dot) dot.classList.add('hidden');
       const banner = document.getElementById('update-banner');
       if (banner) banner.classList.add('hidden');
+      updateTabBarPosition();
     }
 
     function applyUnseenIndicator() {
@@ -2998,6 +3016,7 @@
         const txt = document.getElementById('update-banner-text');
         if (txt) txt.textContent = rel.title ? `What's new: ${rel.title}` : "What's new";
         if (banner) banner.classList.remove('hidden');
+        updateTabBarPosition();
       }
     }
 
@@ -3594,6 +3613,7 @@
     loadPrefs();
     initUIFromState();
     loadAndRender();
+    updateTabBarPosition();
     loadReleases();
     _wireIntroControls();
     // Show first-run carousel once; fvt_intro_seen_v1 persists across reloads.
