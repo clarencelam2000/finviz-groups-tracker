@@ -13,8 +13,8 @@
 | 0 | This plan + ADR-006 | 🟢 Done | `docs: revise AI capture plan per review` |
 | 1 | Tier-2 debug capture (`CallResult` + `--capture`) | 🟢 Done | PR #155 |
 | 2 | `--preview` (build prompts, no API) | 🟢 Done | PR #155 |
-| 3 | Prompt snapshot tests | ⬜ Not started | |
-| 4 | Tier-1 provenance + PWA "Behind this" drawer | ⬜ Not started | |
+| 3 | Prompt snapshot tests | 🟢 Done | PR #160 |
+| 4 | Tier-1 provenance + PWA "Behind this" drawer | 🟢 Done | PR #160 |
 | 5 | `tools/ai-lab.html` offline viewer | ⬜ Not started | |
 | 6 | `scripts/eval_ai.py` (offline guards; opt-in LLM-judge) | ⬜ Not started | |
 | 7 | Vertex express-key auth path | 🟢 Done | PR #155 |
