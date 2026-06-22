@@ -3263,7 +3263,8 @@
       const name = card.dataset.moverName;
       if (!name) return;
       switchTab('lookup');
-      document.querySelector('main').scrollTop = 0;
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0; // iOS Safari
       doGroupLookup(name, state.group);
     });
 
