@@ -1352,7 +1352,7 @@
       if (state.momentumView === 'rotation') {
         descEl.textContent = 'Rotation signal: recent (wk+mo) vs. long-horizon (3mo+6mo+yr) strength. Positive = rotating in.';
         if (whyEl) { whyEl.textContent = 'ⓘ What does regime mean? →'; whyEl.onclick = () => __openHub('guide','regime_short_long'); }
-        renderRotation(delta, snap, container);
+        renderRotation(delta, container);
       } else {
         descEl.textContent = 'Confirmed momentum: breadth across all 7 timeframes, gated by cross-timeframe agreement. Raw score shown below each name.';
         if (whyEl) { whyEl.textContent = 'ⓘ What do the badges mean? →'; whyEl.onclick = () => __openHub('guide','momentum_accel'); }
@@ -1365,6 +1365,9 @@
       // raw score: it discounts groups whose strength rides on a single outlier timeframe,
       // so a broad-based leader ranks above a narrow one. Raw score shown as secondary
       // context. See GUIDE 'momentum_confirmed' and CLAUDE.md deltas.csv columns.
+      // momentum_confirmed was added to the pipeline in June 2026; rows from older CSV
+      // snapshots will have '' and be filtered out. getLatest() serves only the most
+      // recent date, so in practice this only matters if live data predates the column.
       const sorted = [...delta]
         .filter(r => r.momentum_confirmed !== '' && r.momentum_confirmed !== undefined)
         .sort((a, b) => (pf(b.momentum_confirmed) ?? 0) - (pf(a.momentum_confirmed) ?? 0));
@@ -1403,13 +1406,14 @@
       }).join('');
     }
 
-    function renderRotation(delta, snap, container) {
-      const snapMap = Object.fromEntries((snap || []).map(r => [r.name, r]));
+    function renderRotation(delta, container) {
       // n = total groups for this date. delta is latest-date-only (getLatest), so its
       // length matches the pipeline's n = len(df_day), which counts ALL rows (NaN-perf
       // ranks go to the bottom via na_option='bottom'). This lets the client reproduce
       // regime_short_long exactly: percentile = (n - rank) / (n - 1). See
       // delta_config.py _perf_percentiles() / REGIME_SHORT / REGIME_LONG.
+      // IMPORTANT: do not pre-filter `delta` before this call — nGroups must equal the
+      // full cohort size or bucketPctile percentiles will be wrong.
       const nGroups = delta.length;
       // Mean cross-sectional percentile (0–1) over the given rank columns; skips nulls.
       // rank_ytd is deliberately excluded — REGIME_SHORT/LONG omit perf_ytd.
