@@ -15,8 +15,8 @@
 | 2 | `--preview` (build prompts, no API) | 🟢 Done | PR #155 |
 | 3 | Prompt snapshot tests | 🟢 Done | PR #160 |
 | 4 | Tier-1 provenance + PWA "Behind this" drawer | 🟢 Done | PR #160 |
-| 5 | `tools/ai-lab.html` offline viewer | ⬜ Not started | |
-| 6 | `scripts/eval_ai.py` (offline guards; opt-in LLM-judge) | ⬜ Not started | |
+| 5 | `tools/ai-lab.html` offline viewer | 🟢 Done | PR #160 |
+| 6 | `scripts/eval_ai.py` (offline guards; opt-in LLM-judge) | 🟢 Done | PR #160 |
 | 7 | Vertex express-key auth path | 🟢 Done | PR #155 |
 | S | Stretch: PWA `?debug=1`, interactive regenerate/Q&A | ⬜ Backlog | |
 
