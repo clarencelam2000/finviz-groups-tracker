@@ -1275,13 +1275,18 @@
         const mom  = pf(row.momentum_score);
         const subline = [
           rank !== null ? `YTD #${rank}` : null,
-          mom  !== null ? `Score ${(mom*100).toFixed(0)}%` : null,
+          mom  !== null ? `Mom ${(mom*100).toFixed(0)}%` : null,
         ].filter(Boolean).join(' · ');
+
+        // RS signal badges — only on gainers; NH wins over cross (stronger signal)
+        const nh    = isGainer ? rsNewHighBadge(row.rs_new_high) : '';
+        const cross = isGainer && !nh ? rsCrossBadge(row.rs_cross) : '';
+        const rsBadges = nh || cross;
 
         return `
           <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 ${border} flex items-center gap-3">
             <div class="flex-1 min-w-0">
-              <div class="text-sm font-medium text-white truncate">${row.name}</div>
+              <div class="text-sm font-medium text-white truncate">${row.name}${rsBadges ? ' ' + rsBadges : ''}</div>
               <div class="text-xs text-slate-400 mt-0.5">${subline}</div>
             </div>
             <div class="text-right flex-shrink-0">
