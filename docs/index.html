@@ -1284,14 +1284,15 @@
         const rsBadges = nh || cross;
 
         return `
-          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 ${border} flex items-center gap-3">
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 ${border} flex items-center gap-3 cursor-pointer active:opacity-75 select-none"
+               data-mover-name="${escapeHtml(row.name)}">
             <div class="flex-1 min-w-0">
               <div class="text-sm font-medium text-white truncate">${row.name}${rsBadges ? ' ' + rsBadges : ''}</div>
               <div class="text-xs text-slate-400 mt-0.5">${subline}</div>
             </div>
             <div class="text-right flex-shrink-0">
               <div class="text-base font-bold ${color}">${sign}${spots} spots</div>
-              <div class="text-xs text-slate-500">vs ${win} ago</div>
+              <div class="text-xs text-slate-500">vs ${win} ago <span class="text-slate-600">›</span></div>
             </div>
           </div>`;
       }
@@ -3254,6 +3255,17 @@
       btn.addEventListener('click', () => switchGroup(btn.dataset.group)));
 
     // Lookback button listeners are wired in renderLookbackButtons() after CSV load (LB-FF1).
+
+    // Mover card tap → Lookup: single delegated listener on the content container.
+    document.getElementById('movers-content').addEventListener('click', e => {
+      const card = e.target.closest('[data-mover-name]');
+      if (!card) return;
+      const name = card.dataset.moverName;
+      if (!name) return;
+      switchTab('lookup');
+      document.querySelector('main').scrollTop = 0;
+      doGroupLookup(name, state.group);
+    });
 
     document.getElementById('sort-metric').addEventListener('change', e => {
       state.sortMetric = e.target.value;
