@@ -352,6 +352,7 @@
       },
       fetchLog: null,
       aiData: null,
+      provenanceData: null,
       latestAiDate: null,
       latestSnapshotDate: null,
       currentAiDate: null,
@@ -1081,6 +1082,18 @@
       }
     }
 
+    async function loadProvenance(dateStr) {
+      // Tier-1 provenance: input data blocks that backed the AI calls for this date.
+      // Absent before 2026-06-22 (pre-Phase-4 files) — drawer silently omitted.
+      if (!dateStr) { state.provenanceData = null; return; }
+      try {
+        const res = await fetch(`${BASE}/ai/provenance/${dateStr}.json`);
+        state.provenanceData = res.ok ? await res.json() : null;
+      } catch {
+        state.provenanceData = null;
+      }
+    }
+
     function renderPipeline() {
       const section = document.getElementById('pipeline-section');
       const logs = state.fetchLog;
@@ -1803,6 +1816,23 @@
       const sectors    = data.sectors    || {};
       const industries = data.industries || {};
       const activeGroup = state.group === 'sectors' ? sectors : industries;
+      const groupPrefix = state.group === 'sectors' ? 'sectors' : 'industries';
+      const prov = state.provenanceData;
+
+      // Render an expandable "Behind this" drawer showing the raw input data
+      // block that was fed to the model. Only appears when Tier-1 provenance is
+      // available (i.e. data/ai/provenance/{date}.json exists). Absent for dates
+      // before Phase 4 landed (2026-06-22). Uses <details> — no JS toggle needed.
+      function behindThis(taskName) {
+        if (!prov) return '';
+        const entry = prov[`${groupPrefix}.${taskName}`];
+        if (!entry || !entry.input_blocks) return '';
+        return `<details class="mt-2">
+          <summary class="text-xs text-slate-500 cursor-pointer hover:text-slate-400 select-none inline-flex items-center gap-1">ⓘ Behind this</summary>
+          <div class="mt-2 p-3 bg-slate-900 rounded-lg border border-slate-600/50 text-xs text-slate-400 font-mono whitespace-pre-wrap leading-relaxed overflow-x-auto">${escapeHtml(entry.input_blocks)}</div>
+        </details>`;
+      }
+
       let html = '';
 
       // Generated-at caption with relative time
@@ -1853,6 +1883,7 @@
             <div class="text-sm font-bold ${cm.text}">Conviction: ${escapeHtml(lvl)}</div>
           </div>
           ${pulse.conviction.why ? `<div class="text-xs text-slate-300 italic leading-relaxed">${escapeHtml(pulse.conviction.why)}</div>` : ''}
+          ${behindThis('pulse')}
         </div>`;
       }
 
@@ -1875,6 +1906,7 @@
               <button class="why-link ml-auto text-xs text-sky-400 active:text-sky-300 flex-shrink-0" onclick="__openHub('guide','rotation_phase')" title="What does this mean?">ⓘ</button>
             </div>
             ${phase.reasoning ? `<div class="text-xs text-slate-300 italic leading-relaxed">${escapeHtml(phase.reasoning)}</div>` : ''}
+            ${behindThis('rotation_phase')}
           </div>`;
         if (state.group === 'sectors') {
           html += `<div id="ai-phase-history" class="mb-3"></div>`;
@@ -1889,6 +1921,7 @@
       if (note && typeof note === 'string' && note.trim()) {
         html += `<div class="rounded-xl p-4 bg-slate-800 border border-slate-700">
           ${renderMarkdown(note)}
+          ${behindThis('note')}
         </div>`;
       } else {
         html += `<div class="rounded-xl p-4 bg-slate-800 border border-slate-700 text-center">
@@ -1902,16 +1935,21 @@
       // Briefing section cards — each guarded so a missing field (or old JSON
       // entirely) simply renders nothing rather than throwing. renderMarkdown
       // runs all model text through escapeHtml, so card bodies are XSS-safe.
-      const briefingCard = (body, label, accent) => {
+      // taskName (optional) enables the "Behind this" drawer for cards with a
+      // 1:1 fkey mapping; risk_radar spans two sections so it's handled inline.
+      const briefingCard = (body, label, accent, taskName = null) => {
         if (!body || typeof body !== 'string' || !body.trim()) return;
+        const behind = taskName ? behindThis(taskName) : '';
         html += `<div class="text-xs font-semibold ${accent} uppercase tracking-wider mt-4 mb-2">${label}</div>
-          <div class="rounded-xl p-4 bg-slate-800 border border-slate-700">${renderMarkdown(body)}</div>`;
+          <div class="rounded-xl p-4 bg-slate-800 border border-slate-700">${renderMarkdown(body)}${behind}</div>`;
       };
-      briefingCard(activeGroup.rotation_map, 'Rotation Map — From → To', 'text-violet-300');
-      briefingCard(activeGroup.watchlist, 'Watchlist', 'text-sky-300');
+      briefingCard(activeGroup.rotation_map, 'Rotation Map — From → To', 'text-violet-300', 'rotation_map');
+      briefingCard(activeGroup.watchlist, 'Watchlist', 'text-sky-300', 'watchlist');
       const riskRadar = activeGroup.risk_radar || null;
       if (riskRadar) {
-        briefingCard(riskRadar.relative_strength, 'Relative Strength vs S&P', 'text-emerald-300');
+        // risk_radar covers two display sections but shares one provenance fkey.
+        // Show "Behind this" only on the first section to avoid duplication.
+        briefingCard(riskRadar.relative_strength, 'Relative Strength vs S&P', 'text-emerald-300', 'risk_radar');
         briefingCard(riskRadar.risks, 'Risks & Fragility', 'text-rose-300');
       }
 
@@ -1967,9 +2005,12 @@
       if (found) {
         state.currentAiDate = found.dateStr;
         state.aiData = found.data;
+        state.provenanceData = null; // cleared; loadProvenance below re-fills it
+        loadProvenance(found.dateStr).catch(() => {});
       } else {
         // Mark sentinel so renderAI can show "no data" message
         state.aiData = { _noData: true };
+        state.provenanceData = null;
       }
       renderAI();
       updateAINavUI();
@@ -2849,6 +2890,8 @@
       if (state.aiData && !state.aiData._noData && Object.keys(state.aiData).length > 0) {
         const aiDate = state.aiData.date || latestDate;
         state.latestAiDate = aiDate;
+        // Load Tier-1 provenance for the "Behind this" drawer (non-blocking, best-effort)
+        loadProvenance(aiDate).catch(() => {});
       }
       setLoading(false);
       render();
@@ -3318,6 +3361,7 @@
       state.data.industries = { snap: null, delta: null, deltaAll: null };
       state.fetchLog = null;
       state.aiData = null;
+      state.provenanceData = null;
       state.latestAiDate = null;
       state.latestSnapshotDate = null;
       state.currentAiDate = null;

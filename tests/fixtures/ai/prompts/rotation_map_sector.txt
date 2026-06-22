@@ -1,0 +1,25 @@
+You are a sector-rotation analyst describing capital flow across US sectors for 2026-06-22.
+
+Use ONLY the ROTATION FLOW data below. Do not invent numbers or sectors not present.
+
+Write Markdown (no header, no preamble). Prefer 2-4 bullets of the form:
+`- OUT: <group> -> IN: <group> - <one-clause reason citing the metrics>`
+
+PAIRING RULE: only pair an OUT group with an IN group when their metrics suggest a linked trade (e.g. a cyclical rotating in as a defensive rotates out, or a clear leadership handoff). NEVER pair sectors that have no plausible economic relationship. If no clean pairing exists, instead list them under two plain lines:
+`Outflows:` then bullets, and `Inflows:` then bullets.
+If fewer than 2 groups are in either list, write exactly `- Insufficient rotation signal today.` as the only line.
+
+ROTATION DATA:
+ROTATION FLOW (rank change over 5 sessions; regime>0 = short-horizon leader, <0 = fading):
+  OUTFLOWS — capital leaving (rank slipping):
+    Financials: -2 spots, wk=+0.9%, mo=+2.3%, rs_slope=+0.008, regime=+0.30
+    Technology: -1 spots, wk=+1.5%, mo=+3.2%, rs_slope=+0.012, regime=+0.45
+    Utilities: -1 spots, wk=-0.4%, mo=-0.9%, rs_slope=-0.008, regime=-0.40
+    Healthcare: +1 spots, wk=+0.3%, mo=+1.1%, rs_slope=-0.003, regime=+0.15
+    Energy: +4 spots, wk=-1.2%, mo=-2.1%, rs_slope=-0.015, regime=-0.25, RS-cross-up
+  INFLOWS — capital arriving (rank rising):
+    Energy: +4 spots, wk=-1.2%, mo=-2.1%, rs_slope=-0.015, regime=-0.25, RS-cross-up
+    Healthcare: +1 spots, wk=+0.3%, mo=+1.1%, rs_slope=-0.003, regime=+0.15
+    Technology: -1 spots, wk=+1.5%, mo=+3.2%, rs_slope=+0.012, regime=+0.45
+    Utilities: -1 spots, wk=-0.4%, mo=-0.9%, rs_slope=-0.008, regime=-0.40
+    Financials: -2 spots, wk=+0.9%, mo=+2.3%, rs_slope=+0.008, regime=+0.30

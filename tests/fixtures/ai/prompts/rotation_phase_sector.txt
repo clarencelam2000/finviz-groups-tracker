@@ -1,0 +1,24 @@
+You are a macro analyst specializing in sector rotation. Classify the current US market rotation phase for 2026-06-22.
+
+Classic phases:
+- Early Cycle: Financials, Consumer Discretionary leading
+- Mid Cycle: Industrials, Materials, Technology leading
+- Late Cycle: Energy, Materials leading; Utilities/Healthcare lagging
+- Defensive: Utilities, Healthcare, Consumer Staples leading; Cyclicals lagging
+
+DATA:
+STRENGTH SIGNALS:
+  Breadth: 3 of 5 groups are all-green (positive across week, month, quarter, half, ytd).
+  All-green: Technology (momentum 0.88); Financials (momentum 0.72); Healthcare (momentum 0.55)
+  Sustained strong (top 3 across 1/3/6-month rank): Technology, Financials, Healthcare
+
+MOMENTUM LEADERS (score 0=weakest, 1=strongest):
+  Technology: 0.880 (rank_ytd=1)
+  Financials: 0.720 (rank_ytd=2)
+  Healthcare: 0.550 (rank_ytd=3)
+  Energy: 0.350 (rank_ytd=4)
+  Utilities: 0.180 (rank_ytd=5)
+
+Respond in exactly two plain-text lines (no code blocks, no markdown):
+Label: <exactly one of Early Cycle, Mid Cycle, Late Cycle, Defensive>
+Why: <one sentence naming which sectors are leading and why it fits>

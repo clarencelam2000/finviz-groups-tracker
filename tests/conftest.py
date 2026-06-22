@@ -1,6 +1,15 @@
 import pandas as pd
 import pytest
 
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--update-snapshots",
+        action="store_true",
+        default=False,
+        help="Regenerate golden prompt snapshots in tests/fixtures/ai/prompts/",
+    )
+
 SNAPSHOT_COLS = [
     "date", "collected_at", "group_type", "name", "stocks", "market_cap",
     "pe", "fwd_pe", "perf_day", "perf_week", "perf_month", "perf_quarter",

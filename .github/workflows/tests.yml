@@ -27,6 +27,8 @@ jobs:
           pytest tests/ -v \
             --ignore=tests/test_collect_parsing.py \
             --ignore=tests/test_functional_playwright.py
+      - name: Run eval_ai guards on captured outputs (if any)
+        run: python scripts/eval_ai.py --all
 
   worker-test:
     runs-on: ubuntu-latest

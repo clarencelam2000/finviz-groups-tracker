@@ -580,7 +580,9 @@ def test_call_api_happy_path(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda _: None)
     client = _make_client(["  hello world  "])
     result = generate_ai._call_api(client, "prompt")
-    assert result == "hello world"
+    assert result.text == "hello world"
+    assert isinstance(result.latency, float) and result.latency >= 0
+    assert isinstance(result.usage, dict)
 
 
 def test_call_api_retries_on_quota_error(monkeypatch):
@@ -589,7 +591,7 @@ def test_call_api_retries_on_quota_error(monkeypatch):
     monkeypatch.setattr("time.sleep", lambda s: sleep_calls.append(s))
     client = _make_client([Exception("429 quota exceeded"), "ok"])
     result = generate_ai._call_api(client, "prompt")
-    assert result == "ok"
+    assert result.text == "ok"
     assert len(sleep_calls) >= 1  # slept before retry
 
 
@@ -638,7 +640,7 @@ def test_call_api_config_has_no_schema_or_token_cap(monkeypatch):
     client = _make_client(["result"])
     result = generate_ai._call_api(client, "prompt", generation_config={"temperature": 0.2})
 
-    assert result == "result"
+    assert result.text == "result"
     mock_types.GenerateContentConfig.assert_called_once()
     ctor_kwargs = mock_types.GenerateContentConfig.call_args[1]
     assert ctor_kwargs["temperature"] == 0.2
@@ -1112,7 +1114,7 @@ def test_call_api_retries_on_empty_response(monkeypatch):
     monkeypatch.setattr(generate_ai, "_RETRY_BASE_DELAY", 0)
 
     result = generate_ai._call_api(client, "prompt", max_retries=3)
-    assert result == "Energy leads."
+    assert result.text == "Energy leads."
     assert client.models.generate_content.call_count == 3
 
 
@@ -1131,7 +1133,7 @@ def test_call_api_retries_on_whitespace_response(monkeypatch):
     monkeypatch.setattr(generate_ai, "_RETRY_BASE_DELAY", 0)
 
     result = generate_ai._call_api(client, "prompt", max_retries=3)
-    assert result == "Energy leads."
+    assert result.text == "Energy leads."
 
 
 # ---------------------------------------------------------------------------
@@ -1416,7 +1418,7 @@ def test_call_api_retries_per_minute_quota_not_daily(monkeypatch):
     client = _make_client([per_minute_err, "ok"])
 
     result = generate_ai._call_api(client, "prompt")
-    assert result == "ok"
+    assert result.text == "ok"
     assert client.models.generate_content.call_count == 2
     assert len(sleep_calls) >= 1
     assert generate_ai._rate_limit_hits == 1
@@ -1562,11 +1564,13 @@ def _run_main_capture_client(monkeypatch, tmp_path):
 
 
 def test_main_uses_vertex_client_when_flag_set(monkeypatch, tmp_path):
-    """GOOGLE_GENAI_USE_VERTEXAI=true → genai.Client(vertexai=True, project, location)."""
+    """GOOGLE_GENAI_USE_VERTEXAI=true without express key → ADC path (project+location)."""
     monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
     monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "test-project")
     monkeypatch.setenv("GOOGLE_CLOUD_LOCATION", "us-east1")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    # Delete express key so we exercise the ADC (not vertex_express) path
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
 
     mock_genai = _run_main_capture_client(monkeypatch, tmp_path)
 
@@ -1593,10 +1597,12 @@ def test_main_uses_ai_studio_client_when_flag_absent(monkeypatch, tmp_path):
 
 
 def test_main_exits_zero_when_vertex_flag_set_but_no_project(monkeypatch, tmp_path):
-    """Toggle on but GOOGLE_CLOUD_PROJECT unset → graceful skip (exit 0)."""
+    """Toggle on but no GOOGLE_CLOUD_PROJECT and no GOOGLE_API_KEY → graceful skip (exit 0)."""
     monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    # Also remove express key so neither Vertex path is configured
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
     monkeypatch.delenv("FORCE_AI", raising=False)
     monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
     monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
@@ -1776,3 +1782,264 @@ def test_serialize_rs_signals_reports_score_and_flags():
 def test_serialize_rs_signals_no_benchmark():
     out = generate_ai.serialize_rs_signals(pd.DataFrame({"name": ["X"]}))
     assert "No benchmark" in out
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: CallResult, _extract_usage, _record_capture, _write_capture_tiers
+# ---------------------------------------------------------------------------
+
+def test_callresult_fields():
+    """CallResult carries text, usage dict, and float latency."""
+    r = generate_ai.CallResult(text="hello", usage={"prompt_tokens": 10}, latency=1.5)
+    assert r.text == "hello"
+    assert r.usage == {"prompt_tokens": 10}
+    assert r.latency == 1.5
+
+
+def test_extract_usage_present(monkeypatch):
+    """_extract_usage pulls token counts from usage_metadata."""
+    from unittest.mock import MagicMock
+    meta = MagicMock()
+    meta.prompt_token_count = 100
+    meta.candidates_token_count = 50
+    meta.total_token_count = 150
+    response = MagicMock()
+    response.usage_metadata = meta
+    usage = generate_ai._extract_usage(response)
+    assert usage["prompt_tokens"] == 100
+    assert usage["output_tokens"] == 50
+    assert usage["total_tokens"] == 150
+
+
+def test_extract_usage_absent():
+    """_extract_usage returns {} when response raises on usage_metadata access."""
+    class _Resp:
+        @property
+        def usage_metadata(self):
+            raise AttributeError("no usage_metadata")
+    usage = generate_ai._extract_usage(_Resp())
+    assert usage == {}
+
+
+def test_record_capture_accumulates_entries():
+    """_record_capture populates _capture_log with the expected shape."""
+    generate_ai._reset_tracking()
+    generate_ai._record_capture(
+        "sectors.pulse",
+        input_blocks="MARKET STATE: breadth 7/11",
+        prompt="full prompt text",
+        generation_config={"temperature": 0.4},
+        raw="## Headline\nEnergy leads",
+        parsed={"headline": "Energy leads"},
+        usage={"prompt_tokens": 100, "output_tokens": 50, "total_tokens": 150},
+        latency=2.3,
+        status="ok",
+    )
+    assert "sectors.pulse" in generate_ai._capture_log
+    entry = generate_ai._capture_log["sectors.pulse"]
+    assert entry["input_blocks"] == "MARKET STATE: breadth 7/11"
+    assert entry["prompt"] == "full prompt text"
+    assert entry["raw_response"] == "## Headline\nEnergy leads"
+    assert entry["parsed_output"] == {"headline": "Energy leads"}
+    assert entry["usage"]["prompt_tokens"] == 100
+    assert entry["latency_seconds"] == 2.3
+    assert entry["status"] == "ok"
+
+
+def test_record_capture_defaults_empty():
+    """_record_capture with minimal kwargs fills in safe defaults."""
+    generate_ai._reset_tracking()
+    generate_ai._record_capture("sectors.note", input_blocks="some data", status="error")
+    entry = generate_ai._capture_log["sectors.note"]
+    assert entry["prompt"] == ""
+    assert entry["usage"] == {}
+    assert entry["parsed_output"] is None
+    assert entry["raw_response"] == ""
+
+
+def test_write_capture_tiers_tier1_always_written(tmp_path, monkeypatch):
+    """Tier-1 provenance is always written regardless of capture_on flag."""
+    monkeypatch.setattr(generate_ai, "PROVENANCE_DIR", tmp_path / "provenance")
+    monkeypatch.setattr(generate_ai, "CAPTURE_DIR", tmp_path / "debug")
+    monkeypatch.setattr(generate_ai, "GEMINI_MODEL", "gemini-test")
+    monkeypatch.setattr(generate_ai, "_backend", "vertex_ai")
+    generate_ai._reset_tracking()
+    generate_ai._record_capture("sectors.pulse", input_blocks="block A", status="ok")
+
+    generate_ai._write_capture_tiers("2026-06-18", capture_on=False)
+
+    prov_path = tmp_path / "provenance" / "2026-06-18.json"
+    assert prov_path.exists()
+    prov = json.loads(prov_path.read_text())
+    assert prov["date"] == "2026-06-18"
+    assert prov["sectors.pulse"]["input_blocks"] == "block A"
+    # Tier-2 should NOT be written when capture_on=False
+    assert not (tmp_path / "debug" / "2026-06-18.json").exists()
+
+
+def test_write_capture_tiers_tier2_written_when_capture_on(tmp_path, monkeypatch):
+    """Tier-2 debug file is written only when capture_on=True."""
+    monkeypatch.setattr(generate_ai, "PROVENANCE_DIR", tmp_path / "provenance")
+    monkeypatch.setattr(generate_ai, "CAPTURE_DIR", tmp_path / "debug")
+    monkeypatch.setattr(generate_ai, "GEMINI_MODEL", "gemini-test")
+    monkeypatch.setattr(generate_ai, "_backend", "vertex_ai")
+    generate_ai._reset_tracking()
+    generate_ai._record_capture("sectors.pulse", input_blocks="block A",
+                                prompt="full prompt", raw="raw text",
+                                usage={"total_tokens": 99}, latency=1.1, status="ok")
+
+    generate_ai._write_capture_tiers("2026-06-18", capture_on=True)
+
+    debug_path = tmp_path / "debug" / "2026-06-18.json"
+    assert debug_path.exists()
+    debug = json.loads(debug_path.read_text())
+    assert debug["date"] == "2026-06-18"
+    assert debug["model"] == "gemini-test"
+    assert "sectors.pulse" in debug["calls"]
+    assert debug["calls"]["sectors.pulse"]["prompt"] == "full prompt"
+    assert debug["calls"]["sectors.pulse"]["usage"]["total_tokens"] == 99
+
+
+def test_prune_tier2_keeps_retention_days(tmp_path, monkeypatch):
+    """_prune_tier2 removes files beyond CAPTURE_RETENTION_DAYS, newest first."""
+    monkeypatch.setattr(generate_ai, "CAPTURE_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "CAPTURE_RETENTION_DAYS", 3)
+    for i in range(5):
+        (tmp_path / f"2026-06-{10+i:02d}.json").write_text("{}")
+
+    generate_ai._prune_tier2()
+
+    remaining = sorted(p.name for p in tmp_path.glob("*.json"))
+    assert remaining == ["2026-06-12.json", "2026-06-13.json", "2026-06-14.json"]
+
+
+def test_reset_tracking_clears_capture_log():
+    """_reset_tracking() zeros _capture_log alongside the other tracking globals."""
+    generate_ai._capture_log["sectors.note"] = {"input_blocks": "x"}
+    generate_ai._reset_tracking()
+    assert generate_ai._capture_log == {}
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: --preview mode
+# ---------------------------------------------------------------------------
+
+def test_preview_builds_prompts_no_api_calls(monkeypatch, tmp_path, capsys):
+    """--preview prints prompts and writes Tier-1 but makes zero API calls."""
+    monkeypatch.setattr(generate_ai, "PROVENANCE_DIR", tmp_path / "provenance")
+    monkeypatch.setattr(generate_ai, "CAPTURE_DIR", tmp_path / "debug")
+
+    snap = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-18").date()],
+        "name": ["Energy"],
+        "perf_week": [2.0], "perf_month": [3.0], "perf_ytd": [5.0],
+    })
+    delta = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-18").date()],
+        "name": ["Energy"],
+        "rank_ytd": [1.0], "rank_ytd_delta_5d": [2.0], "momentum_score": [0.8],
+    })
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
+    generate_ai._reset_tracking()
+
+    api_call_count_before = generate_ai._api_call_count
+    generate_ai._run_preview("2026-06-18", task_filter="note", group_filter="sector")
+
+    # No API calls were made
+    assert generate_ai._api_call_count == api_call_count_before
+
+    # Tier-1 provenance was written
+    prov_path = tmp_path / "provenance" / "2026-06-18.json"
+    assert prov_path.exists()
+
+    # Output includes prompt text
+    captured = capsys.readouterr()
+    assert "INPUT BLOCKS" in captured.out or "COMPUTED SIGNALS" in captured.out or "Energy" in captured.out
+
+
+def test_preview_json_flag_outputs_valid_json(monkeypatch, tmp_path, capsys):
+    """--json flag produces valid JSON lines, not human-readable text."""
+    monkeypatch.setattr(generate_ai, "PROVENANCE_DIR", tmp_path / "provenance")
+    monkeypatch.setattr(generate_ai, "CAPTURE_DIR", tmp_path / "debug")
+
+    snap = pd.DataFrame({
+        "date": [pd.Timestamp("2026-06-18").date()],
+        "name": ["Energy"],
+        "perf_week": [1.0], "perf_month": [2.0], "perf_ytd": [3.0],
+    })
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: pd.DataFrame())
+    generate_ai._reset_tracking()
+
+    generate_ai._run_preview("2026-06-18", task_filter="note", group_filter="sector", as_json=True)
+
+    captured = capsys.readouterr()
+    for line in captured.out.strip().splitlines():
+        if line.strip().startswith("{"):
+            obj = json.loads(line)
+            assert "fkey" in obj
+            assert "prompt" in obj
+            break
+    else:
+        assert False, "No JSON line found in preview output"
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Vertex express-key auth path
+# ---------------------------------------------------------------------------
+
+def test_main_uses_vertex_express_when_google_api_key_set(monkeypatch, tmp_path):
+    """GOOGLE_GENAI_USE_VERTEXAI=true + GOOGLE_API_KEY → vertex_express (no ADC needed)."""
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
+    monkeypatch.setenv("GOOGLE_API_KEY", "express-key-123")
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    mock_genai = _run_main_capture_client(monkeypatch, tmp_path)
+
+    kwargs = mock_genai.Client.call_args.kwargs
+    assert kwargs.get("vertexai") is True
+    assert kwargs.get("api_key") == "express-key-123"
+    assert "project" not in kwargs
+    assert generate_ai._backend == "vertex_express"
+
+
+def test_main_vertex_express_takes_priority_over_adc(monkeypatch, tmp_path):
+    """When both GOOGLE_API_KEY and GOOGLE_CLOUD_PROJECT are set, express key wins."""
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
+    monkeypatch.setenv("GOOGLE_API_KEY", "express-key-456")
+    monkeypatch.setenv("GOOGLE_CLOUD_PROJECT", "some-project")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    mock_genai = _run_main_capture_client(monkeypatch, tmp_path)
+
+    kwargs = mock_genai.Client.call_args.kwargs
+    assert kwargs.get("api_key") == "express-key-456"
+    assert generate_ai._backend == "vertex_express"
+
+
+def test_main_exits_zero_when_vertex_flag_and_neither_key_nor_project(monkeypatch, tmp_path):
+    """Vertex toggle on but no express key and no project → graceful skip (exit 0)."""
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("FORCE_AI", raising=False)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path / "ai")
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
+    with pytest.raises(SystemExit) as exc_info:
+        generate_ai.main()
+    assert exc_info.value.code == 0
+
+
+def test_backend_value_is_vertex_express_when_express_key_used(monkeypatch, tmp_path):
+    """_backend is set to 'vertex_express' when Vertex+GOOGLE_API_KEY path is taken."""
+    monkeypatch.setenv("GOOGLE_GENAI_USE_VERTEXAI", "true")
+    monkeypatch.setenv("GOOGLE_API_KEY", "my-key")
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+    _run_main_capture_client(monkeypatch, tmp_path)
+    assert generate_ai._backend == "vertex_express"
