@@ -1,6 +1,19 @@
 {
-  "current": "2026.06.22",
+  "current": "2026.06.22.1",
   "releases": [
+    {
+      "version": "2026.06.22.1",
+      "date": "2026-06-22",
+      "title": "Movers tab: RS signals, drill-down & rank toggle",
+      "tag": "improvement",
+      "tab": "movers",
+      "notes": [
+        "Top Gainers now show an NH badge (amber) when a group's RS vs S&P is at a 20-session high, or a ↑ cross badge (sky) when it just flipped from lagging to beating the market — so a rank climber that's also outperforming the market is immediately visible.",
+        "The momentum label on each card renamed from 'Score' to 'Mom' for clarity, consistent with the Today tab.",
+        "Tap any mover card to jump directly to that group's full Lookup detail (perf history, RS spreads, AI context) — adds it to your recents automatically.",
+        "New YTD / Month / Week toggle below the lookback buttons: switch between tracking YTD rank changes (position traders), Month rank (swing), or Week rank (active) without leaving the tab."
+      ]
+    },
     {
       "version": "2026.06.22",
       "date": "2026-06-22",

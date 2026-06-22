@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-06-22 — Movers tab improvements shipped (PRs #155, #156, #157)
+
+Four improvements across three PRs: RS NH/↑cross market-context badges on Top Gainers; "Score" → "Mom" label rename; tap-any-card to open Lookup for that group; YTD/Month/Week rank dimension toggle. Review subagents caught two real bugs (scroll target + initUIFromState sync) fixed before merge. Release 2026.06.22.1, sw.js CACHE → finviz-v24.
+
+---
+
 ## 2026-06-21 — CF Worker auto-deploy live (PR #152)
 
 `.github/workflows/deploy-workers.yml` shipped. Both Cloudflare Workers (finviz-ticker-lookup, finviz-cron-dispatcher) now auto-deploy on push to default branch when their source changes. `build:taxonomy` runs before tests (validates ETF override names against snapshot CSVs). No more manual `npm run deploy`. Post-merge: trigger `workflow_dispatch` to smoke-test both deploy jobs.
