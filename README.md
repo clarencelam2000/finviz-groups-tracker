@@ -293,6 +293,22 @@ remains as a same-time redundancy backstop. See `planning/cloudflare-cron-schedu
 | `DISPATCH_REF` (`worker-cron/wrangler.toml` `[vars]`) | `claude/elegant-babbage-hlxnfy` | The git ref `collect.yml` runs on. Change without touching Worker code; redeploy to apply. |
 | `GITHUB_DISPATCH_TOKEN` (Worker secret) | — | GitHub fine-grained PAT (this repo, Actions: R/W). Set via `wrangler secret put`, never committed. |
 
+### AI analysis (`scripts/generate_ai.py`)
+
+Controls Tier-1 (provenance) and Tier-2 (debug capture) output, auth, and retention.
+
+| Parameter | Default | What it controls |
+|-----------|---------|-----------------|
+| `CAPTURE_DIR` | `data/ai/debug/` | Directory for Tier-2 debug JSON files (full prompt + raw + parsed + usage + latency). Not committed by default; written only when `AI_CAPTURE=1`. Rolling 30-day window in HEAD; full history in git. |
+| `PROVENANCE_DIR` | `data/ai/provenance/` | Directory for Tier-1 provenance JSON files (input data blocks only — no instruction text). Always written on every successful run. Committed permanently. |
+| `CAPTURE_RETENTION_DAYS` | `30` | How many days of Tier-2 debug files to keep in HEAD (older files are deleted from the working tree on the next run, but remain in git history). |
+| `AI_CAPTURE` (env) | unset (off) | Set to `1` to enable Tier-2 debug capture. Always on in CI (`generate_ai.yml`). Off by default locally to avoid committing verbose debug blobs. |
+| `GOOGLE_API_KEY` (env) | unset | Vertex AI express key (third auth path). Priority: express key > Vertex ADC > AI Studio. Enables Vertex without a full GCP project credential setup. |
+
+**Auth priority for Vertex AI:** `GOOGLE_API_KEY` (express key) → `GOOGLE_CLOUD_PROJECT` + ADC → graceful-skip with a clear error message.
+
+**Preview mode:** `python scripts/generate_ai.py --preview [--task TASK] [--group TYPE] [--json]` — builds prompts from CSVs, writes Tier-1 provenance, no API calls, no credentials required.
+
 ### Releases / "What's New" (`docs/releases.json`)
 
 The PWA's ℹ️ hub shows release notes from `docs/releases.json` and flags unseen updates with a dot.

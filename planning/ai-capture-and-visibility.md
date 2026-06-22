@@ -4,25 +4,29 @@
 > visible, testable, iterable, and — for users — auditable. Brainstorm origin: VP
 > session 2026-06-22 ("can we make AI calls more visible/testable/interactive").
 >
-> **Status:** plan approved for merge; **implementation on hold** pending VP go-ahead.
-> Review by `code-review` bot (PR #154) resolved — see "Review resolutions" below.
+> **Status:** implementation in progress — VP go-ahead received 2026-06-22.
 
 ## Phase Status
 
 | Phase | Item | Status | Commit |
 |-------|------|--------|--------|
-| 0 | This plan + ADR-006 | 🟢 Approved (impl on hold) | `docs: revise AI capture plan per review` |
-| 1 | Tier-2 debug capture (`CallResult` + `--capture`) | ⬜ Not started | |
-| 2 | `--preview` (build prompts, no API) | ⬜ Not started | |
+| 0 | This plan + ADR-006 | 🟢 Done | `docs: revise AI capture plan per review` |
+| 1 | Tier-2 debug capture (`CallResult` + `--capture`) | 🟢 Done | PR #155 |
+| 2 | `--preview` (build prompts, no API) | 🟢 Done | PR #155 |
 | 3 | Prompt snapshot tests | ⬜ Not started | |
 | 4 | Tier-1 provenance + PWA "Behind this" drawer | ⬜ Not started | |
 | 5 | `tools/ai-lab.html` offline viewer | ⬜ Not started | |
 | 6 | `scripts/eval_ai.py` (offline guards; opt-in LLM-judge) | ⬜ Not started | |
-| 7 | Vertex express-key auth path | ⬜ Not started | |
+| 7 | Vertex express-key auth path | 🟢 Done | PR #155 |
 | S | Stretch: PWA `?debug=1`, interactive regenerate/Q&A | ⬜ Backlog | |
 
 > Resuming after a context reset: read this table, then `python3 -m pytest tests/ -q`
 > for a green baseline before touching `generate_ai.py`.
+
+> **VP decisions locked (2026-06-22):** Provenance = verbatim text; CI artifact upload
+> for Tier-2 = yes (with note for reassessment once Phase 6 eval is live — see
+> `generate_ai.yml` upload step comment); Eval cadence = CI on every PR touching
+> `generate_ai.py`; Staging = Phase 1+2+7 (PR1), Phase 3+4 (PR2), Phase 5+6 (PR3).
 
 ---
 

@@ -37,6 +37,7 @@ python scripts/export_db.py
 |--------|-------------|----------------|
 | `scripts/collect.py` | Playwright scraper; appends to snapshot CSVs; deduplicates on `(date, name)` | ~200–250 |
 | `scripts/compute_deltas.py` | Computes ranks, trading-day deltas (5/10/20/50), and momentum variants; appends to delta CSVs. Accepts `--date YYYY-MM-DD` | ~300–400 |
+| `scripts/generate_ai.py` | Gemini AI analysis from latest deltas; writes `data/ai/YYYY-MM-DD.json`. Auth: Vertex express key (GOOGLE_API_KEY) > Vertex ADC > AI Studio (GEMINI_API_KEY). Supports `--preview` (no API), `--capture` (Tier-2 debug). | ~1300 |
 | `scripts/export_db.py` | Exports CSVs → SQLite (`finviz_groups.db`) + Parquet in `./exports/` (not committed) | ~150 |
 | `scripts/backfill.py` | Shows current date coverage; prints manual backfill instructions. Accepts `--status` | ~50 |
 | `dashboard/app.py` | Streamlit dashboard: Snapshot, Top Movers, Time Series, Momentum tabs | ~100 |
@@ -332,6 +333,28 @@ with an explicit rationale; do not bump silently.
 6 real tab ids). Adding a 7th tab requires updating `WELCOME` + `product-intro-copy.md`
 + `VALID_TAB_IDS` in `tests/test_pwa_intro.py` — the anti-drift test will catch the
 mismatch.
+
+## AI capture constants (`scripts/generate_ai.py`)
+
+> Added in Phase 1 of the AI capture plan (ADR-006). Document changes to these in all three places per the configurable-constants rule above.
+
+| Constant | Default | Controls |
+|----------|---------|---------|
+| `CAPTURE_DIR` | `data/ai/debug/` | Where Tier-2 debug captures are written (one file per date, committed, rolling window) |
+| `PROVENANCE_DIR` | `data/ai/provenance/` | Where Tier-1 provenance files are written (one per date, committed permanently, user-facing) |
+| `CAPTURE_RETENTION_DAYS` | `30` | Number of Tier-2 debug files kept in HEAD; older files are pruned from HEAD on each run but stay recoverable in git history. ~1 MB total at 30 days. |
+| `AI_CAPTURE` env / `--capture` flag | off (on in CI) | Controls whether Tier-2 debug file is written. Set `AI_CAPTURE=1` or pass `--capture` to enable locally. Always enabled in `generate_ai.yml`. |
+| `GOOGLE_API_KEY` | (set in env) | Vertex express key — sidesteps ADC and AI Studio 429s. Takes priority over Vertex ADC (`GOOGLE_CLOUD_PROJECT`) when `GOOGLE_GENAI_USE_VERTEXAI=true`. Sets `_backend="vertex_express"`. |
+
+**Auth priority:** `GOOGLE_API_KEY` (Vertex express) > `GOOGLE_CLOUD_PROJECT` (Vertex ADC) > `GEMINI_API_KEY` (AI Studio).
+
+**Preview mode (no creds needed):**
+```bash
+python scripts/generate_ai.py --preview [--task pulse] [--group sector] [--json]
+```
+Builds prompts from existing CSVs and writes Tier-1 provenance — no API call, no credentials required. Add `--date YYYY-MM-DD` to use a specific date (defaults to latest snapshot date).
+
+---
 
 ## Session continuity (Claude Code web)
 
