@@ -160,7 +160,7 @@
         <button class="momentum-view-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-mview="momentum">Momentum</button>
         <button class="momentum-view-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-mview="rotation">Rotation</button>
       </div>
-      <p id="momentum-tab-desc" class="text-xs text-slate-500 mb-3">Composite breadth score across all 7 timeframes. 100% = top in every timeframe.</p>
+      <p id="momentum-tab-desc" class="text-xs text-slate-500 mb-3">Confirmed momentum: breadth across all 7 timeframes, gated by cross-timeframe agreement. Raw score shown below each name.</p>
       <button id="momentum-why-link" class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','momentum_accel')">ⓘ What do the badges mean? →</button>
       <div id="momentum-list" class="space-y-2"></div>
     </section>
@@ -678,12 +678,16 @@
       return                    { text: 'text-red-400',     bar: 'bg-red-500' };
     }
 
-    // Returns an HTML badge for momentum_accel, or '' when NaN / within flat zone.
+    // Returns an HTML badge for momentum_accel. Two distinct "no badge" states are made
+    // visible: NaN/missing (insufficient history — fewer than ACCEL_WINDOW sessions) shows
+    // a dimmed em-dash so it reads "not enough data yet"; a genuinely flat accel (within
+    // ±ACCEL_SLIGHT) shows a neutral '~' so it reads "steady, not building or fading".
     function accelBadge(accel) {
-      if (accel === null || accel === undefined || accel === '' || isNaN(accel)) return '';
+      if (accel === null || accel === undefined || accel === '' || isNaN(accel))
+        return '<span class="text-slate-600 text-xs" title="Not enough history yet">—</span>';
       if (accel >  ACCEL_STRONG) return '<span class="text-emerald-400 text-xs whitespace-nowrap">▲▲ building</span>';
       if (accel >  ACCEL_SLIGHT) return '<span class="text-emerald-400 text-xs">▲</span>';
-      if (accel > -ACCEL_SLIGHT) return '';
+      if (accel > -ACCEL_SLIGHT) return '<span class="text-slate-500 text-xs" title="Steady — momentum flat">~</span>';
       if (accel > -ACCEL_STRONG) return '<span class="text-red-400 text-xs">▼</span>';
       return '<span class="text-red-400 text-xs whitespace-nowrap">▼▼ fading</span>';
     }
@@ -1350,26 +1354,32 @@
         if (whyEl) { whyEl.textContent = 'ⓘ What does regime mean? →'; whyEl.onclick = () => __openHub('guide','regime_short_long'); }
         renderRotation(delta, snap, container);
       } else {
-        descEl.textContent = 'Composite breadth score across all 7 timeframes. 100% = top in every timeframe.';
+        descEl.textContent = 'Confirmed momentum: breadth across all 7 timeframes, gated by cross-timeframe agreement. Raw score shown below each name.';
         if (whyEl) { whyEl.textContent = 'ⓘ What do the badges mean? →'; whyEl.onclick = () => __openHub('guide','momentum_accel'); }
         renderMomentumCards(delta, container);
       }
     }
 
     function renderMomentumCards(delta, container) {
+      // Headline metric is momentum_confirmed (= momentum_score × rank_agreement), not the
+      // raw score: it discounts groups whose strength rides on a single outlier timeframe,
+      // so a broad-based leader ranks above a narrow one. Raw score shown as secondary
+      // context. See GUIDE 'momentum_confirmed' and CLAUDE.md deltas.csv columns.
       const sorted = [...delta]
-        .filter(r => r.momentum_score !== '' && r.momentum_score !== undefined)
-        .sort((a, b) => (pf(b.momentum_score) ?? 0) - (pf(a.momentum_score) ?? 0));
+        .filter(r => r.momentum_confirmed !== '' && r.momentum_confirmed !== undefined)
+        .sort((a, b) => (pf(b.momentum_confirmed) ?? 0) - (pf(a.momentum_confirmed) ?? 0));
 
       container.innerHTML = sorted.map((row, i) => {
-        const score = pf(row.momentum_score) ?? 0;
-        const style = momentumStyle(score);
-        const pct   = (score * 100).toFixed(0);
+        const conf  = pf(row.momentum_confirmed) ?? 0;
+        const score = pf(row.momentum_score);
+        const style = momentumStyle(conf);
+        const pct   = (conf * 100).toFixed(0);
         const rankYtd  = pf(row.rank_ytd);
         const rankWeek = pf(row.rank_week);
         const subParts = [
           rankYtd  !== null ? `YTD #${rankYtd}`  : null,
           rankWeek !== null ? `Week #${rankWeek}` : null,
+          score    !== null ? `Score ${(score*100).toFixed(0)}%` : null,
         ].filter(Boolean).join(' · ');
         const badge = accelBadge(pf(row.momentum_accel));
 
@@ -1395,12 +1405,37 @@
 
     function renderRotation(delta, snap, container) {
       const snapMap = Object.fromEntries((snap || []).map(r => [r.name, r]));
+      // n = total groups for this date. delta is latest-date-only (getLatest), so its
+      // length matches the pipeline's n = len(df_day), which counts ALL rows (NaN-perf
+      // ranks go to the bottom via na_option='bottom'). This lets the client reproduce
+      // regime_short_long exactly: percentile = (n - rank) / (n - 1). See
+      // delta_config.py _perf_percentiles() / REGIME_SHORT / REGIME_LONG.
+      const nGroups = delta.length;
+      // Mean cross-sectional percentile (0–1) over the given rank columns; skips nulls.
+      // rank_ytd is deliberately excluded — REGIME_SHORT/LONG omit perf_ytd.
+      const bucketPctile = (row, cols) => {
+        if (nGroups < 2) return null;
+        const vals = cols.map(c => pf(row[c])).filter(v => v !== null)
+          .map(rank => (nGroups - rank) / (nGroups - 1));
+        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+      };
+      const ordinal = (p) => {
+        const n = Math.round(p * 100);
+        const v = n % 100, s = ['th', 'st', 'nd', 'rd'];
+        return n + (s[(v - 20) % 10] || s[v] || s[0]);
+      };
+      const REGIME_SHORT_COLS = ['rank_week', 'rank_month'];
+      const REGIME_LONG_COLS  = ['rank_quarter', 'rank_half', 'rank_year'];
+
       const withRegime = delta.map(r => ({ ...r, _regime: pf(r.regime_short_long) }));
       const valid   = withRegime.filter(r => r._regime !== null).sort((a, b) => b._regime - a._regime);
       const invalid = withRegime.filter(r => r._regime === null);
 
       const emerging    = valid.filter(r => r._regime >  REGIME_THRESHOLD);
-      const established = valid.filter(r => r._regime >= -REGIME_THRESHOLD && r._regime <= REGIME_THRESHOLD);
+      // Established is the low-signal middle; sort by momentum_score so the strongest
+      // (closest to Emerging) surface first, and mark the top-3 cut with a separator.
+      const established = valid.filter(r => r._regime >= -REGIME_THRESHOLD && r._regime <= REGIME_THRESHOLD)
+        .sort((a, b) => (pf(b.momentum_score) ?? 0) - (pf(a.momentum_score) ?? 0));
       const fading      = valid.filter(r => r._regime <  -REGIME_THRESHOLD);
 
       const regimeBar = (regime) => {
@@ -1417,16 +1452,17 @@
 
       const renderCard = (row) => {
         const regime = row._regime;
-        const s = snapMap[row.name] || {};
         const mom  = pf(row.momentum_score);
-        const wk   = pf(s.perf_week);
-        const half = pf(s.perf_half);
+        // Percentile evidence reconstructs the regime number exactly (short − long),
+        // unlike the old raw-% proxy which never reconciled. See bucketPctile above.
+        const shortP = bucketPctile(row, REGIME_SHORT_COLS);
+        const longP  = bucketPctile(row, REGIME_LONG_COLS);
         const sign = regime > 0 ? '+' : '';
         const regimeColor = regime > REGIME_THRESHOLD ? 'text-emerald-400' : regime < -REGIME_THRESHOLD ? 'text-red-400' : 'text-slate-400';
         const sub = [
-          wk   !== null ? `Short: Wk ${wk   > 0 ? '+' : ''}${wk.toFixed(1)}%`   : null,
-          half !== null ? `Long: 6mo ${half > 0 ? '+' : ''}${half.toFixed(1)}%` : null,
-          mom  !== null ? `Mom ${(mom*100).toFixed(0)}%` : null,
+          shortP !== null ? `Short ${ordinal(shortP)}` : null,
+          longP  !== null ? `Long ${ordinal(longP)} pctile` : null,
+          mom    !== null ? `Mom ${(mom*100).toFixed(0)}%` : null,
         ].filter(Boolean).join('  ·  ');
         return `
           <div class="rounded-xl p-3 bg-slate-800 border border-slate-700">
@@ -1443,13 +1479,26 @@
         <h3 class="text-xs font-semibold ${labelClass} uppercase tracking-wider mb-2 mt-4 first:mt-0">${label} (${rows.length})</h3>
         <div class="space-y-2">${rows.map(renderCard).join('')}</div>`;
 
+      // Established can be long and low-signal; cards are sorted by momentum_score, and a
+      // faint divider after the top 3 separates the strongest from the rest (no toggle —
+      // keeps scroll position stable on mobile).
+      const ESTABLISHED_TOP = 3;
+      const establishedSection = (rows, label, labelClass) => {
+        if (rows.length === 0) return '';
+        const card = (r, i) => renderCard(r) + (i === ESTABLISHED_TOP - 1 && rows.length > ESTABLISHED_TOP
+          ? '<div class="border-t border-slate-700/60 my-2"></div>' : '');
+        return `
+        <h3 class="text-xs font-semibold ${labelClass} uppercase tracking-wider mb-2 mt-4 first:mt-0">${label} (${rows.length})</h3>
+        <div class="space-y-2">${rows.map(card).join('')}</div>`;
+      };
+
       const noHistory = invalid.length > 0
         ? `<p class="text-xs text-slate-600 text-center mt-4">Insufficient history for ${invalid.length} group${invalid.length > 1 ? 's' : ''}</p>`
         : '';
 
       container.innerHTML =
         section(emerging,    '🌱 Emerging — short-term outpacing long-term', 'text-emerald-400') +
-        section(established, '→ Established — balanced trend',               'text-slate-400') +
+        establishedSection(established, '→ Established — balanced trend',     'text-slate-400') +
         section(fading,      '📉 Fading — long-term outpacing short-term',   'text-red-400') +
         noHistory;
     }
@@ -2443,9 +2492,7 @@
         const fmtConfirmed = confirmed !== null
           ? `<span class="${momentumStyle(confirmed).text}">${(confirmed * 100).toFixed(0)}%</span>`
           : '<span class="text-slate-600">—</span>';
-        const fmtAccel = accel !== null
-          ? (accelBadge(accel) || '<span class="text-slate-500">flat</span>')
-          : '<span class="text-slate-600">—</span>';
+        const fmtAccel = accelBadge(accel);   // handles null/flat/building/fading uniformly
         const regimeCls = regime !== null
           ? (regime >= REGIME_THRESHOLD ? 'text-emerald-400' : regime <= -REGIME_THRESHOLD ? 'text-red-400' : 'text-slate-400')
           : '';

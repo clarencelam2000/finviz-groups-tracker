@@ -785,3 +785,117 @@ class TestPWAHub:
         finally:
             server.terminate()
             server.wait()
+
+
+def _momentum_snapshot_csv() -> str:
+    """Three sectors with monotonic perfs so ranks/percentiles are predictable."""
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=SNAPSHOT_COLS)
+    w.writeheader()
+    for name, pw, pm in [("Technology", 3.0, 2.5), ("Energy", 1.0, 0.5),
+                          ("Healthcare", 2.0, 1.5)]:
+        w.writerow({
+            "date": "2026-06-17", "collected_at": "2026-06-17T20:00:00Z",
+            "group_type": "sector", "name": name,
+            "stocks": "100", "market_cap": "5.0", "pe": "25.0", "fwd_pe": "22.0",
+            "perf_day": pw * 0.3, "perf_week": pw, "perf_month": pm,
+            "perf_quarter": pm * 0.8, "perf_half": pm * 0.6,
+            "perf_year": pm * 0.5, "perf_ytd": pw * 0.7,
+            "avg_volume": "1000000", "rel_volume": "", "change": pw * 0.3,
+        })
+    return buf.getvalue()
+
+
+def _momentum_delta_csv() -> str:
+    """Delta fixture exercising the Momentum tab: momentum_confirmed (headline),
+    momentum_score (secondary), the full rank set used for percentile evidence, and
+    regime_short_long for the Rotation buckets. n=3, so percentile=(3-rank)/2."""
+    cols = delta_columns()
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=cols)
+    w.writeheader()
+    # rank 1=Technology (best), 2=Healthcare, 3=Energy across every timeframe so the
+    # short bucket (wk+mo) and long bucket (qtr+half+yr) percentiles are unambiguous.
+    rank_of = {"Technology": "1", "Healthcare": "2", "Energy": "3"}
+    rows = [
+        # name,        confirmed, score, regime
+        ("Technology", "0.72", "0.80", "0.90"),   # short ≫ long → Emerging
+        ("Healthcare", "0.45", "0.55", "0.00"),   # balanced → Established
+        ("Energy",     "0.10", "0.35", "-0.90"),  # long ≫ short → Fading
+    ]
+    for name, confirmed, score, regime in rows:
+        row = {c: "" for c in cols}
+        r = rank_of[name]
+        row.update({
+            "date": "2026-06-17", "name": name,
+            "rank_week": r, "rank_month": r, "rank_quarter": r,
+            "rank_half": r, "rank_year": r, "rank_ytd": r,
+            "momentum_score": score, "momentum_confirmed": confirmed,
+            "rank_agreement": "0.9", "regime_short_long": regime,
+        })
+        w.writerow(row)
+    return buf.getvalue()
+
+
+@pytest.mark.functional
+class TestPWAMomentum:
+    """Verify the Momentum tab headlines momentum_confirmed and shows percentile
+    evidence in the Rotation view (PR: Momentum tab improvements A/B/C/D)."""
+
+    def _run(self, port, fn):
+        from playwright.sync_api import sync_playwright
+
+        docs_dir = Path(__file__).parent.parent / "docs"
+        server = subprocess.Popen(
+            ["python3", "-m", "http.server", str(port), "--directory", str(docs_dir)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        time.sleep(1)
+        snap_body, delta_body = _momentum_snapshot_csv(), _momentum_delta_csv()
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                # ignore_https_errors: TLS-intercepting proxy in cloud envs breaks the
+                # CDN <script> certs otherwise (see CLAUDE.md Playwright notes).
+                context = browser.new_context(ignore_https_errors=True)
+                # Skip the first-run intro carousel so it doesn't intercept tab clicks.
+                context.add_init_script("localStorage.setItem('fvt_intro_seen_v1','true');")
+                page = context.new_page()
+                page.route("**/raw.githubusercontent.com/**snapshots.csv",
+                           lambda r: r.fulfill(body=snap_body, content_type="text/plain"))
+                page.route("**/raw.githubusercontent.com/**deltas.csv",
+                           lambda r: r.fulfill(body=delta_body, content_type="text/plain"))
+                page.route("**/data/fetch_log.csv",
+                           lambda r: r.fulfill(body="", content_type="text/plain"))
+                page.route("**/data/ai/**", lambda r: r.fulfill(status=404))
+                page.goto(f"http://localhost:{port}/", wait_until="networkidle", timeout=15000)
+                page.locator("[data-tab='momentum']").click()
+                page.wait_for_timeout(400)
+                fn(page)
+                browser.close()
+        finally:
+            server.terminate()
+            server.wait()
+
+    def test_momentum_headline_is_confirmed_with_score_secondary(self):
+        def check(page):
+            txt = page.locator("#momentum-list").inner_text()
+            # Headline = momentum_confirmed (0.72 → 72%); raw score shown as secondary.
+            assert "72%" in txt, txt
+            assert "Score 80%" in txt, txt
+            # Tab description reflects the confirmed framing, not the old "100% = top".
+            assert "Confirmed momentum" in page.locator("#momentum-tab-desc").inner_text()
+        self._run(8184, check)
+
+    def test_rotation_shows_percentile_evidence(self):
+        def check(page):
+            page.locator(".momentum-view-btn[data-mview='rotation']").click()
+            page.wait_for_timeout(300)
+            txt = page.locator("#momentum-list").inner_text()
+            # Percentile evidence replaces the old raw-% "Short: Wk +X%" line.
+            assert "pctile" in txt, txt
+            # Technology: short bucket rank 1 → 100th percentile.
+            assert "Short 100th" in txt, txt
+            # Buckets render with their headers (CSS uppercases them).
+            assert "EMERGING" in txt.upper() and "FADING" in txt.upper(), txt
+        self._run(8185, check)
