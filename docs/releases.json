@@ -1,6 +1,19 @@
 {
-  "current": "2026.06.21.3",
+  "current": "2026.06.22",
   "releases": [
+    {
+      "version": "2026.06.22",
+      "date": "2026-06-22",
+      "title": "Momentum tab: confirmed scores + clearer rotation",
+      "tag": "improvement",
+      "tab": "momentum",
+      "notes": [
+        "Momentum cards now headline Confirmed momentum (strength gated by cross-timeframe agreement) instead of the raw score, so broad-based leaders rank above groups riding a single hot timeframe. The raw score is still shown under each name.",
+        "Rotation cards now show the actual short- and long-horizon percentile ranks the regime signal is built from (e.g. 'Short 78th · Long 22nd pctile') — these reconcile exactly with the regime number, unlike the old raw-% line.",
+        "The Established (balanced) list is now sorted by momentum strength with a divider after the top 3, so the groups closest to rotating in surface first.",
+        "Acceleration badges now distinguish 'steady' (~) from 'not enough history yet' (—) instead of showing nothing for both."
+      ]
+    },
     {
       "version": "2026.06.21.3",
       "date": "2026-06-21",
