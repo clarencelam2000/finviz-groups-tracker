@@ -587,6 +587,12 @@
         btn.classList.toggle('text-white', active);
         btn.classList.toggle('text-slate-400', !active);
       });
+      document.querySelectorAll('.movers-rank-btn').forEach(btn => {
+        const active = btn.dataset.rankdim === state.moversRankDim;
+        btn.classList.toggle('bg-slate-600', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('text-slate-400', !active);
+      });
       document.getElementById('sort-metric').value = state.sortMetric;
       const sc = document.getElementById('search-container');
       if (sc) sc.classList.toggle('hidden', state.group !== 'industries');
