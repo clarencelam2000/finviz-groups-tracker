@@ -1,6 +1,18 @@
 {
-  "current": "2026.06.22.1",
+  "current": "2026.06.22.2",
   "releases": [
+    {
+      "version": "2026.06.22.2",
+      "date": "2026-06-22",
+      "title": "AI tab: \"Behind this\" data provenance drawer",
+      "tag": "feature",
+      "tab": "ai",
+      "notes": [
+        "Each AI card now has a collapsible \"ⓘ Behind this\" section showing the exact computed signals (breadth %, rank movers, RS spreads, divergences) that were fed to the model — so you can see the data behind every conclusion.",
+        "Provenance is available for dates on or after today; older dates show no drawer (backward-compatible).",
+        "The drawer is read-only and contains only input signals — no raw model response."
+      ]
+    },
     {
       "version": "2026.06.22.1",
       "date": "2026-06-22",
