@@ -299,7 +299,7 @@ Controls Tier-1 (provenance) and Tier-2 (debug capture) output, auth, and retent
 
 | Parameter | Default | What it controls |
 |-----------|---------|-----------------|
-| `CAPTURE_DIR` | `data/ai/debug/` | Directory for Tier-2 debug JSON files (full prompt + raw + parsed + usage + latency). Not committed by default; written only when `AI_CAPTURE=1`. Rolling 30-day window in HEAD; full history in git. |
+| `CAPTURE_DIR` | `data/ai/debug/` | Directory for Tier-2 debug JSON files (full prompt + raw + parsed + usage + latency). Written (and committed) only when `AI_CAPTURE=1`. Rolling 30-day window in HEAD; older files pruned from HEAD but fully recoverable from git history. Always on in CI. |
 | `PROVENANCE_DIR` | `data/ai/provenance/` | Directory for Tier-1 provenance JSON files (input data blocks only — no instruction text). Always written on every successful run. Committed permanently. |
 | `CAPTURE_RETENTION_DAYS` | `30` | How many days of Tier-2 debug files to keep in HEAD (older files are deleted from the working tree on the next run, but remain in git history). |
 | `AI_CAPTURE` (env) | unset (off) | Set to `1` to enable Tier-2 debug capture. Always on in CI (`generate_ai.yml`). Off by default locally to avoid committing verbose debug blobs. |
