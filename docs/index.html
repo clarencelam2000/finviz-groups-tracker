@@ -189,6 +189,7 @@
         </div>
       </div>
       <button class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','sustained_strength')">ⓘ What counts as "sustained"? →</button>
+      <button class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','rs_score')">ⓘ What does the "beats N/7" chip mean? →</button>
       <div id="strength-list" class="space-y-2"></div>
     </section>
 
@@ -436,7 +437,7 @@
         { id: 'ai_note', label: 'AI daily note', tabs: ['ai'],
           oneLiner: 'A plain-English summary the AI writes each day for sectors and industries, highlighting strength, movers, and divergences.',
           detail: 'Freeform briefing built from the computed signals — sustained strength, notable movers, momentum leaders and laggards, and divergences.' },
-        { id: 'rs_score', label: 'RS Score (vs S&P 500)', tabs: ['vsmarket', 'lookup'],
+        { id: 'rs_score', label: 'RS Score (vs S&P 500)', tabs: ['vsmarket', 'strength', 'lookup'],
           oneLiner: 'How broadly this group beats the S&P 500 across every timeframe at once, from 0 to 100%.',
           detail: 'Fraction of the 7 timeframes (day/wk/mo/qtr/6mo/yr/ytd) where the group\'s RS spread (group perf − SPY perf) is positive. 100% = outperforming in every horizon.' },
         { id: 'rs_confirmed', label: 'Confirmed RS', tabs: ['vsmarket', 'lookup'],
@@ -744,6 +745,28 @@
       if (known.length === 0) return null;
       const beats = known.filter(v => +v === 1).length;
       return beats + '/' + known.length;
+    }
+
+    // Compact "vs SPY" chip for the Strength tab. Both Strength views measure ABSOLUTE
+    // strength (top-N ranks / all-green perf), which in a broad rally can flag rising-tide
+    // groups that still lag the market. This chip surfaces the existing RS signal inline so
+    // a true market-beater is distinguishable from a tide-riser without leaving the tab.
+    // Shows "beats N/7" (timeframes ahead of SPY via beatsCount) colored by rs_score.
+    // Returns '' when SPY data is absent (rs_score null / no beats_benchmark columns) so a
+    // group is never mislabeled as confirmed when the benchmark row is missing for that date.
+    function rsBeatsChip(deltaRow) {
+      if (!deltaRow) return '';
+      const bc = beatsCount(deltaRow);
+      if (bc === null) return '';
+      const score = pf(deltaRow.rs_score);
+      let color = 'text-slate-400 border-slate-600';
+      if (score !== null) {
+        if      (score >= 0.7) color = 'text-emerald-300 border-emerald-700';
+        else if (score >= 0.5) color = 'text-green-300 border-green-700';
+        else if (score <= 0.3) color = 'text-red-300 border-red-700';
+        else                   color = 'text-orange-300 border-orange-700';
+      }
+      return `<span class="${color} text-[0.6rem] font-semibold whitespace-nowrap border rounded px-1">beats ${bc}</span>`;
     }
 
     // Returns a small HTML glyph for rank_trend_slope (10-session LS slope of rank_ytd,
@@ -1574,7 +1597,10 @@
           const sub = [rankParts, confStr, raStr].filter(Boolean).join('  ·  ');
           return `
             <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 ${border}">
-              <div class="text-sm font-medium text-white">${row.name}</div>
+              <div class="flex items-center justify-between gap-2">
+                <div class="text-sm font-medium text-white">${row.name}</div>
+                ${rsBeatsChip(row)}
+              </div>
               <div class="text-xs text-slate-400 mt-0.5">${sub}</div>
             </div>`;
         }).join('');
@@ -1620,13 +1646,14 @@
                   mom !== null ? `Mom ${(mom*100).toFixed(0)}%` : null,
                   ra  !== null ? `Agree ${(ra*100).toFixed(0)}%` : null,
                 ].filter(Boolean).join(' · ');
+                const chip = rsBeatsChip(d);
                 return `
                   <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 border-l-emerald-500">
                     <div class="flex items-center justify-between">
                       <div class="text-sm font-medium text-white">${row.name}</div>
                       <div class="text-lg tracking-wide">${dotRow(row)}</div>
                     </div>
-                    ${sub ? `<div class="text-xs text-slate-400 mt-0.5">${sub}</div>` : ''}
+                    ${(sub || chip) ? `<div class="flex items-center justify-between mt-0.5 gap-2"><div class="text-xs text-slate-400">${sub}</div>${chip}</div>` : ''}
                   </div>`;
               }).join('')
           }`;
