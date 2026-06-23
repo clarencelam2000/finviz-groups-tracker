@@ -1,6 +1,18 @@
 {
-  "current": "2026.06.22.2",
+  "current": "2026.06.23",
   "releases": [
+    {
+      "version": "2026.06.23",
+      "date": "2026-06-23",
+      "title": "Lookup: evict chips, live fuzzy typeahead, always-on momentum chips",
+      "tag": "improvement",
+      "tab": "lookup",
+      "notes": [
+        "Tap × on any recent or pinned chip to remove it without opening the result.",
+        "Typing a colloquial name (semis, pharma, banks…) or a near-typo now shows the match in the typeahead dropdown with an ≈ alias or ~ fuzzy badge — no need to submit first.",
+        "Top momentum chips now appear below recent and pinned searches, not just when the shelf is empty."
+      ]
+    },
     {
       "version": "2026.06.22.2",
       "date": "2026-06-22",

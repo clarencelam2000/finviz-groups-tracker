@@ -58,9 +58,15 @@ def load_known_names() -> set:
 # Hallucination guard
 # ---------------------------------------------------------------------------
 
-def _name_in(name: str, text: str) -> bool:
-    """Case-insensitive word-boundary search for a group name in text."""
-    return bool(re.search(r"\b" + re.escape(name) + r"\b", text, re.IGNORECASE))
+def _name_in(name: str, text: str, case_sensitive: bool = False) -> bool:
+    """Word-boundary search for a group name in text.
+
+    case_sensitive=True for raw_response checks: Finviz group names are always
+    Title Case, so a lowercase match (e.g. 'steel' in 'primary steel inputs') is
+    a generic noun, not a hallucinated group reference.
+    """
+    flags = 0 if case_sensitive else re.IGNORECASE
+    return bool(re.search(r"\b" + re.escape(name) + r"\b", text, flags))
 
 
 def check_hallucinations(fkey: str, call: dict, known_names: set) -> list:
@@ -71,7 +77,9 @@ def check_hallucinations(fkey: str, call: dict, known_names: set) -> list:
         return []
     issues = []
     for name in sorted(known_names):
-        if _name_in(name, raw) and not _name_in(name, input_text):
+        # Use case-sensitive match on raw_response: group names are capitalized;
+        # generic lowercase uses (e.g. 'steel' in 'primary steel inputs') are not hallucinations.
+        if _name_in(name, raw, case_sensitive=True) and not _name_in(name, input_text):
             issues.append(f"  hallucination: {name!r} in output but not in input_blocks")
     return issues
 
