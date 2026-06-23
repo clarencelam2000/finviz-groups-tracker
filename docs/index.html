@@ -13,6 +13,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
   <style>
+    :root {
+      --safe-area-inset-top: env(safe-area-inset-top);
+    }
     body {
       padding-top: env(safe-area-inset-top);
       padding-bottom: env(safe-area-inset-bottom);
@@ -32,7 +35,7 @@
 <body class="bg-slate-900 text-slate-100 min-h-screen font-sans select-none">
 
   <!-- Header -->
-  <header class="sticky top-0 z-20 bg-slate-900/95 backdrop-blur-sm border-b border-slate-700 px-4 pb-2"
+  <header id="header" class="sticky top-0 z-20 bg-slate-900/95 backdrop-blur-sm border-b border-slate-700 px-4 pb-2"
           style="padding-top: calc(env(safe-area-inset-top) + 0.6rem)">
     <div class="flex items-center justify-between">
       <div>
@@ -62,7 +65,7 @@
   </header>
 
   <!-- One-time post-update banner (shown by applyUnseenIndicator when a release is unseen) -->
-  <div id="update-banner" class="hidden bg-sky-900/60 border-b border-sky-700 px-4 py-2 flex items-center justify-between gap-3 text-sm">
+  <div id="update-banner" class="hidden relative z-30 bg-sky-900/60 border-b border-sky-700 px-4 py-2 flex items-center justify-between gap-3 text-sm">
     <span id="update-banner-text" class="text-sky-100 truncate">What's new</span>
     <div class="flex items-center gap-2 flex-shrink-0">
       <button id="update-banner-see" class="text-xs font-medium px-2 py-1 rounded bg-sky-700 text-sky-100 active:bg-sky-600">See what's new</button>
@@ -127,7 +130,13 @@
         <button class="group-toggle-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-group="industries">Industries</button>
       </div>
       <!-- Lookback buttons populated dynamically from deltas.csv header (LB-FF1) -->
-      <div id="lookback-btn-row" class="flex bg-slate-800 rounded-lg p-1 mb-4"></div>
+      <div id="lookback-btn-row" class="flex bg-slate-800 rounded-lg p-1 mb-2"></div>
+      <!-- Rank dimension: which rank column to track changes in -->
+      <div class="flex bg-slate-800 rounded-lg p-1 mb-4">
+        <button class="movers-rank-btn flex-1 py-1.5 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-rankdim="ytd">YTD</button>
+        <button class="movers-rank-btn flex-1 py-1.5 rounded-md text-sm font-medium text-slate-400 transition-colors" data-rankdim="month">Month</button>
+        <button class="movers-rank-btn flex-1 py-1.5 rounded-md text-sm font-medium text-slate-400 transition-colors" data-rankdim="week">Week</button>
+      </div>
       <div id="movers-placeholder" class="rounded-xl bg-slate-800 border border-slate-700 p-6 text-center hidden">
         <div class="text-4xl mb-3">📅</div>
         <p class="text-white font-semibold mb-1">Data accumulating…</p>
@@ -136,9 +145,9 @@
       </div>
       <div id="movers-content" class="hidden">
         <button class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','rank_delta')">ⓘ How is rank change measured? →</button>
-        <h3 class="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">Top Gainers — YTD Rank</h3>
+        <h3 id="gainers-header" class="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">Top Gainers — YTD Rank</h3>
         <div id="gainers-list" class="space-y-2 mb-5"></div>
-        <h3 class="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">Top Losers — YTD Rank</h3>
+        <h3 id="losers-header" class="text-xs font-semibold text-red-400 uppercase tracking-wider mb-2">Top Losers — YTD Rank</h3>
         <div id="losers-list" class="space-y-2"></div>
       </div>
     </section>
@@ -154,7 +163,7 @@
         <button class="momentum-view-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-mview="momentum">Momentum</button>
         <button class="momentum-view-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-mview="rotation">Rotation</button>
       </div>
-      <p id="momentum-tab-desc" class="text-xs text-slate-500 mb-3">Composite breadth score across 6 timeframes (week → YTD). 100% = top in every timeframe.</p>
+      <p id="momentum-tab-desc" class="text-xs text-slate-500 mb-3">Confirmed momentum: breadth across 6 timeframes (week → YTD), gated by cross-timeframe agreement. Raw score shown below each name.</p>
       <button id="momentum-why-link" class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','momentum_accel')">ⓘ What do the badges mean? →</button>
       <div id="momentum-list" class="space-y-2"></div>
     </section>
@@ -180,6 +189,7 @@
         </div>
       </div>
       <button class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','sustained_strength')">ⓘ What counts as "sustained"? →</button>
+      <button class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','rs_score')">ⓘ What does the "beats N/7" chip mean? →</button>
       <div id="strength-list" class="space-y-2"></div>
     </section>
 
@@ -338,6 +348,7 @@
       strengthView: 'sustained',
       momentumView: 'momentum',
       vsMarketView: 'score',
+      moversRankDim: 'ytd',  // 'ytd' | 'month' | 'week' — which rank column movers tracks
       topN: 20,
       data: {
         sectors:    { snap: null, delta: null, deltaAll: null },
@@ -345,6 +356,7 @@
       },
       fetchLog: null,
       aiData: null,
+      provenanceData: null,
       latestAiDate: null,
       latestSnapshotDate: null,
       currentAiDate: null,
@@ -425,7 +437,7 @@
         { id: 'ai_note', label: 'AI daily note', tabs: ['ai'],
           oneLiner: 'A plain-English summary the AI writes each day for sectors and industries, highlighting strength, movers, and divergences.',
           detail: 'Freeform briefing built from the computed signals — sustained strength, notable movers, momentum leaders and laggards, and divergences.' },
-        { id: 'rs_score', label: 'RS Score (vs S&P 500)', tabs: ['vsmarket', 'lookup'],
+        { id: 'rs_score', label: 'RS Score (vs S&P 500)', tabs: ['vsmarket', 'strength', 'lookup'],
           oneLiner: 'How broadly this group beats the S&P 500 across every timeframe at once, from 0 to 100%.',
           detail: 'Fraction of 6 timeframes (wk/mo/qtr/6mo/yr/ytd) where the group\'s RS spread (group perf − SPY perf) is positive. Day excluded as too noisy. 100% = outperforming in every horizon.' },
         { id: 'rs_confirmed', label: 'Confirmed RS', tabs: ['vsmarket', 'lookup'],
@@ -580,6 +592,12 @@
         btn.classList.toggle('text-white', active);
         btn.classList.toggle('text-slate-400', !active);
       });
+      document.querySelectorAll('.movers-rank-btn').forEach(btn => {
+        const active = btn.dataset.rankdim === state.moversRankDim;
+        btn.classList.toggle('bg-slate-600', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('text-slate-400', !active);
+      });
       document.getElementById('sort-metric').value = state.sortMetric;
       const sc = document.getElementById('search-container');
       if (sc) sc.classList.toggle('hidden', state.group !== 'industries');
@@ -665,12 +683,16 @@
       return                    { text: 'text-red-400',     bar: 'bg-red-500' };
     }
 
-    // Returns an HTML badge for momentum_accel, or '' when NaN / within flat zone.
+    // Returns an HTML badge for momentum_accel. Two distinct "no badge" states are made
+    // visible: NaN/missing (insufficient history — fewer than ACCEL_WINDOW sessions) shows
+    // a dimmed em-dash so it reads "not enough data yet"; a genuinely flat accel (within
+    // ±ACCEL_SLIGHT) shows a neutral '~' so it reads "steady, not building or fading".
     function accelBadge(accel) {
-      if (accel === null || accel === undefined || accel === '' || isNaN(accel)) return '';
+      if (accel === null || accel === undefined || accel === '' || isNaN(accel))
+        return '<span class="text-slate-600 text-xs" title="Not enough history yet">—</span>';
       if (accel >  ACCEL_STRONG) return '<span class="text-emerald-400 text-xs whitespace-nowrap">▲▲ building</span>';
       if (accel >  ACCEL_SLIGHT) return '<span class="text-emerald-400 text-xs">▲</span>';
-      if (accel > -ACCEL_SLIGHT) return '';
+      if (accel > -ACCEL_SLIGHT) return '<span class="text-slate-500 text-xs" title="Steady — momentum flat">~</span>';
       if (accel > -ACCEL_STRONG) return '<span class="text-red-400 text-xs">▼</span>';
       return '<span class="text-red-400 text-xs whitespace-nowrap">▼▼ fading</span>';
     }
@@ -727,6 +749,28 @@
       return beats + '/' + known.length;
     }
 
+    // Compact "vs SPY" chip for the Strength tab. Both Strength views measure ABSOLUTE
+    // strength (top-N ranks / all-green perf), which in a broad rally can flag rising-tide
+    // groups that still lag the market. This chip surfaces the existing RS signal inline so
+    // a true market-beater is distinguishable from a tide-riser without leaving the tab.
+    // Shows "beats N/7" (timeframes ahead of SPY via beatsCount) colored by rs_score.
+    // Returns '' when SPY data is absent (rs_score null / no beats_benchmark columns) so a
+    // group is never mislabeled as confirmed when the benchmark row is missing for that date.
+    function rsBeatsChip(deltaRow) {
+      if (!deltaRow) return '';
+      const bc = beatsCount(deltaRow);
+      if (bc === null) return '';
+      const score = pf(deltaRow.rs_score);
+      let color = 'text-slate-400 border-slate-600';
+      if (score !== null) {
+        if      (score >= 0.7) color = 'text-emerald-300 border-emerald-700';
+        else if (score >= 0.5) color = 'text-green-300 border-green-700';
+        else if (score <= 0.3) color = 'text-red-300 border-red-700';
+        else                   color = 'text-orange-300 border-orange-700';
+      }
+      return `<span class="${color} text-[0.6rem] font-semibold whitespace-nowrap border rounded px-1">beats ${bc}</span>`;
+    }
+
     // Returns a small HTML glyph for rank_trend_slope (10-session LS slope of rank_ytd,
     // negated so positive = improving). Shown beside the short-window delta arrow in Today.
     function slopeGlyph(slope) {
@@ -772,8 +816,8 @@
         btn.addEventListener('click', () => switchLookback(btn.dataset.window)));
     }
 
-    function hasMoversData(rows, win) {
-      const col = `rank_ytd_delta_${win}`;
+    function hasMoversData(rows, win, rankDim) {
+      const col = `rank_${rankDim || 'ytd'}_delta_${win}`;
       return rows.some(r => r[col] !== '' && r[col] !== undefined && !isNaN(parseFloat(r[col])));
     }
 
@@ -846,9 +890,11 @@
       const dateStr = data.date || new Date().toISOString().slice(0, 10);
 
       const lines = [`Finviz AI Note — ${dateStr} (${groupLabel})`];
-      const noteText = group.note
-        || (typeof group.briefing === 'string' ? group.briefing : group.briefing?.briefing)
-        || '';
+      // Lead the share with the briefing headline when present (newer JSON files).
+      const headline = group.pulse && typeof group.pulse.headline === 'string'
+        ? group.pulse.headline.trim() : '';
+      if (headline) lines.push(headline);
+      const noteText = group.note || '';
       if (noteText) {
         const snippet = noteText.length > 600 ? noteText.slice(0, 600) + '…' : noteText;
         lines.push(snippet);
@@ -1064,6 +1110,18 @@
       }
     }
 
+    async function loadProvenance(dateStr) {
+      // Tier-1 provenance: input data blocks that backed the AI calls for this date.
+      // Absent before 2026-06-22 (pre-Phase-4 files) — drawer silently omitted.
+      if (!dateStr) { state.provenanceData = null; return; }
+      try {
+        const res = await fetch(`${BASE}/ai/provenance/${dateStr}.json`);
+        state.provenanceData = res.ok ? await res.json() : null;
+      } catch {
+        state.provenanceData = null;
+      }
+    }
+
     function renderPipeline() {
       const section = document.getElementById('pipeline-section');
       const logs = state.fetchLog;
@@ -1223,6 +1281,9 @@
                   ${rsMonthChip}
                 </div>
               </div>
+              <button data-today-lookup="${escapeHtml(row.name)}"
+                      class="text-slate-500 hover:text-slate-300 text-sm px-1 select-none flex-shrink-0"
+                      title="Open in Lookup">›</button>
               <div class="text-right flex-shrink-0">
                 <div class="text-base font-bold ${mainColor}">${mainFmt}</div>
                 <div class="text-xs text-slate-500">${metricLabel} ${isExpanded ? '▴' : '▾'}</div>
@@ -1246,10 +1307,11 @@
         return;
       }
 
-      const win = state.lookback;
-      const col = `rank_ytd_delta_${win}`;
+      const win     = state.lookback;
+      const rankDim = state.moversRankDim;  // 'ytd' | 'month' | 'week'
+      const col     = `rank_${rankDim}_delta_${win}`;
 
-      if (!hasMoversData(delta, win)) {
+      if (!hasMoversData(delta, win, rankDim)) {
         placeholder.classList.remove('hidden');
         content.classList.add('hidden');
         return;
@@ -1257,6 +1319,21 @@
 
       placeholder.classList.add('hidden');
       content.classList.remove('hidden');
+
+      // Sync rank-dim toggle button styles
+      document.querySelectorAll('.movers-rank-btn').forEach(btn => {
+        const active = btn.dataset.rankdim === rankDim;
+        btn.classList.toggle('bg-slate-600', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('text-slate-400', !active);
+      });
+
+      // Update section headers to reflect current rank dimension
+      const dimLabels = { ytd: 'YTD', month: 'Month', week: 'Week' };
+      const dimLabel  = dimLabels[rankDim] || 'YTD';
+      const rankShort = { ytd: 'YTD', month: 'Mo', week: 'Wk' };
+      document.getElementById('gainers-header').textContent = `Top Gainers — ${dimLabel} Rank`;
+      document.getElementById('losers-header').textContent  = `Top Losers — ${dimLabel} Rank`;
 
       const withData = delta
         .filter(r => r[col] !== '' && r[col] !== undefined && !isNaN(parseFloat(r[col])))
@@ -1271,22 +1348,29 @@
         const sign = spots > 0 ? '+' : '';
         const color = isGainer ? 'text-emerald-400' : 'text-red-400';
         const border = isGainer ? 'border-l-emerald-500' : 'border-l-red-500';
-        const rank = pf(row.rank_ytd);
+        const rank = pf(row[`rank_${rankDim}`]);
         const mom  = pf(row.momentum_score);
+        const rankLabel = rankShort[rankDim] || 'YTD';
         const subline = [
-          rank !== null ? `YTD #${rank}` : null,
-          mom  !== null ? `Score ${(mom*100).toFixed(0)}%` : null,
+          rank !== null ? `${rankLabel} #${rank}` : null,
+          mom  !== null ? `Mom ${(mom*100).toFixed(0)}%` : null,
         ].filter(Boolean).join(' · ');
 
+        // RS signal badges — only on gainers; NH wins over cross (stronger signal)
+        const nh    = isGainer ? rsNewHighBadge(row.rs_new_high) : '';
+        const cross = isGainer && !nh ? rsCrossBadge(row.rs_cross) : '';
+        const rsBadges = nh || cross;
+
         return `
-          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 ${border} flex items-center gap-3">
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 ${border} flex items-center gap-3 cursor-pointer active:opacity-75 select-none"
+               data-mover-name="${escapeHtml(row.name)}">
             <div class="flex-1 min-w-0">
-              <div class="text-sm font-medium text-white truncate">${row.name}</div>
+              <div class="text-sm font-medium text-white truncate">${row.name}${rsBadges ? ' ' + rsBadges : ''}</div>
               <div class="text-xs text-slate-400 mt-0.5">${subline}</div>
             </div>
             <div class="text-right flex-shrink-0">
               <div class="text-base font-bold ${color}">${sign}${spots} spots</div>
-              <div class="text-xs text-slate-500">vs ${win} ago</div>
+              <div class="text-xs text-slate-500">vs ${win} ago <span class="text-slate-600">›</span></div>
             </div>
           </div>`;
       }
@@ -1312,33 +1396,43 @@
       if (state.momentumView === 'rotation') {
         descEl.textContent = 'Rotation signal: recent (wk+mo) vs. long-horizon (3mo+6mo+yr) strength. Positive = rotating in.';
         if (whyEl) { whyEl.textContent = 'ⓘ What does regime mean? →'; whyEl.onclick = () => __openHub('guide','regime_short_long'); }
-        renderRotation(delta, snap, container);
+        renderRotation(delta, container);
       } else {
-        descEl.textContent = 'Composite breadth score across 6 timeframes (week → YTD). 100% = top in every timeframe.';
+        descEl.textContent = 'Confirmed momentum: breadth across 6 timeframes (week → YTD), gated by cross-timeframe agreement. Raw score shown below each name.';
         if (whyEl) { whyEl.textContent = 'ⓘ What do the badges mean? →'; whyEl.onclick = () => __openHub('guide','momentum_accel'); }
         renderMomentumCards(delta, container);
       }
     }
 
     function renderMomentumCards(delta, container) {
+      // Headline metric is momentum_confirmed (= momentum_score × rank_agreement), not the
+      // raw score: it discounts groups whose strength rides on a single outlier timeframe,
+      // so a broad-based leader ranks above a narrow one. Raw score shown as secondary
+      // context. See GUIDE 'momentum_confirmed' and CLAUDE.md deltas.csv columns.
+      // momentum_confirmed was added to the pipeline in June 2026; rows from older CSV
+      // snapshots will have '' and be filtered out. getLatest() serves only the most
+      // recent date, so in practice this only matters if live data predates the column.
       const sorted = [...delta]
-        .filter(r => r.momentum_score !== '' && r.momentum_score !== undefined)
-        .sort((a, b) => (pf(b.momentum_score) ?? 0) - (pf(a.momentum_score) ?? 0));
+        .filter(r => r.momentum_confirmed !== '' && r.momentum_confirmed !== undefined)
+        .sort((a, b) => (pf(b.momentum_confirmed) ?? 0) - (pf(a.momentum_confirmed) ?? 0));
 
       container.innerHTML = sorted.map((row, i) => {
-        const score = pf(row.momentum_score) ?? 0;
-        const style = momentumStyle(score);
-        const pct   = (score * 100).toFixed(0);
+        const conf  = pf(row.momentum_confirmed) ?? 0;
+        const score = pf(row.momentum_score);
+        const style = momentumStyle(conf);
+        const pct   = (conf * 100).toFixed(0);
         const rankYtd  = pf(row.rank_ytd);
         const rankWeek = pf(row.rank_week);
         const subParts = [
           rankYtd  !== null ? `YTD #${rankYtd}`  : null,
           rankWeek !== null ? `Week #${rankWeek}` : null,
+          score    !== null ? `Score ${(score*100).toFixed(0)}%` : null,
         ].filter(Boolean).join(' · ');
         const badge = accelBadge(pf(row.momentum_accel));
 
         return `
-          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 flex items-center gap-3">
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 flex items-center gap-3 cursor-pointer active:opacity-75 select-none"
+               data-group-name="${escapeHtml(row.name)}">
             <span class="text-sm font-bold text-slate-500 w-5 text-right flex-shrink-0">${i+1}</span>
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between gap-1">
@@ -1352,19 +1446,46 @@
               <div class="h-1.5 rounded-full bg-slate-700 mt-1 overflow-hidden">
                 <div class="h-full rounded-full ${style.bar}" style="width:${pct}%"></div>
               </div>
+              <div class="text-right"><span class="text-slate-600 text-xs">›</span></div>
             </div>
           </div>`;
       }).join('');
     }
 
-    function renderRotation(delta, snap, container) {
-      const snapMap = Object.fromEntries((snap || []).map(r => [r.name, r]));
+    function renderRotation(delta, container) {
+      // n = total groups for this date. delta is latest-date-only (getLatest), so its
+      // length matches the pipeline's n = len(df_day), which counts ALL rows (NaN-perf
+      // ranks go to the bottom via na_option='bottom'). This lets the client reproduce
+      // regime_short_long exactly: percentile = (n - rank) / (n - 1). See
+      // delta_config.py _perf_percentiles() / REGIME_SHORT / REGIME_LONG.
+      // IMPORTANT: do not pre-filter `delta` before this call — nGroups must equal the
+      // full cohort size or bucketPctile percentiles will be wrong.
+      const nGroups = delta.length;
+      // Mean cross-sectional percentile (0–1) over the given rank columns; skips nulls.
+      // rank_ytd is deliberately excluded — REGIME_SHORT/LONG omit perf_ytd.
+      const bucketPctile = (row, cols) => {
+        if (nGroups < 2) return null;
+        const vals = cols.map(c => pf(row[c])).filter(v => v !== null)
+          .map(rank => (nGroups - rank) / (nGroups - 1));
+        return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+      };
+      const ordinal = (p) => {
+        const n = Math.round(p * 100);
+        const v = n % 100, s = ['th', 'st', 'nd', 'rd'];
+        return n + (s[(v - 20) % 10] || s[v] || s[0]);
+      };
+      const REGIME_SHORT_COLS = ['rank_week', 'rank_month'];
+      const REGIME_LONG_COLS  = ['rank_quarter', 'rank_half', 'rank_year'];
+
       const withRegime = delta.map(r => ({ ...r, _regime: pf(r.regime_short_long) }));
       const valid   = withRegime.filter(r => r._regime !== null).sort((a, b) => b._regime - a._regime);
       const invalid = withRegime.filter(r => r._regime === null);
 
       const emerging    = valid.filter(r => r._regime >  REGIME_THRESHOLD);
-      const established = valid.filter(r => r._regime >= -REGIME_THRESHOLD && r._regime <= REGIME_THRESHOLD);
+      // Established is the low-signal middle; sort by momentum_score so the strongest
+      // (closest to Emerging) surface first, and mark the top-3 cut with a separator.
+      const established = valid.filter(r => r._regime >= -REGIME_THRESHOLD && r._regime <= REGIME_THRESHOLD)
+        .sort((a, b) => (pf(b.momentum_score) ?? 0) - (pf(a.momentum_score) ?? 0));
       const fading      = valid.filter(r => r._regime <  -REGIME_THRESHOLD);
 
       const regimeBar = (regime) => {
@@ -1381,22 +1502,27 @@
 
       const renderCard = (row) => {
         const regime = row._regime;
-        const s = snapMap[row.name] || {};
         const mom  = pf(row.momentum_score);
-        const wk   = pf(s.perf_week);
-        const half = pf(s.perf_half);
+        // Percentile evidence reconstructs the regime number exactly (short − long),
+        // unlike the old raw-% proxy which never reconciled. See bucketPctile above.
+        const shortP = bucketPctile(row, REGIME_SHORT_COLS);
+        const longP  = bucketPctile(row, REGIME_LONG_COLS);
         const sign = regime > 0 ? '+' : '';
         const regimeColor = regime > REGIME_THRESHOLD ? 'text-emerald-400' : regime < -REGIME_THRESHOLD ? 'text-red-400' : 'text-slate-400';
         const sub = [
-          wk   !== null ? `Short: Wk ${wk   > 0 ? '+' : ''}${wk.toFixed(1)}%`   : null,
-          half !== null ? `Long: 6mo ${half > 0 ? '+' : ''}${half.toFixed(1)}%` : null,
-          mom  !== null ? `Mom ${(mom*100).toFixed(0)}%` : null,
+          shortP !== null ? `Short ${ordinal(shortP)}` : null,
+          longP  !== null ? `Long ${ordinal(longP)} pctile` : null,
+          mom    !== null ? `Mom ${(mom*100).toFixed(0)}%` : null,
         ].filter(Boolean).join('  ·  ');
         return `
-          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700">
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 cursor-pointer active:opacity-75 select-none"
+               data-group-name="${escapeHtml(row.name)}">
             <div class="flex items-center justify-between">
               <div class="text-sm font-medium text-white">${row.name}</div>
-              <div class="text-xs font-mono ${regimeColor} flex-shrink-0 ml-2">${sign}${regime.toFixed(2)}</div>
+              <div class="flex items-center gap-1 flex-shrink-0">
+                <span class="text-xs font-mono ${regimeColor} ml-2">${sign}${regime.toFixed(2)}</span>
+                <span class="text-slate-600 text-xs">›</span>
+              </div>
             </div>
             ${regimeBar(regime)}
             ${sub ? `<div class="text-xs text-slate-400">${sub}</div>` : ''}
@@ -1407,13 +1533,26 @@
         <h3 class="text-xs font-semibold ${labelClass} uppercase tracking-wider mb-2 mt-4 first:mt-0">${label} (${rows.length})</h3>
         <div class="space-y-2">${rows.map(renderCard).join('')}</div>`;
 
+      // Established can be long and low-signal; cards are sorted by momentum_score, and a
+      // faint divider after the top 3 separates the strongest from the rest (no toggle —
+      // keeps scroll position stable on mobile).
+      const ESTABLISHED_TOP = 3;
+      const establishedSection = (rows, label, labelClass) => {
+        if (rows.length === 0) return '';
+        const card = (r, i) => renderCard(r) + (i === ESTABLISHED_TOP - 1 && rows.length > ESTABLISHED_TOP
+          ? '<div class="border-t border-slate-700/60 my-2"></div>' : '');
+        return `
+        <h3 class="text-xs font-semibold ${labelClass} uppercase tracking-wider mb-2 mt-4 first:mt-0">${label} (${rows.length})</h3>
+        <div class="space-y-2">${rows.map(card).join('')}</div>`;
+      };
+
       const noHistory = invalid.length > 0
         ? `<p class="text-xs text-slate-600 text-center mt-4">Insufficient history for ${invalid.length} group${invalid.length > 1 ? 's' : ''}</p>`
         : '';
 
       container.innerHTML =
         section(emerging,    '🌱 Emerging — short-term outpacing long-term', 'text-emerald-400') +
-        section(established, '→ Established — balanced trend',               'text-slate-400') +
+        establishedSection(established, '→ Established — balanced trend',     'text-slate-400') +
         section(fading,      '📉 Fading — long-term outpacing short-term',   'text-red-400') +
         noHistory;
     }
@@ -1468,8 +1607,12 @@
           const raStr   = ra   !== null ? `Agree ${(ra*100).toFixed(0)}%`       : '';
           const sub = [rankParts, confStr, raStr].filter(Boolean).join('  ·  ');
           return `
-            <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 ${border}">
-              <div class="text-sm font-medium text-white">${row.name}</div>
+            <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 ${border} cursor-pointer active:opacity-75 select-none"
+                 data-group-name="${escapeHtml(row.name)}">
+              <div class="flex items-center justify-between gap-2">
+                <div class="text-sm font-medium text-white">${row.name}</div>
+                <div class="flex items-center gap-1 flex-shrink-0">${rsBeatsChip(row)}<span class="text-slate-600 text-xs">›</span></div>
+              </div>
               <div class="text-xs text-slate-400 mt-0.5">${sub}</div>
             </div>`;
         }).join('');
@@ -1515,13 +1658,18 @@
                   mom !== null ? `Mom ${(mom*100).toFixed(0)}%` : null,
                   ra  !== null ? `Agree ${(ra*100).toFixed(0)}%` : null,
                 ].filter(Boolean).join(' · ');
+                const chip = rsBeatsChip(d);
                 return `
-                  <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 border-l-emerald-500">
+                  <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 border-l-emerald-500 cursor-pointer active:opacity-75 select-none"
+                       data-group-name="${escapeHtml(row.name)}">
                     <div class="flex items-center justify-between">
                       <div class="text-sm font-medium text-white">${row.name}</div>
-                      <div class="text-lg tracking-wide">${dotRow(row)}</div>
+                      <div class="flex items-center gap-1 flex-shrink-0">
+                        <div class="text-lg tracking-wide">${dotRow(row)}</div>
+                        <span class="text-slate-600 text-xs ml-1">›</span>
+                      </div>
                     </div>
-                    ${sub ? `<div class="text-xs text-slate-400 mt-0.5">${sub}</div>` : ''}
+                    ${(sub || chip) ? `<div class="flex items-center justify-between mt-0.5 gap-2"><div class="text-xs text-slate-400">${sub}</div>${chip}</div>` : ''}
                   </div>`;
               }).join('')
           }`;
@@ -1592,13 +1740,14 @@
         const subParts = [
           rsMo  !== null ? `Mo: ${rsMo  >= 0 ? '+' : ''}${rsMo.toFixed(1)}pp`  : null,
           rsDay !== null ? `Day: ${rsDay >= 0 ? '+' : ''}${rsDay.toFixed(1)}pp` : null,
-          bc    !== null ? `beats ${bc} tf` : null,
+          bc    !== null ? `beats ${bc}/6 tf` : null,
         ].filter(Boolean).join(' · ');
 
         const discreteBadges = [nhBadge, crossBadge].filter(Boolean).join(' ');
 
         return `
-          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 flex items-center gap-3">
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 flex items-center gap-3 cursor-pointer active:opacity-75 select-none"
+               data-group-name="${escapeHtml(row.name)}">
             <span class="text-sm font-bold text-slate-500 w-5 text-right flex-shrink-0">${i+1}</span>
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between gap-1">
@@ -1612,6 +1761,7 @@
               <div class="h-1.5 rounded-full bg-slate-700 mt-1 overflow-hidden">
                 <div class="h-full rounded-full ${style.bar}" style="width:${pct}%"></div>
               </div>
+              <div class="text-right"><span class="text-slate-600 text-xs">›</span></div>
             </div>
           </div>`;
       }).join('');
@@ -1654,10 +1804,11 @@
           rsScore !== null ? `RS Score ${(rsScore*100).toFixed(0)}%` : null,
         ].filter(Boolean).join('  ·  ');
         return `
-          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700">
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 cursor-pointer active:opacity-75 select-none"
+               data-group-name="${escapeHtml(row.name)}">
             <div class="flex items-center justify-between gap-1">
               <div class="text-sm font-medium text-white">${row.name}</div>
-              <div class="flex items-center gap-1 flex-shrink-0">${discreteBadges}<span class="text-xs font-mono ${regimeColor} ml-1">${sign}${regime.toFixed(2)}</span></div>
+              <div class="flex items-center gap-1 flex-shrink-0">${discreteBadges}<span class="text-xs font-mono ${regimeColor} ml-1">${sign}${regime.toFixed(2)}</span><span class="text-slate-600 text-xs ml-1">›</span></div>
             </div>
             ${rsBar(regime)}
             ${sub ? `<div class="text-xs text-slate-400">${sub}</div>` : ''}
@@ -1714,6 +1865,23 @@
       const sectors    = data.sectors    || {};
       const industries = data.industries || {};
       const activeGroup = state.group === 'sectors' ? sectors : industries;
+      const groupPrefix = state.group === 'sectors' ? 'sectors' : 'industries';
+      const prov = state.provenanceData;
+
+      // Render an expandable "Behind this" drawer showing the raw input data
+      // block that was fed to the model. Only appears when Tier-1 provenance is
+      // available (i.e. data/ai/provenance/{date}.json exists). Absent for dates
+      // before Phase 4 landed (2026-06-22). Uses <details> — no JS toggle needed.
+      function behindThis(taskName) {
+        if (!prov) return '';
+        const entry = prov[`${groupPrefix}.${taskName}`];
+        if (!entry || !entry.input_blocks) return '';
+        return `<details class="mt-2">
+          <summary class="text-xs text-slate-500 cursor-pointer hover:text-slate-400 select-none inline-flex items-center gap-1">ⓘ Behind this</summary>
+          <div class="mt-2 p-3 bg-slate-900 rounded-lg border border-slate-600/50 text-xs text-slate-400 font-mono whitespace-pre-wrap leading-relaxed overflow-x-auto">${escapeHtml(entry.input_blocks)}</div>
+        </details>`;
+      }
+
       let html = '';
 
       // Generated-at caption with relative time
@@ -1739,6 +1907,35 @@
       const shareBtn = document.getElementById('ai-share-btn');
       if (shareBtn) shareBtn.disabled = false;
 
+      // Focused briefing fields (added 2026.06.21) — each is independent and may
+      // be absent on older JSON files, so every block guards before rendering.
+      const pulse = activeGroup.pulse || null;
+
+      // Headline hero — punchy one-liner at the very top.
+      if (pulse && typeof pulse.headline === 'string' && pulse.headline.trim()) {
+        html += `<div class="rounded-xl p-4 mb-3 bg-gradient-to-br from-sky-900/50 to-slate-800 border border-sky-700/50">
+          <div class="text-base font-bold text-white leading-snug">${escapeHtml(pulse.headline.trim())}</div>
+        </div>`;
+      }
+
+      // Conviction badge — High / Medium / Low with one-line rationale.
+      if (pulse && pulse.conviction && pulse.conviction.level) {
+        const lvl = pulse.conviction.level;
+        const cm = {
+          'High':   { bg: 'bg-emerald-900/40', border: 'border-emerald-600/50', text: 'text-emerald-300', dot: '#22c55e' },
+          'Medium': { bg: 'bg-yellow-900/40',  border: 'border-yellow-600/50',  text: 'text-yellow-300', dot: '#eab308' },
+          'Low':    { bg: 'bg-rose-900/40',     border: 'border-rose-600/50',    text: 'text-rose-300',   dot: '#f43f5e' },
+        }[lvl] || { bg: 'bg-slate-800', border: 'border-slate-600', text: 'text-slate-300', dot: '#64748b' };
+        html += `<div class="rounded-xl p-4 ${cm.bg} border ${cm.border} mb-3">
+          <div class="flex items-center gap-2 mb-1">
+            <div class="w-3.5 h-3.5 rounded-full flex-shrink-0" style="background-color:${cm.dot}"></div>
+            <div class="text-sm font-bold ${cm.text}">Conviction: ${escapeHtml(lvl)}</div>
+          </div>
+          ${pulse.conviction.why ? `<div class="text-xs text-slate-300 italic leading-relaxed">${escapeHtml(pulse.conviction.why)}</div>` : ''}
+          ${behindThis('pulse')}
+        </div>`;
+      }
+
       // Rotation phase — sectors only. Skip empty / "Unknown" labels.
       const phase = activeGroup.rotation_phase;
       const phaseLabel = phase && phase.label && phase.label !== 'Unknown' ? phase.label : '';
@@ -1758,6 +1955,7 @@
               <button class="why-link ml-auto text-xs text-sky-400 active:text-sky-300 flex-shrink-0" onclick="__openHub('guide','rotation_phase')" title="What does this mean?">ⓘ</button>
             </div>
             ${phase.reasoning ? `<div class="text-xs text-slate-300 italic leading-relaxed">${escapeHtml(phase.reasoning)}</div>` : ''}
+            ${behindThis('rotation_phase')}
           </div>`;
         if (state.group === 'sectors') {
           html += `<div id="ai-phase-history" class="mb-3"></div>`;
@@ -1766,14 +1964,13 @@
 
       // Daily note — group-toggle-aware freeform markdown
       const groupLabel = state.group === 'sectors' ? 'Sectors' : 'Industries';
-      const note = activeGroup.note
-        || (typeof activeGroup.briefing === 'string' ? activeGroup.briefing : activeGroup.briefing?.briefing)
-        || '';
+      const note = activeGroup.note || '';
 
       html += `<div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Daily Note — ${groupLabel}</div>`;
       if (note && typeof note === 'string' && note.trim()) {
         html += `<div class="rounded-xl p-4 bg-slate-800 border border-slate-700">
           ${renderMarkdown(note)}
+          ${behindThis('note')}
         </div>`;
       } else {
         html += `<div class="rounded-xl p-4 bg-slate-800 border border-slate-700 text-center">
@@ -1782,6 +1979,27 @@
             ? '<p class="text-slate-500 text-xs mt-1">Switch to Sectors for the available note.</p>'
             : ''}
         </div>`;
+      }
+
+      // Briefing section cards — each guarded so a missing field (or old JSON
+      // entirely) simply renders nothing rather than throwing. renderMarkdown
+      // runs all model text through escapeHtml, so card bodies are XSS-safe.
+      // taskName (optional) enables the "Behind this" drawer for cards with a
+      // 1:1 fkey mapping; risk_radar spans two sections so it's handled inline.
+      const briefingCard = (body, label, accent, taskName = null) => {
+        if (!body || typeof body !== 'string' || !body.trim()) return;
+        const behind = taskName ? behindThis(taskName) : '';
+        html += `<div class="text-xs font-semibold ${accent} uppercase tracking-wider mt-4 mb-2">${label}</div>
+          <div class="rounded-xl p-4 bg-slate-800 border border-slate-700">${renderMarkdown(body)}${behind}</div>`;
+      };
+      briefingCard(activeGroup.rotation_map, 'Rotation Map — From → To', 'text-violet-300', 'rotation_map');
+      briefingCard(activeGroup.watchlist, 'Watchlist', 'text-sky-300', 'watchlist');
+      const riskRadar = activeGroup.risk_radar || null;
+      if (riskRadar) {
+        // risk_radar covers two display sections but shares one provenance fkey.
+        // Show "Behind this" only on the first section to avoid duplication.
+        briefingCard(riskRadar.relative_strength, 'Relative Strength vs S&P', 'text-emerald-300', 'risk_radar');
+        briefingCard(riskRadar.risks, 'Risks & Fragility', 'text-rose-300');
       }
 
       container.innerHTML = html;
@@ -1836,9 +2054,12 @@
       if (found) {
         state.currentAiDate = found.dateStr;
         state.aiData = found.data;
+        state.provenanceData = null; // cleared; loadProvenance below re-fills it
+        loadProvenance(found.dateStr).catch(() => {});
       } else {
         // Mark sentinel so renderAI can show "no data" message
         state.aiData = { _noData: true };
+        state.provenanceData = null;
       }
       renderAI();
       updateAINavUI();
@@ -1929,10 +2150,23 @@
         : '<span class="text-[0.5rem] px-1 py-0.5 rounded bg-sky-900/50 text-sky-300 ml-1">I</span>';
     }
 
+    function evictItem(type, name) {
+      if (isPinned(type, name)) {
+        lsSet(PINNED_KEY, getPinned().filter(p => !(p.type === type && p.name === name)));
+      } else {
+        lsSet(RECENT_KEY, getRecents().filter(x => !(x.type === type && x.name === name)));
+      }
+      renderLookupChips();
+    }
+
     function savedChipHtml(item) {
       const badge = _chipBadge(item.type, item.groupKey);
       const gAttr = item.groupKey ? ` data-chip-group="${item.groupKey}"` : '';
-      return `<button class="lookup-chip flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-sm text-slate-200 hover:bg-slate-700 active:bg-slate-600 transition-colors" style="min-height:36px" data-chip-type="${item.type}" data-chip-name="${escapeHtml(item.name)}"${gAttr}>${escapeHtml(item.name)}${badge}</button>`;
+      // Wrapper span: left button triggers lookup, right × button evicts.
+      return `<span class="lookup-chip-wrap inline-flex items-center rounded-full bg-slate-800 border border-slate-700" style="min-height:36px">` +
+        `<button class="lookup-chip flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-l-full text-sm text-slate-200 hover:bg-slate-700 active:bg-slate-600 transition-colors" data-chip-type="${item.type}" data-chip-name="${escapeHtml(item.name)}"${gAttr}>${escapeHtml(item.name)}${badge}</button>` +
+        `<button class="lookup-chip-evict px-1.5 py-1 rounded-r-full text-slate-500 hover:text-slate-200 hover:bg-slate-700 transition-colors text-xs leading-none" aria-label="Remove" data-evict-type="${item.type}" data-evict-name="${escapeHtml(item.name)}">×</button>` +
+        `</span>`;
     }
 
     function dataChipHtml(item) {
@@ -1961,8 +2195,7 @@
       }
       const pinned  = getPinned();
       const recents = getRecents();
-      const hasSaved = pinned.length || recents.length;
-      const dataChips = hasSaved ? [] : topMomentumChips(5);
+      const dataChips = topMomentumChips(5);
       if (!pinned.length && !recents.length && !dataChips.length) {
         el.classList.add('hidden'); return;
       }
@@ -2077,17 +2310,29 @@
       if (!raw || raw.trim().length < 2) return [];
       const q = raw.trim().toLowerCase();
       const prefix = [], sub = [];
+      const seen = new Set();
       for (const groupKey of ['sectors', 'industries']) {
         const snaps = (state.data[groupKey]?.snap) || [];
         for (const r of snaps) {
           const lo = r.name.toLowerCase();
-          if (lo.startsWith(q)) prefix.push({ name: r.name, groupKey });
-          else if (lo.includes(q)) sub.push({ name: r.name, groupKey });
+          if (lo.startsWith(q)) { prefix.push({ name: r.name, groupKey, matchType: 'prefix' }); seen.add(r.name); }
+          else if (lo.includes(q)) { sub.push({ name: r.name, groupKey, matchType: 'sub' }); seen.add(r.name); }
         }
       }
       prefix.sort((a, b) => a.name.localeCompare(b.name));
       sub.sort((a, b) => a.name.localeCompare(b.name));
-      return [...prefix, ...sub].slice(0, 6);
+      const results = [...prefix, ...sub];
+      // Synonym match: colloquial alias → exact Finviz name (e.g. "semis" → Semiconductors).
+      if (results.length < 6) {
+        const syn = resolveGroupSynonym(raw);
+        if (syn && !seen.has(syn.name)) { results.push({ ...syn, matchType: 'synonym' }); seen.add(syn.name); }
+      }
+      // Fuzzy match: catch typos when few exact hits exist.
+      if (results.length < 3) {
+        const fz = findFuzzyGroupMatch(raw);
+        if (fz && !seen.has(fz.name)) results.push({ name: fz.name, groupKey: fz.groupKey, matchType: 'fuzzy' });
+      }
+      return results.slice(0, 6);
     }
 
     let _suggFocusIdx = -1;
@@ -2113,17 +2358,22 @@
       el.innerHTML = suggestions.map(s => {
         const lo = s.name.toLowerCase();
         const idx = lo.indexOf(q);
-        const hl = idx >= 0
+        const hl = (idx >= 0 && s.matchType !== 'synonym' && s.matchType !== 'fuzzy')
           ? escapeHtml(s.name.slice(0, idx))
             + `<span class="font-semibold text-sky-300">${escapeHtml(s.name.slice(idx, idx + q.length))}</span>`
             + escapeHtml(s.name.slice(idx + q.length))
           : escapeHtml(s.name);
-        const badge = s.groupKey === 'sectors'
+        const groupBadge = s.groupKey === 'sectors'
           ? `<span class="flex-shrink-0 text-[0.55rem] px-1.5 py-0.5 rounded bg-violet-900/50 text-violet-300 leading-none">S</span>`
           : `<span class="flex-shrink-0 text-[0.55rem] px-1.5 py-0.5 rounded bg-sky-900/50 text-sky-300 leading-none">I</span>`;
+        const matchBadge = s.matchType === 'synonym'
+          ? `<span class="flex-shrink-0 text-[0.55rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 leading-none">≈ alias</span>`
+          : s.matchType === 'fuzzy'
+          ? `<span class="flex-shrink-0 text-[0.55rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 leading-none">~ fuzzy</span>`
+          : '';
         return `<button class="lookup-suggestion w-full text-left px-3 py-2.5 text-sm text-white hover:bg-slate-700 flex justify-between items-center gap-2"
           style="min-height:40px" role="option" aria-selected="false"
-          data-name="${escapeHtml(s.name)}" data-group="${s.groupKey}"><span>${hl}</span>${badge}</button>`;
+          data-name="${escapeHtml(s.name)}" data-group="${s.groupKey}"><span>${hl}</span><span class="flex items-center gap-1">${matchBadge}${groupBadge}</span></button>`;
       }).join('');
       _suggFocusIdx = -1;
       el.classList.remove('hidden');
@@ -2365,9 +2615,7 @@
         const fmtConfirmed = confirmed !== null
           ? `<span class="${momentumStyle(confirmed).text}">${(confirmed * 100).toFixed(0)}%</span>`
           : '<span class="text-slate-600">—</span>';
-        const fmtAccel = accel !== null
-          ? (accelBadge(accel) || '<span class="text-slate-500">flat</span>')
-          : '<span class="text-slate-600">—</span>';
+        const fmtAccel = accelBadge(accel);   // handles null/flat/building/fading uniformly
         const regimeCls = regime !== null
           ? (regime >= REGIME_THRESHOLD ? 'text-emerald-400' : regime <= -REGIME_THRESHOLD ? 'text-red-400' : 'text-slate-400')
           : '';
@@ -2720,6 +2968,8 @@
       if (state.aiData && !state.aiData._noData && Object.keys(state.aiData).length > 0) {
         const aiDate = state.aiData.date || latestDate;
         state.latestAiDate = aiDate;
+        // Load Tier-1 provenance for the "Behind this" drawer (non-blocking, best-effort)
+        loadProvenance(aiDate).catch(() => {});
       }
       setLoading(false);
       render();
@@ -2800,12 +3050,27 @@
     function getSeenRelease() { try { return localStorage.getItem(SEEN_RELEASE_KEY); } catch(e) { return null; } }
     function setSeenRelease(v) { try { localStorage.setItem(SEEN_RELEASE_KEY, v); } catch(e) {} }
 
+    function updateTabBarPosition() {
+      const header = document.getElementById('header');
+      const banner = document.getElementById('update-banner');
+      const tabBar = document.getElementById('tab-bar');
+      if (!tabBar) return;
+      const headerHeight = header ? header.offsetHeight : 58;
+      const bannerVisible = banner && !banner.classList.contains('hidden');
+      const bannerHeight = bannerVisible ? banner.offsetHeight : 0;
+      const rootStyles = getComputedStyle(document.documentElement);
+      const safeAreaStr = rootStyles.getPropertyValue('--safe-area-inset-top').trim();
+      const safeAreaTop = safeAreaStr.includes('px') ? parseInt(safeAreaStr) : 0;
+      tabBar.style.top = `${safeAreaTop + headerHeight + bannerHeight}px`;
+    }
+
     function clearUnseen() {
       if (RELEASES && RELEASES.current) setSeenRelease(RELEASES.current);
       const dot = document.getElementById('hub-dot');
       if (dot) dot.classList.add('hidden');
       const banner = document.getElementById('update-banner');
       if (banner) banner.classList.add('hidden');
+      updateTabBarPosition();
     }
 
     function applyUnseenIndicator() {
@@ -2826,6 +3091,7 @@
         const txt = document.getElementById('update-banner-text');
         if (txt) txt.textContent = rel.title ? `What's new: ${rel.title}` : "What's new";
         if (banner) banner.classList.remove('hidden');
+        updateTabBarPosition();
       }
     }
 
@@ -3189,6 +3455,7 @@
       state.data.industries = { snap: null, delta: null, deltaAll: null };
       state.fetchLog = null;
       state.aiData = null;
+      state.provenanceData = null;
       state.latestAiDate = null;
       state.latestSnapshotDate = null;
       state.currentAiDate = null;
@@ -3208,6 +3475,61 @@
 
     // Lookback button listeners are wired in renderLookbackButtons() after CSV load (LB-FF1).
 
+    // Rank dimension toggle (YTD / Month / Week) for Movers tab.
+    document.querySelectorAll('.movers-rank-btn').forEach(btn =>
+      btn.addEventListener('click', () => {
+        state.moversRankDim = btn.dataset.rankdim;
+        renderMovers();
+      }));
+
+    // Mover card tap → Lookup: single delegated listener on the content container.
+    document.getElementById('movers-content').addEventListener('click', e => {
+      const card = e.target.closest('[data-mover-name]');
+      if (!card) return;
+      const name = card.dataset.moverName;
+      if (!name) return;
+      switchTab('lookup');
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0; // iOS Safari
+      doGroupLookup(name, state.group);
+    });
+
+    // Momentum card tap → Lookup (covers both Momentum Cards and Rotation views)
+    document.getElementById('momentum-list').addEventListener('click', e => {
+      const card = e.target.closest('[data-group-name]');
+      if (!card) return;
+      const name = card.dataset.groupName;
+      if (!name) return;
+      switchTab('lookup');
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0; // iOS Safari
+      doGroupLookup(name, state.group);
+    });
+
+    // Strength card tap → Lookup (covers Sustained, Weak, and All Green views)
+    document.getElementById('strength-list').addEventListener('click', e => {
+      const card = e.target.closest('[data-group-name]');
+      if (!card) return;
+      const name = card.dataset.groupName;
+      if (!name) return;
+      switchTab('lookup');
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0; // iOS Safari
+      doGroupLookup(name, state.group);
+    });
+
+    // vs Market card tap → Lookup (covers RS Score and RS Regime views)
+    document.getElementById('vsmarket-list').addEventListener('click', e => {
+      const card = e.target.closest('[data-group-name]');
+      if (!card) return;
+      const name = card.dataset.groupName;
+      if (!name) return;
+      switchTab('lookup');
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0; // iOS Safari
+      doGroupLookup(name, state.group);
+    });
+
     document.getElementById('sort-metric').addEventListener('change', e => {
       state.sortMetric = e.target.value;
       savePrefs();
@@ -3215,6 +3537,19 @@
     });
 
     document.getElementById('search-input').addEventListener('input', () => renderToday());
+
+    // Today card › button → Lookup. stopPropagation prevents the expand handler from also firing.
+    document.getElementById('today-cards').addEventListener('click', e => {
+      const btn = e.target.closest('[data-today-lookup]');
+      if (!btn) return;
+      e.stopPropagation();
+      const name = btn.dataset.todayLookup;
+      if (!name) return;
+      switchTab('lookup');
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0; // iOS Safari
+      doGroupLookup(name, state.group);
+    });
 
     document.getElementById('today-cards').addEventListener('click', e => {
       const card = e.target.closest('[data-name]');
@@ -3275,8 +3610,10 @@
       document.getElementById('ticker-input').value = btn.dataset.name;
       doGroupLookup(btn.dataset.name, btn.dataset.group);
     });
-    // Chip click: run the saved/data chip lookup (Ideas 5+7)
+    // Chip click: evict × or run the saved/data chip lookup (Ideas 5+7)
     document.getElementById('lookup-chips').addEventListener('click', e => {
+      const evict = e.target.closest('.lookup-chip-evict');
+      if (evict) { evictItem(evict.dataset.evictType, evict.dataset.evictName); return; }
       const btn = e.target.closest('.lookup-chip');
       if (!btn) return;
       const type = btn.dataset.chipType;
@@ -3402,6 +3739,7 @@
     loadPrefs();
     initUIFromState();
     loadAndRender();
+    updateTabBarPosition();
     loadReleases();
     _wireIntroControls();
     // Show first-run carousel once; fvt_intro_seen_v1 persists across reloads.
@@ -3411,6 +3749,12 @@
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('/finviz-groups-tracker/sw.js')
           .catch(() => {}); // silently ignore in non-Pages environments
+      });
+      // Auto-reload when a new SW version activates (CACHE bump on deploy).
+      // The SW broadcasts SW_RELOAD after claiming all clients; we reload so the
+      // new shell HTML is rendered without requiring a manual refresh.
+      navigator.serviceWorker.addEventListener('message', e => {
+        if (e.data?.type === 'SW_RELOAD') location.reload();
       });
     }
 

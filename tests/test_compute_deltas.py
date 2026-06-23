@@ -963,6 +963,16 @@ class TestComputeRsNewHigh:
         s = cd.compute_rs_new_high(hist, bench, dates, date(2026, 6, 13))
         assert len(s) == 0
 
+    def test_single_overlapping_session_returns_nan(self, rs_history_4sessions):
+        # Regression: SPY data on only ONE session in the window means each group
+        # has a single RS observation, which must NOT trivially flag a new high.
+        dates, _, hist = rs_history_4sessions
+        sparse_bench = pd.DataFrame({"date": [date(2026, 6, 12)], "perf_month": [1.0]})
+        s = cd.compute_rs_new_high(hist, sparse_bench, dates, date(2026, 6, 12), window=4)
+        assert s["Tech"] != s["Tech"]  # NaN
+        assert s["Energy"] != s["Energy"]
+        assert s["Finance"] != s["Finance"]
+
 
 class TestComputeRsCross:
     def test_crossed_from_negative_returns_1(self, rs_history_4sessions):
@@ -999,6 +1009,14 @@ class TestComputeRsCross:
         dates, _, hist = rs_history_4sessions
         s = cd.compute_rs_cross(hist, pd.DataFrame(), dates, date(2026, 6, 12))
         assert len(s) == 0
+
+    def test_single_overlapping_session_returns_nan(self, rs_history_4sessions):
+        # Regression: a single RS observation cannot have "crossed" anything.
+        dates, _, hist = rs_history_4sessions
+        sparse_bench = pd.DataFrame({"date": [date(2026, 6, 12)], "perf_month": [1.0]})
+        s = cd.compute_rs_cross(hist, sparse_bench, dates, date(2026, 6, 12), window=4)
+        assert s["Tech"] != s["Tech"]  # NaN
+        assert s["Energy"] != s["Energy"]
 
 
 class TestBeatsAndDiscreteInComputeForGroup:

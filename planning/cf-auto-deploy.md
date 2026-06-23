@@ -1,6 +1,6 @@
 # CF Auto-Deploy: Cloudflare Workers CI/CD
 
-**Status:** Planned — not yet implemented  
+**Status:** ✅ Implemented — `.github/workflows/deploy-workers.yml` shipped on `claude/trusting-mendel-lq4nhm`  
 **Branch:** `claude/cloudflare-auto-deploy-mi0cb5`  
 **Requested:** 2026-06-21 — "auto-deploy merged CF code to CF; stop relying on best intentions"
 

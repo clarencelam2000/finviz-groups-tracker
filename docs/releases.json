@@ -1,17 +1,105 @@
 {
-  "current": "2026.06.21.3",
+  "current": "2026.06.23.2",
   "releases": [
     {
-      "version": "2026.06.21.3",
-      "date": "2026-06-21",
+      "version": "2026.06.23.2",
+      "date": "2026-06-23",
       "title": "Quieter scores: single-day noise removed",
       "tag": "improvement",
       "tab": "momentum",
       "notes": [
         "Momentum Score now averages 6 timeframes (week → YTD) instead of 7 — the single-day move is excluded because one noisy session could knock a true leader down ~14% for no real reason. Scores are now ~40% steadier day-to-day.",
-        "RS Score and the 'beats N tf' count drop the single-day spread the same way (now 'beats N/6 tf'). A red day vs the S&P no longer dents a group that's beating the market across every durable horizon.",
+        "RS Score and the 'beats N/6 tf' count drop the single-day spread the same way. A red day vs the S&P no longer dents a group that's beating the market across every durable horizon.",
         "The day's RS spread is still shown for context — on the vs Market card it now sits behind the 1-month figure rather than leading it.",
         "No action needed: scores recompute automatically."
+      ]
+    },
+    {
+      "version": "2026.06.23.1",
+      "date": "2026-06-23",
+      "title": "Tap any card to drill into Lookup",
+      "tag": "feature",
+      "notes": [
+        "Every group card across Momentum, Strength, vs Market, and Today tabs now taps through to the Lookup tab with that group pre-filled.",
+        "Subtle › affordance on each card signals tappability. No back-navigation from Lookup — by design for now."
+      ]
+    },
+    {
+      "version": "2026.06.23",
+      "date": "2026-06-23",
+      "title": "Lookup: evict chips, live fuzzy typeahead, always-on momentum chips",
+      "tag": "improvement",
+      "tab": "lookup",
+      "notes": [
+        "Tap × on any recent or pinned chip to remove it without opening the result.",
+        "Typing a colloquial name (semis, pharma, banks…) or a near-typo now shows the match in the typeahead dropdown with an ≈ alias or ~ fuzzy badge — no need to submit first.",
+        "Top momentum chips now appear below recent and pinned searches, not just when the shelf is empty."
+      ]
+    },
+    {
+      "version": "2026.06.22.2",
+      "date": "2026-06-22",
+      "title": "AI tab: \"Behind this\" data provenance drawer",
+      "tag": "feature",
+      "tab": "ai",
+      "notes": [
+        "Each AI card now has a collapsible \"ⓘ Behind this\" section showing the exact computed signals (breadth %, rank movers, RS spreads, divergences) that were fed to the model — so you can see the data behind every conclusion.",
+        "Provenance is available for dates on or after today; older dates show no drawer (backward-compatible).",
+        "The drawer is read-only and contains only input signals — no raw model response."
+      ]
+    },
+    {
+      "version": "2026.06.22.1",
+      "date": "2026-06-22",
+      "title": "Movers tab: RS signals, drill-down & rank toggle",
+      "tag": "improvement",
+      "tab": "movers",
+      "notes": [
+        "Top Gainers now show an NH badge (amber) when a group's RS vs S&P is at a 20-session high, or a ↑ cross badge (sky) when it just flipped from lagging to beating the market — so a rank climber that's also outperforming the market is immediately visible.",
+        "The momentum label on each card renamed from 'Score' to 'Mom' for clarity, consistent with the Today tab.",
+        "Tap any mover card to jump directly to that group's full Lookup detail (perf history, RS spreads, AI context) — adds it to your recents automatically.",
+        "New YTD / Month / Week toggle below the lookback buttons: switch between tracking YTD rank changes (position traders), Month rank (swing), or Week rank (active) without leaving the tab."
+      ]
+    },
+    {
+      "version": "2026.06.22",
+      "date": "2026-06-22",
+      "title": "Momentum tab: confirmed scores + clearer rotation",
+      "tag": "improvement",
+      "tab": "momentum",
+      "notes": [
+        "Momentum cards now headline Confirmed momentum (strength gated by cross-timeframe agreement) instead of the raw score, so broad-based leaders rank above groups riding a single hot timeframe. The raw score is still shown under each name.",
+        "Rotation cards now show the actual short- and long-horizon percentile ranks the regime signal is built from (e.g. 'Short 78th · Long 22nd pctile') — these reconcile exactly with the regime number, unlike the old raw-% line.",
+        "The Established (balanced) list is now sorted by momentum strength with a divider after the top 3, so the groups closest to rotating in surface first.",
+        "Acceleration badges now distinguish 'steady' (~) from 'not enough history yet' (—) instead of showing nothing for both."
+      ]
+    },
+    {
+      "version": "2026.06.21.4",
+      "date": "2026-06-21",
+      "title": "AI tab: structured desk briefing",
+      "tag": "feature",
+      "tab": "ai",
+      "notes": [
+        "The AI tab now leads with a one-line Headline and a Conviction badge (High / Medium / Low) judging how broad and consistent today's read is.",
+        "New Rotation Map card spells out capital flow as 'OUT of X → IN to Y' pairs — the core rotation thesis, stated literally.",
+        "New Watchlist card surfaces 3–5 specific groups to watch with the exact trigger (RS cross, RS new high, or rank/momentum divergence).",
+        "New Relative Strength card calls out which groups are actually beating the S&P 500 (not just leading their peers).",
+        "New Risks & Fragility card flags strong-but-slipping and all-green-but-unstable setups so the bullish read stays honest.",
+        "Each section is generated by its own focused AI call with purpose-built input data (e.g. the Rotation Map is fed week/month perf, rs_slope and RS-cross flags so it reports real flows instead of guessing pairings; the Watchlist is fed pre-tagged trigger types). Older dates without a briefing still render fine."
+      ]
+    },
+    {
+      "version": "2026.06.21.3",
+      "date": "2026-06-21",
+      "title": "Strength cards show 'beats N/7' vs S&P",
+      "tag": "feature",
+      "tab": "strength",
+      "notes": [
+        "Sustained and All Green cards now carry a 'beats N/7' chip showing how many of the 7 timeframes the group is outperforming the S&P 500.",
+        "The chip is colored by RS Score (green = broadly beating the market, red = broadly lagging), so you can tell a true market-beater from a group that's only riding a broad rally.",
+        "The chip is hidden when there's no S&P benchmark row for the date — a group is never mislabeled as confirmed when RS data is missing.",
+        "Uses existing rs_score / beats_benchmark columns — no pipeline changes."
       ]
     },
     {

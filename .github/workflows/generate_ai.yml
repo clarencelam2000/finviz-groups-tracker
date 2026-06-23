@@ -55,7 +55,24 @@ jobs:
           GOOGLE_CLOUD_PROJECT: ${{ secrets.GOOGLE_CLOUD_PROJECT }}
           GOOGLE_CLOUD_LOCATION: global
           FORCE_AI: ${{ github.event.inputs.force_ai == 'true' && '1' || '' }}
+          # AI_CAPTURE=1: write Tier-2 debug capture (data/ai/debug/{date}.json)
+          # on every CI run so prompt+raw+parsed+usage+latency are never lost to
+          # the ephemeral runner. Rolling 30-day window keeps HEAD bounded (~1 MB).
+          AI_CAPTURE: '1'
         run: python scripts/generate_ai.py
+
+      - name: Upload Tier-2 debug capture artifact
+        # Upload data/ai/debug/ as a CI artifact for ergonomic long-term access
+        # without git log spelunking. Kept for 90 days by GitHub Actions.
+        # NOTE(reassess): review artifact volume once Phase 6 eval is live —
+        # at that point consider whether the git history alone is sufficient.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-debug-capture-${{ github.run_id }}
+          path: data/ai/debug/
+          if-no-files-found: ignore
+          retention-days: 90
 
       - name: Commit and push
         if: always()

@@ -552,7 +552,11 @@ def compute_rs_new_high(df_hist: pd.DataFrame, bench_df: pd.DataFrame,
     result = {}
     for name, pts in per_name.items():
         today_vals = [v for x, v in pts if x == last_x]
-        if not today_vals:
+        # Need today's point AND at least one prior overlapping session: a "new
+        # high" is meaningless with a single observation. A group with only one
+        # SPY-overlapping session in the window (e.g. sparse benchmark history)
+        # would otherwise trivially satisfy today_rs >= window_max and flag 1.
+        if not today_vals or len(pts) < 2:
             result[name] = float("nan")
             continue
         today_rs = today_vals[0]
@@ -585,7 +589,9 @@ def compute_rs_cross(df_hist: pd.DataFrame, bench_df: pd.DataFrame,
     for name, pts in per_name.items():
         sorted_pts = sorted(pts, key=lambda p: p[0])
         today_vals = [v for x, v in sorted_pts if x == last_x]
-        if not today_vals:
+        # A cross requires today plus at least one prior overlapping session to
+        # compare against; a single observation cannot have "crossed" anything.
+        if not today_vals or len(sorted_pts) < 2:
             result[name] = float("nan")
             continue
         today_rs = today_vals[0]

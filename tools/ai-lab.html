@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI Lab — Finviz Groups Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .diff-add  { background: rgba(34,197,94,.18); color: #86efac; display: block; }
+    .diff-del  { background: rgba(239,68,68,.18);  color: #fca5a5; display: block; }
+    .diff-same { display: block; }
+    code, pre, .mono { font-family: ui-monospace, 'Cascadia Code', 'Source Code Pro', monospace; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-200 text-sm min-h-screen">
+<div id="app" class="max-w-5xl mx-auto px-4 py-6">
+
+  <!-- Header -->
+  <div class="flex items-baseline gap-3 mb-5">
+    <span class="text-lg font-bold text-slate-100">AI Lab</span>
+    <span class="text-slate-500 text-xs">offline viewer for Tier-2 debug captures &middot; drag &amp; drop a JSON file to start</span>
+  </div>
+
+  <!-- File loaders -->
+  <div class="grid grid-cols-2 gap-3 mb-5">
+    <div id="drop-a"
+         class="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-700 p-6 cursor-pointer hover:border-slate-500 transition"
+         onclick="document.getElementById('file-a').click()"
+         ondragover="event.preventDefault()"
+         ondrop="handleDrop(event,'a')">
+      <span class="text-slate-400 text-xs mono">File A &mdash; primary</span>
+      <span id="label-a" class="text-slate-600 text-xs">drag &amp; drop or click</span>
+      <input type="file" id="file-a" class="hidden" accept=".json" onchange="handleFile(this,'a')">
+    </div>
+    <div id="drop-b"
+         class="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-700 p-6 cursor-pointer hover:border-slate-500 transition"
+         onclick="document.getElementById('file-b').click()"
+         ondragover="event.preventDefault()"
+         ondrop="handleDrop(event,'b')">
+      <span class="text-slate-400 text-xs mono">File B &mdash; compare / diff</span>
+      <span id="label-b" class="text-slate-600 text-xs">optional</span>
+      <input type="file" id="file-b" class="hidden" accept=".json" onchange="handleFile(this,'b')">
+    </div>
+  </div>
+
+  <!-- Metadata strip -->
+  <div id="meta-strip" class="hidden flex-wrap gap-4 text-xs mono text-slate-400 bg-slate-900 rounded-lg px-4 py-2 mb-3"></div>
+
+  <!-- Filter row -->
+  <div id="filter-row" class="hidden flex gap-3 items-center mb-4">
+    <select id="task-filter"
+            class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none"
+            onchange="render()">
+      <option value="">All tasks</option>
+    </select>
+    <select id="group-filter"
+            class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none"
+            onchange="render()">
+      <option value="">All groups</option>
+      <option value="sectors">Sectors</option>
+      <option value="industries">Industries</option>
+    </select>
+    <div id="summary-line" class="ml-auto text-xs text-slate-500 mono"></div>
+  </div>
+
+  <!-- Call cards -->
+  <div id="calls" class="space-y-3"></div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+const S = {
+  a: null,         // parsed File A JSON
+  b: null,         // parsed File B JSON (optional)
+  pane: {},        // fkey -> active tab name
+};
+
+// ---------------------------------------------------------------------------
+// File I/O
+// ---------------------------------------------------------------------------
+function handleDrop(ev, slot) {
+  ev.preventDefault();
+  const file = ev.dataTransfer.files[0];
+  if (file) readFile(file, slot);
+}
+function handleFile(input, slot) {
+  if (input.files[0]) readFile(input.files[0], slot);
+}
+function readFile(file, slot) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      S[slot] = JSON.parse(e.target.result);
+      document.getElementById('label-' + slot).textContent =
+        file.name + '  (' + (S[slot].date || '?') + ')';
+      render();
+    } catch (err) {
+      alert('Could not parse JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function fmtTok(u) {
+  if (!u || !u.total_tokens) return '—';
+  const t = u.total_tokens;
+  return t >= 1000 ? (t/1000).toFixed(1) + 'k tok' : t + ' tok';
+}
+function fmtLat(l) {
+  return l ? Number(l).toFixed(1) + 's' : '—';
+}
+function badge(text, cls) {
+  return `<span class="rounded px-1.5 py-0.5 text-xs mono ${cls}">${esc(text)}</span>`;
+}
+function statusBadge(s) {
+  return s === 'ok'
+    ? badge(s, 'bg-emerald-900/60 text-emerald-300')
+    : badge(s || '—', 'bg-amber-900/60 text-amber-300');
+}
+
+// ---------------------------------------------------------------------------
+// Line diff (LCS-based)
+// ---------------------------------------------------------------------------
+function diffLines(textA, textB) {
+  const a = (textA || '').split('\n');
+  const b = (textB || '').split('\n');
+  const m = a.length, n = b.length;
+
+  // Skip heavy LCS for very large texts — just return raw side-by-side marker
+  if (m * n > 250000) {
+    return [{ t: 'note', v: '(texts too large for inline diff — see tabs A / B)' }];
+  }
+
+  const dp = [];
+  for (let i = 0; i <= m; i++) dp.push(new Int32Array(n + 1));
+  for (let i = m - 1; i >= 0; i--)
+    for (let j = n - 1; j >= 0; j--)
+      dp[i][j] = a[i] === b[j]
+        ? 1 + dp[i+1][j+1]
+        : Math.max(dp[i+1][j], dp[i][j+1]);
+
+  const ops = [];
+  let i = 0, j = 0;
+  while (i < m && j < n) {
+    if (a[i] === b[j])          { ops.push({ t: '=', v: a[i] }); i++; j++; }
+    else if (dp[i+1][j] >= dp[i][j+1]) { ops.push({ t: '-', v: a[i] }); i++; }
+    else                        { ops.push({ t: '+', v: b[j] }); j++; }
+  }
+  while (i < m) ops.push({ t: '-', v: a[i++] });
+  while (j < n) ops.push({ t: '+', v: b[j++] });
+  return ops;
+}
+
+function renderDiff(textA, textB) {
+  const ops = diffLines(textA, textB);
+  const added   = ops.filter(o => o.t === '+').length;
+  const removed = ops.filter(o => o.t === '-').length;
+  if (added === 0 && removed === 0) {
+    return '<div class="text-xs text-slate-500 italic">Identical</div>';
+  }
+  const summary = `<div class="text-xs text-slate-500 mb-2">+${added} / -${removed} lines</div>`;
+  const body = ops.map(op => {
+    if (op.t === 'note') return `<span class="text-xs text-amber-400 italic">${esc(op.v)}</span>`;
+    const cls = op.t === '+' ? 'diff-add' : op.t === '-' ? 'diff-del' : 'diff-same';
+    const pfx = op.t === '+' ? '+ ' : op.t === '-' ? '- ' : '  ';
+    return `<code class="${cls}">${esc(pfx + op.v)}</code>`;
+  }).join('');
+  return summary + `<div class="text-xs leading-5">${body}</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Content pane rendering
+// ---------------------------------------------------------------------------
+function paneHtml(fkey, tab, callA, callB) {
+  const get = (call, field) => (call || {})[field];
+  switch (tab) {
+    case 'input':       return preBlock(get(callA, 'input_blocks'));
+    case 'prompt':      return preBlock(get(callA, 'prompt'));
+    case 'raw':         return preBlock(get(callA, 'raw_response'));
+    case 'parsed':      return preBlock(fmtParsed(get(callA, 'parsed_output')));
+    case 'b_input':     return preBlock(get(callB, 'input_blocks'));
+    case 'b_raw':       return preBlock(get(callB, 'raw_response'));
+    case 'b_parsed':    return preBlock(fmtParsed(get(callB, 'parsed_output')));
+    case 'diff_input':  return renderDiff(get(callA,'input_blocks'), get(callB,'input_blocks'));
+    case 'diff_prompt': return renderDiff(get(callA,'prompt'),       get(callB,'prompt'));
+    case 'diff_raw':    return renderDiff(get(callA,'raw_response'), get(callB,'raw_response'));
+    default: return '<span class="text-slate-600">—</span>';
+  }
+}
+function preBlock(s) {
+  if (s == null) return '<span class="text-slate-600 italic text-xs">null</span>';
+  return `<pre class="text-xs text-slate-300 leading-5 whitespace-pre-wrap break-words">${esc(String(s))}</pre>`;
+}
+function fmtParsed(v) {
+  if (v == null) return null;
+  if (typeof v === 'string') return v;
+  return JSON.stringify(v, null, 2);
+}
+
+// ---------------------------------------------------------------------------
+// Render — top level
+// ---------------------------------------------------------------------------
+function render() {
+  if (!S.a) return;
+
+  // Meta strip
+  const m = S.a;
+  let metaHtml = [
+    m.date       ? `<span>📅 ${esc(m.date)}</span>`    : '',
+    m.model      ? `<span>🤖 ${esc(m.model)}</span>`   : '',
+    m.backend    ? `<span>🔑 ${esc(m.backend)}</span>` : '',
+    m.captured_at
+      ? `<span>⏰ ${esc(m.captured_at.replace('T',' ').replace('Z',' UTC'))}</span>`
+      : '',
+  ].filter(Boolean).join('');
+  if (S.b) metaHtml += `<span class="text-slate-600">│</span><span class="text-sky-400">B: ${esc(S.b.date || '?')}</span>`;
+  document.getElementById('meta-strip').innerHTML = metaHtml;
+  document.getElementById('meta-strip').classList.replace('hidden','flex');
+
+  // Update task filter options
+  const tf = document.getElementById('task-filter');
+  const calls = S.a.calls || {};
+  const tasks = [...new Set(Object.keys(calls).map(k => k.split('.').slice(-1)[0]))];
+  const curTask = tf.value;
+  tf.innerHTML = '<option value="">All tasks</option>' +
+    tasks.map(t => `<option value="${t}"${t===curTask?' selected':''}>${esc(t)}</option>`).join('');
+  document.getElementById('filter-row').classList.replace('hidden','flex');
+
+  // Filter fkeys
+  const groupF = document.getElementById('group-filter').value;
+  const fkeys = Object.keys(calls).filter(k => {
+    if (curTask && !k.endsWith('.' + curTask)) return false;
+    if (groupF && !k.startsWith(groupF)) return false;
+    return true;
+  });
+
+  // Summary
+  const okCount  = Object.values(calls).filter(c => c.status === 'ok').length;
+  const totTok   = Object.values(calls).reduce((s, c) => s + (c.usage?.total_tokens || 0), 0);
+  const totLat   = Object.values(calls).reduce((s, c) => s + (c.latency_seconds || 0), 0);
+  document.getElementById('summary-line').textContent =
+    `${okCount}/${Object.keys(calls).length} ok · ` +
+    (totTok ? (totTok/1000).toFixed(1) + 'k tokens · ' : '') +
+    totLat.toFixed(1) + 's total';
+
+  // Render cards
+  document.getElementById('calls').innerHTML = fkeys.map(k => cardHtml(k, calls[k])).join('');
+}
+
+// ---------------------------------------------------------------------------
+// Card rendering
+// ---------------------------------------------------------------------------
+function cardHtml(fkey, callA) {
+  const callB   = S.b ? (S.b.calls || {})[fkey] : null;
+  const hasDiff = S.b != null;
+  const active  = S.pane[fkey] || 'input';
+
+  // Build tab list
+  const tabDefs = [
+    { id: 'input',   label: 'Input' },
+    { id: 'prompt',  label: 'Prompt' },
+    { id: 'raw',     label: 'Raw' },
+    { id: 'parsed',  label: 'Parsed' },
+  ];
+  if (hasDiff) {
+    tabDefs.push(
+      { id: 'b_input',     label: 'B Input' },
+      { id: 'b_raw',       label: 'B Raw' },
+      { id: 'b_parsed',    label: 'B Parsed' },
+      { id: 'diff_input',  label: '≠ Input' },
+      { id: 'diff_prompt', label: '≠ Prompt' },
+      { id: 'diff_raw',    label: '≠ Raw' },
+    );
+  }
+
+  const tabBtns = tabDefs.map(({ id, label }) => {
+    const isActive = id === active;
+    const cls = isActive
+      ? 'bg-slate-700 text-slate-100'
+      : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50';
+    const fkeyJson  = JSON.stringify(fkey);
+    const idJson    = JSON.stringify(id);
+    return `<button class="rounded px-2 py-0.5 text-xs mono transition ${cls}" onclick="setPane(${fkeyJson},${idJson})">${esc(label)}</button>`;
+  }).join('');
+
+  // Header stats
+  const tokA = callA?.usage?.total_tokens;
+  const tokB = callB?.usage?.total_tokens;
+  const tokStr = tokA != null
+    ? (tokB != null ? `${fmtTok(callA.usage)} / ${fmtTok(callB.usage)}` : fmtTok(callA.usage))
+    : '—';
+  const latStr = callA?.latency_seconds != null
+    ? (callB?.latency_seconds != null
+        ? `${fmtLat(callA.latency_seconds)} / ${fmtLat(callB.latency_seconds)}`
+        : fmtLat(callA.latency_seconds))
+    : '—';
+
+  return `
+    <div class="rounded-xl bg-slate-900 border border-slate-800 overflow-hidden">
+      <div class="flex flex-wrap items-center gap-2 px-4 py-2.5 bg-slate-800/60 border-b border-slate-700">
+        <span class="mono text-xs text-slate-100 font-semibold">${esc(fkey)}</span>
+        ${statusBadge(callA?.status)}
+        ${callB ? statusBadge(callB?.status) : ''}
+        <span class="ml-auto mono text-xs text-slate-500">${esc(latStr)} &middot; ${esc(tokStr)}</span>
+      </div>
+      <div class="flex flex-wrap gap-1.5 px-3 py-2 border-b border-slate-800/60">${tabBtns}</div>
+      <div class="p-4 max-h-[480px] overflow-y-auto">
+        ${paneHtml(fkey, active, callA, callB)}
+      </div>
+    </div>`;
+}
+
+function setPane(fkey, tab) {
+  S.pane[fkey] = tab;
+  render();
+}
+</script>
+</body>
+</html>

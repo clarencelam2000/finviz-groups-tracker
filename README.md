@@ -21,7 +21,7 @@ moat. Every metric is documented in
 
 - **Momentum score** — broad strength across 6 timeframes (week → YTD) at once (0–100%).
 - **Momentum confirmed** — `momentum_score × rank_agreement`: broad strength gated by cross-timeframe consistency. High only when the trend is corroborated across 1/3/6-month.
-- **Momentum weighted** — two weighted variants: `momentum_weighted_mid` (heavier on 1mo/3mo trend) and `momentum_weighted_fast` (heavier on day/week) for different rotation detection speeds.
+- **Momentum weighted** — two weighted variants: `momentum_weighted_mid` (heavier on 1mo/3mo trend) and `momentum_weighted_fast` (heavier on week) for different rotation detection speeds.
 - **Momentum acceleration** — `momentum_accel`: change in `momentum_score` over the past 10 sessions. Positive = broad momentum is building.
 - **Regime signal** — `regime_short_long`: short-horizon percentile minus long-horizon percentile (~[-1,1]). Positive = emerging leader (strong recently, weaker long-term); negative = fading.
 - **Rank trend slope** — `rank_trend_slope`: least-squares slope of `rank_ytd` over the trailing 10 sessions. Positive = rank is improving.
@@ -293,13 +293,29 @@ remains as a same-time redundancy backstop. See `planning/cloudflare-cron-schedu
 | `DISPATCH_REF` (`worker-cron/wrangler.toml` `[vars]`) | `claude/elegant-babbage-hlxnfy` | The git ref `collect.yml` runs on. Change without touching Worker code; redeploy to apply. |
 | `GITHUB_DISPATCH_TOKEN` (Worker secret) | — | GitHub fine-grained PAT (this repo, Actions: R/W). Set via `wrangler secret put`, never committed. |
 
+### AI analysis (`scripts/generate_ai.py`)
+
+Controls Tier-1 (provenance) and Tier-2 (debug capture) output, auth, and retention.
+
+| Parameter | Default | What it controls |
+|-----------|---------|-----------------|
+| `CAPTURE_DIR` | `data/ai/debug/` | Directory for Tier-2 debug JSON files (full prompt + raw + parsed + usage + latency). Written (and committed) only when `AI_CAPTURE=1`. Rolling 30-day window in HEAD; older files pruned from HEAD but fully recoverable from git history. Always on in CI. |
+| `PROVENANCE_DIR` | `data/ai/provenance/` | Directory for Tier-1 provenance JSON files (input data blocks only — no instruction text). Always written on every successful run. Committed permanently. |
+| `CAPTURE_RETENTION_DAYS` | `30` | How many days of Tier-2 debug files to keep in HEAD (older files are deleted from the working tree on the next run, but remain in git history). |
+| `AI_CAPTURE` (env) | unset (off) | Set to `1` to enable Tier-2 debug capture. Always on in CI (`generate_ai.yml`). Off by default locally to avoid committing verbose debug blobs. |
+| `GOOGLE_API_KEY` (env) | unset | Vertex AI express key (third auth path). Priority: express key > Vertex ADC > AI Studio. Enables Vertex without a full GCP project credential setup. |
+
+**Auth priority for Vertex AI:** `GOOGLE_API_KEY` (express key) → `GOOGLE_CLOUD_PROJECT` + ADC → graceful-skip with a clear error message.
+
+**Preview mode:** `python scripts/generate_ai.py --preview [--task TASK] [--group TYPE] [--json]` — builds prompts from CSVs, writes Tier-1 provenance, no API calls, no credentials required.
+
 ### Releases / "What's New" (`docs/releases.json`)
 
 The PWA's ℹ️ hub shows release notes from `docs/releases.json` and flags unseen updates with a dot.
 
 | Item | Convention | Notes |
 |------|-----------|-------|
-| Version | `YYYY.MM.DD` | Human-scannable, monotonic, no semver. `current` must equal the newest entry's `version`. |
+| Version | `YYYY.MM.DD` (or `YYYY.MM.DD.N` for same-day releases) | Human-scannable, monotonic, no semver. `current` must equal the newest entry's `version`. |
 | `tag` | `feature` / `fix` / `data` / `improvement` | Colors the entry badge. |
 | `tab` (optional) | a PWA tab id (e.g. `momentum`) | Adds an "Open {tab} →" deep-link to the entry. |
 | Unseen tracking | `localStorage` key `fvt_seen_release_v1` | First visit seeds to `current` (no backlog nag); dot clears on opening the hub. |

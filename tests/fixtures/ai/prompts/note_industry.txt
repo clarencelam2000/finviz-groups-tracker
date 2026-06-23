@@ -1,0 +1,58 @@
+You are a markets analyst writing a concise daily note on US industries for 2026-06-22.
+
+Write in Markdown, using ONLY the computed signals below. Do not invent numbers or industries not present in the data.
+
+Structure:
+- Start with one line: `**TL;DR:**` followed by the single most important takeaway.
+- Then 1-2 short narrative paragraphs on what is leading, rotating, and fading.
+- Then exactly these three sections, each a `##` header followed by 2-4 tight bullets:
+  ## Strength
+  ## Movers & Momentum
+  ## Divergences
+
+Name specific industries and cite the numbers from the signals. Be concise and concrete. No preamble, no disclaimers, no meta commentary about the data or being an AI.
+
+COMPUTED SIGNALS:
+STRENGTH SIGNALS:
+  Breadth: 4 of 8 groups are all-green (positive across week, month, quarter, half, ytd).
+  All-green: Semiconductors (momentum 0.91); Software (momentum 0.78); Banks (momentum 0.62); Biotechnology (momentum 0.51)
+  Sustained strong (top 3 across 1/3/6-month rank): Semiconductors, Software, Banks
+
+TOP GAINERS (rank improved most in 5 sessions):
+  Oil & Gas: +5 spots, rank 5, momentum 0.29
+  Biotechnology: +2 spots, rank 4, momentum 0.51
+  Software: +1 spots, rank 2, momentum 0.78
+  Retail: +0 spots, rank 7, momentum 0.22
+  Banks: +-1 spots, rank 3, momentum 0.62
+  Semiconductors: +-2 spots, rank 1, momentum 0.91
+  Airlines: +-3 spots, rank 6, momentum 0.74
+  Electric Utilities: +-4 spots, rank 8, momentum 0.11
+
+TOP LOSERS (rank declined most in 5 sessions):
+  Electric Utilities: -4 spots, rank 8, momentum 0.11
+  Airlines: -3 spots, rank 6, momentum 0.74
+  Semiconductors: -2 spots, rank 1, momentum 0.91
+  Banks: -1 spots, rank 3, momentum 0.62
+  Retail: 0 spots, rank 7, momentum 0.22
+  Software: 1 spots, rank 2, momentum 0.78
+  Biotechnology: 2 spots, rank 4, momentum 0.51
+  Oil & Gas: 5 spots, rank 5, momentum 0.29
+
+MOMENTUM LEADERS (score 0=weakest, 1=strongest):
+  Semiconductors: 0.910 (rank_ytd=1)
+  Software: 0.780 (rank_ytd=2)
+  Airlines: 0.740 (rank_ytd=6)
+  Banks: 0.620 (rank_ytd=3)
+  Biotechnology: 0.510 (rank_ytd=4)
+
+MOMENTUM LAGGARDS (score 0=weakest, 1=strongest):
+  Electric Utilities: 0.110 (rank_ytd=8)
+  Retail: 0.220 (rank_ytd=7)
+  Oil & Gas: 0.290 (rank_ytd=5)
+  Biotechnology: 0.510 (rank_ytd=4)
+  Banks: 0.620 (rank_ytd=3)
+
+DIVERGENCES (early-warning):
+  Fading (strong momentum, rank slipping): Airlines (momentum 0.74, rank -3 in 5d); Semiconductors (momentum 0.91, rank -2 in 5d); Banks (momentum 0.62, rank -1 in 5d)
+  Emerging (rank jumping, momentum still low): Oil & Gas (rank +5 in 5d, momentum 0.29)
+  Fragile all-green (green but unstable rank): Banks (agreement 0.45)

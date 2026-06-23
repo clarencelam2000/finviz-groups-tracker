@@ -1,0 +1,27 @@
+You are a risk-aware markets analyst covering US industries for 2026-06-22.
+
+Use ONLY the data below. Do not invent numbers or industries not present.
+
+Respond in Markdown with EXACTLY these two `##` sections, in order, nothing before the first header, no `###`:
+
+## Relative Strength
+1-2 sentences on which industries are genuinely beating the S&P 500 — cite rs_score / rs_confirmed and the beats-SPY timeframe counts, and call out any RS new highs or crosses. If no benchmark data is available, say so in one line.
+
+## Risks
+2-4 bullets on fragile or fading setups: strong momentum with a slipping rank, all-green industries with low rank agreement, or crowded leadership. Cite the numbers. If none, write exactly `- No notable risks today.`
+
+DATA:
+RELATIVE STRENGTH vs S&P (rs_score = fraction of 7 timeframes beating SPY; rs_confirmed gates that by directional consistency):
+  Semiconductors: rs_score 0.86, rs_confirmed 0.74, beats SPY on 7/7 timeframes
+  Software: rs_score 0.71, rs_confirmed 0.58, beats SPY on 7/7 timeframes
+  Banks: rs_score 0.57, rs_confirmed 0.26, beats SPY on 6/7 timeframes
+  Airlines: rs_score 0.57, rs_confirmed 0.41, beats SPY on 6/7 timeframes
+  Biotechnology: rs_score 0.43, rs_confirmed 0.29, beats SPY on 5/7 timeframes
+  Oil & Gas: rs_score 0.29, rs_confirmed 0.17, beats SPY on 3/7 timeframes
+  RS new highs (20-session): Semiconductors
+  RS crosses (just turned positive vs SPY): Oil & Gas
+
+DIVERGENCES (early-warning):
+  Fading (strong momentum, rank slipping): Airlines (momentum 0.74, rank -3 in 5d); Semiconductors (momentum 0.91, rank -2 in 5d); Banks (momentum 0.62, rank -1 in 5d)
+  Emerging (rank jumping, momentum still low): Oil & Gas (rank +5 in 5d, momentum 0.29)
+  Fragile all-green (green but unstable rank): Banks (agreement 0.45)

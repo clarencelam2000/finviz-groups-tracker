@@ -37,6 +37,7 @@ python scripts/export_db.py
 |--------|-------------|----------------|
 | `scripts/collect.py` | Playwright scraper; appends to snapshot CSVs; deduplicates on `(date, name)` | ~200–250 |
 | `scripts/compute_deltas.py` | Computes ranks, trading-day deltas (5/10/20/50), and momentum variants; appends to delta CSVs. Accepts `--date YYYY-MM-DD` | ~300–400 |
+| `scripts/generate_ai.py` | Gemini AI analysis from latest deltas; writes `data/ai/YYYY-MM-DD.json`. Auth: Vertex express key (GOOGLE_API_KEY) > Vertex ADC > AI Studio (GEMINI_API_KEY). Supports `--preview` (no API), `--capture` (Tier-2 debug). | ~1300 |
 | `scripts/export_db.py` | Exports CSVs → SQLite (`finviz_groups.db`) + Parquet in `./exports/` (not committed) | ~150 |
 | `scripts/backfill.py` | Shows current date coverage; prints manual backfill instructions. Accepts `--status` | ~50 |
 | `dashboard/app.py` | Streamlit dashboard: Snapshot, Top Movers, Time Series, Momentum tabs | ~100 |
@@ -83,7 +84,7 @@ then the RS discrete flags: `beats_benchmark_day, beats_benchmark_week, beats_be
 - `rank_*_delta_Wd`: positive = improved (rose in ranking). E.g., `+6` means 6 spots better than W trading sessions ago.
 - `momentum_score`: 0–1 float; average percentile rank across 6 perf timeframes (week → YTD; day excluded as too noisy). Higher = stronger broad momentum.
 - `momentum_confirmed`: `momentum_score × rank_agreement` (strength gated by cross-timeframe consistency).
-- `momentum_weighted_mid` / `_fast`: percentile means weighted toward 1mo/3mo / day-week respectively.
+- `momentum_weighted_mid` / `_fast`: percentile means weighted toward 1mo/3mo / week respectively (day excluded from both; `_fast` leans on week to catch fresh rotation).
 - `momentum_accel`: change in `momentum_score` over `ACCEL_WINDOW` (10) sessions; positive = building.
 - `regime_short_long`: short- minus long-horizon percentile (range ~[-1,1]); positive = emerging leader, negative = fading. Short bucket: `perf_week + perf_month`. Long bucket: `perf_quarter + perf_half + perf_year`. Configured in `scripts/delta_config.py` as `REGIME_SHORT` / `REGIME_LONG`.
 - `rank_trend_slope`: negated least-squares slope of `rank_ytd` over the trailing window; positive = improving.
@@ -107,7 +108,7 @@ These constants gate visual indicators in the PWA. Edit them directly in `index.
 |----------|---------|---------|
 | `REGIME_THRESHOLD` | `0.15` | Boundary between Emerging / Established / Fading buckets in Rotation view. Also the card color cutoff — must stay consistent (uses `REGIME_THRESHOLD` in both places). |
 | `ACCEL_STRONG` | `0.08` | `momentum_accel` threshold for double-arrow (▲▲/▼▼) badge on Momentum cards. |
-| `ACCEL_SLIGHT` | `0.02` | `momentum_accel` threshold for single-arrow (▲/▼) badge. Within ±`ACCEL_SLIGHT` = no badge. |
+| `ACCEL_SLIGHT` | `0.02` | `momentum_accel` threshold for single-arrow (▲/▼) badge. Within ±`ACCEL_SLIGHT` = neutral `~` glyph (steady); NaN/insufficient history = dimmed `—`. |
 | `SLOPE_STRONG` | `0.05` | `rank_trend_slope` threshold for double-arrow (↑↑/↓↓) glyph on Today cards. |
 | `SLOPE_SLIGHT` | `0.01` | `rank_trend_slope` threshold for single-arrow (↑/↓) glyph. Within ±`SLOPE_SLIGHT` = `~`. |
 | `RS_STRONG` | `2.0` | RS spread (pp vs S&P) threshold for deep-color badge in vs Market tab and Today cards. |
@@ -268,6 +269,17 @@ There is no need for a conditional or auto-detection — just run it when you ne
 - Workflow: `.github/workflows/collect.yml`
 - Trigger: `workflow_dispatch` also available for manual runs.
 - On failure: GitHub emails automatically. Retry 3x before failing.
+- **Worker auto-deploy: `.github/workflows/deploy-workers.yml`** — triggers on push to the
+  default branch when `worker/**` or `worker-cron/**` change. Runs `build:taxonomy` + tests
+  before deploying; two independent jobs (one per worker). Also triggerable manually via
+  `workflow_dispatch`. **No manual `npm run deploy` needed after merging worker changes.**
+  - If the `Build taxonomy` step fails in CI: it is a **data validation error**, not a code
+    error. An entry in `data/etf_overrides.csv` references a Finviz group name that doesn't
+    exist in the snapshot CSVs. Fix: correct the name in `etf_overrides.csv` and re-push.
+  - `wrangler deploy` does **not** touch secrets (FMP_API_KEY, GITHUB_DISPATCH_TOKEN), KV
+    data, or cron expressions unless `wrangler.toml` changes.
+  - TODO(D1): update `branches:` in the workflow to `[main]` when the default branch is
+    renamed; also update `DISPATCH_REF` in `worker-cron/wrangler.toml` at the same time.
 - `collect.py` and `compute_deltas.py` are **last-write-wins** per `date`: a later run on the same
   trading day evicts and rewrites that date's snapshot *and* delta rows, so the EOD run's ranks win
   over an earlier intraday run's.
@@ -276,11 +288,13 @@ There is no need for a conditional or auto-detection — just run it when you ne
 ### Cutting a release ("What's New") — 3 steps, always together
 
 The PWA's **What's New** hub reads `docs/releases.json`. Release versions use the
-`YYYY.MM.DD` convention (human-scannable, monotonic, no semver to maintain). When you
-ship a user-facing change, do **all three** of these in the same PR:
+`YYYY.MM.DD` convention (human-scannable, monotonic, no semver to maintain). For multiple
+releases on the same calendar day, append `.N` (e.g. `2026.06.21.1`, `2026.06.21.2`).
+When you ship a user-facing change, do **all three** of these in the same PR:
 
 1. **Prepend** a new entry to `releases.json` `releases[]` (newest-first): `version`
-   (`YYYY.MM.DD`), `date`, `title`, `tag` (`feature|fix|data|improvement`), optional
+   (`YYYY.MM.DD` or `YYYY.MM.DD.N` for same-day releases), `date`, `title`, `tag`
+   (`feature|fix|data|improvement`), optional
    `tab` (deep-links the entry to a tab), and a short user-facing `notes[]`.
 2. **Update** the top-level `current` to the new `version` (this drives the unseen-update
    dot). `tests/test_guide_releases.py` asserts `current === releases[0].version`.
@@ -319,6 +333,28 @@ with an explicit rationale; do not bump silently.
 6 real tab ids). Adding a 7th tab requires updating `WELCOME` + `product-intro-copy.md`
 + `VALID_TAB_IDS` in `tests/test_pwa_intro.py` — the anti-drift test will catch the
 mismatch.
+
+## AI capture constants (`scripts/generate_ai.py`)
+
+> Added in Phase 1 of the AI capture plan (ADR-006). Document changes to these in all three places per the configurable-constants rule above.
+
+| Constant | Default | Controls |
+|----------|---------|---------|
+| `CAPTURE_DIR` | `data/ai/debug/` | Where Tier-2 debug captures are written (one file per date, committed, rolling window) |
+| `PROVENANCE_DIR` | `data/ai/provenance/` | Where Tier-1 provenance files are written (one per date, committed permanently, user-facing) |
+| `CAPTURE_RETENTION_DAYS` | `30` | Number of Tier-2 debug files kept in HEAD; older files are pruned from HEAD on each run but stay recoverable in git history. ~1 MB total at 30 days. |
+| `AI_CAPTURE` env / `--capture` flag | off (on in CI) | Controls whether Tier-2 debug file is written. Set `AI_CAPTURE=1` or pass `--capture` to enable locally. Always enabled in `generate_ai.yml`. |
+| `GOOGLE_API_KEY` | (set in env) | Vertex express key — sidesteps ADC and AI Studio 429s. Takes priority over Vertex ADC (`GOOGLE_CLOUD_PROJECT`) when `GOOGLE_GENAI_USE_VERTEXAI=true`. Sets `_backend="vertex_express"`. |
+
+**Auth priority:** `GOOGLE_API_KEY` (Vertex express) > `GOOGLE_CLOUD_PROJECT` (Vertex ADC) > `GEMINI_API_KEY` (AI Studio).
+
+**Preview mode (no creds needed):**
+```bash
+python scripts/generate_ai.py --preview [--task pulse] [--group sector] [--json]
+```
+Builds prompts from existing CSVs and writes Tier-1 provenance — no API call, no credentials required. Add `--date YYYY-MM-DD` to use a specific date (defaults to latest snapshot date).
+
+---
 
 ## Session continuity (Claude Code web)
 

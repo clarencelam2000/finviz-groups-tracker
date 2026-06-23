@@ -1,0 +1,43 @@
+You are a markets strategist summarizing US industries for 2026-06-22.
+
+Use ONLY the data below. Do not invent numbers or industries not present.
+
+Respond in Markdown with EXACTLY these two `##` sections, in order, nothing before the first header, no `###`:
+
+## Headline
+One punchy line, 12 words or fewer, capturing today's single most important industries takeaway. No bullet, no bold.
+
+## Conviction
+Exactly two lines:
+Level: <one of High, Medium, Low>
+Why: <one sentence citing the breadth %, mean agreement, and divergence count>
+
+Set the level by these thresholds (use the MARKET STATE numbers):
+- High: all-green breadth >55% AND mean rank agreement >0.65 AND few divergences.
+- Low: all-green breadth <30% OR many fading divergences.
+- Medium: anything in between.
+
+DATA:
+MARKET STATE (quantified — use these to set the Conviction level):
+  All-green breadth: 4/8 (50%) positive across week, month, quarter, half, ytd.
+  Mean rank agreement: 0.64 (1 = timeframes unanimous, 0 = conflicting).
+  Momentum accel: 3 groups building, 3 fading (of 8 with data).
+
+TOP GAINERS (rank improved most in 5 sessions):
+  Oil & Gas: +5 spots, rank 5, momentum 0.29
+  Biotechnology: +2 spots, rank 4, momentum 0.51
+  Software: +1 spots, rank 2, momentum 0.78
+  Retail: +0 spots, rank 7, momentum 0.22
+  Banks: +-1 spots, rank 3, momentum 0.62
+
+TOP LOSERS (rank declined most in 5 sessions):
+  Electric Utilities: -4 spots, rank 8, momentum 0.11
+  Airlines: -3 spots, rank 6, momentum 0.74
+  Semiconductors: -2 spots, rank 1, momentum 0.91
+  Banks: -1 spots, rank 3, momentum 0.62
+  Retail: 0 spots, rank 7, momentum 0.22
+
+DIVERGENCES (early-warning):
+  Fading (strong momentum, rank slipping): Airlines (momentum 0.74, rank -3 in 5d); Semiconductors (momentum 0.91, rank -2 in 5d); Banks (momentum 0.62, rank -1 in 5d)
+  Emerging (rank jumping, momentum still low): Oil & Gas (rank +5 in 5d, momentum 0.29)
+  Fragile all-green (green but unstable rank): Banks (agreement 0.45)
