@@ -899,3 +899,229 @@ class TestPWAMomentum:
             # Buckets render with their headers (CSS uppercases them).
             assert "EMERGING" in txt.upper() and "FADING" in txt.upper(), txt
         self._run(8185, check)
+
+
+# ---------------------------------------------------------------------------
+# Card deep-link tests (PR #165 — card tap → Lookup)
+# ---------------------------------------------------------------------------
+
+def _deeplink_snapshot_csv() -> str:
+    """Snapshot fixture for deep-link tests: 4 groups, 3 with all-positive perfs
+    (Technology, Healthcare, Oil & Gas) for All Green coverage. Energy is negative."""
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=SNAPSHOT_COLS)
+    w.writeheader()
+    for name, pw, pm in [
+        ("Technology", 4.0,  3.0),
+        ("Healthcare", 2.0,  1.5),
+        ("Energy",    -1.0, -0.5),   # negative: excluded from All Green
+        ("Oil & Gas",  1.5,  1.0),   # ampersand name; all positive perfs
+    ]:
+        abs_pm = abs(pm)
+        w.writerow({
+            "date": "2026-06-17", "collected_at": "2026-06-17T20:00:00Z",
+            "group_type": "sector", "name": name,
+            "stocks": "100", "market_cap": "5.0", "pe": "25.0", "fwd_pe": "22.0",
+            "perf_day": abs(pw) * 0.2, "perf_week": pw, "perf_month": pm,
+            "perf_quarter": abs_pm * 0.8, "perf_half": abs_pm * 0.6,
+            "perf_year": abs_pm * 0.5, "perf_ytd": abs(pw) * 0.7,
+            "avg_volume": "1000000", "rel_volume": "", "change": pw * 0.2,
+        })
+    return buf.getvalue()
+
+
+def _deeplink_delta_csv() -> str:
+    """Delta fixture for deep-link tests: full RS + momentum + regime columns.
+    Technology rank 1, Healthcare 2, Energy 3, Oil & Gas 4.
+    RS columns non-empty so vs Market tab renders its card list."""
+    cols = delta_columns()
+    buf = io.StringIO()
+    w = csv.DictWriter(buf, fieldnames=cols)
+    w.writeheader()
+    entries = [
+        # name,       rank, confirmed, score,  regime,  rs_score, rs_regime
+        ("Technology",  "1", "0.80",  "0.90",  "0.90",  "0.86",   "0.80"),
+        ("Healthcare",  "2", "0.50",  "0.60",  "0.00",  "0.50",   "0.00"),
+        ("Energy",      "3", "0.15",  "0.30",  "-0.80", "0.14",  "-0.80"),
+        ("Oil & Gas",   "4", "0.20",  "0.35",  "-0.40", "0.30",  "-0.40"),
+    ]
+    for name, rank, confirmed, score, regime, rs_score, rs_regime in entries:
+        row = {c: "" for c in cols}
+        row.update({
+            "date": "2026-06-17", "name": name,
+            "rank_week": rank, "rank_month": rank, "rank_quarter": rank,
+            "rank_half": rank, "rank_year": rank, "rank_ytd": rank,
+            "momentum_score": score, "momentum_confirmed": confirmed,
+            "rank_agreement": "0.9",
+            "regime_short_long": regime,
+            "rs_score": rs_score, "rs_regime_short_long": rs_regime,
+            f"rank_ytd_delta_{LOOKBACK_WINDOWS[0]}d": "2",
+        })
+        w.writerow(row)
+    return buf.getvalue()
+
+
+@pytest.mark.functional
+class TestPWACardDeeplink:
+    """Verify card-tap → Lookup deep-link for all 6 new card types (PR #165).
+
+    Each test: navigate to the target tab/view, click a [data-group-name] card
+    (or [data-today-lookup] button for Today), assert the group name appears in
+    #lookup-result (i.e., doGroupLookup was called and renderLookup rendered it).
+    """
+
+    PORT = 8185
+
+    def _run(self, fn):
+        from playwright.sync_api import sync_playwright
+
+        docs_dir = Path(__file__).parent.parent / "docs"
+        server = subprocess.Popen(
+            ["python3", "-m", "http.server", str(self.PORT), "--directory", str(docs_dir)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        time.sleep(1)
+        snap_body = _deeplink_snapshot_csv()
+        delta_body = _deeplink_delta_csv()
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                ctx = browser.new_context(ignore_https_errors=True)
+                ctx.add_init_script("localStorage.setItem('fvt_intro_seen_v1','true');")
+                page = ctx.new_page()
+                page.route("**/raw.githubusercontent.com/**snapshots.csv",
+                           lambda r: r.fulfill(body=snap_body, content_type="text/plain"))
+                page.route("**/raw.githubusercontent.com/**deltas.csv",
+                           lambda r: r.fulfill(body=delta_body, content_type="text/plain"))
+                page.route("**/data/fetch_log.csv",
+                           lambda r: r.fulfill(body="", content_type="text/plain"))
+                page.route("**/data/ai/**", lambda r: r.fulfill(status=404))
+                page.goto(f"http://localhost:{self.PORT}/", wait_until="networkidle",
+                          timeout=15000)
+                fn(page)
+                ctx.close()
+                browser.close()
+        finally:
+            server.terminate()
+            server.wait()
+
+    def _click_card_assert_lookup(self, page, container_id, group_name):
+        """Click the first [data-group-name] card in container; assert group in #lookup-result."""
+        container = page.locator(f"#{container_id}")
+        card = container.locator(f"[data-group-name='{group_name}']").first
+        assert card.count() > 0, \
+            f"No card with data-group-name='{group_name}' in #{container_id}"
+        card.click()
+        page.wait_for_timeout(400)
+        result = page.locator("#lookup-result").inner_text()
+        assert group_name in result, \
+            f"Expected '{group_name}' in lookup result, got: {result[:200]}"
+
+    def test_momentum_card_tap_opens_lookup(self):
+        """Click a Momentum card; assert Lookup tab becomes active and shows that group."""
+        def check(page):
+            page.locator("[data-tab='momentum']").click()
+            page.wait_for_timeout(400)
+            self._click_card_assert_lookup(page, "momentum-list", "Technology")
+        self._run(check)
+
+    def test_rotation_card_tap_opens_lookup(self):
+        """Switch to Rotation view on Momentum tab; click a card; assert Lookup opens."""
+        def check(page):
+            page.locator("[data-tab='momentum']").click()
+            page.wait_for_timeout(400)
+            page.locator(".momentum-view-btn[data-mview='rotation']").click()
+            page.wait_for_timeout(300)
+            self._click_card_assert_lookup(page, "momentum-list", "Technology")
+        self._run(check)
+
+    def test_strength_card_tap_opens_lookup(self):
+        """Click a Sustained Strength card; assert Lookup tab opens."""
+        def check(page):
+            page.locator("[data-tab='strength']").click()
+            page.wait_for_timeout(400)
+            self._click_card_assert_lookup(page, "strength-list", "Technology")
+        self._run(check)
+
+    def test_allgreen_card_tap_opens_lookup(self):
+        """Switch to All Green view on Strength tab; click a card; assert Lookup opens."""
+        def check(page):
+            page.locator("[data-tab='strength']").click()
+            page.wait_for_timeout(400)
+            page.locator(".strength-view-btn[data-view='allgreen']").click()
+            page.wait_for_timeout(300)
+            self._click_card_assert_lookup(page, "strength-list", "Technology")
+        self._run(check)
+
+    def test_rscore_card_tap_opens_lookup(self):
+        """Click an RS Score card on vs Market tab; assert Lookup tab opens."""
+        def check(page):
+            page.locator("[data-tab='vsmarket']").click()
+            page.wait_for_timeout(400)
+            self._click_card_assert_lookup(page, "vsmarket-list", "Technology")
+        self._run(check)
+
+    def test_rsregime_card_tap_opens_lookup(self):
+        """Switch to RS Regime view; click a card; assert Lookup tab opens."""
+        def check(page):
+            page.locator("[data-tab='vsmarket']").click()
+            page.wait_for_timeout(400)
+            page.locator(".vsmarket-view-btn[data-mview='regime']").click()
+            page.wait_for_timeout(300)
+            self._click_card_assert_lookup(page, "vsmarket-list", "Technology")
+        self._run(check)
+
+    def test_today_card_lookup_button(self):
+        """Tap the › lookup button on a Today card; Lookup opens, card does NOT expand."""
+        def check(page):
+            # Today tab is default — already on it.
+            btn = page.locator("[data-today-lookup='Technology']").first
+            assert btn.count() > 0, "Expected Today card lookup button for Technology"
+            btn.click()
+            page.wait_for_timeout(400)
+            # Lookup tab is now active.
+            result = page.locator("#lookup-result").inner_text()
+            assert "Technology" in result, \
+                f"Expected 'Technology' in lookup result: {result[:200]}"
+            # Switching to Lookup hides Today — confirm Lookup section is not hidden.
+            lookup_cls = page.locator("#tab-lookup").get_attribute("class") or ""
+            assert "hidden" not in lookup_cls, \
+                "Lookup section should be visible after tapping the › button"
+        self._run(check)
+
+    def test_ampersand_group_name_round_trips(self):
+        """Tap an industry card whose name contains '&'; Lookup renders the decoded name.
+
+        Sectors have no '&' names; switch to Industries to get names like
+        'Aerospace & Defense'. Uses has_text filter rather than attribute-value CSS
+        selector because Playwright's CSS engine can mishandle '&' in attribute selectors.
+        The data-group-name attribute value is verified separately via get_attribute()
+        (Playwright returns the decoded DOM value, not the raw HTML entity).
+        """
+        def check(page):
+            page.locator("[data-tab='momentum']").click()
+            page.wait_for_timeout(400)
+            # Switch to Industries so cards with '&' in their names appear.
+            page.locator("#tab-momentum .group-toggle-btn[data-group='industries']").click()
+            page.wait_for_load_state("networkidle", timeout=20000)
+            page.wait_for_timeout(500)
+            container = page.locator("#momentum-list")
+            # Find the first industry card with '&' in its name.
+            card = container.locator("[data-group-name]").filter(has_text="&").first
+            assert card.count() > 0, \
+                "Expected at least one industry Momentum card with '&' in its name"
+            # Verify the attribute value contains '&' and NOT the HTML entity '&amp;'.
+            attr_val = card.get_attribute("data-group-name")
+            assert attr_val is not None, "data-group-name attribute must be present"
+            assert "&" in attr_val, \
+                f"data-group-name should contain '&', got: {attr_val!r}"
+            assert "&amp;" not in attr_val, \
+                f"data-group-name should not contain HTML entity, got: {attr_val!r}"
+            card.click()
+            page.wait_for_timeout(400)
+            result = page.locator("#lookup-result").inner_text()
+            assert attr_val in result, \
+                f"Expected {attr_val!r} in lookup result: {result[:200]}"
+            assert "&amp;" not in result, \
+                f"HTML entity should not appear in inner_text: {result[:200]}"
+        self._run(check)

@@ -1279,6 +1279,9 @@
                   ${rsMonthChip}
                 </div>
               </div>
+              <button data-today-lookup="${escapeHtml(row.name)}"
+                      class="text-slate-500 hover:text-slate-300 text-sm px-1 select-none flex-shrink-0"
+                      title="Open in Lookup">›</button>
               <div class="text-right flex-shrink-0">
                 <div class="text-base font-bold ${mainColor}">${mainFmt}</div>
                 <div class="text-xs text-slate-500">${metricLabel} ${isExpanded ? '▴' : '▾'}</div>
@@ -1426,7 +1429,8 @@
         const badge = accelBadge(pf(row.momentum_accel));
 
         return `
-          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 flex items-center gap-3">
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 flex items-center gap-3 cursor-pointer active:opacity-75 select-none"
+               data-group-name="${escapeHtml(row.name)}">
             <span class="text-sm font-bold text-slate-500 w-5 text-right flex-shrink-0">${i+1}</span>
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between gap-1">
@@ -1440,6 +1444,7 @@
               <div class="h-1.5 rounded-full bg-slate-700 mt-1 overflow-hidden">
                 <div class="h-full rounded-full ${style.bar}" style="width:${pct}%"></div>
               </div>
+              <div class="text-right"><span class="text-slate-600 text-xs">›</span></div>
             </div>
           </div>`;
       }).join('');
@@ -1508,10 +1513,14 @@
           mom    !== null ? `Mom ${(mom*100).toFixed(0)}%` : null,
         ].filter(Boolean).join('  ·  ');
         return `
-          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700">
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 cursor-pointer active:opacity-75 select-none"
+               data-group-name="${escapeHtml(row.name)}">
             <div class="flex items-center justify-between">
               <div class="text-sm font-medium text-white">${row.name}</div>
-              <div class="text-xs font-mono ${regimeColor} flex-shrink-0 ml-2">${sign}${regime.toFixed(2)}</div>
+              <div class="flex items-center gap-1 flex-shrink-0">
+                <span class="text-xs font-mono ${regimeColor} ml-2">${sign}${regime.toFixed(2)}</span>
+                <span class="text-slate-600 text-xs">›</span>
+              </div>
             </div>
             ${regimeBar(regime)}
             ${sub ? `<div class="text-xs text-slate-400">${sub}</div>` : ''}
@@ -1596,10 +1605,11 @@
           const raStr   = ra   !== null ? `Agree ${(ra*100).toFixed(0)}%`       : '';
           const sub = [rankParts, confStr, raStr].filter(Boolean).join('  ·  ');
           return `
-            <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 ${border}">
+            <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 ${border} cursor-pointer active:opacity-75 select-none"
+                 data-group-name="${escapeHtml(row.name)}">
               <div class="flex items-center justify-between gap-2">
                 <div class="text-sm font-medium text-white">${row.name}</div>
-                ${rsBeatsChip(row)}
+                <div class="flex items-center gap-1 flex-shrink-0">${rsBeatsChip(row)}<span class="text-slate-600 text-xs">›</span></div>
               </div>
               <div class="text-xs text-slate-400 mt-0.5">${sub}</div>
             </div>`;
@@ -1648,10 +1658,14 @@
                 ].filter(Boolean).join(' · ');
                 const chip = rsBeatsChip(d);
                 return `
-                  <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 border-l-emerald-500">
+                  <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 border-l-4 border-l-emerald-500 cursor-pointer active:opacity-75 select-none"
+                       data-group-name="${escapeHtml(row.name)}">
                     <div class="flex items-center justify-between">
                       <div class="text-sm font-medium text-white">${row.name}</div>
-                      <div class="text-lg tracking-wide">${dotRow(row)}</div>
+                      <div class="flex items-center gap-1 flex-shrink-0">
+                        <div class="text-lg tracking-wide">${dotRow(row)}</div>
+                        <span class="text-slate-600 text-xs ml-1">›</span>
+                      </div>
                     </div>
                     ${(sub || chip) ? `<div class="flex items-center justify-between mt-0.5 gap-2"><div class="text-xs text-slate-400">${sub}</div>${chip}</div>` : ''}
                   </div>`;
@@ -1730,7 +1744,8 @@
         const discreteBadges = [nhBadge, crossBadge].filter(Boolean).join(' ');
 
         return `
-          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 flex items-center gap-3">
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 flex items-center gap-3 cursor-pointer active:opacity-75 select-none"
+               data-group-name="${escapeHtml(row.name)}">
             <span class="text-sm font-bold text-slate-500 w-5 text-right flex-shrink-0">${i+1}</span>
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between gap-1">
@@ -1744,6 +1759,7 @@
               <div class="h-1.5 rounded-full bg-slate-700 mt-1 overflow-hidden">
                 <div class="h-full rounded-full ${style.bar}" style="width:${pct}%"></div>
               </div>
+              <div class="text-right"><span class="text-slate-600 text-xs">›</span></div>
             </div>
           </div>`;
       }).join('');
@@ -1786,10 +1802,11 @@
           rsScore !== null ? `RS Score ${(rsScore*100).toFixed(0)}%` : null,
         ].filter(Boolean).join('  ·  ');
         return `
-          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700">
+          <div class="rounded-xl p-3 bg-slate-800 border border-slate-700 cursor-pointer active:opacity-75 select-none"
+               data-group-name="${escapeHtml(row.name)}">
             <div class="flex items-center justify-between gap-1">
               <div class="text-sm font-medium text-white">${row.name}</div>
-              <div class="flex items-center gap-1 flex-shrink-0">${discreteBadges}<span class="text-xs font-mono ${regimeColor} ml-1">${sign}${regime.toFixed(2)}</span></div>
+              <div class="flex items-center gap-1 flex-shrink-0">${discreteBadges}<span class="text-xs font-mono ${regimeColor} ml-1">${sign}${regime.toFixed(2)}</span><span class="text-slate-600 text-xs ml-1">›</span></div>
             </div>
             ${rsBar(regime)}
             ${sub ? `<div class="text-xs text-slate-400">${sub}</div>` : ''}
@@ -3475,6 +3492,42 @@
       doGroupLookup(name, state.group);
     });
 
+    // Momentum card tap → Lookup (covers both Momentum Cards and Rotation views)
+    document.getElementById('momentum-list').addEventListener('click', e => {
+      const card = e.target.closest('[data-group-name]');
+      if (!card) return;
+      const name = card.dataset.groupName;
+      if (!name) return;
+      switchTab('lookup');
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0; // iOS Safari
+      doGroupLookup(name, state.group);
+    });
+
+    // Strength card tap → Lookup (covers Sustained, Weak, and All Green views)
+    document.getElementById('strength-list').addEventListener('click', e => {
+      const card = e.target.closest('[data-group-name]');
+      if (!card) return;
+      const name = card.dataset.groupName;
+      if (!name) return;
+      switchTab('lookup');
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0; // iOS Safari
+      doGroupLookup(name, state.group);
+    });
+
+    // vs Market card tap → Lookup (covers RS Score and RS Regime views)
+    document.getElementById('vsmarket-list').addEventListener('click', e => {
+      const card = e.target.closest('[data-group-name]');
+      if (!card) return;
+      const name = card.dataset.groupName;
+      if (!name) return;
+      switchTab('lookup');
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0; // iOS Safari
+      doGroupLookup(name, state.group);
+    });
+
     document.getElementById('sort-metric').addEventListener('change', e => {
       state.sortMetric = e.target.value;
       savePrefs();
@@ -3482,6 +3535,19 @@
     });
 
     document.getElementById('search-input').addEventListener('input', () => renderToday());
+
+    // Today card › button → Lookup. stopPropagation prevents the expand handler from also firing.
+    document.getElementById('today-cards').addEventListener('click', e => {
+      const btn = e.target.closest('[data-today-lookup]');
+      if (!btn) return;
+      e.stopPropagation();
+      const name = btn.dataset.todayLookup;
+      if (!name) return;
+      switchTab('lookup');
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0; // iOS Safari
+      doGroupLookup(name, state.group);
+    });
 
     document.getElementById('today-cards').addEventListener('click', e => {
       const card = e.target.closest('[data-name]');
