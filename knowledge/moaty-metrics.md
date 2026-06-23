@@ -17,7 +17,7 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
 
 | Metric | Where | What it is |
 |--------|-------|-----------|
-| `momentum_score` | deltas.csv | 0–1; avg percentile rank across all 7 perf timeframes |
+| `momentum_score` | deltas.csv | 0–1; avg percentile rank across 6 perf timeframes (week → YTD) |
 | `momentum_confirmed` | deltas.csv | momentum_score × rank_agreement; strength gated by consistency |
 | `momentum_accel` | deltas.csv | change in momentum_score over 10 sessions; positive = building |
 | `regime_short_long` | deltas.csv | short-horizon minus long-horizon percentile; positive = emerging |
@@ -33,11 +33,12 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
 ---
 
 ## momentum_score
-- **Source:** `compute_momentum` (`scripts/compute_deltas.py` L163).
-- **Formula:** mean of `(n - rank_x) / (n - 1)` across day/week/month/quarter/
+- **Source:** `compute_momentum` (`scripts/compute_deltas.py`).
+- **Formula:** mean of `(n - rank_x) / (n - 1)` across week/month/quarter/
   half/year/ytd, where `n` = groups with non-null values. All-NaN columns
   excluded. Range 0.0 (worst) – 1.0 (best); single-row → NaN.
-- **Signals:** broad strength across *every* timeframe at once.
+  Day excluded from scoring — too noisy (one session swings the score ~14%).
+- **Signals:** broad strength across durable timeframes at once.
 - **User one-liner:** "How strong this group is across every timeframe at once,
   from 0 to 100%."
 
@@ -164,11 +165,13 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   timeframe — positive means it outperformed the market."
 
 ## rs_score
-- **Source:** `compute_rs_score` (`scripts/compute_deltas.py`). Fraction of the 7
-  timeframes (day/wk/mo/qtr/6mo/yr/ytd) where the group's RS spread (group perf −
-  SPY perf) is positive. Score 1.0 = beating SPY in every horizon; 0.0 = trailing
-  in all. This is an absolute signal — a rising tide lifting all groups does not
-  inflate the score (unlike `momentum_score`, which is a cross-sectional peer rank).
+- **Source:** `compute_rs_score` (`scripts/compute_deltas.py`). Fraction of 6
+  timeframes (wk/mo/qtr/6mo/yr/ytd) where the group's RS spread (group perf −
+  SPY perf) is positive. Day excluded from scoring — too noisy (stored and
+  displayed separately for the "held up on a down day" read). Score 1.0 = beating
+  SPY in every counted horizon; 0.0 = trailing in all. This is an absolute signal
+  — a rising tide lifting all groups does not inflate the score (unlike
+  `momentum_score`, which is a cross-sectional peer rank).
 - **User one-liner:** "How broadly this group beats the S&P 500 across every
   timeframe at once, from 0 to 100%."
 
@@ -184,7 +187,7 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
 - **Source:** `df_today["rs_confirmed"] = df_today["rs_score"] * df_today["rs_agreement"]`.
   Product of two 0–1 scores. High only when the group is *broadly* outperforming (high
   rs_score — many timeframes positive) AND the medium-term timeframes agree on direction
-  (high rs_agreement). A group beating SPY in 6 of 7 timeframes but with mixed 1/3/6mo
+  (high rs_agreement). A group beating SPY in 5 of 6 timeframes but with mixed 1/3/6mo
   signals is discounted.
 - **User one-liner:** "Market-beating strength filtered by consistency — high only
   when the group beats SPY across timeframes AND those timeframes agree."
@@ -217,11 +220,13 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
 ## beats_benchmark_X (beats_benchmark_day / _week / _month / … / _ytd)
 - **Source:** `compute_beats_benchmark` (`scripts/compute_deltas.py`). Boolean per
   timeframe: 1 when `rs_X > 0` (the group beats SPY for that horizon), 0 otherwise.
-  Blank when SPY data is absent. The 7 columns parallel `RS_BEAT_TIMEFRAMES`.
-- **Signals:** the count of 1s across all 7 timeframes ("beats N/7 tf") gives a
-  quick breadth-of-outperformance read distinct from `rs_score` (which uses percentile
-  ranking of spreads). 7/7 = outperforming across every horizon.
-- **User one-liner:** "How many of the 7 standard timeframes this group is currently outperforming the S&P 500 on — shown as "beats N/7 tf" on cards."
+  Blank when SPY data is absent. All 7 columns (including `beats_benchmark_day`) are
+  stored; the PWA count excludes day — too noisy for a breadth read.
+- **Signals:** the count of 1s across the 6 non-day timeframes ("beats N/6 tf") gives a
+  quick breadth-of-outperformance read distinct from `rs_score`. 6/6 = outperforming
+  across every tracked horizon. `rs_day` and `beats_benchmark_day` remain visible for
+  the "held up on a down day" signal.
+- **User one-liner:** "How many of the 6 standard timeframes (week → YTD) this group is currently outperforming the S&P 500 on — shown as "beats N/6 tf" on cards."
 
 ## rs_new_high
 - **Source:** `compute_rs_new_high` (`scripts/compute_deltas.py`). 1 when today's

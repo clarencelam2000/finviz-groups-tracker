@@ -163,7 +163,7 @@
         <button class="momentum-view-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-mview="momentum">Momentum</button>
         <button class="momentum-view-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-mview="rotation">Rotation</button>
       </div>
-      <p id="momentum-tab-desc" class="text-xs text-slate-500 mb-3">Confirmed momentum: breadth across all 7 timeframes, gated by cross-timeframe agreement. Raw score shown below each name.</p>
+      <p id="momentum-tab-desc" class="text-xs text-slate-500 mb-3">Confirmed momentum: breadth across 6 timeframes (week → YTD), gated by cross-timeframe agreement. Raw score shown below each name.</p>
       <button id="momentum-why-link" class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','momentum_accel')">ⓘ What do the badges mean? →</button>
       <div id="momentum-list" class="space-y-2"></div>
     </section>
@@ -204,7 +204,7 @@
         <button class="vsmarket-view-btn flex-1 py-2 rounded-md text-sm font-medium bg-slate-600 text-white transition-colors" data-mview="score">RS Score</button>
         <button class="vsmarket-view-btn flex-1 py-2 rounded-md text-sm font-medium text-slate-400 transition-colors" data-mview="regime">Emerging / Fading</button>
       </div>
-      <p id="vsmarket-tab-desc" class="text-xs text-slate-500 mb-3">How broadly this group beats the S&amp;P 500 across all 7 timeframes. 100% = outperforming in every horizon.</p>
+      <p id="vsmarket-tab-desc" class="text-xs text-slate-500 mb-3">How broadly this group beats the S&amp;P 500 across 6 timeframes (week → YTD). 100% = outperforming in every horizon.</p>
       <button id="vsmarket-why-link" class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','rs_score')">ⓘ What is RS Score? →</button>
       <div id="vsmarket-list" class="space-y-2"></div>
     </section>
@@ -397,7 +397,7 @@
       metrics: [
         { id: 'momentum_score', label: 'Momentum score', tabs: ['today', 'momentum', 'lookup'],
           oneLiner: 'How strong this group is across every timeframe at once, from 0 to 100%.',
-          detail: 'Average percentile rank across all seven perf timeframes (day → YTD). Higher = broadly strong everywhere.' },
+          detail: 'Average percentile rank across six perf timeframes (week → YTD). Day excluded as too noisy for a consistent signal. Higher = broadly strong everywhere.' },
         { id: 'momentum_confirmed', label: 'Confirmed momentum', tabs: ['momentum', 'strength', 'lookup'],
           oneLiner: 'Momentum filtered by consistency — high only when the group is strong across timeframes AND those timeframes agree.',
           detail: 'momentum_score × rank_agreement. A strong score with low agreement (one outlier timeframe) is discounted.' },
@@ -439,7 +439,7 @@
           detail: 'Freeform briefing built from the computed signals — sustained strength, notable movers, momentum leaders and laggards, and divergences.' },
         { id: 'rs_score', label: 'RS Score (vs S&P 500)', tabs: ['vsmarket', 'strength', 'lookup'],
           oneLiner: 'How broadly this group beats the S&P 500 across every timeframe at once, from 0 to 100%.',
-          detail: 'Fraction of the 7 timeframes (day/wk/mo/qtr/6mo/yr/ytd) where the group\'s RS spread (group perf − SPY perf) is positive. 100% = outperforming in every horizon.' },
+          detail: 'Fraction of 6 timeframes (wk/mo/qtr/6mo/yr/ytd) where the group\'s RS spread (group perf − SPY perf) is positive. Day excluded as too noisy. 100% = outperforming in every horizon.' },
         { id: 'rs_confirmed', label: 'Confirmed RS', tabs: ['vsmarket', 'lookup'],
           oneLiner: 'Market-beating strength filtered by consistency — high only when the group beats SPY across timeframes AND those timeframes agree.',
           detail: 'rs_score × rs_agreement. Broad outperformance (many timeframes positive) discounted if short/medium/long horizons disagree on direction.' },
@@ -456,8 +456,8 @@
           oneLiner: 'How much this group beat or lagged the S&P 500 over each timeframe — positive means it outperformed the market.',
           detail: 'group_perf_X − SPY_perf_X per matching timeframe. Positive = outperforming; negative = lagging. NaN until the first SPY benchmark snapshot is collected.' },
         { id: 'beats_benchmark', label: 'Beats SPY count', tabs: ['vsmarket'],
-          oneLiner: 'How many of the 7 standard timeframes this group is currently outperforming the S&P 500 on — shown as "beats N/7 tf" on cards.',
-          detail: '1 per timeframe where rs_X > 0 (group perf exceeded SPY). 7/7 = outperforming across every horizon; 0/7 = lagging everywhere.' },
+          oneLiner: 'How many of the 6 standard timeframes (week → YTD) this group is currently outperforming the S&P 500 on — shown as "beats N/6 tf" on cards.',
+          detail: '1 per timeframe where rs_X > 0 (group perf exceeded SPY). Counts week through YTD only; day is stored but excluded as too noisy. 6/6 = outperforming across every horizon; 0/6 = lagging everywhere.' },
         { id: 'rs_new_high', label: 'RS new high (NH)', tabs: ['vsmarket'],
           oneLiner: 'The group\'s RS spread vs SPY is at its highest point in the last 20 sessions — a classic IBD-style leadership signal.',
           detail: '1 when today\'s rs_month (1-month RS spread) equals or exceeds its maximum over the trailing 20 trading sessions. Based on rs_month as the canonical mid-frequency RS line. NaN until 2+ sessions of SPY data exist.' },
@@ -736,10 +736,12 @@
         : '';
     }
 
-    // "beats N/7" sub-label: how many timeframes is the group ahead of SPY.
+    // "beats N/6" sub-label: how many of the 6 non-day timeframes the group leads SPY.
+    // Day excluded — too noisy for a breadth count (same reason rs_day is out of rs_score).
+    // beats_benchmark_day remains stored in the CSV for raw inspection.
     // Returns null when no beats_benchmark columns are available.
     function beatsCount(row) {
-      const tfs = ['day','week','month','quarter','half','year','ytd'];
+      const tfs = ['week','month','quarter','half','year','ytd'];
       const vals = tfs.map(tf => row['beats_benchmark_' + tf]);
       const known = vals.filter(v => v !== '' && v !== undefined && v !== null);
       if (known.length === 0) return null;
@@ -1396,7 +1398,7 @@
         if (whyEl) { whyEl.textContent = 'ⓘ What does regime mean? →'; whyEl.onclick = () => __openHub('guide','regime_short_long'); }
         renderRotation(delta, container);
       } else {
-        descEl.textContent = 'Confirmed momentum: breadth across all 7 timeframes, gated by cross-timeframe agreement. Raw score shown below each name.';
+        descEl.textContent = 'Confirmed momentum: breadth across 6 timeframes (week → YTD), gated by cross-timeframe agreement. Raw score shown below each name.';
         if (whyEl) { whyEl.textContent = 'ⓘ What do the badges mean? →'; whyEl.onclick = () => __openHub('guide','momentum_accel'); }
         renderMomentumCards(delta, container);
       }
@@ -1705,7 +1707,7 @@
         if (whyEl)  { whyEl.textContent = 'ⓘ What is the RS regime? →'; whyEl.onclick = () => __openHub('guide','rs_regime_short_long'); }
         renderRsRegime(delta, container);
       } else {
-        if (descEl) descEl.textContent = 'How broadly this group beats the S&P 500 across all 7 timeframes. 100% = outperforming in every horizon.';
+        if (descEl) descEl.textContent = 'How broadly this group beats the S&P 500 across 6 timeframes (week → YTD). 100% = outperforming in every horizon.';
         if (whyEl)  { whyEl.textContent = 'ⓘ What is RS Score? →'; whyEl.onclick = () => __openHub('guide','rs_score'); }
         renderRsScore(delta, container);
       }
@@ -1736,9 +1738,9 @@
         const bc        = beatsCount(row);
 
         const subParts = [
-          rsDay !== null ? `Day: ${rsDay >= 0 ? '+' : ''}${rsDay.toFixed(1)}pp` : null,
           rsMo  !== null ? `Mo: ${rsMo  >= 0 ? '+' : ''}${rsMo.toFixed(1)}pp`  : null,
-          bc    !== null ? `beats ${bc} tf` : null,
+          rsDay !== null ? `Day: ${rsDay >= 0 ? '+' : ''}${rsDay.toFixed(1)}pp` : null,
+          bc    !== null ? `beats ${bc}/6 tf` : null,
         ].filter(Boolean).join(' · ');
 
         const discreteBadges = [nhBadge, crossBadge].filter(Boolean).join(' ');
