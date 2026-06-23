@@ -2131,10 +2131,23 @@
         : '<span class="text-[0.5rem] px-1 py-0.5 rounded bg-sky-900/50 text-sky-300 ml-1">I</span>';
     }
 
+    function evictItem(type, name) {
+      if (isPinned(type, name)) {
+        lsSet(PINNED_KEY, getPinned().filter(p => !(p.type === type && p.name === name)));
+      } else {
+        lsSet(RECENT_KEY, getRecents().filter(x => !(x.type === type && x.name === name)));
+      }
+      renderLookupChips();
+    }
+
     function savedChipHtml(item) {
       const badge = _chipBadge(item.type, item.groupKey);
       const gAttr = item.groupKey ? ` data-chip-group="${item.groupKey}"` : '';
-      return `<button class="lookup-chip flex items-center gap-1 px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-sm text-slate-200 hover:bg-slate-700 active:bg-slate-600 transition-colors" style="min-height:36px" data-chip-type="${item.type}" data-chip-name="${escapeHtml(item.name)}"${gAttr}>${escapeHtml(item.name)}${badge}</button>`;
+      // Wrapper span: left button triggers lookup, right × button evicts.
+      return `<span class="lookup-chip-wrap inline-flex items-center rounded-full bg-slate-800 border border-slate-700" style="min-height:36px">` +
+        `<button class="lookup-chip flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-l-full text-sm text-slate-200 hover:bg-slate-700 active:bg-slate-600 transition-colors" data-chip-type="${item.type}" data-chip-name="${escapeHtml(item.name)}"${gAttr}>${escapeHtml(item.name)}${badge}</button>` +
+        `<button class="lookup-chip-evict px-1.5 py-1 rounded-r-full text-slate-500 hover:text-slate-200 hover:bg-slate-700 transition-colors text-xs leading-none" aria-label="Remove" data-evict-type="${item.type}" data-evict-name="${escapeHtml(item.name)}">×</button>` +
+        `</span>`;
     }
 
     function dataChipHtml(item) {
@@ -2163,8 +2176,7 @@
       }
       const pinned  = getPinned();
       const recents = getRecents();
-      const hasSaved = pinned.length || recents.length;
-      const dataChips = hasSaved ? [] : topMomentumChips(5);
+      const dataChips = topMomentumChips(5);
       if (!pinned.length && !recents.length && !dataChips.length) {
         el.classList.add('hidden'); return;
       }
@@ -2279,17 +2291,29 @@
       if (!raw || raw.trim().length < 2) return [];
       const q = raw.trim().toLowerCase();
       const prefix = [], sub = [];
+      const seen = new Set();
       for (const groupKey of ['sectors', 'industries']) {
         const snaps = (state.data[groupKey]?.snap) || [];
         for (const r of snaps) {
           const lo = r.name.toLowerCase();
-          if (lo.startsWith(q)) prefix.push({ name: r.name, groupKey });
-          else if (lo.includes(q)) sub.push({ name: r.name, groupKey });
+          if (lo.startsWith(q)) { prefix.push({ name: r.name, groupKey, matchType: 'prefix' }); seen.add(r.name); }
+          else if (lo.includes(q)) { sub.push({ name: r.name, groupKey, matchType: 'sub' }); seen.add(r.name); }
         }
       }
       prefix.sort((a, b) => a.name.localeCompare(b.name));
       sub.sort((a, b) => a.name.localeCompare(b.name));
-      return [...prefix, ...sub].slice(0, 6);
+      const results = [...prefix, ...sub];
+      // Synonym match: colloquial alias → exact Finviz name (e.g. "semis" → Semiconductors).
+      if (results.length < 6) {
+        const syn = resolveGroupSynonym(raw);
+        if (syn && !seen.has(syn.name)) { results.push({ ...syn, matchType: 'synonym' }); seen.add(syn.name); }
+      }
+      // Fuzzy match: catch typos when few exact hits exist.
+      if (results.length < 3) {
+        const fz = findFuzzyGroupMatch(raw);
+        if (fz && !seen.has(fz.name)) results.push({ name: fz.name, groupKey: fz.groupKey, matchType: 'fuzzy' });
+      }
+      return results.slice(0, 6);
     }
 
     let _suggFocusIdx = -1;
@@ -2315,17 +2339,22 @@
       el.innerHTML = suggestions.map(s => {
         const lo = s.name.toLowerCase();
         const idx = lo.indexOf(q);
-        const hl = idx >= 0
+        const hl = (idx >= 0 && s.matchType !== 'synonym' && s.matchType !== 'fuzzy')
           ? escapeHtml(s.name.slice(0, idx))
             + `<span class="font-semibold text-sky-300">${escapeHtml(s.name.slice(idx, idx + q.length))}</span>`
             + escapeHtml(s.name.slice(idx + q.length))
           : escapeHtml(s.name);
-        const badge = s.groupKey === 'sectors'
+        const groupBadge = s.groupKey === 'sectors'
           ? `<span class="flex-shrink-0 text-[0.55rem] px-1.5 py-0.5 rounded bg-violet-900/50 text-violet-300 leading-none">S</span>`
           : `<span class="flex-shrink-0 text-[0.55rem] px-1.5 py-0.5 rounded bg-sky-900/50 text-sky-300 leading-none">I</span>`;
+        const matchBadge = s.matchType === 'synonym'
+          ? `<span class="flex-shrink-0 text-[0.55rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 leading-none">≈ alias</span>`
+          : s.matchType === 'fuzzy'
+          ? `<span class="flex-shrink-0 text-[0.55rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 leading-none">~ fuzzy</span>`
+          : '';
         return `<button class="lookup-suggestion w-full text-left px-3 py-2.5 text-sm text-white hover:bg-slate-700 flex justify-between items-center gap-2"
           style="min-height:40px" role="option" aria-selected="false"
-          data-name="${escapeHtml(s.name)}" data-group="${s.groupKey}"><span>${hl}</span>${badge}</button>`;
+          data-name="${escapeHtml(s.name)}" data-group="${s.groupKey}"><span>${hl}</span><span class="flex items-center gap-1">${matchBadge}${groupBadge}</span></button>`;
       }).join('');
       _suggFocusIdx = -1;
       el.classList.remove('hidden');
@@ -3513,8 +3542,10 @@
       document.getElementById('ticker-input').value = btn.dataset.name;
       doGroupLookup(btn.dataset.name, btn.dataset.group);
     });
-    // Chip click: run the saved/data chip lookup (Ideas 5+7)
+    // Chip click: evict × or run the saved/data chip lookup (Ideas 5+7)
     document.getElementById('lookup-chips').addEventListener('click', e => {
+      const evict = e.target.closest('.lookup-chip-evict');
+      if (evict) { evictItem(evict.dataset.evictType, evict.dataset.evictName); return; }
       const btn = e.target.closest('.lookup-chip');
       if (!btn) return;
       const type = btn.dataset.chipType;
