@@ -3651,6 +3651,12 @@
         navigator.serviceWorker.register('/finviz-groups-tracker/sw.js')
           .catch(() => {}); // silently ignore in non-Pages environments
       });
+      // Auto-reload when a new SW version activates (CACHE bump on deploy).
+      // The SW broadcasts SW_RELOAD after claiming all clients; we reload so the
+      // new shell HTML is rendered without requiring a manual refresh.
+      navigator.serviceWorker.addEventListener('message', e => {
+        if (e.data?.type === 'SW_RELOAD') location.reload();
+      });
     }
 
   })();

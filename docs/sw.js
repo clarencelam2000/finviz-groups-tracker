@@ -16,11 +16,15 @@ self.addEventListener('install', e => {
 
 self.addEventListener('activate', e => {
   e.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    )
+    caches.keys()
+      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+      .then(() => self.clients.matchAll({ includeUncontrolled: true }))
+      // TODO(SW-UPDATE-UX): if auto-reload proves disruptive (e.g. user mid-session),
+      // switch to Option 2: post { type: 'SW_UPDATED' } here and show a "New version —
+      // tap to refresh" toast in index.html instead of reloading automatically.
+      .then(clients => clients.forEach(c => c.postMessage({ type: 'SW_RELOAD' })))
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', e => {
