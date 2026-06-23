@@ -1,9 +1,11 @@
 # Plan: Top-stock picks from leading groups (Stage-2 screener pipeline)
 
-> Status: **FRAMEWORK / pre-implementation.** Decisions below are VP-confirmed (interview
-> 2026-06-23). Two hard dependencies remain before coding the scraper: (1) the canonical
-> wide-net Finviz screener URL(s) from the VP, (2) one-time validation of the 144-row
-> industry→`ind_` slug map against Finviz's live filter dropdown.
+> Status: **FRAMEWORK / pre-implementation.** Decisions below are VP-confirmed (interviews
+> 2026-06-23). The Finviz URL templates are now **in hand** (wide-net + button, decoded in
+> §VP URL handoff). Remaining before/within Phase 1: (1) one-time validation of the 144-row
+> industry→`ind_` slug map vs Finviz's live dropdown, (2) retire three free-tier risks (84-col
+> custom `c=`, the `wiimdailydigest` sort token, Stage-2 filters baked into the stored net), and
+> (3) VP sign-off on the proposed selector thresholds / 20-group cap mix.
 
 ## Context & thesis
 
@@ -43,7 +45,7 @@ is a later session.
 | D2 | Group coverage | **Selected leading groups only**, not all 144. Categories below. Button still available for ALL 144. |
 | D3 | List categories | **Leaders + emerging (core)**, **Accelerating momentum**, **RS-new-high confirmed** — with a baseline-strength floor on the latter two (see §Selectors). |
 | D4 | Stock screen | **Wide net, filter in-house.** VP supplies canonical Finviz URL(s). Don't bake tight filters into the URL; store wide, tune filters in our pipeline. |
-| D5 | Stored columns | **Full `v=151` custom view (~70 columns)** — maximally future-proofs attribution. **Pin the explicit ordered `c=` list in config (§VP URL handoff), never rely on the bare saved view** — saved-view membership is account/cookie-bound and can drift, which would corrupt an append-only fixed-header CSV. |
+| D5 | Stored columns | **Full `v=151` custom view (~84 columns — VP-supplied `c=` list, see §VP URL handoff)** — maximally future-proofs attribution. **Pin the explicit ordered `c=` list in config, never rely on the bare saved view** — saved-view membership is account/cookie-bound and can drift, which would corrupt an append-only fixed-header CSV. |
 | D6 | List size | **Store ALL qualifiers per group** (breadth = count of qualifiers is its own signal). Requires Finviz pagination (`&r=` offset; ~20 rows/page). |
 | D7 | Scrape job | **Separate GitHub Actions workflow** (`collect_picks.yml`), **independent cron + concurrency guard** (VP-confirmed). Own EOD trigger scheduled *after* `collect.py`. Isolates failure domains; the concurrency group + rebase-before-push + a "deltas are today's" assertion prevent commit races / stale reads (see §Finviz scraping notes). |
 | D8 | PWA surface | **Both:** standalone **"Picks" tab** (cross-group destination) + a per-group **"Stage-2 names →" section inside the Lookup tab** (contextual, when an industry is pulled up). No generic-card surface. |
@@ -112,8 +114,34 @@ rows written to `picks.csv` with `list_category`:
 > momentum-accel spike or 20-day RS-new-high while still near the bottom of the pack. Gate
 > both on absolute standing before they qualify. Exact thresholds to tune; start conservative.
 
-Expected selected universe: ~20–30 groups/day (mostly leaders). Cap total selected groups
-(e.g. 30) to bound scrape volume / ToS exposure.
+### Daily cap & priority-fill mix (proposed — VP sign-off pending)
+
+**Cap = 20 unique groups/day** (conviction over breadth; also bounds ToS exposure). Fill by
+priority, dedup groups, stop at 20:
+
+| Priority | Category | Gate (existing `deltas.csv` cols) | Slots | Rank within by |
+|----------|----------|-----------------------------------|-------|----------------|
+| 1 | `leaders` | all-green (5/5 timeframes +) **AND** `rs_confirmed ≥ 0.5` | ≤ **10** | `rs_confirmed` desc |
+| 2 | `emerging` | `regime_short_long > REGIME_THRESHOLD (0.15)` **AND** `rs_score > 0.5` | ≤ **4** | `regime_short_long` desc |
+| 3 | `accel` | `momentum_accel > ACCEL_STRONG (0.08)` **AND** `momentum_score ≥ 0.5` **AND** `rs_score > 0.5` | ≤ **3** | `momentum_accel` desc |
+| 4 | `rs_new_high` | `rs_new_high == 1` **AND** `rs_score ≥ 0.6` **AND** `momentum_score ≥ 0.5` | ≤ **3** | `rs_slope` desc |
+
+Rationale:
+- **`momentum_score ≥ 0.5` is the "top-half" anti-flash floor** — it's already a 0–1 percentile
+  across timeframes, so "top half" is unambiguous and self-adjusting (cleaner than a raw rank
+  cutoff). This is the gate the VP wanted on `accel`/`rs_new_high`.
+- **Leaders gets half the cap** — highest-expectancy, most-sustained; the earlier/riskier
+  buckets get small allocations.
+- **Dedup counts unique groups toward 20**, but a group qualifying in multiple categories still
+  gets its stock rows **tagged per category** in `picks.csv` (clean per-methodology attribution);
+  it is only **scraped once**.
+- **Reuses existing PWA constants** (`REGIME_THRESHOLD`, `ACCEL_STRONG`) — one source of truth,
+  no new magic numbers. New floors (`rs_confirmed ≥ 0.5`, `rs_score` cutoffs) go in
+  `delta_config.py` with the configurable-constant triple-doc treatment.
+- **Self-shrinks in a correction** (fewer all-green leaders) — correct behavior, not a bug.
+
+Thresholds are deliberately conservative starting points; tune after the first few weeks of
+captured data.
 
 ## Finviz scraping notes (carry-over from collect.py + new)
 
@@ -129,7 +157,10 @@ Expected selected universe: ~20–30 groups/day (mostly leaders). Cap total sele
   Azure IP — a 50–100× escalation, against Finviz's *screener* (more bot-sensitive than the
   groups view). Two compounding effects: (a) Cloudflare/ToS escalation risk, (b) Actions
   wall-clock — at a 3–5s polite delay this is a ~10–20 min job. State the runtime budget and
-  treat the 30-group cap (D-cap) as a **hard ceiling**, not a suggestion.
+  treat the 20-group cap (§Selector thresholds) as a **hard ceiling**, not a suggestion.
+  **NOTE:** the VP wide-net URL is itself Stage-2 pre-filtered (`ta_highlow52w_a30h`,
+  `ta_sma200_sb50`, `ta_sma50_pa`), so per-group name counts are moderate, not raw-universe —
+  the realistic load is ~tens of page loads/day, not hundreds.
 - **Concurrency / stale-read guard (D7).** `collect_picks.yml` and `collect.yml` both commit to
   `data/` on the same branch. Use a shared GitHub **`concurrency:` group** so they never push
   simultaneously, **rebase (or `git pull --rebase`) before push**, and **assert the deltas are
@@ -147,16 +178,42 @@ Expected selected universe: ~20–30 groups/day (mostly leaders). Cap total sele
   NOT `taxonomy_map.csv`** (the latter is the incomplete FMP→Finviz map — missing ~17
   industries: Airlines, Gambling, Internet Retail, Semiconductor Equipment & Materials,
   "Furnishings, Fixtures & Appliances", Coking Coal, etc.).
-- **URL template (PENDING VP):** wide-net version of e.g.
-  `https://finviz.com/screener?v=151&f=cap_midover,ind_<slug>,...&ft=4&o=sma50&c=<col list>`
-  — VP to supply the exact `f=` filter set and `c=` column list. **Handling, validation, and
-  modularity of this URL are specified in §VP URL handoff & modular screener config below.**
+- **URL templates (VP-supplied 2026-06-23, decoded below).** Handling, validation, and
+  modularity are specified in §VP URL handoff & modular screener config.
 
 ## VP URL handoff & modular screener config
 
 **What the VP provides:** *one* full sample screener URL per template — the **wide-net (storage)**
 URL and the **tight Stage-2 (button)** URL — for *any single* industry. The VP does **not**
 hand-build 144 URLs; they paste two example URLs and the implementer parameterizes them.
+
+### VP-supplied samples (2026-06-23) — decoded
+
+**Button (tight Stage-2), view `v=311`:**
+```
+https://finviz.com/screener?v=311&f=cap_midover,ind_<slug>,ta_sma20_sa50,ta_sma50_pa&ft=4&o=sma50
+  filters: cap_midover · ta_sma20_sa50 (20SMA > 50SMA) · ta_sma50_pa (price > 50SMA)
+```
+
+**Wide net (storage scrape), view `v=151`, 84 columns:**
+```
+https://finviz.com/screener?v=151&f=cap_midover,ind_<slug>,ta_highlow52w_a30h,ta_sma200_sb50,ta_sma50_pa&ft=4&o=wiimdailydigest&c=1,2,4,5,6,7,67,65,66,68,79,8,9,10,13,145,146,33,32,34,37,38,149,16,77,17,18,142,19,20,143,21,23,22,132,133,39,40,41,27,29,42,43,44,45,47,46,138,49,51,48,52,53,54,59,63,64,81,86,87,88,62,69,135,137,136,150,3,12,144,35,36,82,78,28,139,50,57,58,60,61,148,127,128
+  filters: cap_midover · ta_highlow52w_a30h (within 30% of 52w high) · ta_sma200_sb50 (50SMA > 200SMA) · ta_sma50_pa (price > 50SMA)
+  84 columns (exceeds the original "~70" estimate — even better for attribution)
+```
+> `%2C` in the raw paste = `,` (URL-encoded comma) — decode before parsing.
+> Semiconductors is a large group → doubles as the multi-page pagination validation case.
+
+**Three risks to retire in Phase-1 validation (do NOT assume; verify on an Azure run):**
+1. **Custom 84-col `c=` on a free (non-Elite) account.** We already use custom `c=` for the
+   *groups* view (`v=152&c=…`) on free, so it's *likely* fine for the screener — but this is the
+   single biggest schema risk; confirm all 84 columns render before trusting the header.
+2. **`o=wiimdailydigest` sort** looks like a custom/Elite sort token. Low impact (we paginate
+   every page, so sort order doesn't affect completeness) — fall back to `o=-change` if it errors.
+3. **Stage-2 filters are baked into the "wide" net** (`ta_*` above). This *narrows* what we
+   store: names that drop out of Stage-2 vanish from the log, so some counterfactual attribution
+   ("did Stage-2 gating add value vs an unfiltered group?") is impossible later. VP confirmed
+   wording pending — see Open dependencies. Mild tension with D4's "store wide, filter in-house."
 
 **How the implementer turns that into the pipeline:**
 
@@ -166,12 +223,15 @@ hand-build 144 URLs; they paste two example URLs and the implementer parameteriz
    {
      "wide": {
        "v": "151",
-       "base_filters": ["cap_midover", "..."],     // f= tokens MINUS ind_<slug>
-       "sort": "sma50",                              // o=
-       "ft": "4",
-       "columns": [{"id": 0, "label": "No."}, {"id": 65, "label": "RSI"}, ...]  // ordered c=
+       "base_filters": ["cap_midover", "ta_highlow52w_a30h", "ta_sma200_sb50", "ta_sma50_pa"],
+       "sort": "wiimdailydigest", "ft": "4",
+       "columns": [{"id": 1, "label": "Ticker"}, {"id": 65, "label": "RSI"}, ...]  // 84 ids, ordered
      },
-     "button": { ... tighter f= set, same shape ... }
+     "button": {
+       "v": "311",
+       "base_filters": ["cap_midover", "ta_sma20_sa50", "ta_sma50_pa"],
+       "sort": "sma50", "ft": "4"
+     }
    }
    ```
    The scraper builds each request URL programmatically: `base_filters + ["ind_"+slug]` joined
@@ -186,10 +246,12 @@ hand-build 144 URLs; they paste two example URLs and the implementer parameteriz
    that adding a column is a schema bump, not a silent change. Removing/reordering columns is
    discouraged; prefer append-only column growth.
 
-3. **Label the opaque `c=` numbers once.** Finviz `c=` IDs are not self-documenting. On first
-   run, scrape the rendered table's header row and map each `c=` id → its visible label; store
-   that map in `columns[].label`. Assert `len(scraped header) == len(columns)` so a view drift
-   is caught immediately (the D5 header-drift guard).
+3. **The opaque integer `c=` IDs are NOT a problem (VP asked).** They never need hand-decoding.
+   Finviz **renders the human column labels in the result table's header row**, in `c=` order.
+   So on first run we scrape that header and map *position → label* (e.g. id `65` → "RS"), store
+   it in `columns[].label`, and use the labels as the `picks.csv` header. The integers are just
+   the request key; meaning comes from the scraped header. Assert `len(scraped header) == 84` so
+   a view drift is caught immediately (the D5 header-drift guard).
 
 4. **Validation recipe (extends the VP's "try one, check two" idea).** Don't just try the
    sample group — validate across the shape of the data:
@@ -205,9 +267,9 @@ hand-build 144 URLs; they paste two example URLs and the implementer parameteriz
    - **Golden-header snapshot:** commit the first validated header as a fixture; a test asserts
      future scrapes match it (drift tripwire).
 
-5. **What still must come from the VP** (cannot be inferred): the exact `f=` semantics —
-   `ft=4` meaning, the `cap_*` band (geography implication, see open questions), whether the
-   wide net intentionally omits the Stage-2 SMA-stack filters, and the canonical `o=` sort.
+5. **Mostly resolved by the VP samples.** URLs, filters, sort, and the 84-col `c=` list are now
+   in hand (decoded above). The only residual VP confirmation is the **Stage-2-filter-in-wide-net**
+   question (risk 3 above) — see Open dependencies.
 
 ## Deep-link button (folds into same effort)
 
@@ -254,22 +316,27 @@ derived from the log — never hand-maintained.
 1. **Phase 1 — slug map + validation** (small): build `finviz_industry_slugs.csv` from
    snapshots, validate vs live Finviz dropdown (one Actions run). De-risks everything.
 2. **Phase 2 — scraper + collection** (core, irreplaceable): `collect_picks.py` (selectors +
-   paginated scrape + append), `collect_picks.yml` separate workflow, `data/picks/picks.csv`.
-   **Start the daily clock ASAP.** Needs VP URL template (D4).
+   paginated scrape + append), `collect_picks.yml` separate workflow, `data/picks/picks.csv` +
+   `picks_latest.csv`. **Start the daily clock ASAP.** URL templates now in hand (decoded
+   above); Phase-1 must first retire the 3 free-tier risks (84-col `c=`, sort token, Stage-2-net).
 3. **Phase 3 — PWA surfaces:** Picks tab + Lookup-tab section + deep-link button + release.
-4. **Phase 4 — attribution** (later, own session): `eval_picks.py`, FMP backfill, methodology
+4. **Phase 4 — attribution** (later, own session): `eval_picks.py`, OHLC backfill, methodology
    comparison.
 5. **Spike (optional) — TwelveData/extended indicators** if Finviz columns prove insufficient.
 
 ## Open dependencies / questions parked for VP
 
-- [ ] **Canonical wide-net Finviz URL(s)** — VP to supply `f=` filters + `c=` column list (D4/D5).
-- [ ] Selector thresholds (the anti-flash floors) — start conservative, tune after first weeks.
-- [ ] Total selected-group cap per day (bounds scrape volume) — propose 30.
-- [ ] Finviz ToS comfort level on ~20–30 paginated screener scrapes/day (escalation over the
-      2 group-page scrapes today). Politeness + cap mitigate; flag if concern.
-- [ ] Stock universe geography (Finviz `cap_midover` includes foreign listings) — keep all or
-      US-only? Default: keep all, store country column, filter later.
+- [x] **Canonical wide-net + button Finviz URLs** — VP supplied 2026-06-23 (decoded in §VP URL
+      handoff). 84-col `c=` list, `cap_midover` + Stage-2 `ta_*` filters, `v=151`/`v=311`.
+- [ ] **CONFIRM: keep the Stage-2 `ta_*` filters in the *stored* wide net?** They narrow the log
+      (names that exit Stage-2 disappear), foreclosing some counterfactual attribution. Default:
+      keep as supplied. Flag if you want a truly unfiltered store for the comparison study.
+- [x] Selector thresholds + cap — proposed in §Daily cap (20-group priority-fill, mix per
+      category). **VP sign-off still wanted** on the exact numbers/slot split.
+- [ ] **VP confirm geography:** `cap_midover` includes foreign listings — keep all (store Country,
+      filter later) or restrict to US? Default: keep all.
+- [ ] Finviz ToS comfort on ~20 groups × pages/day. Stage-2-filtered net keeps this to ~tens of
+      page loads; politeness + cap mitigate. Flag if concern.
 - [ ] **`picks.csv` log growth** (non-blocking, VP-noted) — the full append-only log grows
       multi-MB; revisit rotation / git-LFS / yearly partition later. PWA already insulated via
       `picks_latest.csv`, so this does not block collection.
@@ -283,9 +350,18 @@ derived from the log — never hand-maintained.
   (asserts `ind_<slug>` injection + ordered `c=`). Use `tmp_path`/`StringIO` per house rule.
 - Slug-map anti-drift test: every industry in `snapshots.csv` has a row in
   `finviz_industry_slugs.csv` (mirrors taxonomy validation discipline).
-- **Header / config tests:** golden-header fixture match (drift tripwire); required-columns
-  assertion (Price, %-from-50SMA, 52w-high, RSI, perf wk/mo, EPS/sales growth, Country present);
-  `len(scraped header) == len(config.columns)`.
+- **Header / schema smoke tests (VP asked) — guard the discouraged behaviors explicitly:**
+  - **Golden-header match:** the first validated 84-col header committed as a fixture; any drift
+    (Finviz view change or config edit) fails.
+  - **Reorder/removal guard:** assert a new header is a same-order **superset** of the committed
+    one → column **removal or reorder fails the test**; a pure **append** is allowed and triggers
+    the migration path (below).
+  - **Migration test:** adding a column to `screener_config.json` backfills existing `picks.csv`
+    rows with blanks and produces a superset header (mirrors `ensure_deltas_csv()`); old rows
+    stay readable.
+  - **Count + required-columns asserts:** `len(scraped) == len(config.columns) == 84`, and the
+    needed fields are present (Price, %-from-50SMA, 52w-high, RSI, perf wk/mo, EPS/sales growth,
+    Country).
 - **`picks_latest.csv` test:** equals the max-date slice of `picks.csv` after a run.
 - PWA: Playwright fixture-intercept tests for Picks tab + Lookup section (per CLAUDE.md
   pattern).
