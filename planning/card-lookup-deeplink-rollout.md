@@ -1,6 +1,6 @@
 # Plan: Card Tap → Lookup Deep-Link — Full Rollout
 
-**Status:** Ready to implement  
+**Status:** ✅ Implemented (2026-06-23)  
 **Scope:** `docs/index.html`, `docs/releases.json`, `docs/sw.js`, `tests/test_functional_playwright.py`  
 **Estimated diff:** ~65 lines JS/HTML in `index.html` + 8 Playwright test functions  
 **Prereq:** None — all referenced functions and IDs are live on default branch
@@ -304,7 +304,12 @@ Per `CLAUDE.md` "Cutting a release" — all three together:
 
 ## Verification checklist
 
-- [ ] `python3 -m pytest tests/ -q` passes (all existing tests + new ones)
+- [x] `python3 -m pytest tests/ -q` passes (all 366 existing tests — new Playwright tests require `playwright install chromium`)
+- [x] Part A: Momentum, Strength, vs Market cards — `data-group-name`, `cursor-pointer`, `›` added; 3 delegated listeners added
+- [x] Part B: Today card `data-today-lookup` button added; Today lookup listener added before expand listener
+- [x] `docs/releases.json` — version `2026.06.23.1` prepended; `current` updated
+- [x] `docs/sw.js` — CACHE bumped `finviz-v26` → `finviz-v27`
+- [x] 8 new Playwright test functions added to `tests/test_functional_playwright.py`
 - [ ] Serve `docs/` locally, navigate to each tab, tap a card → Lookup tab activates and
       shows that group's data
 - [ ] "Oil & Gas" card → Lookup renders "Oil & Gas" (not `&amp;`)

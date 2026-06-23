@@ -1,6 +1,16 @@
 {
-  "current": "2026.06.23",
+  "current": "2026.06.23.1",
   "releases": [
+    {
+      "version": "2026.06.23.1",
+      "date": "2026-06-23",
+      "title": "Tap any card to drill into Lookup",
+      "tag": "feature",
+      "notes": [
+        "Every group card across Momentum, Strength, vs Market, and Today tabs now taps through to the Lookup tab with that group pre-filled.",
+        "Subtle › affordance on each card signals tappability. No back-navigation from Lookup — by design for now."
+      ]
+    },
     {
       "version": "2026.06.23",
       "date": "2026-06-23",
