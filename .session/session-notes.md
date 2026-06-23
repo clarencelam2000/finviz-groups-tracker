@@ -6,6 +6,8 @@
 
 ## Current Status
 
+**Status (2026-06-23) — CRON SCHEDULE ADJUSTMENT: COMPLETE.** PR #168 open (draft). Updated `worker-cron/wrangler.toml` cron times from 9:49am/10:51am/3:48pm ET (summer) to 5:01pm/10:30am/3:48pm ET (summer). Cloudflare Cron is fixed-UTC with no DST support — manual adjustments required twice yearly. **Next: Monitor for CI, then merge. Action needed: adjust UTC times on November 2, 2026 (EDT→EST) and March 9, 2027 (EST→EDT).** See PR body for winter UTC equivalents.
+
 **Status (2026-06-22) — AI CAPTURE & VISIBILITY (Phases 1/2/3/4/7): COMPLETE. PR #160 ready for review.** Branch `claude/beautiful-bohr-2bky6v`. Phases 1/2/7 (CallResult dataclass, Tier-1 provenance, Tier-2 debug capture, --preview mode, Vertex express-key auth), Phase 3 (prompt snapshot tests, 11 golden .txt files), Phase 4 (PWA "Behind this" provenance drawer) all shipped. 325 non-Playwright tests pass. CI green 6/6. **Next: Phases 5+6 (tools/ai-lab.html offline viewer + eval_ai.py offline guards) on this same branch/PR.** SAFE to start Phase 5+6 immediately.
 
 **Status (2026-06-22) — MOVERS TAB IMPROVEMENTS: COMPLETE.** PRs #155, #156, #157 merged. Changes: (1) RS NH/↑cross badges on Top Gainers (reuses existing helpers from vs Mkt tab); (2) "Score" → "Mom" label rename for clarity; (3) Tap-to-lookup: each mover card deep-links to Lookup tab for that group; (4) YTD/Month/Week rank dimension toggle. Release triplet: `releases.json 2026.06.22.1`, `sw.js CACHE → finviz-v24`. Review subagents caught two real bugs: `main.scrollTop` (silent no-op on mobile, fixed to `documentElement`+`body`) and missing `.movers-rank-btn` sync in `initUIFromState` (future-proofing, added). Safe to close.
@@ -15,6 +17,26 @@
 **Status (2026-06-21) — RS DISCRETE FLAGS (RS-4 / Phase 3 Tier 5): COMPLETE on `claude/wonderful-brown-dahc9q`.** PR open (draft → ready for review). 206 non-Playwright tests pass. Changes: (1) Pipeline: beats_benchmark_{day..ytd}, rs_new_high, rs_cross added to delta schema (9 new columns), compute_deltas.py has 3 new pure functions; (2) PWA: NH (amber) + ↑ cross (sky) badges on vs-Market cards, "beats N/7 tf" sub-line; (3) GUIDE: 3 new entries; (4) moaty-metrics.md, README, CLAUDE.md updated; (5) release triplet: releases.json 2026.06.21.2, sw.js CACHE → finviz-v21. All plan phases Phases 0-3 now complete. Phases 4+5 remain deferred. **Safe to close once PR merged.**
 
 **Status (2026-06-21) — START HERE ONBOARDING (ONBOARD): COMPLETE on `claude/dreamy-archimedes-3q6ag1`.** PR #143 merged. All 212 non-Playwright tests pass. Changes: WELCOME constant + hub section + anti-drift tests, carousel overlay + fvt_intro_seen_v1, release cut (releases.json 2026.06.21, sw.js CACHE → v19). Deferred: ONBOARD-DL-UX (carousel deep-link dismiss UX, tracked in SPRINT.md), PWATEST-LOOKBACK (3 pre-existing Playwright failures). **Merged.**
+
+---
+
+## Session: 2026-06-23 — Cron schedule adjustment for market hours
+
+**What happened:** User requested adjustment to Cloudflare Worker cron schedule to better align with US market hours. Researched Cloudflare Cron timezone/DST support and confirmed: fixed-UTC only, no DST handling, must adjust manually twice yearly.
+
+**Changes (1 commit):**
+- Updated `worker-cron/wrangler.toml` cron times from summer EDT times:
+  - 9:49 AM ET (13:49 UTC) → 5:01 PM ET (21:01 UTC) — late afternoon before close
+  - 10:51 AM ET (14:51 UTC) → 10:30 AM ET (14:30 UTC) — morning update
+  - 3:48 PM ET (19:48 UTC) → kept (already good)
+- Added detailed comment block with winter UTC equivalents (22:01, 15:30, 20:48)
+- Updated PR body with DST adjustment reminders and next action dates
+
+**Key finding:** Cloudflare Cron does NOT support timezone configuration or DST. The workaround is to manually update `wrangler.toml` on:
+- November 2, 2026 (1st Sunday): EDT→EST transition
+- March 9, 2027 (2nd Sunday): EST→EDT transition
+
+**PR #168:** Opened as draft, awaiting CI. Ready to merge.
 
 ---
 

@@ -17,11 +17,16 @@ name = "finviz-cron-dispatcher"
 main = "src/index.js"
 compatibility_date = "2024-09-23"
 
-# Cron Triggers (UTC, weekday-only) — identical expressions to today's GitHub
-# cron in collect.yml. Cloudflare cron is fixed-UTC, so DST behaves exactly as
-# documented in CLAUDE.md § Automation (one hour earlier in ET during winter).
+# Cron Triggers (UTC, weekday-only). Scheduled for summer EDT times:
+# - 21:01 UTC = 5:01 PM EDT (10:51 changed from 10:51am)
+# - 14:30 UTC = 10:30 AM EDT (9:49 changed from 9:49am)
+# - 19:48 UTC = 3:48 PM EDT (kept as-is)
+# NOTE: Cloudflare cron is fixed-UTC with no DST support. Must adjust manually:
+# - On 2nd Sunday of March: add 1 hour to UTC times (EST→EDT transition)
+# - On 1st Sunday of November: subtract 1 hour from UTC times (EDT→EST transition)
+# Winter UTC equivalents: ["22:01 * * 1-5", "15:30 * * 1-5", "20:48 * * 1-5"]
 [triggers]
-crons = ["49 13 * * 1-5", "51 14 * * 1-5", "48 19 * * 1-5"]
+crons = ["01 21 * * 1-5", "30 14 * * 1-5", "48 19 * * 1-5"]
 
 [vars]
 # The git ref that collect.yml runs on. Stored as a var (not a secret) so it can
