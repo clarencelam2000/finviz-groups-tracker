@@ -196,6 +196,15 @@ Full plan: `planning/compute-deltas-lookbacks-and-momentum.md` (see gap map). Su
 
 **Data availability note:** `momentum_accel` and `rank_trend_slope` need 10 sessions (~2026-06-23). `perf_*_delta_20d` needs 20 sessions (~2026-07-10). These columns appear empty until then — their UI elements are hidden gracefully until data arrives.
 
+#### Signal-to-Noise Monitoring
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| ~~SIG-NOISE-1~~ | ~~**`scripts/signal_noise.py` — rolling churn reporter**~~ | `scripts/signal_noise.py`, `tests/test_signal_noise.py` | S | ✅ **Done 2026-06-23.** Computes `mean \|day-over-day Δmomentum_score\|` over a rolling window (default 20 sessions) separately for sectors and industries. Baseline (8 days, 6-tf formula): sectors 0.058 / industries 0.046 (~40% better than old 7-tf formula). Run: `python scripts/signal_noise.py`. 11 tests. |
+| SIG-NOISE-2 | **[FUTURE] Wire churn as CI assertion or dashboard panel** | `.github/workflows/tests.yml` or `dashboard/app.py` | S | Gate on ≥20 sessions of data. Proposed threshold: `mean \|Δmomentum_score\| > 0.07` = regression flag for both sectors and industries. Prevents a future formula change from silently re-introducing noise. Implement once session count crosses 20 (~2026-07-16 at 1 run/day). |
+
+---
+
 #### Data / Insight Features
 
 | # | Task | File(s) | Effort | Notes |
