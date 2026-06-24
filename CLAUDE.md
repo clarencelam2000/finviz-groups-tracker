@@ -98,6 +98,12 @@ Seeded by the same `seed_taxonomy.py` run (same HTTP fetch, no extra cost). Stru
 - `ticker_to_industry`: flat reverse index for O(1) ticker→industry lookup; enables Worker fallback classification without FMP API calls
 - ~5550 tickers, ~876KB on disk
 
+**Data freshness:** The fasiha repo halted scraping in April 2025 ("halt scraping since the website has changed"). The JSON reflects ~March 2025 state and will not auto-update.
+
+- **Reliable:** sector/industry names (taxonomy rarely changes; confirmed 100% match with our live data as of 2026-06-24), stock membership for established companies, relative market cap ordering within an industry
+- **Stale:** absolute `market_cap_m` figures, stock completeness (companies IPO'd or reclassified after March 2025 are missing)
+- **Do not use for:** live prices, current market caps, or expecting new companies to appear on re-seed
+
 ### snapshots.csv columns
 `date, collected_at, group_type, name, stocks, market_cap, pe, fwd_pe, perf_day, perf_week, perf_month, perf_quarter, perf_half, perf_year, perf_ytd, avg_volume, rel_volume, change`
 

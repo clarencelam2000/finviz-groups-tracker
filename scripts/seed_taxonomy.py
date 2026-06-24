@@ -2,15 +2,35 @@
 Seed the Finviz sector→industry taxonomy map and industry→stock map
 from fasiha/finviz-git-scraper.
 
-The fasiha repo scrapes finviz.com/map nightly and publishes map-sec_all.json —
+The fasiha repo scraped finviz.com/map nightly and published map-sec_all.json —
 a 3-level tree (Root → Sector → Industry → Stock) using the same Finviz taxonomy
-as our groups pipeline. This script extracts both layers in a single HTTP fetch:
+as our groups pipeline.
+
+NOTE: The fasiha repo stopped updating in April 2025 ("halt scraping since the
+website has changed"). The source data is frozen at ~March 2025. This affects
+what is and is not reliable from this file:
+
+  RELIABLE (taxonomy rarely changes):
+    - Sector → Industry containment tree (our 144/144 industries still match)
+    - Industry → Stock membership for established companies
+    - ticker_to_industry reverse index for tickers that existed in March 2025
+
+  STALE (do not use as live data):
+    - market_cap_m values — approximately correct for large caps, stale for
+      smaller names; use only for rough relative ordering within an industry
+    - Stock completeness — companies IPO'd or reclassified after March 2025
+      will be missing; established names remain reliably categorized
+
+Re-run this script only after Finviz restructures their own taxonomy (rare, ~yearly)
+or if a better/updated source becomes available. Do NOT re-run expecting fresh
+market cap data — the source won't change.
+
+This script extracts both layers in a single HTTP fetch:
 
   data/finviz_sector_industry_map.json  — sectors dict + metadata
   data/finviz_sector_industry_map.csv   — flat (finviz_sector, finviz_industry) pairs
   data/finviz_industry_stock_map.json   — industry→stocks + reverse ticker index
 
-Run once to seed; re-run only after Finviz restructures taxonomy (rare, ~yearly).
 No Playwright, no Cloudflare — plain HTTP fetch from raw.githubusercontent.com.
 
 Usage:
@@ -97,17 +117,21 @@ def parse_industry_stock_map(data: dict) -> dict:
 
     Each industry entry includes:
       - sector: parent sector name
-      - stock_count: number of stocks
-      - total_market_cap_m: sum of all stock market caps (millions USD)
-      - top_concentration_pct: largest single stock as % of industry total market cap;
-        high values (>40%) signal that the industry rank is a single-stock proxy
+      - stock_count: number of stocks in this industry
+      - total_market_cap_m: sum of market caps (millions USD) — STALE as of ~March 2025
+      - top_concentration_pct: largest stock as % of industry total; high values (>40%)
+        signal that the industry group rank is a single-stock proxy (e.g., Consumer
+        Electronics = 97% AAPL, Internet Retail = 75% AMZN)
       - stocks: list of {ticker, name, market_cap_m}, sorted descending by market cap
 
     market_cap_m = raw treemap value / 1000 (Finviz stores in thousands of USD).
-    Stocks with no ticker or zero market cap are included with market_cap_m=0.
+    Market cap values are from ~March 2025 (source frozen) — use only for relative
+    ordering within an industry, not as current figures.
+    Stocks with no ticker are skipped; zero market cap is stored as 0.
 
     Also builds a flat ticker_to_industry reverse index for O(1) Worker fallback
-    classification without any FMP API call.
+    classification without any FMP API call. Covers tickers present in March 2025;
+    companies IPO'd after that date will not appear.
 
     Returns dict with keys "industries" and "ticker_to_industry".
     """
@@ -164,12 +188,17 @@ def write_stock_map_output(stock_data: dict, generated_at: str) -> None:
         "generated_at": generated_at,
         "source": "fasiha/finviz-git-scraper (map-sec_all.json)",
         "source_url": SOURCE_URL,
+        # fasiha stopped scraping April 2025; data reflects ~March 2025 state
+        "source_data_as_of": "~2025-03 (fasiha halted scraping April 2025)",
         "total_industries": len(industries),
         "total_stocks": total_stocks,
-        # market_cap_m = raw treemap value / 1000; unit is millions USD
-        "note_market_cap": "market_cap_m is market cap in millions USD (Finviz treemap value/1000)",
+        # market_cap_m values are stale (~March 2025) — use for relative ordering only
+        "note_market_cap": "market_cap_m is market cap in millions USD (Finviz treemap value/1000); stale as of ~March 2025, use for relative ordering within an industry only",
+        # Reliable: sector/industry names and stock membership for established companies.
+        # Not reliable: absolute market cap figures; stocks IPO'd after March 2025.
+        "note_reliability": "sector, industry, and stock membership are reliable for established companies; market_cap_m values and stock completeness are stale (~March 2025)",
         # Flat reverse lookup: ticker → industry name. Enables O(1) Worker fallback
-        # classification without FMP. ~5000 entries, typically <300KB.
+        # classification without FMP. Covers ~5550 tickers present in March 2025.
         "ticker_to_industry": ticker_index,
         "industries": industries,
     }

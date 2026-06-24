@@ -1,10 +1,12 @@
 {
-  "generated_at": "2026-06-24T07:38:28.571538+00:00",
+  "generated_at": "2026-06-24T08:45:33.312917+00:00",
   "source": "fasiha/finviz-git-scraper (map-sec_all.json)",
   "source_url": "https://raw.githubusercontent.com/fasiha/finviz-git-scraper/main/map-sec_all.json",
+  "source_data_as_of": "~2025-03 (fasiha halted scraping April 2025)",
   "total_industries": 145,
   "total_stocks": 5550,
-  "note_market_cap": "market_cap_m is market cap in millions USD (Finviz treemap value/1000)",
+  "note_market_cap": "market_cap_m is market cap in millions USD (Finviz treemap value/1000); stale as of ~March 2025, use for relative ordering within an industry only",
+  "note_reliability": "sector, industry, and stock membership are reliable for established companies; market_cap_m values and stock completeness are stale (~March 2025)",
   "ticker_to_industry": {
     "JPM": "Banks - Diversified",
     "BAC": "Banks - Diversified",
