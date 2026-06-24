@@ -224,6 +224,19 @@ EMPTY_TABLE_HTML = """
 
 NO_TABLE_HTML = "<html><body><p>No results</p></body></html>"
 
+# Real Finviz renders header cells as <th> (data cells as <td>). The original
+# parser only read <td> for the header, yielding 0 cols → 0 rows. This fixture
+# guards that regression.
+TH_HEADER_HTML = """
+<html><body>
+<table class="screener_table">
+<tr><th>Ticker</th><th>Company</th><th>Price</th></tr>
+<tr><td>NVDA</td><td>NVIDIA</td><td>142.50</td></tr>
+<tr><td>AMD</td><td>Advanced Micro</td><td>165.20</td></tr>
+</table>
+</body></html>
+"""
+
 
 class TestParseTable:
     def test_parses_header_and_rows(self):
@@ -232,6 +245,15 @@ class TestParseTable:
         assert len(rows) == 2
         assert rows[0]["Ticker"] == "NVDA"
         assert rows[1]["Price"] == "165.20"
+
+    def test_parses_th_header_row(self):
+        # Regression: Finviz header cells are <th>; must still parse 84-style
+        # headers and data rows. Was the cause of the 0-rows/0-cols probe fail.
+        headers, rows = _parse_table(TH_HEADER_HTML)
+        assert headers == ["Ticker", "Company", "Price"]
+        assert len(rows) == 2
+        assert rows[0]["Ticker"] == "NVDA"
+        assert rows[1]["Company"] == "Advanced Micro"
 
     def test_returns_empty_on_no_table(self):
         headers, rows = _parse_table(NO_TABLE_HTML)

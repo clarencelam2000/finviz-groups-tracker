@@ -61,6 +61,12 @@ SCREENER_BASE = "https://finviz.com/screener.ashx"
 # _dump_diagnostics will print the page title/snippet to identify the new class.
 SCREENER_TABLE_SELECTOR = "table.screener_table"
 
+# Where raw page HTML is dumped on a parse failure, for upload as a CI artifact.
+# probe_picks.yml has an `if: failure()` upload step pointed here. Inspect these
+# files to see exactly what Finviz returned when the probe can't be debugged
+# from the cloud env (Cloudflare blocks Google Cloud IPs).
+DEBUG_HTML_DIR = BASE_DIR / "data" / "picks" / "debug_html"
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -107,16 +113,37 @@ def _parse_table(html: str) -> tuple[list[str], list[dict]]:
     if not rows:
         return [], []
 
-    # First <tr> is the header row
-    headers = [th.get_text(strip=True) for th in rows[0].find_all("td")]
+    # First <tr> is the header row. Finviz renders header cells as <th> (the
+    # data cells below are <td>), so accept both — extracting only <td> here
+    # yields an empty header, which then drops every data row via the
+    # len(cells)==len(headers) guard below. This was the real cause of the
+    # "0 rows / 0 cols" probe failure (collect.parse_table uses ["th","td"] too).
+    headers = [c.get_text(strip=True) for c in rows[0].find_all(["th", "td"])]
 
     data_rows = []
     for tr in rows[1:]:
-        cells = [td.get_text(strip=True) for td in tr.find_all("td")]
+        cells = [c.get_text(strip=True) for c in tr.find_all(["th", "td"])]
         if len(cells) == len(headers):
             data_rows.append(dict(zip(headers, cells)))
 
     return headers, data_rows
+
+
+def _save_debug_html(html: str, ind_slug: str) -> None:
+    """Write the raw page HTML to DEBUG_HTML_DIR for CI-artifact inspection.
+
+    The probe can't reach Finviz from the cloud dev env (Cloudflare blocks
+    Google Cloud IPs), so when a parse fails on Azure the only way to see what
+    Finviz actually returned is to capture the HTML and upload it as a workflow
+    artifact. probe_picks.yml uploads this dir on failure.
+    """
+    try:
+        DEBUG_HTML_DIR.mkdir(parents=True, exist_ok=True)
+        out = DEBUG_HTML_DIR / f"page1_{ind_slug}.html"
+        out.write_text(html, encoding="utf-8")
+        print(f"  [diag] raw HTML ({len(html)} bytes) saved to {out}")
+    except Exception as exc:
+        print(f"  [diag] failed to save debug HTML: {exc}")
 
 
 def _dump_diagnostics(page) -> None:
@@ -187,6 +214,11 @@ def _scrape_group(page, config: dict, ind_slug: str) -> tuple[list[str], list[di
         if page_num == 1:
             if not hdrs:
                 print("  WARNING: No screener table found — slug may be wrong or 0 results")
+                # Parse failed even though the page loaded: dump diagnostics and
+                # save the raw HTML so the actual Finviz response can be inspected
+                # from the CI artifact (we can't reach Finviz from the cloud env).
+                _dump_diagnostics(page)
+                _save_debug_html(html, ind_slug)
                 return [], []
             header = hdrs
             print(f"  [page 1] Header ({len(header)} cols): {header[:5]}...")

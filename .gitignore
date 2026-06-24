@@ -12,3 +12,6 @@ node_modules/
 # .claude/session-notes.md  (tracked)
 # .claude/WORK_LOG.md       (tracked)
 .claude/worktrees/
+
+# Probe debug HTML dumps (CI artifact only, never committed)
+data/picks/debug_html/
