@@ -46,12 +46,12 @@ PAGE_DELAY_S = float(__import__("os").environ.get("PROBE_PAGE_DELAY", "2"))
 # How many rows Finviz returns per screener page
 PAGE_SIZE = 20
 
-# Required columns the PWA and attribution pipeline need (verified in Phase-1)
-REQUIRED_LABELS = {
-    "Ticker", "Price", "SMA50", "52W High", "RSI",
-    "Perf Week", "Perf Month", "EPS growth this year",
-    "Sales growth past 5Y", "Country",
-}
+# Expected column count from screener_config.json.
+# The exact label names are provisional until the probe run writes the golden header —
+# Finviz may abbreviate (e.g. "EPS Q/Q" vs "EPS growth qtr over qtr"). Only position 0
+# (c=1 = Ticker) is safe to assert by name independent of Elite gating or label drift.
+EXPECTED_COL_COUNT = 84
+EXPECTED_COL_0 = "Ticker"
 
 SCREENER_BASE = "https://finviz.com/screener.ashx"
 
@@ -171,8 +171,7 @@ def main() -> None:
     args = parser.parse_args()
 
     config = json.loads(CONFIG_PATH.read_text())
-    expected_col_count = len(config["wide"]["columns"])
-    expected_labels = {c["label"] for c in config["wide"]["columns"]}
+    expected_col_count = len(config["wide"]["columns"])  # must equal EXPECTED_COL_COUNT
 
     ind_slug = slugify_industry(args.group)
     print(f"\n=== Phase-1 Probe: {args.group!r} (slug: ind_{ind_slug}) ===\n")
@@ -203,50 +202,50 @@ def main() -> None:
 
     ok = True
 
-    # 1. Column count
-    if len(header) != expected_col_count:
-        print(f"  FAIL: col count mismatch — got {len(header)}, expected {expected_col_count}")
+    # 1. Column count — must be exactly EXPECTED_COL_COUNT (84).
+    # A lower count means Finviz withheld Elite-gated columns; higher is unexpected.
+    if len(header) != EXPECTED_COL_COUNT:
+        print(f"  FAIL: col count mismatch — got {len(header)}, expected {EXPECTED_COL_COUNT}")
         ok = False
     else:
-        print(f"  PASS: col count == {expected_col_count}")
+        print(f"  PASS: col count == {EXPECTED_COL_COUNT}")
 
-    # 2. Required columns present
-    scraped_label_set = set(header)
-    missing_required = REQUIRED_LABELS - scraped_label_set
-    if missing_required:
-        print(f"  FAIL: missing required columns: {sorted(missing_required)}")
-        ok = False
-    else:
-        print(f"  PASS: all {len(REQUIRED_LABELS)} required columns present")
+    # 2. Position-0 sanity check — c=1 is always Ticker regardless of Elite gating.
+    if header:
+        if header[0] != EXPECTED_COL_0:
+            print(f"  FAIL: header[0] == {header[0]!r}, expected {EXPECTED_COL_0!r}")
+            ok = False
+        else:
+            print(f"  PASS: header[0] == {EXPECTED_COL_0!r}")
 
-    # 3. Config labels match scraped labels (order-insensitive; checks for drift)
-    config_only = expected_labels - scraped_label_set
-    scraped_only = scraped_label_set - expected_labels
-    if config_only or scraped_only:
-        if config_only:
-            print(f"  WARN: columns in config but NOT in scraped header: {sorted(config_only)}")
-        if scraped_only:
-            print(f"  WARN: columns in scraped header but NOT in config: {sorted(scraped_only)}")
-    else:
-        print(f"  PASS: scraped header label set matches config exactly")
-
-    # 4. At least some rows returned
+    # 3. At least some rows returned
     if len(all_rows) == 0:
         print(f"  FAIL: 0 rows — wrong slug or Cloudflare block")
         ok = False
     else:
         print(f"  PASS: {len(all_rows)} rows captured")
 
-    # 5. Populated cell check — none of the required columns should be all-blank
-    if all_rows and header:
-        for label in sorted(REQUIRED_LABELS & scraped_label_set):
-            values = [r.get(label, "") for r in all_rows]
-            populated = [v for v in values if v.strip()]
-            if not populated:
-                print(f"  FAIL: required column {label!r} is all-blank (auth gate?)")
-                ok = False
+    # 4. Full column map: position × c_id × scraped_label × config_label.
+    # DRIFT means Finviz renders a different string than screener_config.json documents.
+    # These are expected for abbreviated labels (e.g. "EPS Q/Q" vs long-form names) —
+    # the golden header written below becomes the authoritative source after this probe.
+    if header:
+        col_ids = [c["id"] for c in config["wide"]["columns"]]
+        config_labels = [c["label"] for c in config["wide"]["columns"]]
+        print(f"\n=== Column map (pos, c_id, scraped, config) ===")
+        print(f"  {'pos':>3}  {'c_id':<5}  {'':5}  {'scraped':<35}  config")
+        drifted = 0
+        for i, (scraped, cid, cfglabel) in enumerate(zip(header, col_ids, config_labels)):
+            if scraped == cfglabel:
+                status = "MATCH"
             else:
-                print(f"  PASS: {label!r}: {len(populated)}/{len(all_rows)} cells populated")
+                status = "DRIFT"
+                drifted += 1
+            print(f"  {i:>3}  {cid:<5}  {status:<5}  {scraped!r:<35}  {cfglabel!r}")
+        if drifted:
+            print(f"\n  {drifted} DRIFT(s) above — update screener_config.json labels to match scraped values.")
+        else:
+            print(f"\n  All {len(header)} labels match config exactly.")
 
     # --------------- Fetch-budget projection ------------------------------
 

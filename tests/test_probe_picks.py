@@ -28,7 +28,8 @@ from probe_picks import (
     slugify_industry,
     _build_url,
     _parse_table,
-    REQUIRED_LABELS,
+    EXPECTED_COL_COUNT,
+    EXPECTED_COL_0,
     GOLDEN_HEADER_PATH,
 )
 
@@ -154,12 +155,6 @@ class TestScreenerConfig:
         for key in ("v", "base_filters", "sort", "ft", "columns"):
             assert key in wide, f"Missing key {key!r} in wide config"
 
-    def test_wide_columns_count(self):
-        wide = self._load()["wide"]
-        assert len(wide["columns"]) == 84, (
-            f"Expected 84 columns, got {len(wide['columns'])}"
-        )
-
     def test_wide_columns_have_id_and_label(self):
         wide = self._load()["wide"]
         for col in wide["columns"]:
@@ -168,11 +163,17 @@ class TestScreenerConfig:
             assert isinstance(col["id"], int), f"Column id not int: {col}"
             assert isinstance(col["label"], str) and col["label"], f"Column label empty: {col}"
 
-    def test_required_labels_in_config(self):
+    def test_wide_columns_count_matches_expected(self):
         wide = self._load()["wide"]
-        labels = {c["label"] for c in wide["columns"]}
-        missing = REQUIRED_LABELS - labels
-        assert not missing, f"Required labels missing from config: {sorted(missing)}"
+        assert len(wide["columns"]) == EXPECTED_COL_COUNT, (
+            f"Config has {len(wide['columns'])} columns; EXPECTED_COL_COUNT == {EXPECTED_COL_COUNT}"
+        )
+
+    def test_first_column_is_ticker(self):
+        wide = self._load()["wide"]
+        assert wide["columns"][0]["label"] == EXPECTED_COL_0, (
+            f"First column label is {wide['columns'][0]['label']!r}; expected {EXPECTED_COL_0!r}"
+        )
 
     def test_no_duplicate_column_ids(self):
         wide = self._load()["wide"]
