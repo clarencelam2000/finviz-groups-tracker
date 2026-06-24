@@ -2,9 +2,9 @@
 
 > Status: **READY TO EXECUTE.** All major decisions VP-confirmed (2026-06-23 + 2026-06-24).
 > Phase-1.5 spike COMPLETE (2026-06-24) — selector policy locked (see §Spike results).
-> Remaining before Phase 2 starts: (1) Phase-1 probe run on GitHub Actions — validate 84-col
+> Completed tasks before Phase 2 starts: (1) DONE - Phase-1 probe run on GitHub Actions — validate 84-col
 > anon fetch on one large industry (Semiconductors) + measure real daily fetch count;
-> (2) VP sign-off on the real fetch number.
+> (2) DONE - VP sign-off on the real fetch number.
 
 ## Context & thesis
 
@@ -62,7 +62,7 @@ collect_picks.py (NEW, separate EOD workflow)
    1. select_groups()      reads latest deltas.csv → leading/emerging/accel/RS-NH groups
    2. for each selected group:
         build screener URL from screener_config.json (base f= + ind_<slug> + ordered c=)
-        scrape ALL pages (Playwright, paginate &r=) → ~70-col rows
+        scrape ALL pages (Playwright, paginate &r=) → ~84-col rows
    3. append to data/picks/picks.csv  (one row per stock × list_category × day)
    4. rewrite data/picks/picks_latest.csv (max-date slice → PWA fetches this)
 
@@ -105,7 +105,7 @@ rows written to `picks.csv` with `list_category`:
 
 | Category | Primary signal | **Baseline-strength floor (anti-flash)** |
 |----------|----------------|------------------------------------------|
-| `leaders` | **sustained strength** — membership pinned to the PWA `allGreen` definition (positive in all 5 timeframes, `docs/index.html` ~line 1636), possibly gated by a strength floor. **Ranking metric is OPEN — to be chosen in the selector spike** (candidates: `momentum_confirmed`, a sustained-strength rank, all-green ranked by RS). NOT `rs_confirmed` alone — that conflates RS-vs-SPY with absolute strength. | n/a — already an absolute-strength definition |
+| `leaders` | **sustained strength top-N across 1mo+3mo+6mo** — membership pinned to the PWA `sustained strength` definition (top N in the three main mid-length timeframes, `docs/index.html`), possibly ranked / tiebroken by momentum_confirmed score. **Ranking metric has been discussed in the selector spike** - NOT `rs_confirmed` alone — that conflates RS-vs-SPY with absolute strength. | n/a — already an absolute-strength definition |
 | `emerging` | `regime_short_long` > `REGIME_THRESHOLD` | `rs_score` > 0.5 (must already be net-positive vs SPY) |
 | `accel` | `momentum_accel` > `ACCEL_STRONG` | **top 40% by `momentum_score` percentile** AND `rs_score` > 0.5 — reject bottom-of-pack dead-cat flashes |
 | `rs_new_high` | `rs_new_high` = 1 | `rs_score` ≥ 0.6 AND **top 40% by `momentum_score` percentile** — IBD "true leadership", not a low-base RS pop |
@@ -122,7 +122,7 @@ in the spike**, not a locked design:
 
 | Priority | Category | Gate (existing `deltas.csv` cols) | Slots | Rank within by (TBD in spike) |
 |----------|----------|-----------------------------------|-------|----------------|
-| 1 | `leaders` | all-green (5/5 timeframes +) | ≤ **10** | **8 by sustained_strength** (rank_month + rank_quarter + rank_half, lowest sum = best) **+ 2 freshness fills by momentum_confirmed** (not already in top-8). VP-locked 2026-06-24. |
+| 1 | `leaders` | top-N (in the three main mid-length timeframes - 1mo/3mo/6mo) with bonus set freshness fills from momentum_confirmed rank | ≤ **10** | **8 by sustained_strength** (rank_month + rank_quarter + rank_half, lowest sum = best) **+ 2 freshness fills by momentum_confirmed** (not already in top-8). VP-locked 2026-06-24. |
 | 2 | `emerging` | `regime_short_long > REGIME_THRESHOLD (0.15)` **AND** `rs_score > 0.5` | ≤ **4** | `regime_short_long` desc |
 | 3 | `accel` | `momentum_accel > ACCEL_STRONG (0.08)` **AND** top-40% floor **AND** `rs_score > 0.5` | ≤ **3** | `momentum_accel` desc |
 | 4 | `rs_new_high` | `rs_new_high == 1` **AND** `rs_score ≥ 0.6` **AND** top-40% floor | ≤ **3** | `rs_slope` desc |
@@ -133,7 +133,7 @@ Rationale & design properties:
 - **Dedup counts unique groups toward 20**, but a group qualifying in multiple categories still
   gets its stock rows **tagged per category** in `picks.csv` (clean per-methodology attribution);
   it is only **scraped once**.
-- **Self-shrinks in a correction** (fewer all-green leaders) — correct behavior, not a bug.
+- **Self-shrinks in a correction** — correct behavior, not a bug.
 
 #### Anti-flash floor: express as a percentile, NOT an absolute cutoff (robustness)
 
@@ -146,7 +146,7 @@ in `delta_config.py` (currently 6 timeframes, day excluded). If that list change
 weekly — the metric **rescales**, so an absolute `≥ 0.5` silently means something different,
 while a *percentile* ("top 40% of today's groups") is invariant to rescaling.
 
-> **Earlier overclaim corrected:** I said reusing `REGIME_THRESHOLD`/`ACCEL_STRONG` means "nothing
+> **Earlier overclaim corrected:** Claude said reusing `REGIME_THRESHOLD`/`ACCEL_STRONG` means "nothing
 > can drift." That only avoids **duplicate-constant drift** (two copies of one threshold
 > disagreeing). It does **not** address **metric-redefinition drift** (the underlying
 > `momentum_score`/`rs_score` formula changing). The two mitigations below handle that.
@@ -165,7 +165,7 @@ all past days at any time. To keep that property usable:
 This is also why the *stock filter* (not the group selector) is the irreplaceable axis: group
 selection is replayable from `deltas.csv`; per-stock point-in-time technicals are not.
 
-### Spike (Phase 1.5) — selector design, live with VP
+### COMPLETED - Spike (Phase 1.5) — selector design, live with VP
 
 **Format:** VP is present for the entire spike. This is a live, interactive session — not a
 pre-computed report. The engineer runs candidates in real time and VP calls the shots on the spot.
@@ -446,13 +446,13 @@ derived from the log — never hand-maintained.
 
 ## Phasing
 
-1. **Phase 1 — slug map + probe run** (small, one GitHub Actions run): (a) generate
+1. **COMPLETED Phase 1 — slug map + probe run** (small, one GitHub Actions run): (a) generate
    `finviz_industry_slugs.csv` from `snapshots.csv` using the slugify function — pure math, no
    Finviz calls; (b) one-shot GitHub Actions run: scrape one large industry (Semiconductors) to
    confirm all 84 columns return populated on an anonymous/headless/Azure client AND count
    pages/rows to measure real daily fetch volume. VP signs off on the real fetch number before
    the daily job turns on.
-1.5 **Spike — selector design, live with VP** (see §Spike): pick the leaders ranking metric, the
+1.5 **COMPLETED Spike — selector design, live with VP** (see §Spike): pick the leaders ranking metric, the
    floors/cap split, and the Stage-2-net decision by running candidates against historical
    `deltas.csv`. Runs in cloud (no scraping). Gates Phase 2's `select_groups`.
 2. **Phase 2 — scraper + collection** (core, irreplaceable): `collect_picks.py` (selectors +
@@ -481,8 +481,8 @@ derived from the log — never hand-maintained.
       screener. Rate limiting is request-velocity-based, not IP-based. Mitigated by polite
       inter-fetch delays and a hard fetch cap. Existing `collect.py` already runs from Azure
       without issues (different endpoint, same IP pool).
-- [ ] **VP sign-off on the real fetch number** after the Phase-1 probe (gate before daily job on).
-- [ ] **Free-tier 84-col validation (engineer, Phase 1)** — one GitHub Actions run against one
+- [x] **VP sign-off on the real fetch number** after the Phase-1 probe (gate before daily job on).
+- [x] **Free-tier 84-col validation (engineer, Phase 1)** — one GitHub Actions run against one
       large industry (Semiconductors) confirms all 84 columns return populated anonymously.
       Also measures real page count / daily fetch volume for VP sign-off.
 - [ ] **`picks.csv` log growth** (non-blocking) — full append-only log grows multi-MB within weeks;
