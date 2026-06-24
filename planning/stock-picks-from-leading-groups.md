@@ -314,6 +314,9 @@ concern. Honoring that requires honesty about the number and hard guardrails:
 URL and the **tight Stage-2 (button)** URL — for *any single* industry. The VP does **not**
 hand-build 144 URLs; they paste two example URLs and the implementer parameterizes them.
 
+6/24/2026 VP provided a less restrictive URL, removing some technical filters: https://finviz.com/screener?v=151&f=cap_midover,ind_semiconductors,sh_avgvol_o100,ta_highlow52w_a20h&ft=4&o=-marketcap&c=1,2,4,5,6,7,67,65,66,68,79,8,9,10,13,145,146,33,32,34,37,38,149,16,77,17,18,142,19,20,143,21,23,22,132,133,39,40,41,27,29,42,43,44,45,47,46,138,49,51,48,52,53,54,59,63,64,81,86,87,88,62,69,135,137,136,150,3,12,144,35,36,82,78,28,139,50,57,58,60,61,148,127,128 
+- Note: references to the old Wide net scrape URL with the "ta_sma200_sb50 (50SMA > 200SMA) · ta_sma50_pa (price > 50SMA)" technic filtera present may need to be found and updated. 
+
 ### VP-supplied samples (2026-06-23) — decoded
 
 **Button (tight Stage-2), view `v=311`:**
@@ -325,7 +328,7 @@ https://finviz.com/screener?v=311&f=cap_midover,ind_<slug>,ta_sma20_sa50,ta_sma5
 **Wide net (storage scrape), view `v=151`, 84 columns (revised URL, 2026-06-23):**
 ```
 https://finviz.com/screener?v=151&f=cap_midover,ind_<slug>,sh_avgvol_o100,ta_highlow52w_a30h,ta_sma200_sb50,ta_sma50_pa&ft=4&o=-marketcap&c=1,2,4,5,6,7,67,65,66,68,79,8,9,10,13,145,146,33,32,34,37,38,149,16,77,17,18,142,19,20,143,21,23,22,132,133,39,40,41,27,29,42,43,44,45,47,46,138,49,51,48,52,53,54,59,63,64,81,86,87,88,62,69,135,137,136,150,3,12,144,35,36,82,78,28,139,50,57,58,60,61,148,127,128
-  filters: cap_midover · sh_avgvol_o100 (avg vol > 100K — liquidity floor) · ta_highlow52w_a30h (within 30% of 52w high) · ta_sma200_sb50 (50SMA > 200SMA) · ta_sma50_pa (price > 50SMA)
+  filters: cap_midover · sh_avgvol_o100 (avg vol > 100K — liquidity floor) · ta_highlow52w_a30h (within 30% of 52w high) 
   sort: o=-marketcap (biggest first — institutional-friendly leaders on top)
   84 columns (exceeds the original "~70" estimate — even better for attribution)
 ```
@@ -346,9 +349,7 @@ https://finviz.com/screener?v=151&f=cap_midover,ind_<slug>,sh_avgvol_o100,ta_hig
 2. **Sort token** — resolved to `o=-marketcap` (the accidental `wiimdailydigest` is dropped).
    Non-critical anyway since we paginate every page.
 3. **Stage-2 filters baked into the stored net (D4 tension)** — see the "wide net = columns not
-   filters" clarification in §Finviz scraping notes and the survivorship discussion. Decision
-   parked for the selector spike + Open dependencies; default is to ship the VP net as-is to
-   start the clock.
+   filters" clarification in §Finviz scraping notes and the survivorship discussion. 
 
 **How the implementer turns that into the pipeline:**
 
