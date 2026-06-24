@@ -6,6 +6,8 @@
 
 ## Current Status
 
+**Status (2026-06-24) — TASK-6B + INS-7 (sector hierarchy Phase 1): COMPLETE.** Branch `claude/fervent-ritchie-jbnz2i`. Sidebar sector filter (TASK-6B): when viewing Industries, sidebar shows a "Sector" selectbox (All + 11 sectors) that filters all tabs to the chosen sector's industries. Full-universe copy preserved for breadth computation. Sector Breadth (INS-7): new section at top of Strength tab (Industries view) — `compute_sector_breadth()` in `dashboard/sector_breadth.py` (10 tests pass). Table shows each sector, how many industries are in top half of full universe, with rank metric selectbox (week/month/ytd). 337 tests pass. PR open. **Next: Phase 2 — PWA breadth bar on sector cards (Feature B from PLAN_sector_industry_hierarchy.md), then drill-down navigation (Feature A). VP decision needed before Feature A: expand-in-place vs new Sectors tab. Safe to close.**
+
 **Status (2026-06-24) — STOCK-PICKS PHASE-1.5 SPIKE: COMPLETE.** Branch `claude/modest-hamilton-a0fp6x`. Selector policy locked with VP. Leaders metric: 8 by sustained_strength (rank_month+rank_quarter+rank_half) + 2 freshness fills by momentum_confirmed. Anti-flash floor: top 40% by momentum_score percentile. Slot split: 10/4/3/3 (cap=20) confirmed. Key finding: `momentum_accel` all NaN until 11th trading date (~2026-06-25) — accel bucket inactive until then. Plan doc updated with full spike results. **Next: Phase-1 probe run (one GitHub Actions `workflow_dispatch` against Semiconductors, validate 84-col anon fetch, measure daily fetch volume). VP signs off on the row count before Phase 2 starts. Probe script scaffolded at `scripts/probe_picks.py` + `.github/workflows/probe_picks.yml` (uncommitted — Phase 1 work, paused per VP).** Safe to close.
 
 **Status (2026-06-24) — SECTOR→INDUSTRY TAXONOMY MAP: COMPLETE.** PR open on `claude/clever-bardeen-obk5lb`. `scripts/seed_taxonomy.py` seeds `data/finviz_sector_industry_map.{json,csv}` from fasiha/finviz-git-scraper (plain HTTP, no Playwright). 11/11 sectors, 144/144 industries match (100%). 13 tests pass. Closes/supersedes PR #109 (Playwright plan no longer needed). INS-7 and Task 6b are now unblocked — separate PRs. **Safe to close once PR merged.**
@@ -21,6 +23,29 @@
 **Status (2026-06-21) — RS DISCRETE FLAGS (RS-4 / Phase 3 Tier 5): COMPLETE on `claude/wonderful-brown-dahc9q`.** PR open (draft → ready for review). 206 non-Playwright tests pass. Changes: (1) Pipeline: beats_benchmark_{day..ytd}, rs_new_high, rs_cross added to delta schema (9 new columns), compute_deltas.py has 3 new pure functions; (2) PWA: NH (amber) + ↑ cross (sky) badges on vs-Market cards, "beats N/7 tf" sub-line; (3) GUIDE: 3 new entries; (4) moaty-metrics.md, README, CLAUDE.md updated; (5) release triplet: releases.json 2026.06.21.2, sw.js CACHE → finviz-v21. All plan phases Phases 0-3 now complete. Phases 4+5 remain deferred. **Safe to close once PR merged.**
 
 **Status (2026-06-21) — START HERE ONBOARDING (ONBOARD): COMPLETE on `claude/dreamy-archimedes-3q6ag1`.** PR #143 merged. All 212 non-Playwright tests pass. Changes: WELCOME constant + hub section + anti-drift tests, carousel overlay + fvt_intro_seen_v1, release cut (releases.json 2026.06.21, sw.js CACHE → v19). Deferred: ONBOARD-DL-UX (carousel deep-link dismiss UX, tracked in SPRINT.md), PWATEST-LOOKBACK (3 pre-existing Playwright failures). **Merged.**
+
+---
+
+## Session: 2026-06-24 — TASK-6B + INS-7: sector filter + breadth metric (branch claude/fervent-ritchie-jbnz2i)
+
+**What happened:** Implemented Phase 1 of the sector→industry hierarchy roadmap (PR #175 plan).
+
+**Changes:**
+- NEW `dashboard/sector_breadth.py`: `compute_sector_breadth(industry_delta, taxonomy, rank_col)` — counts industries in top half of full universe per sector. Pure, testable, 10 tests.
+- NEW `tests/test_sector_breadth.py`: 10 tests — happy path, edge cases (empty, missing col, NaN ranks, unknown industries, empty taxonomy).
+- `dashboard/app.py`:
+  - Import `compute_sector_breadth` alongside `lookup_ticker`.
+  - Added `_load_taxonomy()` cached function (loads `data/finviz_sector_industry_map.json`).
+  - TASK-6B: Sidebar "Sector" selectbox (All + 11 sectors) when group_label == "Industries". Filters snap_df, delta_df, snap_df_full, delta_df_full to the chosen sector's industries across all tabs.
+  - Preserved `_delta_df_all` (unfiltered-by-sector) for INS-7 breadth computation.
+  - INS-7: "Sector Breadth" section at top of Strength tab (Industries view). Shows per-sector count of top-half industries with a rank metric dropdown (week/month/ytd). Caption explains full-universe threshold.
+
+**Test count:** 337 non-Playwright tests pass.
+
+**What's next (Phase 2):**
+- Feature B: PWA breadth bar on sector cards in `docs/index.html` — "7/11 industries top-half ↑"
+- Feature A: PWA drill-down (tap sector → see constituent industries ranked). VP decision needed: expand-in-place vs new Sectors tab. Recommend expand-in-place (lower effort).
+- Feature F: Rank within sector alongside universe rank (shows "best house on bad street").
 
 ---
 

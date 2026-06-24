@@ -17,8 +17,10 @@ from delta_config import LOOKBACK_WINDOWS, delta_columns
 
 try:
     from dashboard.worker_client import lookup_ticker
+    from dashboard.sector_breadth import compute_sector_breadth
 except ModuleNotFoundError:  # `streamlit run dashboard/app.py` puts dashboard/ on sys.path
     from worker_client import lookup_ticker
+    from sector_breadth import compute_sector_breadth
 
 try:
     import plotly.graph_objects as go
@@ -78,6 +80,18 @@ def _load_releases():
         return json.loads(RELEASES_JSON.read_text(encoding="utf-8")).get("releases", [])
     except Exception:
         return []
+
+
+@st.cache_data
+def _load_taxonomy() -> dict:
+    """Sector → industry list from data/finviz_sector_industry_map.json; {} on failure."""
+    path = DATA_DIR / "finviz_sector_industry_map.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("sectors", {})
+    except Exception:
+        return {}
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +191,17 @@ with st.sidebar:
             st.info(f"Only one date available: {min_date}")
             date_range = (min_date, min_date)
 
+    # ── Sector filter (Industries only) ─────────────────────────────────────
+    # Loads the taxonomy map and lets the user narrow all tabs to a single sector.
+    sector_filter: list | None = None  # None = show all industries
+    if group_label == "Industries":
+        taxonomy = _load_taxonomy()
+        if taxonomy:
+            sector_names = ["All"] + sorted(taxonomy.keys())
+            chosen_sector = st.selectbox("Sector", sector_names, key="sector_filter")
+            if chosen_sector != "All":
+                sector_filter = taxonomy[chosen_sector]
+
     metric_options = [
         "perf_day", "perf_week", "perf_month", "perf_quarter",
         "perf_half", "perf_year", "perf_ytd",
@@ -224,6 +249,18 @@ else:
     snap_df = snap_df_full.copy()
     delta_df = delta_df_full.copy()
     latest_date = None
+
+# Keep unfiltered copies for breadth computation (INS-7 needs the full industry universe).
+_delta_df_all = delta_df.copy()
+_snap_df_full_all = snap_df_full.copy()
+
+# Apply sector filter (narrows all tabs to the chosen sector's industries).
+if sector_filter is not None:
+    _sector_set = set(sector_filter)
+    snap_df = snap_df[snap_df["name"].isin(_sector_set)].copy()
+    delta_df = delta_df[delta_df["name"].isin(_sector_set)].copy()
+    snap_df_full = snap_df_full[snap_df_full["name"].isin(_sector_set)].copy()
+    delta_df_full = delta_df_full[delta_df_full["name"].isin(_sector_set)].copy()
 
 # ---------------------------------------------------------------------------
 # Ticker lookup helpers (Worker join)
@@ -599,6 +636,49 @@ with tab6:
         if latest_delta.empty or latest_snap.empty:
             st.info(f"No data for {latest_date}.")
         else:
+            # ---- Section 0: Sector Breadth (Industries only) ------------------
+            if group_label == "Industries":
+                st.markdown("### Sector Breadth")
+                st.caption(
+                    "For each sector, how many of its industries are in the top half "
+                    "of the full universe by weekly rank. "
+                    "High breadth = broad sector participation, not just a single mover."
+                )
+                taxonomy = _load_taxonomy()
+                if not taxonomy:
+                    st.info("Taxonomy map not found. Run `python scripts/seed_taxonomy.py`.")
+                else:
+                    # Use the full universe delta (not sector-filtered) so the top-half
+                    # threshold reflects all 144 industries, then map back to sectors.
+                    latest_all = (
+                        _delta_df_all[_delta_df_all["date"] == latest_date].copy()
+                        if "date" in _delta_df_all.columns
+                        else _delta_df_all.copy()
+                    )
+                    breadth_rank_col = st.selectbox(
+                        "Rank metric for breadth",
+                        ["rank_week", "rank_month", "rank_ytd"],
+                        key="breadth_rank_col",
+                    )
+                    breadth_df = compute_sector_breadth(latest_all, taxonomy, rank_col=breadth_rank_col)
+                    if breadth_df.empty:
+                        st.info("No breadth data available yet.")
+                    else:
+                        n_universe = len(latest_all)
+                        breadth_df["breadth"] = breadth_df.apply(
+                            lambda r: f"{int(r['n_top_half'])}/{int(r['n_mapped'])} "
+                                      f"({r['pct_top_half']:.0%})",
+                            axis=1,
+                        )
+                        display = breadth_df[["sector", "breadth", "n_top_half", "n_mapped"]].copy()
+                        display.columns = ["Sector", "Top-half industries", "# top half", "# mapped"]
+                        st.dataframe(display, use_container_width=True, hide_index=True)
+                        st.caption(
+                            f"Top-half threshold: rank ≤ {n_universe // 2} of {n_universe} industries. "
+                            "Breadth rank uses full universe (not the sidebar sector filter)."
+                        )
+                st.markdown("---")
+
             # ---- Section 1: Sustained Strength --------------------------------
             st.markdown("### Sustained Strength")
             st.caption(
