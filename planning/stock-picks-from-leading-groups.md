@@ -4,7 +4,7 @@
 > 2026-06-23). The Finviz URL templates are now **in hand** (wide-net + button, decoded in
 > §VP URL handoff). Remaining before/within Phase 1: (1) one-time validation of the 144-row
 > industry→`ind_` slug map vs Finviz's live dropdown, (2) retire three free-tier risks (84-col
-> custom `c=`, the `wiimdailydigest` sort token, Stage-2 filters baked into the stored net), and
+> custom `c=` on a headless/anon/Azure client, and the Stage-2 filters baked into the stored net), and
 > (3) VP sign-off on the proposed selector thresholds / 20-group cap mix.
 
 ## Context & thesis
@@ -80,14 +80,14 @@ PWA:
 
 ```
 data/picks/
-  picks.csv                    # append-only; date, list_category, group, ticker, <~70 finviz cols>
+  picks.csv                    # append-only; date, list_category, selector_version, group, ticker, <84 finviz cols>, <group-metric values at selection>
   picks_latest.csv             # latest trading date only — what the PWA fetches (see PWA note)
   finviz_industry_slugs.csv    # industry_name, ind_slug, validated (bool), note
   screener_config.json         # modular URL config (base f= filters, ordered c= columns, v/o/ft) — see §VP URL handoff
 ```
 
 > **PWA fetch size (VP-confirmed: per-date latest artifact).** `picks.csv` is the full
-> append-only log (~25 groups × ~40 names × ~70 cols/day → multi-MB within weeks) and is for
+> append-only log (~20 groups × ~40 names × 84 cols/day → multi-MB within weeks) and is for
 > offline attribution only. `collect_picks.py` also writes a small **`picks_latest.csv`**
 > (current trading date only) that the PWA fetches from `raw.githubusercontent`, so the app
 > never downloads full history. Tracked as a non-blocking open question below (rotation/LFS for
@@ -105,7 +105,7 @@ rows written to `picks.csv` with `list_category`:
 
 | Category | Primary signal | **Baseline-strength floor (anti-flash)** |
 |----------|----------------|------------------------------------------|
-| `leaders` | **all-green AND `rs_confirmed` ≥ floor.** Pin "all-green" to the existing PWA definition: positive in all 5 timeframes (Wk·Mo·Qtr·½yr·YTD), per `docs/index.html` `allGreen` (~line 1636). Name the `rs_confirmed` threshold explicitly in `delta_config` (start ~0.5). | n/a — already an absolute-strength definition |
+| `leaders` | **sustained strength** — membership pinned to the PWA `allGreen` definition (positive in all 5 timeframes, `docs/index.html` ~line 1636), possibly gated by a strength floor. **Ranking metric is OPEN — to be chosen in the selector spike** (candidates: `momentum_confirmed`, a sustained-strength rank, all-green ranked by RS). NOT `rs_confirmed` alone — that conflates RS-vs-SPY with absolute strength. | n/a — already an absolute-strength definition |
 | `emerging` | `regime_short_long` > `REGIME_THRESHOLD` | `rs_score` > 0.5 (must already be net-positive vs SPY) |
 | `accel` | `momentum_accel` > `ACCEL_STRONG` | rank in **top half** of peers AND `rs_score` > 0.5 — reject bottom-of-pack dead-cat flashes |
 | `rs_new_high` | `rs_new_high` = 1 | `rs_score` high AND rank top-half — IBD "true leadership", not a low-base RS pop |
@@ -114,34 +114,67 @@ rows written to `picks.csv` with `list_category`:
 > momentum-accel spike or 20-day RS-new-high while still near the bottom of the pack. Gate
 > both on absolute standing before they qualify. Exact thresholds to tune; start conservative.
 
-### Daily cap & priority-fill mix (proposed — VP sign-off pending)
+### Daily cap & priority-fill mix (STARTING PROPOSAL — finalized in the selector spike)
 
 **Cap = 20 unique groups/day** (conviction over breadth; also bounds ToS exposure). Fill by
-priority, dedup groups, stop at 20:
+priority, dedup groups, stop at 20. The gates/ranks below are a **starting proposal to react to
+in the spike**, not a locked design:
 
-| Priority | Category | Gate (existing `deltas.csv` cols) | Slots | Rank within by |
+| Priority | Category | Gate (existing `deltas.csv` cols) | Slots | Rank within by (TBD in spike) |
 |----------|----------|-----------------------------------|-------|----------------|
-| 1 | `leaders` | all-green (5/5 timeframes +) **AND** `rs_confirmed ≥ 0.5` | ≤ **10** | `rs_confirmed` desc |
+| 1 | `leaders` | all-green (5/5 timeframes +), optional strength floor | ≤ **10** | `momentum_confirmed` *or* sustained-strength rank *or* all-green-by-RS — **spike picks** |
 | 2 | `emerging` | `regime_short_long > REGIME_THRESHOLD (0.15)` **AND** `rs_score > 0.5` | ≤ **4** | `regime_short_long` desc |
-| 3 | `accel` | `momentum_accel > ACCEL_STRONG (0.08)` **AND** `momentum_score ≥ 0.5` **AND** `rs_score > 0.5` | ≤ **3** | `momentum_accel` desc |
-| 4 | `rs_new_high` | `rs_new_high == 1` **AND** `rs_score ≥ 0.6` **AND** `momentum_score ≥ 0.5` | ≤ **3** | `rs_slope` desc |
+| 3 | `accel` | `momentum_accel > ACCEL_STRONG (0.08)` **AND** top-half floor **AND** `rs_score > 0.5` | ≤ **3** | `momentum_accel` desc |
+| 4 | `rs_new_high` | `rs_new_high == 1` **AND** `rs_score ≥ 0.6` **AND** top-half floor | ≤ **3** | `rs_slope` desc |
 
-Rationale:
-- **`momentum_score ≥ 0.5` is the "top-half" anti-flash floor** — it's already a 0–1 percentile
-  across timeframes, so "top half" is unambiguous and self-adjusting (cleaner than a raw rank
-  cutoff). This is the gate the VP wanted on `accel`/`rs_new_high`.
-- **Leaders gets half the cap** — highest-expectancy, most-sustained; the earlier/riskier
-  buckets get small allocations.
+Rationale & design properties:
+- **Leaders gets half the cap** — highest-expectancy, most-sustained; earlier/riskier buckets get
+  small allocations.
 - **Dedup counts unique groups toward 20**, but a group qualifying in multiple categories still
   gets its stock rows **tagged per category** in `picks.csv` (clean per-methodology attribution);
   it is only **scraped once**.
-- **Reuses existing PWA constants** (`REGIME_THRESHOLD`, `ACCEL_STRONG`) — one source of truth,
-  no new magic numbers. New floors (`rs_confirmed ≥ 0.5`, `rs_score` cutoffs) go in
-  `delta_config.py` with the configurable-constant triple-doc treatment.
 - **Self-shrinks in a correction** (fewer all-green leaders) — correct behavior, not a bug.
 
-Thresholds are deliberately conservative starting points; tune after the first few weeks of
-captured data.
+#### Anti-flash floor: express as a percentile, NOT an absolute cutoff (robustness)
+
+The "top-half" floor on `accel`/`rs_new_high` should be the group's **cross-sectional percentile
+rank among today's groups** (e.g. top 50% by `momentum_score`), **not** an absolute `momentum_score
+≥ 0.5`. Reason (VP's robustness concern): `momentum_score` is config-driven by `PERF_RANK_METRICS`
+in `delta_config.py` (currently 6 timeframes, day excluded). If that list changes — e.g. drop
+weekly — the metric **rescales**, so an absolute `≥ 0.5` silently means something different, while
+a *percentile* ("top half of today's groups") is invariant to rescaling.
+
+> **Earlier overclaim corrected:** I said reusing `REGIME_THRESHOLD`/`ACCEL_STRONG` means "nothing
+> can drift." That only avoids **duplicate-constant drift** (two copies of one threshold
+> disagreeing). It does **not** address **metric-redefinition drift** (the underlying
+> `momentum_score`/`rs_score` formula changing). The two mitigations below handle that.
+
+#### Selector decoupling, versioning & replayability (makes the selector modular)
+
+The selector is the *one* part of this pipeline that is cheap to change and **fully replayable**:
+`deltas.csv` is a complete historical archive, so any group-selection policy can be re-run over
+all past days at any time. To keep that property usable:
+1. **Stamp each pick with `selector_version`** and record the group-level metric values used at
+   selection time (sidecar or extra `picks.csv` cols). Then a later formula change doesn't strand
+   past analysis — you re-select historically and compare versions head-to-head.
+2. **Keep selection logic in one small module** (`select_groups`) reading named config constants,
+   so swapping the leaders rank metric or a floor is a one-line, tested change.
+
+This is also why the *stock filter* (not the group selector) is the irreplaceable axis: group
+selection is replayable from `deltas.csv`; per-stock point-in-time technicals are not.
+
+### Spike (Phase 1.5) — selector design, live with VP
+
+Before locking the selector, run a short analysis spike against the **existing** `deltas.csv`
+history (no scraping needed — runs fine in cloud Claude):
+- For each candidate **leaders ranking** (`momentum_confirmed`, sustained-strength rank,
+  all-green-ranked-by-RS, others VP suggests) and each **floor/threshold**, show *which groups
+  would have been selected* on real historical days; eyeball stability, overlap, turnover.
+- Quantify the **Stage-2-filter tradeoff** (D4): pull row counts per group at a few filter
+  loosenesses to put numbers on "how much extra volume would a looser stored net cost?" — so VP
+  decides survivorship-vs-volume with data.
+- Output: the locked selector policy (gates, ranks, slot split, cap) + the Stage-2-net decision.
+  Do this **interactively with VP**; it's a judgment call best made over real selected lists.
 
 ## Finviz scraping notes (carry-over from collect.py + new)
 
@@ -157,10 +190,16 @@ captured data.
   Azure IP — a 50–100× escalation, against Finviz's *screener* (more bot-sensitive than the
   groups view). Two compounding effects: (a) Cloudflare/ToS escalation risk, (b) Actions
   wall-clock — at a 3–5s polite delay this is a ~10–20 min job. State the runtime budget and
-  treat the 20-group cap (§Selector thresholds) as a **hard ceiling**, not a suggestion.
-  **NOTE:** the VP wide-net URL is itself Stage-2 pre-filtered (`ta_highlow52w_a30h`,
-  `ta_sma200_sb50`, `ta_sma50_pa`), so per-group name counts are moderate, not raw-universe —
-  the realistic load is ~tens of page loads/day, not hundreds.
+- **"Wide net" = wide on COLUMNS, not on FILTERS (clarification).** Two orthogonal axes:
+  *column breadth* (`c=`, 84 IDs — how many attributes per passing stock) vs *filter width*
+  (`f=` tokens — how many stocks pass at all). D5 is the column axis; D4 ("filter in-house")
+  is the filter axis. The VP net is **wide on columns (84) but Stage-2-narrow on filters**, so
+  per-group name counts are moderate, not raw-universe — realistic load ~tens of page loads/day.
+  **Consequence (survivorship):** only names *already* Stage-2 ever enter the log; names that
+  drop out vanish, and pre-Stage-2 observations are never captured. Group selection is
+  *replayable* from the archived `deltas.csv`; per-stock point-in-time technicals are **not**.
+  So the stock-filter width is the one thing we can never widen retroactively — see the
+  Stage-2-net open question (D4 tension) and the selector spike.
 - **Concurrency / stale-read guard (D7).** `collect_picks.yml` and `collect.yml` both commit to
   `data/` on the same branch. Use a shared GitHub **`concurrency:` group** so they never push
   simultaneously, **rebase (or `git pull --rebase`) before push**, and **assert the deltas are
@@ -195,25 +234,33 @@ https://finviz.com/screener?v=311&f=cap_midover,ind_<slug>,ta_sma20_sa50,ta_sma5
   filters: cap_midover · ta_sma20_sa50 (20SMA > 50SMA) · ta_sma50_pa (price > 50SMA)
 ```
 
-**Wide net (storage scrape), view `v=151`, 84 columns:**
+**Wide net (storage scrape), view `v=151`, 84 columns (revised URL, 2026-06-23):**
 ```
-https://finviz.com/screener?v=151&f=cap_midover,ind_<slug>,ta_highlow52w_a30h,ta_sma200_sb50,ta_sma50_pa&ft=4&o=wiimdailydigest&c=1,2,4,5,6,7,67,65,66,68,79,8,9,10,13,145,146,33,32,34,37,38,149,16,77,17,18,142,19,20,143,21,23,22,132,133,39,40,41,27,29,42,43,44,45,47,46,138,49,51,48,52,53,54,59,63,64,81,86,87,88,62,69,135,137,136,150,3,12,144,35,36,82,78,28,139,50,57,58,60,61,148,127,128
-  filters: cap_midover · ta_highlow52w_a30h (within 30% of 52w high) · ta_sma200_sb50 (50SMA > 200SMA) · ta_sma50_pa (price > 50SMA)
+https://finviz.com/screener?v=151&f=cap_midover,ind_<slug>,sh_avgvol_o100,ta_highlow52w_a30h,ta_sma200_sb50,ta_sma50_pa&ft=4&o=-marketcap&c=1,2,4,5,6,7,67,65,66,68,79,8,9,10,13,145,146,33,32,34,37,38,149,16,77,17,18,142,19,20,143,21,23,22,132,133,39,40,41,27,29,42,43,44,45,47,46,138,49,51,48,52,53,54,59,63,64,81,86,87,88,62,69,135,137,136,150,3,12,144,35,36,82,78,28,139,50,57,58,60,61,148,127,128
+  filters: cap_midover · sh_avgvol_o100 (avg vol > 100K — liquidity floor) · ta_highlow52w_a30h (within 30% of 52w high) · ta_sma200_sb50 (50SMA > 200SMA) · ta_sma50_pa (price > 50SMA)
+  sort: o=-marketcap (biggest first — institutional-friendly leaders on top)
   84 columns (exceeds the original "~70" estimate — even better for attribution)
 ```
+> Revision: the first paste had `o=wiimdailydigest` (accidental leftover sort) and no avg-vol
+> floor. Revised URL **adds `sh_avgvol_o100`** (a real filter change — liquidity gate) and sorts
+> `-marketcap`. Columns byte-identical (verified). Since we paginate **every** page, sort affects
+> only the button's display order + scrape order, never *what* we store.
 > `%2C` in the raw paste = `,` (URL-encoded comma) — decode before parsing.
 > Semiconductors is a large group → doubles as the multi-page pagination validation case.
 
-**Three risks to retire in Phase-1 validation (do NOT assume; verify on an Azure run):**
-1. **Custom 84-col `c=` on a free (non-Elite) account.** We already use custom `c=` for the
-   *groups* view (`v=152&c=…`) on free, so it's *likely* fine for the screener — but this is the
-   single biggest schema risk; confirm all 84 columns render before trusting the header.
-2. **`o=wiimdailydigest` sort** looks like a custom/Elite sort token. Low impact (we paginate
-   every page, so sort order doesn't affect completeness) — fall back to `o=-change` if it errors.
-3. **Stage-2 filters are baked into the "wide" net** (`ta_*` above). This *narrows* what we
-   store: names that drop out of Stage-2 vanish from the log, so some counterfactual attribution
-   ("did Stage-2 gating add value vs an unfiltered group?") is impossible later. VP confirmed
-   wording pending — see Open dependencies. Mild tension with D4's "store wide, filter in-house."
+**Risks to retire in Phase-1 validation (verify on a HEADLESS, ANONYMOUS, Azure run):**
+1. **Custom 84-col `c=` on a free / unauthenticated client — biggest schema risk.** VP sees all
+   84 columns *in his logged-in browser*, but that is **necessary, not sufficient**: our scrape
+   is headless + unauthenticated + on an Azure IP. Elite-gated columns can render for VP yet be
+   blank/absent anonymously; the anonymous table shape may differ. We already use custom `c=` for
+   the *groups* view (`v=152&c=…`) anonymously, so it's *likely* fine — but the only valid test
+   is a headless anonymous Azure fetch returning all 84 columns **populated**.
+2. **Sort token** — resolved to `o=-marketcap` (the accidental `wiimdailydigest` is dropped).
+   Non-critical anyway since we paginate every page.
+3. **Stage-2 filters baked into the stored net (D4 tension)** — see the "wide net = columns not
+   filters" clarification in §Finviz scraping notes and the survivorship discussion. Decision
+   parked for the selector spike + Open dependencies; default is to ship the VP net as-is to
+   start the clock.
 
 **How the implementer turns that into the pipeline:**
 
@@ -224,7 +271,7 @@ https://finviz.com/screener?v=151&f=cap_midover,ind_<slug>,ta_highlow52w_a30h,ta
      "wide": {
        "v": "151",
        "base_filters": ["cap_midover", "ta_highlow52w_a30h", "ta_sma200_sb50", "ta_sma50_pa"],
-       "sort": "wiimdailydigest", "ft": "4",
+       "sort": "-marketcap", "ft": "4",
        "columns": [{"id": 1, "label": "Ticker"}, {"id": 65, "label": "RSI"}, ...]  // 84 ids, ordered
      },
      "button": {
@@ -282,7 +329,7 @@ the human lands on a clean list, even though our stored scrape uses the wide net
 
 - **Picks tab (new):** top-level tab. Read **`picks_latest.csv`** (not the full log). Group by `list_category`
   → industry → stocks. Show per stock: ticker, %-from-50SMA (extension), 52w-high distance,
-  RSI, perf week/month, EPS/sales growth (from the stored ~70 cols). Sort least-extended
+  RSI, perf week/month, EPS/sales growth (from the stored 84 cols). Sort least-extended
   first. Show breadth (count of qualifiers) per group as a health signal.
 - **Lookup tab section:** when an industry is pulled up, render its Stage-2 names (from
   `picks.csv` if the group was selected that day) + the deep-link button. If the group wasn't
@@ -314,11 +361,15 @@ derived from the log — never hand-maintained.
 ## Phasing
 
 1. **Phase 1 — slug map + validation** (small): build `finviz_industry_slugs.csv` from
-   snapshots, validate vs live Finviz dropdown (one Actions run). De-risks everything.
+   snapshots, validate vs live Finviz dropdown (one Actions run). Also retire the headless-anon
+   84-col `c=` check on Azure. De-risks everything.
+1.5 **Spike — selector design, live with VP** (see §Spike): pick the leaders ranking metric, the
+   floors/cap split, and the Stage-2-net decision by running candidates against historical
+   `deltas.csv`. Runs in cloud (no scraping). Gates Phase 2's `select_groups`.
 2. **Phase 2 — scraper + collection** (core, irreplaceable): `collect_picks.py` (selectors +
    paginated scrape + append), `collect_picks.yml` separate workflow, `data/picks/picks.csv` +
-   `picks_latest.csv`. **Start the daily clock ASAP.** URL templates now in hand (decoded
-   above); Phase-1 must first retire the 3 free-tier risks (84-col `c=`, sort token, Stage-2-net).
+   `picks_latest.csv`. **Start the daily clock ASAP.** URL templates in hand; needs Phase-1
+   validation + the spike's selector policy.
 3. **Phase 3 — PWA surfaces:** Picks tab + Lookup-tab section + deep-link button + release.
 4. **Phase 4 — attribution** (later, own session): `eval_picks.py`, OHLC backfill, methodology
    comparison.
@@ -328,11 +379,14 @@ derived from the log — never hand-maintained.
 
 - [x] **Canonical wide-net + button Finviz URLs** — VP supplied 2026-06-23 (decoded in §VP URL
       handoff). 84-col `c=` list, `cap_midover` + Stage-2 `ta_*` filters, `v=151`/`v=311`.
-- [ ] **CONFIRM: keep the Stage-2 `ta_*` filters in the *stored* wide net?** They narrow the log
-      (names that exit Stage-2 disappear), foreclosing some counterfactual attribution. Default:
-      keep as supplied. Flag if you want a truly unfiltered store for the comparison study.
-- [x] Selector thresholds + cap — proposed in §Daily cap (20-group priority-fill, mix per
-      category). **VP sign-off still wanted** on the exact numbers/slot split.
+- [ ] **Stage-2 `ta_*` filters in the *stored* net (D4 tension)** — narrows the log to names
+      already Stage-2 (survivorship). Note: this is a *filter/row* question, not a *column* one —
+      we still store all 84 columns either way. **Deferred to the selector spike**, which will put
+      row-count numbers on the volume cost of a looser net. Default: ship VP net as-is to start
+      the clock.
+- [ ] **Leaders ranking metric + cap/floor split — to the selector spike.** NOT `rs_confirmed`
+      (conflates RS with absolute strength). Candidates: `momentum_confirmed`, sustained-strength
+      rank, all-green-by-RS. Anti-flash floors expressed as **percentiles**, not absolute cutoffs.
 - [ ] **VP confirm geography:** `cap_midover` includes foreign listings — keep all (store Country,
       filter later) or restrict to US? Default: keep all.
 - [ ] Finviz ToS comfort on ~20 groups × pages/day. Stage-2-filtered net keeps this to ~tens of
@@ -340,6 +394,9 @@ derived from the log — never hand-maintained.
 - [ ] **`picks.csv` log growth** (non-blocking, VP-noted) — the full append-only log grows
       multi-MB; revisit rotation / git-LFS / yearly partition later. PWA already insulated via
       `picks_latest.csv`, so this does not block collection.
+- [ ] **Free-tier 84-col validation (engineer, Phase 1)** — headless + anonymous + Azure fetch
+      must return all 84 columns populated. VP seeing them in his logged-in browser is not
+      sufficient evidence.
 - [ ] **Phase-4 OHLC provider** for exited-name backfill — Stooq / yfinance / Tiingo; validate
       coverage + quota. Not yet integrated (see §Context correction).
 
