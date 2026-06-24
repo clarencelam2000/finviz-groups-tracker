@@ -1,4 +1,4 @@
-"""Tests for scripts/seed_taxonomy.py — parse_sector_industry_map and cross_validate."""
+"""Tests for scripts/seed_taxonomy.py — parse_sector_industry_map, cross_validate, parse_industry_stock_map."""
 
 import csv
 import json
@@ -7,7 +7,7 @@ from pathlib import Path
 
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
-from seed_taxonomy import parse_sector_industry_map, cross_validate
+from seed_taxonomy import parse_sector_industry_map, cross_validate, parse_industry_stock_map
 
 
 # ---------------------------------------------------------------------------
@@ -152,3 +152,123 @@ def test_cross_validate_missing_snapshot_file_returns_empty_sets(tmp_path, monke
     sector_map = {"Technology": ["Semiconductors"]}
     in_both, only_ours, only_theirs = cross_validate(sector_map)
     assert in_both == set()
+
+
+# ---------------------------------------------------------------------------
+# parse_industry_stock_map — happy paths
+# ---------------------------------------------------------------------------
+
+def make_full_tree(sectors_with_stocks: dict) -> dict:
+    """Build a treemap dict: sector → industry → list of (ticker, name, value)."""
+    children = []
+    for sector_name, industries in sectors_with_stocks.items():
+        ind_nodes = []
+        for ind_name, stocks in industries.items():
+            stock_nodes = [
+                {"name": t, "description": n, "value": v}
+                for t, n, v in stocks
+            ]
+            ind_nodes.append({"name": ind_name, "children": stock_nodes})
+        children.append({"name": sector_name, "children": ind_nodes})
+    return {"name": "Root", "children": children}
+
+
+def test_stock_map_sector_assignment():
+    data = make_full_tree({
+        "Technology": {"Semiconductors": [("NVDA", "NVIDIA", 3_000_000_000)]},
+        "Financial": {"Banks - Diversified": [("JPM", "JPMorgan", 500_000_000)]},
+    })
+    result = parse_industry_stock_map(data)
+    assert result["industries"]["Semiconductors"]["sector"] == "Technology"
+    assert result["industries"]["Banks - Diversified"]["sector"] == "Financial"
+
+
+def test_stock_map_market_cap_conversion():
+    # value / 1000 = market_cap_m
+    data = make_full_tree({
+        "Technology": {"Semiconductors": [("NVDA", "NVIDIA", 3_255_318_000)]}
+    })
+    result = parse_industry_stock_map(data)
+    stock = result["industries"]["Semiconductors"]["stocks"][0]
+    assert stock["ticker"] == "NVDA"
+    assert stock["market_cap_m"] == 3_255_318  # 3_255_318_000 / 1000
+
+
+def test_stock_map_stocks_sorted_by_market_cap_descending():
+    data = make_full_tree({
+        "Technology": {"Semiconductors": [
+            ("AMD", "AMD", 250_000_000),
+            ("NVDA", "NVIDIA", 3_000_000_000),
+            ("QCOM", "Qualcomm", 200_000_000),
+        ]}
+    })
+    result = parse_industry_stock_map(data)
+    stocks = result["industries"]["Semiconductors"]["stocks"]
+    caps = [s["market_cap_m"] for s in stocks]
+    assert caps == sorted(caps, reverse=True)
+    assert stocks[0]["ticker"] == "NVDA"
+
+
+def test_stock_map_ticker_to_industry_reverse_index():
+    data = make_full_tree({
+        "Technology": {"Semiconductors": [("NVDA", "NVIDIA", 1_000_000)]},
+        "Financial": {"Banks - Diversified": [("JPM", "JPMorgan", 500_000)]},
+    })
+    result = parse_industry_stock_map(data)
+    assert result["ticker_to_industry"]["NVDA"] == "Semiconductors"
+    assert result["ticker_to_industry"]["JPM"] == "Banks - Diversified"
+
+
+def test_stock_map_concentration_pct():
+    # NVDA = 3000, AMD = 1000 → total = 4000 → concentration = 75%
+    data = make_full_tree({
+        "Technology": {"Semiconductors": [
+            ("NVDA", "NVIDIA", 3_000_000),
+            ("AMD", "AMD", 1_000_000),
+        ]}
+    })
+    result = parse_industry_stock_map(data)
+    ind = result["industries"]["Semiconductors"]
+    assert ind["top_concentration_pct"] == 75.0
+    assert ind["total_market_cap_m"] == 4000
+
+
+def test_stock_map_total_market_cap_and_stock_count():
+    data = make_full_tree({
+        "Technology": {"Semiconductors": [
+            ("NVDA", "NVIDIA", 3_000_000),
+            ("AMD", "AMD", 1_000_000),
+            ("QCOM", "Qualcomm", 500_000),
+        ]}
+    })
+    result = parse_industry_stock_map(data)
+    ind = result["industries"]["Semiconductors"]
+    assert ind["stock_count"] == 3
+    assert ind["total_market_cap_m"] == 4500
+
+
+def test_stock_map_empty_industry_has_zero_concentration():
+    data = make_full_tree({"Technology": {"EmptyIndustry": []}})
+    result = parse_industry_stock_map(data)
+    ind = result["industries"]["EmptyIndustry"]
+    assert ind["stock_count"] == 0
+    assert ind["top_concentration_pct"] is None
+
+
+def test_stock_map_skips_stocks_with_no_ticker():
+    data = make_full_tree({"Technology": {"Semiconductors": [("NVDA", "NVIDIA", 1_000_000)]}})
+    # Inject nameless stock node
+    data["children"][0]["children"][0]["children"].append(
+        {"name": "", "description": "No ticker", "value": 500_000}
+    )
+    result = parse_industry_stock_map(data)
+    assert result["industries"]["Semiconductors"]["stock_count"] == 1
+    assert "" not in result["ticker_to_industry"]
+
+
+def test_stock_map_zero_value_stock_included_with_zero_cap():
+    data = make_full_tree({"Technology": {"Semiconductors": [("NVDA", "NVIDIA", 0)]}})
+    result = parse_industry_stock_map(data)
+    stock = result["industries"]["Semiconductors"]["stocks"][0]
+    assert stock["ticker"] == "NVDA"
+    assert stock["market_cap_m"] == 0
