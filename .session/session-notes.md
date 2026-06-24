@@ -6,7 +6,9 @@
 
 ## Current Status
 
-**Status (2026-06-24) — SECTOR→INDUSTRY TAXONOMY MAP: COMPLETE.** PR open on `claude/clever-bardeen-obk5lb`. `scripts/seed_taxonomy.py` seeds `data/finviz_sector_industry_map.{json,csv}` from fasiha/finviz-git-scraper (plain HTTP, no Playwright). 11/11 sectors, 144/144 industries match (100%). 13 tests pass. Closes/supersedes PR #109 (Playwright plan no longer needed). INS-7 and Task 6b are now unblocked — separate PRs. **Safe to close once PR merged.**
+**Status (2026-06-24) — INDUSTRY→STOCK MAP: COMPLETE.** PR open on `claude/industry-stock-map-artifact`. Extends `seed_taxonomy.py` to also write `data/finviz_industry_stock_map.json`: 5550 stocks, market caps, concentration scores, ticker→industry reverse index. 22 tests pass. Unlocks: Worker FMP fallback, peer context in Lookup tab, concentration signal, ETF override validation. **Safe to close once PR merged.**
+
+**Status (2026-06-24) — SECTOR→INDUSTRY TAXONOMY MAP: COMPLETE.** PR #171 merged. `scripts/seed_taxonomy.py` seeds `data/finviz_sector_industry_map.{json,csv}` from fasiha/finviz-git-scraper (plain HTTP, no Playwright). 11/11 sectors, 144/144 industries match (100%). INS-7 and Task 6b now unblocked.
 
 **Status (2026-06-23) — CRON SCHEDULE ADJUSTMENT: COMPLETE.** PR #168 open (draft). Updated `worker-cron/wrangler.toml` cron times from 9:49am/10:51am/3:48pm ET (summer) to 5:01pm/10:30am/3:48pm ET (summer). Cloudflare Cron is fixed-UTC with no DST support — manual adjustments required twice yearly. **Next: Monitor for CI, then merge. Action needed: adjust UTC times on November 2, 2026 (EDT→EST) and March 9, 2027 (EST→EDT).** See PR body for winter UTC equivalents.
 

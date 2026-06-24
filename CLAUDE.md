@@ -40,7 +40,7 @@ python scripts/export_db.py
 | `scripts/generate_ai.py` | Gemini AI analysis from latest deltas; writes `data/ai/YYYY-MM-DD.json`. Auth: Vertex express key (GOOGLE_API_KEY) > Vertex ADC > AI Studio (GEMINI_API_KEY). Supports `--preview` (no API), `--capture` (Tier-2 debug). | ~1300 |
 | `scripts/export_db.py` | Exports CSVs → SQLite (`finviz_groups.db`) + Parquet in `./exports/` (not committed) | ~150 |
 | `scripts/backfill.py` | Shows current date coverage; prints manual backfill instructions. Accepts `--status` | ~50 |
-| `scripts/seed_taxonomy.py` | Seeds `data/finviz_sector_industry_map.{json,csv}` by parsing fasiha/finviz-git-scraper's `map-sec_all.json` (plain HTTP — no Playwright, no Cloudflare). Run once; re-run only after Finviz restructures taxonomy. Validates against snapshot CSVs automatically. | ~80 |
+| `scripts/seed_taxonomy.py` | Seeds `data/finviz_sector_industry_map.{json,csv}` and `data/finviz_industry_stock_map.json` by parsing fasiha/finviz-git-scraper's `map-sec_all.json` (plain HTTP — no Playwright, no Cloudflare). Run once; re-run only after Finviz restructures taxonomy. Validates against snapshot CSVs automatically. Accepts `--skip-stocks`. | ~150 |
 | `dashboard/app.py` | Streamlit dashboard: Snapshot, Top Movers, Time Series, Momentum tabs | ~100 |
 
 > Token estimates are rough input-only counts for the script files themselves. Actual session costs depend on how much data context you load. Use `/context` to monitor live usage.
@@ -59,8 +59,9 @@ data/
     deltas.csv       # append-only; one row per (date, industry) ~150 rows/day
   benchmark/
     snapshots.csv    # append-only; one SPY row per trading date; raw perf_* (never spread-only)
-  finviz_sector_industry_map.json  # static; sector→industry containment tree; re-seed if Finviz restructures
-  finviz_sector_industry_map.csv   # flat (finviz_sector, finviz_industry) pairs; for pandas joins
+  finviz_sector_industry_map.json    # static; sector→industry containment tree; re-seed if Finviz restructures
+  finviz_sector_industry_map.csv     # flat (finviz_sector, finviz_industry) pairs; for pandas joins
+  finviz_industry_stock_map.json     # static; industry→stock list + ticker reverse index; ~876KB
 ```
 
 ### finviz_sector_industry_map files
@@ -71,6 +72,37 @@ Seeded by `scripts/seed_taxonomy.py` from [fasiha/finviz-git-scraper](https://gi
 - **Accuracy:** 100% match against `data/industries/snapshots.csv` as of 2026-06-24
 - **Freshness:** Re-run `seed_taxonomy.py` if Finviz restructures taxonomy (rare, ~once/year). The script cross-validates and reports any mismatches.
 - **Usage:** Load with `json.loads(Path("data/finviz_sector_industry_map.json").read_text())["sectors"]` → dict of `{sector: [industry, ...]}`. Enables INS-7 sector breadth and Task 6b sidebar filter.
+
+### finviz_industry_stock_map.json
+
+Seeded by the same `seed_taxonomy.py` run (same HTTP fetch, no extra cost). Structure:
+
+```json
+{
+  "ticker_to_industry": {"NVDA": "Semiconductors", "AAPL": "Consumer Electronics", ...},
+  "industries": {
+    "Semiconductors": {
+      "sector": "Technology",
+      "stock_count": 68,
+      "total_market_cap_m": 6755078,
+      "top_concentration_pct": 48.2,
+      "stocks": [{"ticker": "NVDA", "name": "NVIDIA Corp", "market_cap_m": 3255318}, ...]
+    }
+  }
+}
+```
+
+- `market_cap_m`: market cap in millions USD (Finviz treemap value / 1000)
+- `stocks`: sorted descending by market cap — `stocks[0]` is always the dominant name
+- `top_concentration_pct`: largest stock as % of industry total cap; values ≥40% signal a single-stock proxy industry (e.g., Consumer Electronics = 97% Apple, Internet Retail = 75% Amazon)
+- `ticker_to_industry`: flat reverse index for O(1) ticker→industry lookup; enables Worker fallback classification without FMP API calls
+- ~5550 tickers, ~876KB on disk
+
+**Data freshness:** The fasiha repo halted scraping in April 2025 ("halt scraping since the website has changed"). The JSON reflects ~March 2025 state and will not auto-update.
+
+- **Reliable:** sector/industry names (taxonomy rarely changes; confirmed 100% match with our live data as of 2026-06-24), stock membership for established companies, relative market cap ordering within an industry
+- **Stale:** absolute `market_cap_m` figures, stock completeness (companies IPO'd or reclassified after March 2025 are missing)
+- **Do not use for:** live prices, current market caps, or expecting new companies to appear on re-seed
 
 ### snapshots.csv columns
 `date, collected_at, group_type, name, stocks, market_cap, pe, fwd_pe, perf_day, perf_week, perf_month, perf_quarter, perf_half, perf_year, perf_ytd, avg_volume, rel_volume, change`
