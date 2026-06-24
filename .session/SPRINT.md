@@ -226,11 +226,32 @@ Full plan: `planning/compute-deltas-lookbacks-and-momentum.md` (see gap map). Su
 | INS-4 | **Momentum Velocity (`momentum_score_delta_7d/14d`)** | `scripts/compute_deltas.py` | M | Track momentum_score change over time. "Rising Stars" = positive velocity + currently top-half. Needs 7+ days of data. |
 | INS-5 | **Daily Brief card (PWA top-of-screen)** | `docs/index.html` | M | Single card: today's breakout, sustained leaders, what's rolling over. Eliminates tab-hopping on mobile. Needs 7+ days for interesting content. |
 | INS-6 | **Momentum Score Heatmap (time × industry)** | `dashboard/app.py` | S | Companion to existing rank-delta heatmap — cells = `momentum_score` over time. Absolute picture of sustained leaders. Needs 7+ days. |
-| INS-7 | **Sector Breadth** | `dashboard/app.py` | L | % of industries in a sector that are top-half of full universe. Needs static sector→industry mapping (11 sectors × 144 industries). Hardest feature. |
+| ~~TAX-0~~ | ~~**Seed sector→industry taxonomy map**~~ | `data/finviz_sector_industry_map.{json,csv}`, `scripts/seed_taxonomy.py` | S | ✅ **Done 2026-06-24 (PR #171).** Plain-HTTP parse of fasiha/finviz-git-scraper. 11/11 sectors, 144/144 industries match (100%). PR #109 superseded. 13 tests pass. |
+| TASK-6B | **Streamlit sidebar sector filter** | `dashboard/app.py` | S | ✅ *Unblocked by TAX-0. Build first.* Sidebar `selectbox("Sector", ["All"] + ...)` → filter `industries_df` via `isin(SECTOR_MAP[sector_choice])`. Load map from `data/finviz_sector_industry_map.json`. |
+| INS-7 | **Sector Breadth metric** | `dashboard/app.py`, `docs/index.html` | M | ✅ *Unblocked by TAX-0. Build second.* "7 of 12 Technology industries top-half." Streamlit sector view + PWA breadth bar on sector cards. |
 | DEBT-1 | `evict_today_rows` concurrency race | `scripts/collect.py` | S | Two simultaneous `collect.py` processes could race on read-modify-write. Non-issue given single scheduled Action + ad-hoc manual runs. Fix would be a file lock (e.g. `fcntl.flock`). Table until concurrency is actually needed. |
 | DEBT-2 | `evict_today_rows` I/O errors not caught | `scripts/collect.py` | S | Disk-full / permission errors bubble up as exceptions. Intentional — matches rest of codebase. Could add explicit error message if this causes confusion in prod logs. |
 | DEBT-3 | `DISPATCH_REF` in `worker-cron/wrangler.toml` hardcodes non-main branch | `worker-cron/wrangler.toml` | S | Set to `"claude/elegant-babbage-hlxnfy"` during Phase 1 (the current default). **Blocked by D1** — once D1 (create `main`, set as default) is done, change `DISPATCH_REF` to `"main"` and redeploy the Worker. The TODO(D1) comment in `wrangler.toml` marks the spot. |
-| 6b | Sector → Industry drill-down | `dashboard/app.py` | L | Hardcode `SECTOR_INDUSTRY_MAP` (11 sectors → 144 industries) in `app.py`. Sidebar selectbox filters all tabs. Effort is mostly cataloguing the mapping, not code. |
+
+---
+
+#### Sector → Industry Hierarchy Features
+
+Full plan: `planning/PLAN_sector_industry_hierarchy.md` — 22 features across 5 tiers (Navigation, Signal, Retention, Bridge, Trust). Foundation (TAX-0) ✅ done. All features below are consumers of `data/finviz_sector_industry_map.json`.
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| HIR-A | **PWA drill-down navigation** | `docs/index.html` | M | Tap sector card → expand inline to show constituent industries ranked with deltas. Biggest UX win from the hierarchy. Build after INS-7. |
+| HIR-R | **Market-wide breadth gauge** | `docs/index.html` | S | "68% of industries top-half" at top of PWA home. Risk-on/risk-off dial. |
+| HIR-D | **Divergence alerts / Rotation Radar tab** | `docs/index.html`, `dashboard/app.py` | M | Auto-surface sector vs. breadth disagreements: "sector green, only 2/12 industries participating." Highest-signal rotation pattern. VP decision: new tab vs. section before coding. |
+| HIR-M | **Crowding / concentration warning** | `docs/index.html`, `dashboard/app.py` | S | Inverse of breadth: flag sector gain carried by 1 industry. Risk signal missing from every momentum tool. |
+| HIR-I | **Since-last-look digest** | `docs/index.html` | M | Store last-viewed timestamp in PWA local storage. On open: "Since Tuesday: Energy breadth 4→9, Semis entered top 10." Zero backend. Highest-leverage retention feature. |
+| HIR-K | **AI brief with sector context** | `scripts/generate_ai.py` | M | Add sector/breadth context to existing briefing prompt. Prompt-only update — no schema change. |
+| HIR-H | **Rotation flow map** | `docs/index.html`, `dashboard/app.py` | L | Sankey/flow: capital leaving fading sectors → entering emerging ones. Signature feature. VP charting library decision required before coding. |
+| HIR-E | **Breadth-confirmed momentum column** | `scripts/compute_deltas.py`, `tests/` | S | New `momentum_breadth_confirmed` in `deltas.csv`. Schema migration required. |
+| HIR-TAX-TRIPWIRE | **Taxonomy staleness tripwire** | `scripts/collect.py` or `tests/` | S | Warn when live industry name missing from map. Prevents silent breadth denominator errors. Anytime task. |
+| HIR-O | **[FUTURE] Sector→Industry→Stocks bridge** | `worker/src/index.js`, `docs/index.html` | M | Entry point for TICKER-5. Do NOT start until TICKER-4 validated + HIR-A built. |
+| HIR-N | **[DEFERRED Q4+] Historical analog** | TBD | L | Match breadth fingerprint to past setups. Needs 6+ months data. Revisit ~Q4 2026. |
 
 > **D1 note — the elegant-babbage debt**: `claude/elegant-babbage-hlxnfy` is currently the default branch (no `main` exists). GitHub Actions cron only fires on the default branch, and the PWA hardcodes this branch name. D1 is the root fix; PWA-1 is the code follow-up. Until D1 is done, the cron data will keep landing on `elegant-babbage` — so don't change the `BRANCH` constant before D1 is complete.
 
