@@ -325,12 +325,14 @@ https://finviz.com/screener?v=311&f=cap_midover,ind_<slug>,ta_sma20_sa50,ta_sma5
   filters: cap_midover · ta_sma20_sa50 (20SMA > 50SMA) · ta_sma50_pa (price > 50SMA)
 ```
 
-**Wide net (storage scrape), view `v=151`, 84 columns (revised URL, 2026-06-23):**
+**Wide net (storage scrape), view `v=151`, 84 columns (revised URL, 2026-06-24):**
 ```
-https://finviz.com/screener?v=151&f=cap_midover,ind_<slug>,sh_avgvol_o100,ta_highlow52w_a30h,ta_sma200_sb50,ta_sma50_pa&ft=4&o=-marketcap&c=1,2,4,5,6,7,67,65,66,68,79,8,9,10,13,145,146,33,32,34,37,38,149,16,77,17,18,142,19,20,143,21,23,22,132,133,39,40,41,27,29,42,43,44,45,47,46,138,49,51,48,52,53,54,59,63,64,81,86,87,88,62,69,135,137,136,150,3,12,144,35,36,82,78,28,139,50,57,58,60,61,148,127,128
-  filters: cap_midover · sh_avgvol_o100 (avg vol > 100K — liquidity floor) · ta_highlow52w_a30h (within 30% of 52w high) 
+https://finviz.com/screener?v=151&f=cap_midover,ind_<slug>,sh_avgvol_o100,ta_highlow52w_a20h&ft=4&o=-marketcap&c=1,2,4,5,6,7,67,65,66,68,79,8,9,10,13,145,146,33,32,34,37,38,149,16,77,17,18,142,19,20,143,21,23,22,132,133,39,40,41,27,29,42,43,44,45,47,46,138,49,51,48,52,53,54,59,63,64,81,86,87,88,62,69,135,137,136,150,3,12,144,35,36,82,78,28,139,50,57,58,60,61,148,127,128
+  filters: cap_midover · sh_avgvol_o100 (avg vol > 100K — liquidity floor) · ta_highlow52w_a20h (within 20% of 52w high)
   sort: o=-marketcap (biggest first — institutional-friendly leaders on top)
   84 columns (exceeds the original "~70" estimate — even better for attribution)
+  Note: ta_sma200_sb50 (50SMA > 200SMA) and ta_sma50_pa (price > 50SMA) removed 2026-06-24 per VP —
+  trend gates cause survivorship bias; Stage-2 qualification recomputed in-house from stored columns.
 ```
 > Revision: the first paste had `o=wiimdailydigest` (accidental leftover sort) and no avg-vol
 > floor. Revised URL **adds `sh_avgvol_o100`** (a real filter change — liquidity gate) and sorts
@@ -359,9 +361,9 @@ https://finviz.com/screener?v=151&f=cap_midover,ind_<slug>,sh_avgvol_o100,ta_hig
    {
      "wide": {
        "v": "151",
-       "base_filters": ["cap_midover", "ta_highlow52w_a30h", "ta_sma200_sb50", "ta_sma50_pa"],
+       "base_filters": ["cap_midover", "sh_avgvol_o100", "ta_highlow52w_a20h"],
        "sort": "-marketcap", "ft": "4",
-       "columns": [{"id": 1, "label": "Ticker"}, {"id": 65, "label": "RSI"}, ...]  // 84 ids, ordered
+       "columns": [{"id": 1, "label": "Ticker"}, {"id": 65, "label": "Price"}, ...]  // 84 ids, ordered
      },
      "button": {
        "v": "311",
