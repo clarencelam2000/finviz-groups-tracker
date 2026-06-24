@@ -40,6 +40,7 @@ python scripts/export_db.py
 | `scripts/generate_ai.py` | Gemini AI analysis from latest deltas; writes `data/ai/YYYY-MM-DD.json`. Auth: Vertex express key (GOOGLE_API_KEY) > Vertex ADC > AI Studio (GEMINI_API_KEY). Supports `--preview` (no API), `--capture` (Tier-2 debug). | ~1300 |
 | `scripts/export_db.py` | Exports CSVs → SQLite (`finviz_groups.db`) + Parquet in `./exports/` (not committed) | ~150 |
 | `scripts/backfill.py` | Shows current date coverage; prints manual backfill instructions. Accepts `--status` | ~50 |
+| `scripts/seed_taxonomy.py` | Seeds `data/finviz_sector_industry_map.{json,csv}` by parsing fasiha/finviz-git-scraper's `map-sec_all.json` (plain HTTP — no Playwright, no Cloudflare). Run once; re-run only after Finviz restructures taxonomy. Validates against snapshot CSVs automatically. | ~80 |
 | `dashboard/app.py` | Streamlit dashboard: Snapshot, Top Movers, Time Series, Momentum tabs | ~100 |
 
 > Token estimates are rough input-only counts for the script files themselves. Actual session costs depend on how much data context you load. Use `/context` to monitor live usage.
@@ -58,7 +59,18 @@ data/
     deltas.csv       # append-only; one row per (date, industry) ~150 rows/day
   benchmark/
     snapshots.csv    # append-only; one SPY row per trading date; raw perf_* (never spread-only)
+  finviz_sector_industry_map.json  # static; sector→industry containment tree; re-seed if Finviz restructures
+  finviz_sector_industry_map.csv   # flat (finviz_sector, finviz_industry) pairs; for pandas joins
 ```
+
+### finviz_sector_industry_map files
+
+Seeded by `scripts/seed_taxonomy.py` from [fasiha/finviz-git-scraper](https://github.com/fasiha/finviz-git-scraper/blob/main/map-sec_all.json) — a nightly-updated Finviz treemap archive. No Playwright or Cloudflare involved; plain HTTP from raw.githubusercontent.com.
+
+- **Coverage:** 11 sectors, 145 industries (144 match our tracked industries; 1 extra `Infrastructure Operations` not yet in our data)
+- **Accuracy:** 100% match against `data/industries/snapshots.csv` as of 2026-06-24
+- **Freshness:** Re-run `seed_taxonomy.py` if Finviz restructures taxonomy (rare, ~once/year). The script cross-validates and reports any mismatches.
+- **Usage:** Load with `json.loads(Path("data/finviz_sector_industry_map.json").read_text())["sectors"]` → dict of `{sector: [industry, ...]}`. Enables INS-7 sector breadth and Task 6b sidebar filter.
 
 ### snapshots.csv columns
 `date, collected_at, group_type, name, stocks, market_cap, pe, fwd_pe, perf_day, perf_week, perf_month, perf_quarter, perf_half, perf_year, perf_ytd, avg_volume, rel_volume, change`
