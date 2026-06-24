@@ -35,23 +35,34 @@ DEBUG_DIR = DATA_DIR / "ai" / "debug"
 PHASE_LABELS = frozenset({"Early Cycle", "Mid Cycle", "Late Cycle", "Defensive"})
 CONVICTION_LEVELS = frozenset({"High", "Medium", "Low"})
 
+# Prefix used to mark hallucination findings as non-blocking warnings.
+_WARN_TAG = "  [WARN] "
+
 
 # ---------------------------------------------------------------------------
 # Known group names
 # ---------------------------------------------------------------------------
 
-def load_known_names() -> set:
-    """Return all Finviz group names from snapshot CSVs."""
-    names: set = set()
+def load_known_names() -> dict:
+    """Return Finviz group names keyed by group type from snapshot CSVs.
+
+    Returns {"sectors": set, "industries": set} so the hallucination check can
+    scope each call to only its own group type.  Sector names (e.g. "Industrials",
+    "Energy") must not be checked against industry-level outputs — they appear
+    naturally as generic English nouns and produce false positives.
+    """
+    by_group: dict = {}
     for sub in ("sectors", "industries"):
         p = DATA_DIR / sub / "snapshots.csv"
+        names: set = set()
         if p.exists():
             try:
                 df = pd.read_csv(p, usecols=["name"], dtype=str)
                 names.update(df["name"].dropna().unique())
             except Exception as e:
                 print(f"  WARN: could not load {p}: {e}", file=sys.stderr)
-    return names
+        by_group[sub] = names
+    return by_group
 
 
 # ---------------------------------------------------------------------------
@@ -158,19 +169,38 @@ def check_format(fkey: str, call: dict) -> list:
 # Capture-level check
 # ---------------------------------------------------------------------------
 
-def check_capture(capture: dict, known_names: set,
-                  skip_hallucination: bool = False) -> list:
+def check_capture(capture: dict, known_names,
+                  skip_hallucination: bool = False,
+                  warn_hallucination: bool = False) -> list:
     """Run all guards on one Tier-2 capture file.
 
     Returns a flat list of issue strings (empty = all clean).
+
+    known_names: dict {"sectors": set, "industries": set} scopes each call to
+      its own group type, preventing sector names used as generic English nouns
+      (e.g. "Industrials" in an industries.rotation_map description) from being
+      flagged as hallucinations.  A plain set is also accepted for backward
+      compatibility (used by unit tests).
+
     skip_hallucination: set True when no snapshot CSVs are available, to
       avoid spurious failures when running against a stale or partial repo.
+
+    warn_hallucination: when True, hallucination findings are prefixed with
+      _WARN_TAG and remain in the returned list, but main() treats them as
+      non-blocking.  Format violations are always blocking.
     """
     issues = []
     calls = capture.get("calls") or {}
     for fkey, call in sorted(calls.items()):
-        h = [] if skip_hallucination else check_hallucinations(fkey, call, known_names)
+        if isinstance(known_names, dict):
+            group = fkey.split(".")[0]  # "sectors" or "industries"
+            names = known_names.get(group, set())
+        else:
+            names = known_names  # plain set — backward compat for unit tests
+        h = [] if skip_hallucination else check_hallucinations(fkey, call, names)
         f = check_format(fkey, call)
+        if warn_hallucination and h:
+            h = [_WARN_TAG + line.lstrip() for line in h]
         if h or f:
             issues.append(f"[{fkey}]")
             issues.extend(h)
@@ -211,6 +241,9 @@ def main(argv=None) -> int:
                         help="Check all captures in data/ai/debug/")
     parser.add_argument("--no-hallucination", action="store_true",
                         help="Skip hallucination guard (useful when snapshot CSVs are absent)")
+    parser.add_argument("--warn-hallucination", action="store_true",
+                        help="Demote hallucination findings to warnings (non-blocking); "
+                             "format violations still fail")
     args = parser.parse_args(argv)
 
     paths = _resolve_paths(args)
@@ -220,7 +253,9 @@ def main(argv=None) -> int:
         return 0
 
     known = load_known_names()
-    skip_halluc = args.no_hallucination or not known
+    # known is now a dict; skip_halluc applies when no snapshot data is available at all
+    skip_halluc = args.no_hallucination or not any(known.values())
+    warn_halluc = args.warn_hallucination and not skip_halluc
 
     if skip_halluc and not args.no_hallucination:
         print("WARN: no snapshot CSVs found — skipping hallucination guard.", file=sys.stderr)
@@ -234,12 +269,20 @@ def main(argv=None) -> int:
             fail_count += 1
             continue
 
-        issues = check_capture(capture, known, skip_hallucination=skip_halluc)
+        issues = check_capture(capture, known, skip_hallucination=skip_halluc,
+                               warn_hallucination=warn_halluc)
         if issues:
             print(f"\n{path.name}  (date={capture.get('date','?')}):")
             for line in issues:
                 print(line)
-            fail_count += 1
+            # Fail only if any issue is not a demoted hallucination warning.
+            # Header lines ([fkey]) don't count; only warn if all body lines are WARN-tagged.
+            has_hard_issue = any(
+                not line.startswith("[") and not line.startswith(_WARN_TAG)
+                for line in issues
+            )
+            if has_hard_issue:
+                fail_count += 1
         else:
             print(f"{path.name}: OK")
 
