@@ -6,6 +6,8 @@
 
 ## Current Status
 
+**Status (2026-06-24) — SECTOR→INDUSTRY TAXONOMY MAP: COMPLETE.** PR open on `claude/clever-bardeen-obk5lb`. `scripts/seed_taxonomy.py` seeds `data/finviz_sector_industry_map.{json,csv}` from fasiha/finviz-git-scraper (plain HTTP, no Playwright). 11/11 sectors, 144/144 industries match (100%). 13 tests pass. Closes/supersedes PR #109 (Playwright plan no longer needed). INS-7 and Task 6b are now unblocked — separate PRs. **Safe to close once PR merged.**
+
 **Status (2026-06-23) — CRON SCHEDULE ADJUSTMENT: COMPLETE.** PR #168 open (draft). Updated `worker-cron/wrangler.toml` cron times from 9:49am/10:51am/3:48pm ET (summer) to 5:01pm/10:30am/3:48pm ET (summer). Cloudflare Cron is fixed-UTC with no DST support — manual adjustments required twice yearly. **Next: Monitor for CI, then merge. Action needed: adjust UTC times on November 2, 2026 (EDT→EST) and March 9, 2027 (EST→EDT).** See PR body for winter UTC equivalents.
 
 **Status (2026-06-22) — AI CAPTURE & VISIBILITY (Phases 1/2/3/4/7): COMPLETE. PR #160 ready for review.** Branch `claude/beautiful-bohr-2bky6v`. Phases 1/2/7 (CallResult dataclass, Tier-1 provenance, Tier-2 debug capture, --preview mode, Vertex express-key auth), Phase 3 (prompt snapshot tests, 11 golden .txt files), Phase 4 (PWA "Behind this" provenance drawer) all shipped. 325 non-Playwright tests pass. CI green 6/6. **Next: Phases 5+6 (tools/ai-lab.html offline viewer + eval_ai.py offline guards) on this same branch/PR.** SAFE to start Phase 5+6 immediately.

@@ -13,6 +13,9 @@
 | # | Task | File(s) | Effort | Notes |
 |---|------|---------|--------|-------|
 | PIPE-1 | **Backfill historical deltas.csv after day-removal formula change** | `data/sectors/deltas.csv`, `data/industries/deltas.csv`, `scripts/compute_deltas.py` | S | `momentum_score` and `rs_score` rows before PR #150 were computed with 7 timeframes (including day); rows after use 6. The `momentum_accel` and `rs_accel` deltas will straddle the discontinuity for ~10 sessions after merge. Fix: run `compute_deltas.py` over all historical dates to recompute from scratch. Do this in a separate PR (don't bundle with the formula change) to keep diffs legible. |
+| ~~TAX-0~~ | ~~**Seed sector→industry taxonomy map**~~ | `scripts/seed_taxonomy.py`, `tests/test_seed_taxonomy.py`, `data/finviz_sector_industry_map.{json,csv}` | S | ✅ **Done 2026-06-24.** Replaced PR #109's Playwright/Cloudflare plan with a plain-HTTP parse of fasiha/finviz-git-scraper's `map-sec_all.json`. 11/11 sectors, 144/144 industries match (100%). 1 extra in fasiha (`Infrastructure Operations`) — newer Finviz addition. PR #109 superseded and should be closed. 13 tests pass. |
+| INS-7 | **Sector Breadth metric** | `scripts/compute_deltas.py` or `dashboard/app.py`, `data/finviz_sector_industry_map.json` | M | *Now unblocked by TAX-0.* "7 of 18 Technology industries are top-half of the full universe." Show on sector cards in PWA and Streamlit. Load the map, `isin()` filter by sector, count `rank_week <= n_total/2`. |
+| TASK-6B | **Streamlit sidebar sector filter** | `dashboard/app.py`, `data/finviz_sector_industry_map.json` | S | *Now unblocked by TAX-0.* Sidebar `selectbox("Sector", ["All"] + ...)` → filter `industries_df` via `isin(SECTOR_MAP[sector_choice])`. |
 
 ---
 
