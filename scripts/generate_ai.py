@@ -419,7 +419,7 @@ def serialize_divergences(snap_df: pd.DataFrame, delta_df: pd.DataFrame) -> str:
             if not fragile.empty:
                 found = True
                 items = [
-                    f"{r['name']} (agreement {r['rank_agreement']:.2f})"
+                    f"{r['name']} (agreement {r['_a']:.2f})"
                     for _, r in fragile.head(5).iterrows()
                 ]
                 lines.append("  Fragile all-green (green but unstable rank): " + "; ".join(items))
@@ -1065,10 +1065,17 @@ def _expected_fields() -> list:
     return list(seen)
 
 
+def _field_is_set(name: str, val) -> bool:
+    # rotation_phase is a dict — a non-empty dict with an empty label is NOT complete
+    if name == "rotation_phase":
+        return isinstance(val, dict) and bool(val.get("label"))
+    return bool(val)
+
+
 def _is_complete(data: dict) -> bool:
     for field in _expected_fields():
         prefix, name = field.split(".", 1)
-        if not data.get(prefix, {}).get(name):
+        if not _field_is_set(name, data.get(prefix, {}).get(name)):
             return False
     return True
 
@@ -1077,7 +1084,7 @@ def _missing_fields(data: dict) -> list:
     missing = []
     for field in _expected_fields():
         prefix, name = field.split(".", 1)
-        if not data.get(prefix, {}).get(name):
+        if not _field_is_set(name, data.get(prefix, {}).get(name)):
             missing.append(field)
     return missing
 
