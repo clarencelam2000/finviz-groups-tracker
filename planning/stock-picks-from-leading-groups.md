@@ -51,6 +51,7 @@ is a later session.
 | D8 | PWA surface | **Both:** standalone **"Picks" tab** (cross-group destination) + a per-group **"Stage-2 names →" section inside the Lookup tab** (contextual, when an industry is pulled up). No generic-card surface. |
 | D9 | Attribution schema | **Membership-only, append-only event log** (`picks.csv`, one row per stock × list × day). Entry/exit/forward-returns are derived OFFLINE later (Option C hybrid view), never hand-maintained. |
 | D10 | TwelveData / extended indicators | **Deferred.** Finviz's custom view already serves SMA distances, 52w-high distance, ATR, RSI. Optional spike later (§Deferred). |
+| D11 | Stored-net breadth + fetch budget | **Store wide (generous superset, relaxed trend gates), tag Stage-2 in-house — bounded & explicitly NOT long-term** (VP accepted cautiously 2026-06-23). Keep `sh_avgvol_o100` liquidity floor, hard per-group + global fetch caps (~120/day), Phase-1 volume probe, Phase-4 sunset back toward the tight net. Honest volume ~60–120 fetches/day. See §Fetch-volume budget & guardrails. |
 
 ## Architecture
 
@@ -176,6 +177,35 @@ history (no scraping needed — runs fine in cloud Claude):
 - Output: the locked selector policy (gates, ranks, slot split, cap) + the Stage-2-net decision.
   Do this **interactively with VP**; it's a judgment call best made over real selected lists.
 
+### Fetch-volume budget & guardrails (VP concern — D11, 2026-06-23)
+
+**Decision (D11): store wide (generous superset of signals, relaxed *trend* gates), tag Stage-2
+in-house — BUT bounded and explicitly temporary.** The VP accepted the "store wide" recommendation
+*cautiously*, on the record that it is **not a long-term solution** and that fetch volume is a real
+concern. Honoring that requires honesty about the number and hard guardrails:
+
+- **Honest volume estimate.** The VP's "~40 fetches/day" (20 groups × 2 pages) reflects the
+  *tight* Stage-2 net. "Store wide" *loosens the row filter*, so big industries (Semis ≈ 100–200
+  names) become 5–10 pages each. **Realistic generous-capture volume is ~60–120 fetches/day**, not
+  40. Do not plan around 40.
+- **Keep the liquidity floor as a volume ally.** Retain `sh_avgvol_o100` (avg vol > 100K) even in
+  the "wide" net — it is defensible on its own merits (we want liquid, institutional-friendly
+  names) AND it is the single biggest reducer of junk rows / pages. Relax only the *trend* gates
+  (`ta_highlow52w_a30h`, `ta_sma200_sb50`, `ta_sma50_pa`) that cause survivorship; recompute strict
+  Stage-2 as an in-house boolean column.
+- **Measure before committing (Phase-1 probe).** Before turning on the daily job, do a **one-time
+  probe scrape** that counts names/pages per selected group at the proposed breadth and reports the
+  real projected daily fetch total. The spike's "row-count" step needs this probe — existing CSVs
+  are group-level only, so stock counts must be measured, not estimated. **VP signs off on the
+  actual number, not my estimate.**
+- **Hard guardrails in `collect_picks.py`:** per-group page cap, global daily fetch cap (start
+  ~120), polite inter-fetch delay, and **abort if projected fetches exceed the cap** rather than
+  silently scraping more. Caps are configurable constants (triple-doc per house rules).
+- **Sunset trigger (the "not LT" promise, in writing).** Once Phase-4 attribution identifies which
+  signals actually predict winners, **narrow the stored net** to those — dropping back toward the
+  tight Stage-2 volume. This is a tracked obligation, not an aspiration: revisit at the first
+  attribution review.
+
 ## Finviz scraping notes (carry-over from collect.py + new)
 
 - **Same Cloudflare block as collect.py** — must run on **Azure (GitHub Actions)**, not cloud
@@ -185,16 +215,18 @@ history (no scraping needed — runs fine in cloud Claude):
 - **Politeness:** delay between page loads and between groups (the separate workflow per D7
   isolates this from the core EOD snapshot). ~20–30 groups × pages = real volume — keep it
   human-paced and consider a daily cap.
-- **Volume is the #1 feasibility risk (understated until now).** Today's pipeline does ~2 group
-  page loads; this is 20–30 groups × N pages ≈ **100–200 screener page loads/day** from one
-  Azure IP — a 50–100× escalation, against Finviz's *screener* (more bot-sensitive than the
-  groups view). Two compounding effects: (a) Cloudflare/ToS escalation risk, (b) Actions
-  wall-clock — at a 3–5s polite delay this is a ~10–20 min job. State the runtime budget and
+- **Volume is the #1 feasibility risk — see §Fetch-volume budget & guardrails (D11).** With the
+  chosen "store wide" breadth, realistic load is **~60–120 screener page loads/day** from one
+  Azure IP (NOT the ~40 a tight net implies) — a large escalation over today's 2 group page loads,
+  against Finviz's *screener* (more bot-sensitive than the groups view). Mitigations are mandatory,
+  not optional: liquidity floor, per-group + global fetch caps, polite delays, a Phase-1 volume
+  probe to confirm the real number, and a Phase-4 sunset back toward the tight net. At a 3–5s
+  delay this is a ~10–20 min Actions job.
 - **"Wide net" = wide on COLUMNS, not on FILTERS (clarification).** Two orthogonal axes:
   *column breadth* (`c=`, 84 IDs — how many attributes per passing stock) vs *filter width*
-  (`f=` tokens — how many stocks pass at all). D5 is the column axis; D4 ("filter in-house")
-  is the filter axis. The VP net is **wide on columns (84) but Stage-2-narrow on filters**, so
-  per-group name counts are moderate, not raw-universe — realistic load ~tens of page loads/day.
+  (`f=` tokens — how many stocks pass at all). D5 is the column axis; D4/D11 is the filter axis.
+  We store all 84 columns regardless; the breadth choice (D11) is purely about *which names* get
+  logged.
   **Consequence (survivorship):** only names *already* Stage-2 ever enter the log; names that
   drop out vanish, and pre-Stage-2 observations are never captured. Group selection is
   *replayable* from the archived `deltas.csv`; per-stock point-in-time technicals are **not**.
@@ -379,14 +411,13 @@ derived from the log — never hand-maintained.
 
 - [x] **Canonical wide-net + button Finviz URLs** — VP supplied 2026-06-23 (decoded in §VP URL
       handoff). 84-col `c=` list, `cap_midover` + Stage-2 `ta_*` filters, `v=151`/`v=311`.
-- [ ] **Stage-2 `ta_*` filters in the *stored* net (D4 tension)** — narrows the log to names
-      already Stage-2 (survivorship). Note: this is a *filter/row* question, not a *column* one —
-      we still store all 84 columns either way. **Deferred to the selector spike**, which will put
-      row-count numbers on the volume cost of a looser net. Default: ship VP net as-is to start
-      the clock.
-- [ ] **Leaders ranking metric + cap/floor split — to the selector spike.** NOT `rs_confirmed`
-      (conflates RS with absolute strength). Candidates: `momentum_confirmed`, sustained-strength
-      rank, all-green-by-RS. Anti-flash floors expressed as **percentiles**, not absolute cutoffs.
+- [x] **Stored-net breadth (D11)** — VP chose **store wide + tag in-house**, *cautiously*, as an
+      explicitly **non-LT** solution. Keep liquidity floor, relax trend gates, hard fetch caps,
+      Phase-1 volume probe, Phase-4 sunset. Honest volume ~60–120 fetches/day (not 40). See
+      §Fetch-volume budget.
+- [x] **Selector spike confirmed** — leaders ranking metric + cap/floor split decided in the
+      Phase-1.5 spike against historical `deltas.csv`. NOT `rs_confirmed`. Floors as percentiles.
+- [ ] **VP sign-off on the real fetch number** after the Phase-1 probe (gate before daily job on).
 - [ ] **VP confirm geography:** `cap_midover` includes foreign listings — keep all (store Country,
       filter later) or restrict to US? Default: keep all.
 - [ ] Finviz ToS comfort on ~20 groups × pages/day. Stage-2-filtered net keeps this to ~tens of
