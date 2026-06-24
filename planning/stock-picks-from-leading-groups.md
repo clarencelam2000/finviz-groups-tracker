@@ -1,12 +1,10 @@
 # Plan: Top-stock picks from leading groups (Stage-2 screener pipeline)
 
 > Status: **READY TO EXECUTE.** All major decisions VP-confirmed (2026-06-23 + 2026-06-24).
-> Finviz URL templates in hand (§VP URL handoff). Geography resolved (include ADRs, liquidity
-> floor handles quality). Slug pre-validation dropped (fail-loud at scrape time). Remaining
-> before Phase 2 starts: (1) Phase-1 probe run on GitHub Actions — validate 84-col anon fetch
-> on one large industry + measure real daily fetch count; (2) VP sign-off on the real fetch
-> number; (3) Phase-1.5 spike with VP to lock selector policy (leaders ranking metric,
-> cap/floor split). Spike runs in cloud against existing `deltas.csv` — no Finviz needed.
+> Phase-1.5 spike COMPLETE (2026-06-24) — selector policy locked (see §Spike results).
+> Remaining before Phase 2 starts: (1) Phase-1 probe run on GitHub Actions — validate 84-col
+> anon fetch on one large industry (Semiconductors) + measure real daily fetch count;
+> (2) VP sign-off on the real fetch number.
 
 ## Context & thesis
 
@@ -109,8 +107,8 @@ rows written to `picks.csv` with `list_category`:
 |----------|----------------|------------------------------------------|
 | `leaders` | **sustained strength** — membership pinned to the PWA `allGreen` definition (positive in all 5 timeframes, `docs/index.html` ~line 1636), possibly gated by a strength floor. **Ranking metric is OPEN — to be chosen in the selector spike** (candidates: `momentum_confirmed`, a sustained-strength rank, all-green ranked by RS). NOT `rs_confirmed` alone — that conflates RS-vs-SPY with absolute strength. | n/a — already an absolute-strength definition |
 | `emerging` | `regime_short_long` > `REGIME_THRESHOLD` | `rs_score` > 0.5 (must already be net-positive vs SPY) |
-| `accel` | `momentum_accel` > `ACCEL_STRONG` | rank in **top half** of peers AND `rs_score` > 0.5 — reject bottom-of-pack dead-cat flashes |
-| `rs_new_high` | `rs_new_high` = 1 | `rs_score` high AND rank top-half — IBD "true leadership", not a low-base RS pop |
+| `accel` | `momentum_accel` > `ACCEL_STRONG` | **top 40% by `momentum_score` percentile** AND `rs_score` > 0.5 — reject bottom-of-pack dead-cat flashes |
+| `rs_new_high` | `rs_new_high` = 1 | `rs_score` ≥ 0.6 AND **top 40% by `momentum_score` percentile** — IBD "true leadership", not a low-base RS pop |
 
 > The floor on `accel`/`rs_new_high` is the VP's explicit concern: a group can post a
 > momentum-accel spike or 20-day RS-new-high while still near the bottom of the pack. Gate
@@ -124,10 +122,10 @@ in the spike**, not a locked design:
 
 | Priority | Category | Gate (existing `deltas.csv` cols) | Slots | Rank within by (TBD in spike) |
 |----------|----------|-----------------------------------|-------|----------------|
-| 1 | `leaders` | all-green (5/5 timeframes +), optional strength floor | ≤ **10** | `momentum_confirmed` *or* sustained-strength rank *or* all-green-by-RS — **spike picks** |
+| 1 | `leaders` | all-green (5/5 timeframes +) | ≤ **10** | **8 by sustained_strength** (rank_month + rank_quarter + rank_half, lowest sum = best) **+ 2 freshness fills by momentum_confirmed** (not already in top-8). VP-locked 2026-06-24. |
 | 2 | `emerging` | `regime_short_long > REGIME_THRESHOLD (0.15)` **AND** `rs_score > 0.5` | ≤ **4** | `regime_short_long` desc |
-| 3 | `accel` | `momentum_accel > ACCEL_STRONG (0.08)` **AND** top-half floor **AND** `rs_score > 0.5` | ≤ **3** | `momentum_accel` desc |
-| 4 | `rs_new_high` | `rs_new_high == 1` **AND** `rs_score ≥ 0.6` **AND** top-half floor | ≤ **3** | `rs_slope` desc |
+| 3 | `accel` | `momentum_accel > ACCEL_STRONG (0.08)` **AND** top-40% floor **AND** `rs_score > 0.5` | ≤ **3** | `momentum_accel` desc |
+| 4 | `rs_new_high` | `rs_new_high == 1` **AND** `rs_score ≥ 0.6` **AND** top-40% floor | ≤ **3** | `rs_slope` desc |
 
 Rationale & design properties:
 - **Leaders gets half the cap** — highest-expectancy, most-sustained; earlier/riskier buckets get
@@ -139,12 +137,14 @@ Rationale & design properties:
 
 #### Anti-flash floor: express as a percentile, NOT an absolute cutoff (robustness)
 
-The "top-half" floor on `accel`/`rs_new_high` should be the group's **cross-sectional percentile
-rank among today's groups** (e.g. top 50% by `momentum_score`), **not** an absolute `momentum_score
-≥ 0.5`. Reason (VP's robustness concern): `momentum_score` is config-driven by `PERF_RANK_METRICS`
+The floor on `accel`/`rs_new_high` is the group's **cross-sectional percentile rank among
+today's groups by `momentum_score`**, **not** an absolute `momentum_score ≥ 0.5`.
+**VP-locked: top 40% (not top 50%)** — conservative starting point, can loosen toward
+top-50% after 30+ days if the buckets yield too few qualifying groups.
+Reason for percentile over absolute: `momentum_score` is config-driven by `PERF_RANK_METRICS`
 in `delta_config.py` (currently 6 timeframes, day excluded). If that list changes — e.g. drop
-weekly — the metric **rescales**, so an absolute `≥ 0.5` silently means something different, while
-a *percentile* ("top half of today's groups") is invariant to rescaling.
+weekly — the metric **rescales**, so an absolute `≥ 0.5` silently means something different,
+while a *percentile* ("top 40% of today's groups") is invariant to rescaling.
 
 > **Earlier overclaim corrected:** I said reusing `REGIME_THRESHOLD`/`ACCEL_STRONG` means "nothing
 > can drift." That only avoids **duplicate-constant drift** (two copies of one threshold
@@ -194,6 +194,47 @@ Runs entirely in cloud against `deltas.csv` (no Finviz access needed; 10 trading
 **Note:** the fetch-volume quantification (how many stock rows per group under various filters)
 requires hitting the Finviz screener and is NOT part of this spike. That is the Phase-1
 one-shot probe run on GitHub Actions.
+
+### Spike results (VP decisions locked 2026-06-24)
+
+**Data used:** 10 trading dates (2026-06-09 → 2026-06-23), 144 industries.
+All analysis run in cloud against `data/industries/deltas.csv` + `data/industries/snapshots.csv`.
+
+**Findings from the data:**
+- All-green count per day: ranged 21–46 (self-shrinks during weakness — correct behavior).
+  Jun 23 dropped to 21 as the market rotated (vs 31 the prior day); high turnover that day
+  is a rotation signal, not a bug.
+- `momentum_accel` was all NaN across all 10 dates (needs 11 sessions for a 10-session delta;
+  unlocks on the 11th trading date, ~2026-06-25). The `accel` bucket will yield 0 groups
+  until then — expected.
+- `rs_score` available from Jun 18 (3 dates); `rs_new_high` from Jun 22 (2 dates).
+- The `rs_score > 0.5` floor on the `emerging` bucket is **essential**: without it 39–50
+  groups qualify (useless); with it, 3–4. Floor is working exactly as intended.
+- `rs_new_high` raw: 13–19 qualifying → 3 after floors (`rs_score ≥ 0.6` + top-40%).
+
+**Stability comparison (avg day-over-day Jaccard, Jun 15–23):**
+
+| Metric | Jaccard | Character |
+|--------|---------|-----------|
+| sustained_strength | **0.691** (most stable) | Rewards durable mid-TF rank leaders; always includes Semiconductors |
+| momentum_weighted_mid | 0.650 | Near-identical to SS; Jun 17→18 zero turnover |
+| momentum_confirmed | 0.605 | More responsive; catches fresher movers earlier |
+| rank_agreement | 0.578 (least stable) | Noisy; not recommended |
+
+**Locked decisions:**
+
+| Item | Decision |
+|------|----------|
+| **Leaders ranking metric** | **Approach 1: 8 slots by sustained_strength (sum of rank_month + rank_quarter + rank_half, lower = better) + 2 freshness-fill slots by momentum_confirmed (not already in top-8)**. Core 8 are durable mid-timeframe leaders; freshness slots catch fresh movers. Attributable in picks.csv: tag each row's ranking basis. |
+| **Anti-flash floor** | **Top 40% cross-sectional percentile by `momentum_score`** (not absolute cutoff — invariant to formula rescaling per plan §anti-flash floor). Applied to `accel` and `rs_new_high` buckets. |
+| **Slot split** | **≤10 leaders / ≤4 emerging / ≤3 accel / ≤3 rs_new_high (cap = 20)** — confirmed as-is. In practice totals 13–17 given current data coverage. |
+| **Wide-net filter** | Ship VP-supplied URL as-is; revisit at Phase-4 attribution. |
+
+**Sustained_strength vs momentum_confirmed divergence (where they differ):**
+- SS consistently includes Semiconductors (strong mid-rank even when short-term wobbles).
+- momentum_confirmed freshness fills add: Farm & Heavy Construction Machinery (Jun 17–18),
+  Scientific & Technical Instruments + Engineering & Construction (Jun 22),
+  Specialty Industrial Machinery (Jun 23).
 
 ### Fetch-volume budget & guardrails (VP concern — D11, 2026-06-23)
 
@@ -431,8 +472,9 @@ derived from the log — never hand-maintained.
       explicitly **non-LT** solution. Keep liquidity floor, relax trend gates, hard fetch caps,
       Phase-1 volume probe, Phase-4 sunset. Honest volume ~60–120 fetches/day (not 40). See
       §Fetch-volume budget.
-- [x] **Selector spike confirmed** — leaders ranking metric + cap/floor split decided in the
-      Phase-1.5 spike against historical `deltas.csv`. NOT `rs_confirmed`. Floors as percentiles.
+- [x] **Selector spike COMPLETE (2026-06-24)** — leaders ranking metric + cap/floor split locked.
+      See §Spike results. Metric: Approach 1 (8 SS + 2 MC freshness fills). Floor: top 40%
+      by momentum_score percentile. Slot split: 10/4/3/3 confirmed. NOT `rs_confirmed` alone.
 - [x] **Geography** — include foreign ADRs (VP confirmed 2026-06-24). `sh_avgvol_o100` liquidity
       floor handles quality screening. Store `Country` column; filter locally if needed later.
 - [x] **Finviz ToS / Azure IP** — no evidence of GitHub Actions Azure IPs being blocked at the
