@@ -55,6 +55,12 @@ EXPECTED_COL_0 = "Ticker"
 
 SCREENER_BASE = "https://finviz.com/screener.ashx"
 
+# CSS selector for the screener results table. Verified against live Finviz
+# (v=151 custom view). Must be waited-for before reading page.content() — see
+# _scrape_group. If Finviz renames this class the probe will time out and
+# _dump_diagnostics will print the page title/snippet to identify the new class.
+SCREENER_TABLE_SELECTOR = "table.screener_table"
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -92,7 +98,7 @@ def _parse_table(html: str) -> tuple[list[str], list[dict]]:
     Returns ([], []) if the screener table is absent or empty.
     """
     soup = BeautifulSoup(html, "html.parser")
-    table = soup.select_one("table.screener_table")
+    table = soup.select_one(SCREENER_TABLE_SELECTOR)
     if not table:
         # Finviz returns HTTP 200 with no table when the slug is wrong or 0 results
         return [], []
@@ -113,6 +119,36 @@ def _parse_table(html: str) -> tuple[list[str], list[dict]]:
     return headers, data_rows
 
 
+def _dump_diagnostics(page) -> None:
+    """Print page diagnostics when the screener table can't be found.
+
+    Distinguishes the three common failure modes — Cloudflare challenge,
+    wrong/renamed selector, and a genuine 0-result page — which otherwise all
+    surface identically as "no table found".
+    """
+    try:
+        html = page.content()
+        soup = BeautifulSoup(html, "html.parser")
+        title = (soup.title.get_text(strip=True) if soup.title else "(no title)")
+        print(f"  [diag] page title: {title!r}")
+        print(f"  [diag] content length: {len(html)} bytes")
+        text = soup.get_text(" ", strip=True).lower()
+        for marker in ("just a moment", "checking your browser",
+                       "cloudflare", "cf-mitigated", "verify you are human"):
+            if marker in text:
+                print(f"  [diag] Cloudflare challenge marker detected: {marker!r}")
+                break
+        # List a sample of <table> classes present to spot a renamed selector.
+        classes = []
+        for tbl in soup.find_all("table"):
+            cls = tbl.get("class")
+            if cls:
+                classes.append(".".join(cls))
+        print(f"  [diag] tables present ({len(classes)}): {classes[:10]}")
+    except Exception as exc:
+        print(f"  [diag] failed to gather diagnostics: {exc}")
+
+
 def _scrape_group(page, config: dict, ind_slug: str) -> tuple[list[str], list[dict]]:
     """
     Paginate through all screener pages for one industry slug.
@@ -129,6 +165,21 @@ def _scrape_group(page, config: dict, ind_slug: str) -> tuple[list[str], list[di
         url = _build_url(config, ind_slug, offset=offset)
         print(f"  [page {page_num}] GET {url}")
         page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+
+        # The screener table is rendered after domcontentloaded fires, so reading
+        # page.content() immediately captures HTML before the table exists. Wait
+        # for the table selector to appear first — same pattern collect.py uses
+        # for .groups_table. Without this wait the probe sees 0 rows / 0 cols
+        # even though the URL renders fine in a real browser.
+        try:
+            page.wait_for_selector(SCREENER_TABLE_SELECTOR, timeout=30_000)
+        except Exception as exc:
+            # Selector never appeared — dump diagnostics so the failure is
+            # debuggable from CI logs (Cloudflare challenge vs. wrong selector
+            # vs. 0 results all look like "no table" without this context).
+            print(f"  WARNING: '{SCREENER_TABLE_SELECTOR}' not found after 30s: {exc}")
+            _dump_diagnostics(page)
+
         html = page.content()
 
         hdrs, rows = _parse_table(html)
