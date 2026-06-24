@@ -6,6 +6,8 @@
 
 ## Current Status
 
+**Status (2026-06-24) — STOCK-PICKS PHASE-1.5 SPIKE: COMPLETE.** Branch `claude/modest-hamilton-a0fp6x`. Selector policy locked with VP. Leaders metric: 8 by sustained_strength (rank_month+rank_quarter+rank_half) + 2 freshness fills by momentum_confirmed. Anti-flash floor: top 40% by momentum_score percentile. Slot split: 10/4/3/3 (cap=20) confirmed. Key finding: `momentum_accel` all NaN until 11th trading date (~2026-06-25) — accel bucket inactive until then. Plan doc updated with full spike results. **Next: Phase-1 probe run (one GitHub Actions `workflow_dispatch` against Semiconductors, validate 84-col anon fetch, measure daily fetch volume). VP signs off on the row count before Phase 2 starts. Probe script scaffolded at `scripts/probe_picks.py` + `.github/workflows/probe_picks.yml` (uncommitted — Phase 1 work, paused per VP).** Safe to close.
+
 **Status (2026-06-23) — CRON SCHEDULE ADJUSTMENT: COMPLETE.** PR #168 open (draft). Updated `worker-cron/wrangler.toml` cron times from 9:49am/10:51am/3:48pm ET (summer) to 5:01pm/10:30am/3:48pm ET (summer). Cloudflare Cron is fixed-UTC with no DST support — manual adjustments required twice yearly. **Next: Monitor for CI, then merge. Action needed: adjust UTC times on November 2, 2026 (EDT→EST) and March 9, 2027 (EST→EDT).** See PR body for winter UTC equivalents.
 
 **Status (2026-06-22) — AI CAPTURE & VISIBILITY (Phases 1/2/3/4/7): COMPLETE. PR #160 ready for review.** Branch `claude/beautiful-bohr-2bky6v`. Phases 1/2/7 (CallResult dataclass, Tier-1 provenance, Tier-2 debug capture, --preview mode, Vertex express-key auth), Phase 3 (prompt snapshot tests, 11 golden .txt files), Phase 4 (PWA "Behind this" provenance drawer) all shipped. 325 non-Playwright tests pass. CI green 6/6. **Next: Phases 5+6 (tools/ai-lab.html offline viewer + eval_ai.py offline guards) on this same branch/PR.** SAFE to start Phase 5+6 immediately.
@@ -17,6 +19,44 @@
 **Status (2026-06-21) — RS DISCRETE FLAGS (RS-4 / Phase 3 Tier 5): COMPLETE on `claude/wonderful-brown-dahc9q`.** PR open (draft → ready for review). 206 non-Playwright tests pass. Changes: (1) Pipeline: beats_benchmark_{day..ytd}, rs_new_high, rs_cross added to delta schema (9 new columns), compute_deltas.py has 3 new pure functions; (2) PWA: NH (amber) + ↑ cross (sky) badges on vs-Market cards, "beats N/7 tf" sub-line; (3) GUIDE: 3 new entries; (4) moaty-metrics.md, README, CLAUDE.md updated; (5) release triplet: releases.json 2026.06.21.2, sw.js CACHE → finviz-v21. All plan phases Phases 0-3 now complete. Phases 4+5 remain deferred. **Safe to close once PR merged.**
 
 **Status (2026-06-21) — START HERE ONBOARDING (ONBOARD): COMPLETE on `claude/dreamy-archimedes-3q6ag1`.** PR #143 merged. All 212 non-Playwright tests pass. Changes: WELCOME constant + hub section + anti-drift tests, carousel overlay + fvt_intro_seen_v1, release cut (releases.json 2026.06.21, sw.js CACHE → v19). Deferred: ONBOARD-DL-UX (carousel deep-link dismiss UX, tracked in SPRINT.md), PWATEST-LOOKBACK (3 pre-existing Playwright failures). **Merged.**
+
+---
+
+## Session: 2026-06-24 — Phase-1.5 spike: selector policy locked with VP
+
+**What happened:** Interactive spike session against `data/industries/deltas.csv` (10 trading
+dates, 144 industries). VP present throughout. Evaluated 5 candidate leaders ranking metrics
+and locked all three selector policy decisions.
+
+**Key findings:**
+- All-green count: 21–46/day (self-shrinks on weakness — correct). Jun 23 dropped 31→21
+  due to rotation; 5-6/10 leaders changed that day (rotation signal, not bug).
+- `momentum_accel` is **all NaN** on all 10 dates (needs 11 sessions; unlocks ~Jun 25).
+  The `accel` bucket will yield 0 groups until then.
+- `rs_score > 0.5` floor on `emerging` drops qualifying count from 39–50 → 3–4.
+  **Floor is essential** — emerging is uninformative without it.
+- Sustained_strength most stable (Jaccard 0.691 avg); momentum_confirmed more responsive
+  but noisier (0.605). The hybrid (8+2 explicit split) captures both properties.
+- Top-40% floor (vs top-50%) is more conservative — correct starting point for new buckets.
+
+**Decisions locked (VP 2026-06-24):**
+- Leaders metric: **Approach 1 — 8 by sustained_strength + 2 freshness fills by momentum_confirmed**
+- Anti-flash floor: **Top 40% cross-sectional percentile by `momentum_score`**
+- Slot split: **10/4/3/3 (cap=20)** — confirmed as-is
+
+**Docs updated:**
+- `planning/stock-picks-from-leading-groups.md`: status block, Spike section (results + locked
+  decisions), daily cap table, anti-flash floor paragraph, Open dependencies (spike checked off)
+
+**Not committed (Phase-1, paused per VP):**
+- `scripts/probe_picks.py` — one-shot Semiconductors probe script (written, not staged)
+- `.github/workflows/probe_picks.yml` — manual `workflow_dispatch` probe workflow (written, not staged)
+
+**Next (Phase 1):**
+1. Commit + merge the probe scripts in a separate PR
+2. Trigger `probe_picks.yml` manually on GitHub Actions (Azure IP → Finviz screener access)
+3. VP reviews printed row count + 84-col validation in the Actions log
+4. VP signs off on fetch volume → Phase 2 (`collect_picks.py` + daily job) begins
 
 ---
 
