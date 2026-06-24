@@ -1,6 +1,16 @@
 {
-  "current": "2026.06.23.2",
+  "current": "2026.06.24",
   "releases": [
+    {
+      "version": "2026.06.24",
+      "date": "2026-06-24",
+      "title": "Dashboard: sector filter + breadth table",
+      "tag": "feature",
+      "notes": [
+        "Streamlit dashboard now has a Sector filter in the sidebar (Industries view). Select any of the 11 sectors to narrow every tab — Snapshot, Top Movers, Time Series, Momentum, Heatmap, Strength — to that sector's industries only.",
+        "New Sector Breadth table at the top of the Strength tab (Industries view): shows how many industries from each sector rank in the top half of the full 144-industry universe. Choose week, month, or YTD rank as the lens."
+      ]
+    },
     {
       "version": "2026.06.23.2",
       "date": "2026-06-23",

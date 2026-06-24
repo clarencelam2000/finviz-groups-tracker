@@ -4,6 +4,10 @@
 
 ---
 
+## 2026-06-24 — Sector hierarchy Phase 1: sidebar filter + breadth metric
+
+TASK-6B and INS-7 both complete. Streamlit dashboard now has a sidebar Sector selectbox (Industries view) that narrows all tabs to a single sector's industries. New Sector Breadth table in Strength tab shows per-sector top-half industry counts against the full 144-industry universe. `compute_sector_breadth()` extracted as testable module with 10 tests. 337 total tests pass.
+
 ## 2026-06-22 — Movers tab improvements shipped (PRs #155, #156, #157)
 
 Four improvements across three PRs: RS NH/↑cross market-context badges on Top Gainers; "Score" → "Mom" label rename; tap-any-card to open Lookup for that group; YTD/Month/Week rank dimension toggle. Review subagents caught two real bugs (scroll target + initUIFromState sync) fixed before merge. Release 2026.06.22.1, sw.js CACHE → finviz-v24.
