@@ -28,6 +28,8 @@ from probe_picks import (
     slugify_industry,
     _build_url,
     _parse_table,
+    _dump_diagnostics,
+    SCREENER_TABLE_SELECTOR,
     EXPECTED_COL_COUNT,
     EXPECTED_COL_0,
     GOLDEN_HEADER_PATH,
@@ -295,3 +297,40 @@ class TestBuildUrl:
         config = json.loads(CONFIG_PATH.read_text())
         for f in config["wide"]["base_filters"]:
             assert not f.startswith("ind_"), f"ind_ slug found in base_filters: {f}"
+
+
+# ---------------------------------------------------------------------------
+# _dump_diagnostics (failure diagnostics — uses a fake page object)
+# ---------------------------------------------------------------------------
+
+class _FakePage:
+    """Minimal stand-in for a Playwright page exposing .content()."""
+
+    def __init__(self, html):
+        self._html = html
+
+    def content(self):
+        return self._html
+
+
+class TestDumpDiagnostics:
+    def test_selector_constant_used_by_parser(self):
+        # Guards against the parser and the wait selector drifting apart.
+        assert SCREENER_TABLE_SELECTOR == "table.screener_table"
+
+    def test_detects_cloudflare_marker(self, capsys):
+        html = "<html><head><title>Just a moment...</title></head><body>Checking your browser</body></html>"
+        _dump_diagnostics(_FakePage(html))
+        out = capsys.readouterr().out.lower()
+        assert "cloudflare challenge marker detected" in out
+
+    def test_lists_table_classes(self, capsys):
+        html = "<html><body><table class='foo bar'></table></body></html>"
+        _dump_diagnostics(_FakePage(html))
+        out = capsys.readouterr().out
+        assert "foo.bar" in out
+
+    def test_handles_no_tables(self, capsys):
+        _dump_diagnostics(_FakePage("<html><body>nothing</body></html>"))
+        out = capsys.readouterr().out
+        assert "tables present (0)" in out
