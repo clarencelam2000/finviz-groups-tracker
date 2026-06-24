@@ -41,6 +41,13 @@ jobs:
           PROBE_PAGE_DELAY: "3"
         run: |
           python scripts/probe_picks.py --group "${{ github.event.inputs.group || 'Semiconductors' }}"
+      - name: Upload raw HTML on parse failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: probe-debug-html
+          path: data/picks/debug_html/
+          if-no-files-found: ignore
       - name: Commit golden header fixture
         if: steps.probe.outcome == 'success'
         run: |
