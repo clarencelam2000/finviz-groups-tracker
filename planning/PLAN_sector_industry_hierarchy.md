@@ -37,9 +37,9 @@ data/finviz_sector_industry_map.json   — structured dict + metadata
 data/finviz_sector_industry_map.csv    — flat (finviz_sector, finviz_industry) pairs
 ```
 
-**Source:** fasiha/finviz-git-scraper — a nightly-updated Finviz treemap archive fetched via
+**Source:** fasiha/finviz-git-scraper — a Finviz treemap archive fetched via
 plain HTTP (no Playwright, no Cloudflare). Authoritative because it reads Finviz's own internal
-taxonomy directly.
+taxonomy directly. IMPORTANT NOTE: the data is stale and last updated in March 2025. However, the sector to industry mappings are still usable.
 
 **Coverage:**
 - 11 sectors, 145 industries
@@ -55,8 +55,7 @@ TAX = json.loads(Path("data/finviz_sector_industry_map.json").read_text())["sect
 # TAX = {"Technology": ["Semiconductors", "Software - Application", ...], ...}
 ```
 
-**Re-seeding:** Run `python scripts/seed_taxonomy.py` if Finviz restructures taxonomy (~yearly).
-Script auto-validates and reports any mismatches. No Playwright required.
+There is no re-seeding path via fasiha/finviz-git-scraper - the repo is effectively unmaintained.
 
 **Staleness tripwire (not yet built):** A future task should add a warning in `collect.py` or
 a nightly test when a live industry name is missing from the map — so taxonomy drift is caught
@@ -251,7 +250,7 @@ don't architect ourselves out of it. Revisit ~Q4 2026.
 
 ## Recommended Build Sequence
 
-### Phase 1 — Validate the map works (1–2 sessions)
+### COMPLETED - Phase 1 — Validate the map works (1–2 sessions)
 Build the two immediately unblocked sprint items. These are the "does the plumbing work"
 check before investing in the larger surface.
 
@@ -366,8 +365,8 @@ The following sprint entries need updating based on this plan:
 
 | ID | Old description | Update needed |
 |----|----------------|---------------|
-| INS-7 | "Hardest feature. Needs static mapping." | ✅ Unblocked. Reclassify as M, not L. |
-| TASK-6B | "Effort is mostly cataloguing." | ✅ Unblocked. Pure S effort — map already exists. |
+| INS-7 | "Hardest feature. Needs static mapping." | ✅ Completed |
+| TASK-6B | "Effort is mostly cataloguing." | ✅ Completed |
 | (new) | Divergence Radar (feature D) | Add as new backlog item HIR-D |
 | (new) | Market breadth gauge (feature R) | Add as new backlog item HIR-R |
 | (new) | Since-last-look digest (feature I) | Add as new backlog item HIR-I |
