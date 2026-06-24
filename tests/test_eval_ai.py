@@ -15,6 +15,7 @@ from eval_ai import (
     main,
     CONVICTION_LEVELS,
     PHASE_LABELS,
+    _WARN_TAG,
 )
 
 # ---------------------------------------------------------------------------
@@ -423,3 +424,129 @@ def test_main_all_flag(tmp_path):
         assert rc == 0
     finally:
         eval_ai.DEBUG_DIR = orig
+
+
+# ---------------------------------------------------------------------------
+# Scoping: sector names must not be checked against industries.* calls
+# ---------------------------------------------------------------------------
+
+def test_check_capture_sector_name_not_flagged_in_industries_call():
+    """'Industrials' used generically in industries.rotation_map must not fire."""
+    # "Industrials" is a sector name; the industries.rotation_map prompt/input
+    # contains only industry-level data, but the AI may use it as a generic noun.
+    known_dict = {
+        "sectors": {"Industrials", "Technology", "Energy"},
+        "industries": {"Biotechnology", "Aerospace & Defense", "Steel"},
+    }
+    call = make_call(
+        "rotation_map",
+        raw="- OUT: Aerospace & Defense -> IN: Steel - Industrials experience a handoff.",
+        input_blocks="Aerospace & Defense: -22 spots\nSteel: +5 spots",  # "Industrials" absent
+    )
+    # With scoped dict: "Industrials" is in sectors, not industries — should NOT be flagged
+    capture = make_capture({"industries.rotation_map": call})
+    issues = check_capture(capture, known_dict)
+    assert not any("Industrials" in i for i in issues), (
+        "Sector name used as generic noun in industries call should not be flagged"
+    )
+
+
+def test_check_capture_sector_name_still_flagged_in_sectors_call():
+    """A hallucinated sector name in a sectors.* call must still fire."""
+    known_dict = {
+        "sectors": {"Industrials", "Technology"},
+        "industries": set(),
+    }
+    call = make_call(
+        "pulse",
+        raw="Industrials leads strongly today.",
+        input_blocks="Technology δ=+3",  # "Industrials" NOT in input
+        parsed={"headline": "ok", "conviction": {"level": "High", "why": "..."}},
+    )
+    capture = make_capture({"sectors.pulse": call})
+    issues = check_capture(capture, known_dict)
+    assert any("hallucination" in i and "Industrials" in i for i in issues)
+
+
+def test_check_capture_industry_name_flagged_in_industries_call():
+    """A hallucinated industry name in an industries.* call must still fire."""
+    known_dict = {
+        "sectors": set(),
+        "industries": {"Biotechnology", "Steel"},
+    }
+    call = make_call(
+        "rotation_map",
+        raw="Biotechnology surges while Steel lags.",
+        input_blocks="Steel: -8 spots",  # "Biotechnology" NOT in input
+    )
+    capture = make_capture({"industries.rotation_map": call})
+    issues = check_capture(capture, known_dict)
+    assert any("hallucination" in i and "Biotechnology" in i for i in issues)
+
+
+# ---------------------------------------------------------------------------
+# warn_hallucination mode
+# ---------------------------------------------------------------------------
+
+def test_check_capture_warn_hallucination_tags_issues():
+    """Hallucination issues are prefixed with _WARN_TAG when warn_hallucination=True."""
+    call = make_call(
+        "pulse",
+        raw="Financials lead strongly",
+        input_blocks="Technology δ=+3",
+        parsed={"headline": "ok", "conviction": {"level": "High", "why": "..."}},
+    )
+    capture = make_capture({"sectors.pulse": call})
+    issues = check_capture(capture, {"Financials"}, warn_hallucination=True)
+    hallu_lines = [i for i in issues if "hallucination" in i.lower()]
+    assert hallu_lines, "Hallucination issue should still appear when warn_hallucination=True"
+    assert all(line.startswith(_WARN_TAG) for line in hallu_lines), (
+        "Hallucination lines must be prefixed with _WARN_TAG in warn mode"
+    )
+
+
+def test_check_capture_warn_hallucination_format_still_blocking():
+    """Format violations are not affected by warn_hallucination."""
+    call = make_call(
+        "pulse",
+        raw="Financials lead",
+        input_blocks="Financials δ=+3",
+        parsed={"headline": "", "conviction": {"level": "INVALID", "why": "..."}},
+    )
+    capture = make_capture({"sectors.pulse": call})
+    issues = check_capture(capture, {"Financials"}, warn_hallucination=True)
+    format_lines = [i for i in issues if "format:" in i]
+    assert format_lines, "Format issues must remain blocking even in warn mode"
+    assert not any(line.startswith(_WARN_TAG) for line in format_lines)
+
+
+def test_main_warn_hallucination_does_not_fail(tmp_path):
+    """--warn-hallucination: file with only hallucination issues returns exit 0."""
+    capture = make_capture({
+        "sectors.pulse": make_call(
+            "pulse",
+            raw="Financials lead strongly",  # Financials not in input
+            input_blocks="Technology δ=+3",
+            parsed={"headline": "ok", "conviction": {"level": "High", "why": "..."}},
+        ),
+    })
+    p = tmp_path / "2026-06-22.json"
+    p.write_text(json.dumps(capture), encoding="utf-8")
+    rc = main([str(p), "--warn-hallucination"])
+    assert rc == 0, "--warn-hallucination should not fail when only hallucination issues exist"
+
+
+def test_main_warn_hallucination_still_fails_on_format(tmp_path):
+    """--warn-hallucination: file with format issues still exits 1."""
+    capture = make_capture({
+        "sectors.pulse": make_call(
+            "pulse",
+            raw="Financials lead",
+            input_blocks="Financials δ=+3",
+            parsed={"headline": "", "conviction": {"level": "INVALID", "why": ""}},
+        ),
+    })
+    p = tmp_path / "2026-06-22.json"
+    p.write_text(json.dumps(capture), encoding="utf-8")
+    rc = main([str(p), "--warn-hallucination"])
+    assert rc == 1, "Format violations must still fail even with --warn-hallucination"
