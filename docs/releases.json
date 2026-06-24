@@ -1,6 +1,18 @@
 {
-  "current": "2026.06.24",
+  "current": "2026.06.24.1",
   "releases": [
+    {
+      "version": "2026.06.24.1",
+      "date": "2026-06-24",
+      "title": "PWA: sector breadth bars + industry drill-down",
+      "tag": "feature",
+      "tab": "today",
+      "notes": [
+        "Sector cards in the Today tab now show a breadth bar: a fill indicator plus a count like '9/13 industries top-half' telling you how many of the sector's industries rank in the top half of the full 144-industry universe by YTD.",
+        "Tap any sector card to expand an inline drill-down: all constituent industries listed and ranked by YTD performance, each showing its universe rank. Tap again to collapse.",
+        "Industry cards continue to expand their existing quarter / 6-month / 1-year and valuation detail as before."
+      ]
+    },
     {
       "version": "2026.06.24",
       "date": "2026-06-24",

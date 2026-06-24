@@ -308,7 +308,8 @@
       sectors:    { snap: `${BASE}/sectors/snapshots.csv`,    delta: `${BASE}/sectors/deltas.csv` },
       industries: { snap: `${BASE}/industries/snapshots.csv`, delta: `${BASE}/industries/deltas.csv` },
     };
-    const FETCH_LOG_URL = `${BASE}/fetch_log.csv`;
+    const FETCH_LOG_URL  = `${BASE}/fetch_log.csv`;
+    const TAXONOMY_URL   = `https://raw.githubusercontent.com/${REPO}/${BRANCH}/data/finviz_sector_industry_map.json`;
     const WORKER_URL = 'https://finviz-ticker-lookup.salmonbaby8.workers.dev';
 
     // localStorage keys for Lookup tab persistence (Ideas 5+7, planning/lookup-search-enhancements.md).
@@ -362,6 +363,8 @@
       currentAiDate: null,
       loading: false,
       expandedName: null,
+      taxonomy: {},       // sector → [industry, …] loaded from finviz_sector_industry_map.json
+      sectorBreadth: {},  // sector → {top, total} computed after industries data loads
       lookup: { symbol: null, data: null, loading: false, error: null, groupResult: null, didYouMean: null },
     };
 
@@ -464,12 +467,15 @@
         { id: 'rs_cross', label: 'RS cross (↑ cross)', tabs: ['vsmarket'],
           oneLiner: 'This group\'s RS spread just flipped from lagging to beating the market within the last 5 sessions — a rotation trigger.',
           detail: '1 when rs_month crossed from ≤ 0 to > 0 within the last 5 trading sessions. Today must be positive; at least one prior session in the window must have been ≤ 0. 0 if the group has been above 0 throughout, or if today\'s RS is non-positive.' },
+        { id: 'sector_breadth', label: 'Sector breadth', tabs: ['today'],
+          oneLiner: "How many of a sector’s industries are in the top half of all industries by YTD rank — high breadth means the whole sector is participating, not just one or two names.",
+          detail: 'Computed from the latest industry delta data + the sector→industry taxonomy map. "Top half" = rank ≤ 72 of 144 by YTD rank. Shown as a fill bar (N/M ↑) on each sector card. Tap a sector card to see all its industries ranked by YTD performance with their universe rank.' },
       ],
       howto: [
         'Each card is one group: a rank badge on the left, the selected timeframe’s % on the right, and momentum below the name.',
         'The colored left edge reflects the selected metric’s value — green is a gain, red is a loss (see Legend for the exact bands).',
         'Arrows and glyphs next to the name show short-term direction (↑/↓) and the longer rank trend (↑↑ … ↓↓).',
-        'Tap a card to expand quarter / 6-month / 1-year performance and valuation detail.',
+        'Tap a sector card to expand its constituent industries ranked by YTD — sectors show breadth bars too. Industry cards expand quarter / 6-month / 1-year performance and valuation.',
       ],
       // The legend is built from the live threshold constants — see buildLegend().
     };
@@ -965,6 +971,10 @@
       });
     }
 
+    function fetchJSON(url) {
+      return fetch(url).then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); });
+    }
+
     async function loadGroup(group, force = false) {
       if (!force && state.data[group].snap !== null) return; // already cached
       try {
@@ -998,6 +1008,9 @@
           document.getElementById('movers-date-short').textContent =
             dt.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
         }
+        // Sector-hierarchy Phase 2: load taxonomy + industry data for breadth bars +
+        // drill-down. Fire-and-forget; silently absent on network failure.
+        if (group === 'sectors') loadTaxonomyAndBreadth();
       } catch (err) {
         showError(`Failed to load data. ${err.message || 'Check your connection.'}`);
       }
@@ -1011,6 +1024,80 @@
       } catch (e) {
         state.fetchLog = [];
       }
+    }
+
+    // ── Sector hierarchy helpers (Phase 2) ────────────────────────────────────
+
+    function computeSectorBreadth(industryDelta, taxonomy) {
+      if (!industryDelta.length || !Object.keys(taxonomy).length) return {};
+      const n = industryDelta.length;
+      const rankMap = {};
+      industryDelta.forEach(r => { const v = pf(r.rank_ytd); if (v !== null) rankMap[r.name] = v; });
+      const result = {};
+      for (const [sector, industries] of Object.entries(taxonomy)) {
+        const mapped = industries.filter(ind => rankMap[ind] !== undefined);
+        const topHalf = mapped.filter(ind => rankMap[ind] <= n / 2);
+        result[sector] = { top: topHalf.length, total: mapped.length };
+      }
+      return result;
+    }
+
+    // Compact horizontal fill-bar for sector breadth (Feature B, VP decision 2026-06-24).
+    function breadthBar(top, total) {
+      if (!total) return '';
+      const pct = top / total;
+      const majority = pct >= 0.5;
+      return `<div class="px-3 pb-2 -mt-1 flex items-center gap-2 text-xs">
+        <div class="flex-1 h-1 bg-slate-700 rounded-full overflow-hidden">
+          <div class="${majority ? 'bg-emerald-600' : 'bg-red-800'} h-1 rounded-full" style="width:${(pct * 100).toFixed(0)}%"></div>
+        </div>
+        <span class="${majority ? 'text-emerald-400' : 'text-slate-500'} flex-shrink-0 tabular-nums">${top}/${total} ↑</span>
+      </div>`;
+    }
+
+    // Expand-in-place drill-down for sector cards (Feature A + F, VP decision 2026-06-24).
+    // Shows constituent industries sorted by YTD rank with sector-relative rank (#k in sector).
+    function renderSectorDrillDown(sectorName) {
+      if (!Object.keys(state.taxonomy).length || !state.data.industries.delta?.length) {
+        return '<div class="border-t border-slate-700 px-3 py-3 text-xs text-slate-500 italic">Loading industries…</div>';
+      }
+      const industries = state.taxonomy[sectorName] || [];
+      const dMap = Object.fromEntries((state.data.industries.delta || []).map(r => [r.name, r]));
+      const sMap = Object.fromEntries((state.data.industries.snap  || []).map(r => [r.name, r]));
+      const rows = industries
+        .map(name => ({ name, d: dMap[name] || {}, s: sMap[name] || {} }))
+        .sort((a, b) => (pf(a.d.rank_ytd) ?? 9999) - (pf(b.d.rank_ytd) ?? 9999));
+      const rowsHtml = rows.map((r, i) => {
+        const perf = pf(r.s.perf_ytd);
+        const univ = pf(r.d.rank_ytd);
+        const perfStr = perf !== null ? `${perf > 0 ? '+' : ''}${perf.toFixed(1)}%` : '—';
+        const col = perf !== null ? perfColor(perf) : 'text-slate-400';
+        return `<div class="flex items-center gap-2 py-1 text-xs border-b border-slate-700/40 last:border-0">
+          <span class="text-slate-600 w-4 text-right flex-shrink-0">${i + 1}</span>
+          <span class="flex-1 text-slate-300 truncate">${escapeHtml(r.name)}</span>
+          <span class="${col} flex-shrink-0 font-medium tabular-nums">${perfStr}</span>
+          <span class="text-slate-600 flex-shrink-0 tabular-nums w-7 text-right">${univ !== null ? '#' + univ : '—'}</span>
+        </div>`;
+      }).join('');
+      return `<div class="border-t border-slate-700 px-3 pt-2 pb-3">
+        <div class="text-xs text-slate-500 mb-1 flex justify-between">
+          <span>${escapeHtml(sectorName)} industries</span>
+          <span class="text-slate-600">YTD · univ</span>
+        </div>
+        ${rowsHtml || '<div class="text-xs text-slate-500 italic">No data</div>'}
+      </div>`;
+    }
+
+    async function loadTaxonomyAndBreadth() {
+      try {
+        if (!Object.keys(state.taxonomy).length) {
+          const data = await fetchJSON(TAXONOMY_URL);
+          state.taxonomy = (data && data.sectors) ? data.sectors : {};
+        }
+        await loadGroup('industries');
+        state.sectorBreadth = computeSectorBreadth(state.data.industries.delta || [], state.taxonomy);
+        if (state.tab === 'today' && state.group === 'sectors') renderToday();
+      } catch (_) { /* breadth bars silently absent on network error */ }
     }
 
     async function fetchAIForDate(dateStr) {
@@ -1237,37 +1324,49 @@
         const rsMonthChip = rsChip(pf(d.rs_month));
 
         const isExpanded = state.expandedName === row.name;
-        const q = pf(row.perf_quarter), h = pf(row.perf_half), y = pf(row.perf_year);
-        const pe = pf(row.pe), cap = pf(row.market_cap);
-        const capStr = cap === null ? '—'
-          : cap >= 1000 ? '$' + (cap/1000).toFixed(1) + 'T'
-          : cap >= 1    ? '$' + cap.toFixed(0) + 'B'
-          :               '$' + (cap*1000).toFixed(0) + 'M';
-        // Perf deltas vs 20 sessions ago — most interpretable window (~1 month).
-        // Only shown when both columns are non-empty (needs 20 sessions of history).
-        const pw20 = pf(d.perf_week_delta_20d);
-        const py20 = pf(d.perf_ytd_delta_20d);
-        const perfDeltaRow = (pw20 !== null && py20 !== null) ? `
-          <div class="border-t border-slate-700 pt-2 mt-1 text-xs text-center col-span-3">
-            <span class="text-slate-500 active:text-sky-300 cursor-pointer" onclick="event.stopPropagation();__openHub('guide','perf_delta')">vs 20d ago ⓘ: </span>
-            <span class="${pw20 > 0 ? 'text-emerald-400' : 'text-red-400'}">${fmtPp(pw20)} wk</span>
-            <span class="text-slate-600"> · </span>
-            <span class="${py20 > 0 ? 'text-emerald-400' : 'text-red-400'}">${fmtPp(py20)} YTD</span>
-          </div>` : '';
-        const expandedDetail = isExpanded ? `
-          <div class="px-3 pb-3">
-            <div class="border-t border-slate-700 pt-2 grid grid-cols-3 gap-1 text-xs text-center">
-              <div><div class="${perfColor(q)}">${q !== null ? (q > 0 ? '+' : '') + q.toFixed(2) + '%' : '—'}</div><div class="text-slate-500 mt-0.5">Quarter</div></div>
-              <div><div class="${perfColor(h)}">${h !== null ? (h > 0 ? '+' : '') + h.toFixed(2) + '%' : '—'}</div><div class="text-slate-500 mt-0.5">6-Month</div></div>
-              <div><div class="${perfColor(y)}">${y !== null ? (y > 0 ? '+' : '') + y.toFixed(2) + '%' : '—'}</div><div class="text-slate-500 mt-0.5">1-Year</div></div>
-            </div>
-            <div class="grid grid-cols-3 gap-1 text-xs text-center mt-2">
-              <div><div class="text-slate-300">${pe !== null ? pe.toFixed(1) : '—'}</div><div class="text-slate-500 mt-0.5">P/E</div></div>
-              <div><div class="text-slate-300">${row.stocks || '—'}</div><div class="text-slate-500 mt-0.5">Stocks</div></div>
-              <div><div class="text-slate-300">${capStr}</div><div class="text-slate-500 mt-0.5">Mkt Cap</div></div>
-            </div>
-            ${perfDeltaRow}
-          </div>` : '';
+
+        // Feature B: breadth bar on sector cards (VP decision 2026-06-24 — count + mini-bar).
+        const sectBreadth = (state.group === 'sectors') ? state.sectorBreadth[row.name] : null;
+        const breadthBarHtml = sectBreadth ? breadthBar(sectBreadth.top, sectBreadth.total) : '';
+
+        // Feature A: sector cards expand to show constituent industries (drill-down).
+        // Industry cards keep the original P/E / stocks / market-cap detail.
+        let expandedDetail = '';
+        if (isExpanded) {
+          if (state.group === 'sectors') {
+            expandedDetail = renderSectorDrillDown(row.name);
+          } else {
+            const q = pf(row.perf_quarter), h = pf(row.perf_half), y = pf(row.perf_year);
+            const pe = pf(row.pe), cap = pf(row.market_cap);
+            const capStr = cap === null ? '—'
+              : cap >= 1000 ? '$' + (cap/1000).toFixed(1) + 'T'
+              : cap >= 1    ? '$' + cap.toFixed(0) + 'B'
+              :               '$' + (cap*1000).toFixed(0) + 'M';
+            const pw20 = pf(d.perf_week_delta_20d);
+            const py20 = pf(d.perf_ytd_delta_20d);
+            const perfDeltaRow = (pw20 !== null && py20 !== null) ? `
+              <div class="border-t border-slate-700 pt-2 mt-1 text-xs text-center col-span-3">
+                <span class="text-slate-500 active:text-sky-300 cursor-pointer" onclick="event.stopPropagation();__openHub('guide','perf_delta')">vs 20d ago ⓘ: </span>
+                <span class="${pw20 > 0 ? 'text-emerald-400' : 'text-red-400'}">${fmtPp(pw20)} wk</span>
+                <span class="text-slate-600"> · </span>
+                <span class="${py20 > 0 ? 'text-emerald-400' : 'text-red-400'}">${fmtPp(py20)} YTD</span>
+              </div>` : '';
+            expandedDetail = `
+              <div class="px-3 pb-3">
+                <div class="border-t border-slate-700 pt-2 grid grid-cols-3 gap-1 text-xs text-center">
+                  <div><div class="${perfColor(q)}">${q !== null ? (q > 0 ? '+' : '') + q.toFixed(2) + '%' : '—'}</div><div class="text-slate-500 mt-0.5">Quarter</div></div>
+                  <div><div class="${perfColor(h)}">${h !== null ? (h > 0 ? '+' : '') + h.toFixed(2) + '%' : '—'}</div><div class="text-slate-500 mt-0.5">6-Month</div></div>
+                  <div><div class="${perfColor(y)}">${y !== null ? (y > 0 ? '+' : '') + y.toFixed(2) + '%' : '—'}</div><div class="text-slate-500 mt-0.5">1-Year</div></div>
+                </div>
+                <div class="grid grid-cols-3 gap-1 text-xs text-center mt-2">
+                  <div><div class="text-slate-300">${pe !== null ? pe.toFixed(1) : '—'}</div><div class="text-slate-500 mt-0.5">P/E</div></div>
+                  <div><div class="text-slate-300">${row.stocks || '—'}</div><div class="text-slate-500 mt-0.5">Stocks</div></div>
+                  <div><div class="text-slate-300">${capStr}</div><div class="text-slate-500 mt-0.5">Mkt Cap</div></div>
+                </div>
+                ${perfDeltaRow}
+              </div>`;
+          }
+        }
 
         return `
           <div class="rounded-xl bg-slate-800 border border-slate-700 border-l-4 ${borderColor} overflow-hidden" data-name="${row.name}">
@@ -1289,6 +1388,7 @@
                 <div class="text-xs text-slate-500">${metricLabel} ${isExpanded ? '▴' : '▾'}</div>
               </div>
             </div>
+            ${breadthBarHtml}
             ${expandedDetail}
           </div>`;
       }).join('');

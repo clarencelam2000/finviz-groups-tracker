@@ -210,3 +210,6 @@ Strength. Dashboard sidebar mirrors both (glossary parsed from moaty-metrics.md,
 from releases.json). sw.js CACHE v9→v10. New test_guide_releases.py (anti-drift + verbatim
 sync + releases validity) and TestPWAHub Playwright class — all green. 3 pre-existing
 TestPWALookbackWindows failures are unrelated (fail on base branch too).
+
+## 2026-06-24 — Sector hierarchy Phase 2: PWA breadth bars + expand-in-place drill-down
+Sector cards in the PWA Today tab now show a fill breadth bar ("N/M industries top-half") computed client-side from the industry delta data and the taxonomy JSON. Tapping a sector card expands an inline drill-down showing all constituent industries sorted by YTD rank. VP chose expand-in-place over a new Sectors tab. Also fixed a JS syntax bug (curly-quote string delimiters inserted by Edit tool in rs_cross GUIDE entry and howto array). Release 2026.06.24.1, sw.js CACHE v30. 409 non-Playwright tests pass.
