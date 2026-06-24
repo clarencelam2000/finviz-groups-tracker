@@ -1,0 +1,52 @@
+name: Picks Pipeline Phase-1 Probe
+# ONE-SHOT validation run — do NOT schedule; trigger manually via workflow_dispatch.
+# Purpose: validate all 84 Finviz screener columns return populated on an
+# anonymous/headless Azure client, and measure real page count / daily fetch
+# volume for VP sign-off before the daily collect_picks.yml job turns on.
+#
+# GitHub Actions runs on Azure IPs, which Cloudflare allows through
+# (unlike Google Cloud IPs used in the cloud Claude env which get cf-mitigated).
+#
+# After running: review the "Probe run output" step logs.
+#   - Confirm PROBE PASSED
+#   - Note the row count for Semiconductors and the fetch-budget projection
+#   - VP signs off → Phase 2 (collect_picks.py + daily job) begins
+on:
+  workflow_dispatch:
+    inputs:
+      group:
+        description: "Industry name to probe (default: Semiconductors)"
+        required: false
+        default: "Semiconductors"
+permissions:
+  contents: write
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+jobs:
+  probe:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+      - name: Probe run
+        id: probe
+        env:
+          PROBE_PAGE_DELAY: "3"
+        run: |
+          python scripts/probe_picks.py --group "${{ github.event.inputs.group || 'Semiconductors' }}"
+      - name: Commit golden header fixture
+        if: steps.probe.outcome == 'success'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add tests/fixtures/probe_header_84col.txt
+          git diff --cached --quiet || git commit -m "test: commit golden 84-col header from Phase-1 probe"
+          git pull --rebase
+          git push
