@@ -1,6 +1,17 @@
 {
-  "current": "2026.06.24",
+  "current": "2026.06.24.1",
   "releases": [
+    {
+      "version": "2026.06.24.1",
+      "date": "2026-06-24",
+      "title": "PWA: sector breadth table in Strength tab",
+      "tag": "fix",
+      "tab": "strength",
+      "notes": [
+        "Sector Breadth table now appears in the PWA Strength tab (Industries view): shows how many industries from each sector rank in the top half of the full 144-industry universe by week rank.",
+        "Previously this table was only available in the Streamlit dashboard; it is now in the mobile PWA as well."
+      ]
+    },
     {
       "version": "2026.06.24",
       "date": "2026-06-24",

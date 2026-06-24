@@ -190,6 +190,7 @@
       </div>
       <button class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','sustained_strength')">ⓘ What counts as "sustained"? →</button>
       <button class="why-link block text-xs text-sky-400 mb-2 active:text-sky-300" onclick="__openHub('guide','rs_score')">ⓘ What does the "beats N/7" chip mean? →</button>
+      <div id="strength-breadth" class="hidden"></div>
       <div id="strength-list" class="space-y-2"></div>
     </section>
 
@@ -309,6 +310,7 @@
       industries: { snap: `${BASE}/industries/snapshots.csv`, delta: `${BASE}/industries/deltas.csv` },
     };
     const FETCH_LOG_URL = `${BASE}/fetch_log.csv`;
+    const TAXONOMY_URL  = `${BASE}/finviz_sector_industry_map.json`;
     const WORKER_URL = 'https://finviz-ticker-lookup.salmonbaby8.workers.dev';
 
     // localStorage keys for Lookup tab persistence (Ideas 5+7, planning/lookup-search-enhancements.md).
@@ -355,6 +357,7 @@
         industries: { snap: null, delta: null, deltaAll: null },
       },
       fetchLog: null,
+      taxonomy: null,  // { SectorName: [industry, ...] } from finviz_sector_industry_map.json
       aiData: null,
       provenanceData: null,
       latestAiDate: null,
@@ -1013,6 +1016,19 @@
       }
     }
 
+    async function loadTaxonomy(force = false) {
+      if (!force && state.taxonomy !== null) return;
+      try {
+        const url = force ? `${TAXONOMY_URL}?_=${Date.now()}` : TAXONOMY_URL;
+        const resp = await fetch(url);
+        if (!resp.ok) throw new Error('http ' + resp.status);
+        const data = await resp.json();
+        state.taxonomy = data.sectors || {};
+      } catch (e) {
+        state.taxonomy = {};
+      }
+    }
+
     async function fetchAIForDate(dateStr) {
       const cacheKey = `ai_${dateStr}`;
       const cached = sessionStorage.getItem(cacheKey);
@@ -1559,15 +1575,79 @@
 
     // ── Render: Strength ──────────────────────────────────────────────────
 
+    // For each sector, count how many of its industries rank in the top half of
+    // the full industry universe. Returns rows sorted descending by pct_top_half.
+    function computeSectorBreadth(delta, taxonomy, rankCol) {
+      if (!delta || delta.length === 0 || !taxonomy) return [];
+      const n = delta.length;
+      const threshold = n / 2;
+      const byName = Object.fromEntries(delta.map(r => [r.name, r]));
+      const rows = [];
+      for (const [sector, industries] of Object.entries(taxonomy).sort()) {
+        if (!industries || industries.length === 0) continue;
+        const mapped = industries.filter(ind => byName[ind]);
+        if (mapped.length === 0) continue;
+        const valid = mapped.map(ind => pf(byName[ind][rankCol])).filter(v => v !== null);
+        const nTopHalf = valid.filter(v => v <= threshold).length;
+        const pct = valid.length > 0 ? nTopHalf / valid.length : 0;
+        rows.push({ sector, nMapped: mapped.length, nTopHalf, nValid: valid.length, pct });
+      }
+      return rows.sort((a, b) => b.pct - a.pct);
+    }
+
     function renderStrength() {
       const delta = state.data[state.group].delta || [];
       const snap  = state.data[state.group].snap  || [];
       const container = document.getElementById('strength-list');
       const threshRow = document.getElementById('strength-threshold-row');
+      const breadthEl = document.getElementById('strength-breadth');
 
       if (delta.length === 0 || snap.length === 0) {
         container.innerHTML = '<p class="text-slate-500 text-sm text-center py-8">No data available.</p>';
+        if (breadthEl) breadthEl.classList.add('hidden');
         return;
+      }
+
+      // ── Sector Breadth (Industries view only) ─────────────────────────────
+      if (breadthEl) {
+        const tax = state.taxonomy;
+        if (state.group === 'industries' && tax && Object.keys(tax).length > 0) {
+          const rows = computeSectorBreadth(delta, tax, 'rank_week');
+          if (rows.length > 0) {
+            const half = Math.floor(delta.length / 2);
+            const tRows = rows.map(r => {
+              const color = r.pct >= 0.5 ? 'text-emerald-400' : 'text-red-400';
+              return `<tr class="border-b border-slate-700/50 last:border-0">
+                <td class="py-1 pr-3 text-xs text-slate-300">${r.sector}</td>
+                <td class="py-1 px-2 text-xs text-center font-medium ${color}">${r.nTopHalf}/${r.nMapped}</td>
+                <td class="py-1 pl-2 text-xs text-right text-slate-500">${(r.pct * 100).toFixed(0)}%</td>
+              </tr>`;
+            }).join('');
+            breadthEl.innerHTML = `
+              <div class="rounded-xl bg-slate-800 border border-slate-700 p-3 mb-3">
+                <div class="flex items-center justify-between mb-1.5">
+                  <h3 class="text-xs font-semibold text-sky-400 uppercase tracking-wider">Sector Breadth</h3>
+                  <span class="text-[10px] text-slate-500">top-half = rank ≤ ${half} of ${delta.length}</span>
+                </div>
+                <p class="text-xs text-slate-500 mb-2">Industries per sector ranking in the top half of the full 144-industry universe.</p>
+                <table class="w-full">
+                  <thead>
+                    <tr class="border-b border-slate-700">
+                      <th class="pb-1 pr-3 text-left text-[10px] font-medium text-slate-500 uppercase tracking-wide">Sector</th>
+                      <th class="pb-1 px-2 text-center text-[10px] font-medium text-slate-500 uppercase tracking-wide">Top-half</th>
+                      <th class="pb-1 pl-2 text-right text-[10px] font-medium text-slate-500 uppercase tracking-wide">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>${tRows}</tbody>
+                </table>
+              </div>`;
+            breadthEl.classList.remove('hidden');
+          } else {
+            breadthEl.classList.add('hidden');
+          }
+        } else {
+          breadthEl.classList.add('hidden');
+        }
       }
 
       const n = delta.length;
@@ -2955,6 +3035,7 @@
       await Promise.all([
         Promise.all([loadGroup('sectors', force), loadGroup('industries', force)]),
         loadFetchLog(force),
+        loadTaxonomy(force),
         new Promise(r => setTimeout(r, minMs)),
       ]);
       // AI JSON is keyed by the latest data date — derive it after CSVs are loaded
