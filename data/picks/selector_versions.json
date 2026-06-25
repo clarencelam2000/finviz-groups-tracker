@@ -1,0 +1,29 @@
+{
+  "current": "v1",
+  "versions": [
+    {
+      "version": "v1",
+      "effective_date": "2026-06-25",
+      "description": "Initial picks selector (Phase 2). Four-bucket priority-fill (cap 20 unique groups/day): leaders = 8 sustained_strength (lowest sum of rank_month+rank_quarter+rank_half) + 2 freshness fills (momentum_confirmed desc, not already in core); emerging = regime_short_long > 0.15 AND rs_score > 0.5 (sort regime_short_long desc); accel = momentum_accel > 0.08 AND top-40% by momentum_score AND rs_score > 0.5 (sort momentum_accel desc); rs_new_high = rs_new_high == 1 AND rs_score >= 0.6 AND top-40% by momentum_score (sort rs_slope desc). Anti-flash floor is a cross-sectional momentum_score percentile (top 40%), invariant to formula rescaling. VP-locked 2026-06-24/25; see ADR-007.",
+      "params": {
+        "daily_group_cap": 20,
+        "leader_ss_slots": 8,
+        "leader_mc_slots": 2,
+        "emerging_slots": 4,
+        "accel_slots": 3,
+        "rs_nh_slots": 3,
+        "antiflash_pctile": 0.40,
+        "emerging_regime_floor": 0.15,
+        "accel_threshold": 0.08,
+        "emerging_rs_floor": 0.5,
+        "accel_rs_floor": 0.5,
+        "rs_nh_rs_floor": 0.6,
+        "leaders_ss_metric": "sum(rank_month+rank_quarter+rank_half) asc",
+        "leaders_mc_metric": "momentum_confirmed desc",
+        "emerging_rank_metric": "regime_short_long desc",
+        "accel_rank_metric": "momentum_accel desc",
+        "rs_nh_rank_metric": "rs_slope desc"
+      }
+    }
+  ]
+}

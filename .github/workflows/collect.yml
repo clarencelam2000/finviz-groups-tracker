@@ -19,6 +19,15 @@ on:
   workflow_dispatch:          # PRIMARY entry path — invoked by finviz-cron-dispatcher
 permissions:
   contents: write
+# Shared concurrency group with collect_picks.yml (ADR-008 / G1): both jobs commit
+# to data/ on the same branch and MUST serialize. A concurrency group only
+# serializes workflows that declare the SAME group name, so this identical block
+# lives in both files. cancel-in-progress: false so neither data job is killed
+# mid-run (the expected double-run with the Cloudflare EOD trigger is harmless —
+# last-write-wins per date — but it must not race the picks commit).
+concurrency:
+  group: finviz-data-commit
+  cancel-in-progress: false
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 jobs:

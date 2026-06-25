@@ -1,0 +1,61 @@
+name: Daily Picks Scrape
+# Stage-2 stock-picks scraper (Phase 2 of planning/stock-picks-from-leading-groups.md).
+# Selects leading groups from data/industries/deltas.csv and logs individual stock
+# rows into data/picks/picks.csv. Runs on Azure IPs (GitHub Actions) — Cloudflare
+# blocks the headless screener scrape from Google Cloud IPs.
+on:
+  schedule:
+    # Fires AFTER the Daily Snapshot job (collect.yml runs at :48; deltas must be
+    # current before picks select groups). The stale-read guard in collect_picks.py
+    # aborts if deltas.csv's max date != today's trading date, so a too-early run is
+    # a safe no-op rather than a wrong-day scrape. Weekday-only.
+    #
+    # Like collect.yml, GitHub cron drifts and is unreliable; this is a backstop —
+    # promote to a Cloudflare-cron workflow_dispatch trigger if timing matters.
+    - cron: '8 20 * * 1-5'   # ~4:08 PM ET summer — ~20 min after the EOD snapshot
+  workflow_dispatch:
+permissions:
+  contents: write
+# Shared concurrency group with collect.yml (ADR-008 / G1): both jobs commit to
+# data/ on the same branch, so they MUST serialize. cancel-in-progress: false so
+# neither data job is killed mid-run. collect.yml declares the SAME group name —
+# a group only serializes workflows that share the name, so both files need it.
+concurrency:
+  group: finviz-data-commit
+  cancel-in-progress: false
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+jobs:
+  picks:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+      - name: Collect picks
+        id: picks
+        env:
+          PICKS_PAGE_DELAY: "3"
+        run: python scripts/collect_picks.py
+      - name: Upload raw HTML on parse failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: picks-debug-html
+          path: data/picks/debug_html/
+          if-no-files-found: ignore
+      - name: Commit and push
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/picks/
+          git diff --cached --quiet || git commit -m "data: picks $(TZ=America/New_York date +%Y-%m-%d)"
+          git pull --rebase
+          git push
