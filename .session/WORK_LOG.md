@@ -4,6 +4,12 @@
 
 ---
 
+## 2026-06-25 — PICKS-2-CRON: plan + docs committed, implementation queued
+
+Full implementation plan written to `planning/cloudflare-cron-scheduler.md` § Phase 5.
+Cron `31 22 * * 1-5` (22:31 UTC = 6:31 PM EDT / 3:31 PM PDT, 90 min after EOD post-close collect).
+CLAUDE.md §Automation updated. SPRINT PICKS-2-CRON → In Progress. Next session: implementation.
+
 ## 2026-06-25 — Picks pipeline LIVE: first green collect_picks.yml run
 
 First `collect_picks.yml` dispatch succeeded. 273 stock picks / 262 unique tickers / 19 industry

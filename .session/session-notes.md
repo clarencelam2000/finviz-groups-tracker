@@ -6,6 +6,18 @@
 
 ## Current Status
 
+**Status (2026-06-25) — PICKS-2-CRON PLAN COMPLETE. IMPLEMENTATION READY FOR NEXT SESSION.**
+Plan written and docs committed to `claude/picks-cloudflare-cron-f0t7fz`.
+Extend `finviz-cron-dispatcher` with a 4th cron `31 22 * * 1-5` (22:31 UTC = 6:31 PM EDT /
+3:31 PM PDT, 90 min after EOD post-close collect `01 21`). Routes by `event.cron` — picks cron
+dispatches `collect_picks.yml`, all others dispatch `collect.yml`. Separate KV keys, `workflow`
+log field, `/last` returns both. GitHub cron retired from `collect_picks.yml` (50-page scrape
+too expensive to misfire). Healthchecks.io dead-man's-switch on success step covers silent CF
+failure. **VP action item:** create healthchecks.io monitor (period=24h, grace=2h, alert by
+~01:00 UTC) and add `PICKS_HEALTHCHECK_URL` as repo secret before implementation merges.
+Full implementation spec in `planning/cloudflare-cron-scheduler.md` § Phase 5.
+**Safe to close.** Next session: implementation (worker-cron/ + collect_picks.yml).
+
 **Status (2026-06-25) — PICKS PIPELINE PHASE 2 LIVE. PHASE 3 UNBLOCKED.**
 First `collect_picks.yml` dispatch GREEN. 273 picks / 262 tickers / 19 industry groups (all 4
 buckets: leaders/emerging/accel/rs_new_high). 19/19 slugs validated. Dedup confirmed. 108 cols per row.
