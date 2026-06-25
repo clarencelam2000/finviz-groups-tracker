@@ -129,34 +129,42 @@ attribution to selector internals that may have changed).
   will reflect the actual percentile used on each day — it's not locked to 0.40). Document
   any semantic shift with a `selector_version` bump.
 
-**Exact column spec (all written per row regardless of bucket):**
+**Exact column spec (all written per row regardless of bucket) — 19 columns:**
+
+> Note: this table was reconciled on 2026-06-25 to match the implemented plan spec
+> (`planning/stock-picks-from-leading-groups.md §grp_* spec`). The initial ADR draft
+> listed `grp_selection_priority` (global fill-order int 1–20) and 15 other columns.
+> The final plan replaced that with `grp_category_rank` (within-bucket rank among all
+> qualifying candidates, independently computed per category for dedup groups), and added
+> three rejected-alternative columns for Phase-4 head-to-head comparison. `grp_category_rank`
+> is more useful for per-category attribution; `grp_selection_priority` cannot be recovered
+> from `deltas.csv` either — but the plan spec was the canonical just-merged design.
 
 | Column | Source | Notes |
 |--------|--------|-------|
-| `grp_rank_basis` | computed | `"sustained_strength"` / `"freshness_fill"` / bucket name |
-| `grp_selection_priority` | computed | Integer 1–20: position in the daily fill (1 = picked first). Cannot be reconstructed later — it depends on the full day's group competition. |
-| `grp_sum_mid_rank` | `rank_month + rank_quarter + rank_half` | Leaders ranking value |
+| `grp_rank_basis` | computed | `"sustained_strength"` / `"freshness_fill"` for leaders rows; bucket name for the other buckets |
+| `grp_category_rank` | computed | Integer: within-bucket rank among all qualifying candidates for that bucket, sorted by the bucket's rank-within criterion. Rank 1 = strongest qualifying candidate in that bucket that day. For dedup groups appearing in multiple buckets, each category row independently carries the counterfactual within-bucket rank. Cannot be reconstructed later. |
+| `grp_sum_mid_rank` | `rank_month + rank_quarter + rank_half` | Leaders sustained_strength ranking value |
 | `grp_rank_month` | `rank_month` | Transparency / re-derive sum |
 | `grp_rank_quarter` | `rank_quarter` | Transparency / re-derive sum |
 | `grp_rank_half` | `rank_half` | Transparency / re-derive sum |
 | `grp_momentum_confirmed` | `momentum_confirmed` | Freshness-fill basis; strength × agreement |
 | `grp_momentum_score` | `momentum_score` | Floor input |
 | `grp_momentum_score_pctile` | computed cross-sectionally | Actual percentile used for the anti-flash floor; invariant to formula rescaling |
-| `grp_momentum_accel` | `momentum_accel` | `accel` bucket basis |
+| `grp_momentum_accel` | `momentum_accel` | `accel` bucket basis; NaN until 11 sessions of history |
+| `grp_momentum_weighted_mid` | `momentum_weighted_mid` | Spike runner-up (Jaccard 0.650 vs sustained_strength 0.691); stored for Phase-4 head-to-head |
+| `grp_rank_agreement` | `rank_agreement` | Cross-timeframe rank sign agreement; tested in spike (Jaccard 0.578, rejected as primary); stored for Phase-4 head-to-head |
 | `grp_regime_short_long` | `regime_short_long` | `emerging` bucket basis |
 | `grp_rs_score` | `rs_score` | Floor input for emerging / accel / rs_new_high |
-| `grp_rs_agreement` | `rs_agreement` | RS directional consistency across mo/qtr/half |
+| `grp_rs_agreement` | `rs_agreement` | RS directional consistency across mo/qtr/half; needed to re-derive `rs_confirmed` |
 | `grp_rs_confirmed` | `rs_confirmed` | rs_score × rs_agreement; **explicitly rejected as the leaders metric** (see ADR-007) but stored for Phase-4 head-to-head comparison |
+| `grp_rs_accel` | `rs_accel` | RS-score acceleration; RS-domain analog of `grp_momentum_accel` |
 | `grp_rs_new_high` | `rs_new_high` | `rs_new_high` bucket basis |
-| `grp_rs_slope` | `rs_slope` | `rs_new_high` rank-within basis |
+| `grp_rs_slope` | `rs_slope` | `rs_new_high` rank-within basis; LS slope of `rs_month` over trailing window |
 
-`grp_rs_confirmed` and `grp_rs_agreement` are stored even though they are not used as
-selector gates — specifically so Phase-4 can answer "would an rs_confirmed-first selector
-have produced different (better/worse) stocks?" without re-deriving from `deltas.csv`.
-
-`grp_selection_priority` is the single column that cannot be added retroactively — it
-requires knowing the full ranked competition for the day's 20 slots, which is not
-preserved in `deltas.csv`.
+Three columns (`grp_rs_confirmed`, `grp_momentum_weighted_mid`, `grp_rank_agreement`) are
+stored even though they are not used as selector gates — specifically so Phase-4 can answer
+"would an alternative selector have produced different stocks?" without re-deriving from `deltas.csv`.
 
 ## Alternatives considered
 
