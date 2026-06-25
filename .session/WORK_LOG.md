@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-06-25 — Picks pipeline LIVE: first green collect_picks.yml run
+
+First `collect_picks.yml` dispatch succeeded. 273 stock picks / 262 unique tickers / 19 industry
+groups across all 4 buckets (leaders/emerging/accel/rs_new_high). 19/19 scraped slugs
+validated. Dedup confirmed: Packaging & Containers appeared in both `emerging` and `accel`,
+scraped once, tagged separately with independent `grp_category_rank` per bucket. `picks_latest.csv`
+correct (= max-date slice). `picks.csv`: 108 cols per row (84 Finviz + 5 lead + 19 `grp_*`).
+ADR-008 grp_* table reconciled to match the 19-col implemented spec. Phase 3 unblocked.
+
 ## 2026-06-25 — Picks pipeline Phase 2: collect_picks.py + selector + workflow
 
 Stage-2 stock-picks data pipeline code-complete. New `scripts/collect_picks.py` (pure
@@ -13,13 +22,7 @@ triple-doc'd constants). Seeded `data/picks/selector_versions.json` v1 with immu
 New `.github/workflows/collect_picks.yml` with own EOD cron; added the shared
 `concurrency: finviz-data-commit` block to BOTH it and the existing `collect.yml` (G1 gotcha).
 30 new unit tests (selector buckets/floors/dedup/cap, pagination + global-cap, build/write/migration,
-registry, golden-header sync) — 480 tests pass. Docs: ADRs already written; README §Picks pipeline
-params, CLAUDE.md §Picks pipeline, plan status updated. Dry-run against 2026-06-24 deltas selects 18
-unique groups / 20 rows, all 4 buckets populated (accel unlocked on the 11th session). **Caveat:**
-implemented the plan's 19-col `grp_*` spec (uses `grp_category_rank`); ADR-008's table lists a 16-col
-variant with `grp_selection_priority` — flagged to VP, plan is the canonical "just-merged" spec.
-**Next:** dispatch `collect_picks.yml` on Actions to start the irreplaceable daily capture + confirm
-the live 84-col scrape on Azure; then Phase 3 (PWA surfaces).
+registry, golden-header sync) — 480 tests pass.
 
 ## 2026-06-24 — Sector hierarchy Phase 1: sidebar filter + breadth metric
 

@@ -1,10 +1,16 @@
 # Plan: Top-stock picks from leading groups (Stage-2 screener pipeline)
 
-> Status: **PHASE 2 CODE COMPLETE (2026-06-25)** — pending one live GitHub Actions run to start
-> the daily clock + verify the scrape. `scripts/collect_picks.py` + `scripts/picks_config.py` +
-> `select_groups` + pagination/append + `collect_picks.yml` (shared concurrency added to BOTH
-> workflows) + `selector_versions.json` v1 + tests + docs all landed. Next: dispatch
-> `collect_picks.yml` to begin daily capture, then Phase 3 (PWA surfaces). See WORK_LOG 2026-06-25.
+> Status: **PHASE 2 LIVE (2026-06-25)** — first `collect_picks.yml` dispatch GREEN. Daily capture
+> started. 273 stock picks / 262 unique tickers / 19 industry groups across all 4 buckets.
+> 19/19 scraped slugs validated. Dedup logic confirmed (Packaging & Containers tagged in both
+> `emerging` + `accel`, scraped once). `picks_latest.csv` correct. **Phase 3 (PWA surfaces) is
+> unblocked — do not start until daily data has been flowing (gate now cleared).**
+> Fast-follows still open: PICKS-2-ADR8 (ADR-008 grp_* reconciliation), PICKS-2-HDR (live
+> header drift detection), PICKS-2-CRON (Cloudflare cron dispatcher for picks). See SPRINT.
+>
+> Status: **PHASE 2 CODE COMPLETE (2026-06-25)** — all checklist items landed: `collect_picks.py`,
+> `picks_config.py`, `select_groups`, pagination/append, `collect_picks.yml` (shared concurrency on
+> BOTH workflows), `selector_versions.json` v1, 30 unit tests, triple-doc'd constants, ADR-007/008.
 >
 > Status: **READY TO EXECUTE PHASE 2.** All major decisions VP-confirmed (2026-06-23 → 2026-06-25).
 > Phase-1.5 spike COMPLETE (2026-06-24) — selector policy locked (see §Spike results).
@@ -588,11 +594,11 @@ derived from the log — never hand-maintained.
 1.5 **COMPLETED Spike — selector design, live with VP** (see §Spike): pick the leaders ranking metric, the
    floors/cap split, and the Stage-2-net decision by running candidates against historical
    `deltas.csv`. Runs in cloud (no scraping). Gates Phase 2's `select_groups`.
-2. **Phase 2 — scraper + collection** (core, irreplaceable). **CODE COMPLETE 2026-06-25** — all
-   checklist items below landed (`collect_picks.py`, `picks_config.py`, `collect_picks.yml` + shared
+2. **COMPLETED Phase 2 — scraper + collection** (core, irreplaceable). **LIVE 2026-06-25** — first
+   dispatch green: 273 picks / 262 tickers / 19 groups (all 4 buckets). 19/19 slugs validated.
+   Dedup confirmed. Code: `collect_picks.py`, `picks_config.py`, `collect_picks.yml` + shared
    concurrency on both workflows, `selector_versions.json` v1, 30 unit tests, triple-doc'd
-   constants). Remaining: one live Actions dispatch to start the daily capture + confirm the scrape
-   on Azure. Executable checklist:
+   constants. Fast-follows open: PICKS-2-ADR8, PICKS-2-HDR, PICKS-2-CRON (see SPRINT). Checklist:
    - `select_groups(deltas_df)` → leaders (8 sum-of-ranks + 2 momentum_confirmed fills), emerging,
      accel, rs_new_high with top-40% floors; dedup to ≤ 20 unique groups; emit `grp_*` snapshot
      (19 columns, see §grp_* spec) including `grp_category_rank` (within-bucket rank among all
