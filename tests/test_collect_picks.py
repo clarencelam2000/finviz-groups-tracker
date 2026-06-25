@@ -31,6 +31,7 @@ from collect_picks import (
     paginate_group,
     scrape_selected_groups,
     build_pick_rows,
+    build_run_rows,
     write_picks,
     flip_validated,
     _PCTILE_CUTOFF,
@@ -302,6 +303,57 @@ class TestBuildPickRows:
         rows = build_pick_rows("2026-06-24", sels, [{"Ticker": "", "Price": "1"}],
                                ["Ticker", "Price"])
         assert rows == []
+
+
+# ---------------------------------------------------------------------------
+# build_run_rows + empty-scrape guard (D14 / PICKS-2)
+# ---------------------------------------------------------------------------
+
+class TestBuildRunRows:
+    def _sels(self):
+        base = {"selector_version": "v1", **{c: "" for c in pc.PICKS_GRP_COLS}}
+        return [
+            {"group": "G1", "list_category": "leaders", **base},
+            {"group": "G2", "list_category": "emerging", **base},
+        ]
+
+    def test_partitions_rows_validated_and_suspect(self):
+        results = {
+            "G1": (["Ticker"], [{"Ticker": "AAA"}, {"Ticker": "BBB"}]),
+            "G2": (["Ticker"], []),  # scraped but 0 rows → suspect
+        }
+        rows, validated, suspect = build_run_rows(
+            "2026-06-24", ["G1", "G2"], results, self._sels(), ["Ticker"]
+        )
+        assert validated == {"G1"}
+        assert suspect == ["G2"]
+        assert {r["ticker"] for r in rows} == {"AAA", "BBB"}
+
+    def test_all_empty_yields_no_validated_groups(self):
+        # Cloudflare-block signature: every group HTTP 200 with an empty table.
+        results = {"G1": ([], []), "G2": ([], [])}
+        rows, validated, suspect = build_run_rows(
+            "2026-06-24", ["G1", "G2"], results, self._sels(), ["Ticker"]
+        )
+        assert rows == []
+        assert validated == set()          # guard in main() trips on this
+        assert suspect == ["G1", "G2"]
+
+    def test_empty_batch_would_wipe_existing_date(self, tmp_path):
+        # Regression proving WHY the guard exists: write_picks evicts the date
+        # before appending, so an empty batch silently erases a same-day capture
+        # and reverts picks_latest to a prior date. The guard must prevent this
+        # call from ever happening on an all-empty scrape.
+        picks = tmp_path / "picks.csv"
+        latest = tmp_path / "picks_latest.csv"
+        cols = ["date", "list_category", "ticker", "Price"]
+        good = {"date": "2026-06-24", "list_category": "leaders",
+                "ticker": "AAA", "Price": "1"}
+        write_picks(picks, latest, [good], "2026-06-24", cols)
+        # Empty re-run for the same date wipes it (documents the hazard).
+        write_picks(picks, latest, [], "2026-06-24", cols)
+        assert list(csv.DictReader(open(picks))) == []
+        assert list(csv.DictReader(open(latest))) == []
 
 
 # ---------------------------------------------------------------------------

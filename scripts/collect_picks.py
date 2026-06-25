@@ -299,6 +299,36 @@ def build_pick_rows(date_str, selections_for_group, scraped_rows, finviz_cols):
     return out
 
 
+def build_run_rows(date_str, ordered_groups, results, selections, finviz_cols):
+    """Expand one run's scrape results into picks rows + validation bookkeeping.
+
+    Pure (no Finviz, no I/O). Returns (all_new_rows, validated_groups,
+    suspect_slugs):
+      - all_new_rows: every (stock × category) picks row across all groups.
+      - validated_groups: set of groups that returned >= 1 row (G4 flip set).
+      - suspect_slugs: groups that scraped but returned 0 rows (wrong slug or
+        block) — surfaced in the run summary.
+
+    `validated_groups` empty after this means the whole scrape came back empty,
+    which the caller treats as a failed/blocked run (see the empty-scrape guard
+    in main()).
+    """
+    all_new_rows = []
+    validated_groups = set()
+    suspect_slugs = []
+    for g in ordered_groups:
+        if g not in results:
+            continue
+        _header, rows = results[g]
+        if not rows:
+            suspect_slugs.append(g)
+            continue
+        validated_groups.add(g)
+        group_sels = [s for s in selections if s["group"] == g]
+        all_new_rows.extend(build_pick_rows(date_str, group_sels, rows, finviz_cols))
+    return all_new_rows, validated_groups, suspect_slugs
+
+
 def _read_rows(csv_path):
     if not csv_path.exists():
         return []
@@ -454,19 +484,31 @@ def main():
         browser.close()
 
     # Build rows + validation bookkeeping.
-    all_new_rows = []
-    validated_groups = set()
-    suspect_slugs = []
-    for g in ordered_groups:
-        if g not in results:
-            continue
-        header, rows = results[g]
-        if not rows:
-            suspect_slugs.append(g)
-            continue
-        validated_groups.add(g)
-        group_sels = [s for s in selections if s["group"] == g]
-        all_new_rows.extend(build_pick_rows(date_str, group_sels, rows, finviz_cols))
+    all_new_rows, validated_groups, suspect_slugs = build_run_rows(
+        date_str, ordered_groups, results, selections, finviz_cols
+    )
+
+    # Empty-scrape guard (D14 / PICKS-2): if NOT ONE selected group returned a
+    # single row, the scrape did not really succeed — this is the exact signature
+    # of a Cloudflare challenge (every page is HTTP 200 with an empty table, which
+    # _parse_table returns as 0 rows, no exception). Selected groups are leaders
+    # etc. that always contain member stocks, so an all-empty result is never a
+    # genuine "no qualifying stocks" — it is a blocked/broken run.
+    #
+    # We MUST abort BEFORE write_picks here, because write_picks evicts the date's
+    # existing rows before appending: writing an empty batch would silently wipe an
+    # earlier same-day capture and revert picks_latest.csv to a prior date. The
+    # daily list is irreplaceable (no backfill), so a blocked run must be a loud
+    # no-op, not a destructive overwrite. exit(1) turns CI red and fires the
+    # if:failure() debug-HTML upload in collect_picks.yml.
+    if not validated_groups:
+        print(
+            f"\nABORT: scraped {len(ordered_groups)} group(s) over {pages_used} page(s) "
+            f"but got 0 rows total — likely a Cloudflare block or broken slugs. "
+            f"NOT writing picks.csv (would wipe any existing {date_str} capture). "
+            f"suspect slugs: {suspect_slugs}"
+        )
+        sys.exit(1)
 
     appended, latest_count = write_picks(
         pc.PICKS_CSV, pc.PICKS_LATEST_CSV, all_new_rows, date_str, columns
