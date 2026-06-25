@@ -6,6 +6,7 @@
 > anon fetch on one large industry (Semiconductors) + measure real daily fetch count;
 > (2) DONE - VP sign-off on the real fetch number.
 
+> Ensure you check the cross cutting docs section at the end of this plan for documentation requirements.
 ## Context & thesis
 
 The existing pipeline tracks **group** rotation (sector/industry rank, momentum, RS vs SPY)
