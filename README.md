@@ -265,6 +265,31 @@ All pipeline parameters live in `scripts/delta_config.py`. Edit that file to cha
 
 > **To change lookback windows:** edit `LOOKBACK_WINDOWS`, then re-run `compute_deltas.py --date <d>` for each existing date to populate the new columns. `ensure_deltas_csv()` auto-migrates the CSV header on the next run (old columns drop, new columns appear empty).
 
+### Picks pipeline (`scripts/picks_config.py`)
+
+Constants for the Stage-2 stock-picks selector and scraper (`scripts/collect_picks.py`).
+Any change to a constant that feeds selection requires bumping `SELECTOR_VERSION` **and**
+prepending an entry to `data/picks/selector_versions.json` (enforced by tests — see ADR-007).
+
+| Parameter | Default | What it controls |
+|-----------|---------|-----------------|
+| `SELECTOR_VERSION` | `"v1"` | Monotonic, immutable-once-published selector policy id stamped on every `picks.csv` row. Bump on any selection-logic/constant change. |
+| `DAILY_GROUP_CAP` | `20` | Max **unique** groups scraped per day. A group qualifying in multiple buckets counts once but is tagged per bucket. |
+| `LEADER_SS_SLOTS` | `8` | Leaders "core" slots ranked by sustained strength (lowest `rank_month+rank_quarter+rank_half`). |
+| `LEADER_MC_SLOTS` | `2` | Leaders "freshness" slots ranked by `momentum_confirmed` desc among groups not in the core. |
+| `EMERGING_SLOTS` | `4` | Max emerging-bucket groups. |
+| `ACCEL_SLOTS` | `3` | Max accel-bucket groups. |
+| `RS_NH_SLOTS` | `3` | Max rs_new_high-bucket groups. |
+| `ANTIFLASH_PCTILE` | `0.40` | Anti-flash floor for accel/rs_new_high as a cross-sectional `momentum_score` percentile (top 40%). Invariant to formula rescaling. |
+| `EMERGING_REGIME_FLOOR` | `0.15` | Emerging primary gate on `regime_short_long` (mirrors PWA `REGIME_THRESHOLD`). |
+| `ACCEL_THRESHOLD` | `0.08` | Accel primary gate on `momentum_accel` (mirrors PWA `ACCEL_STRONG`). |
+| `EMERGING_RS_FLOOR` / `ACCEL_RS_FLOOR` | `0.5` | `rs_score` floors on emerging / accel buckets (must be net-positive vs SPY). |
+| `RS_NH_RS_FLOOR` | `0.6` | `rs_score` floor on rs_new_high (IBD "true leadership"). |
+| `PAGE_SIZE` | `20` | Rows per Finviz screener page (`v=151`); used to walk `&r=`. |
+| `PAGE_CAP` | `15` | Per-group hard page cap (defensive against a runaway single group). |
+| `GLOBAL_FETCH_CAP` | `50` | **Hard global daily page cap (VP-set).** Job scrapes in priority order (leaders first) and stops at 50 pages. Revisit after live data. |
+| `PAGE_DELAY_S` | `3` | Polite inter-fetch delay (s). `PICKS_PAGE_DELAY=0` to skip during debugging. |
+
 ### PWA display thresholds (`docs/index.html`)
 
 These constants control when visual indicators appear or change state. All are near the top of the `<script>` block.

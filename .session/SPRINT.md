@@ -20,6 +20,20 @@
 
 ---
 
+#### Stock Picks Pipeline
+
+Full plan: `planning/stock-picks-from-leading-groups.md` · ADR-007 (selector) · ADR-008 (architecture)
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| ~~PICKS-2~~ | ~~**Phase 2: collect_picks.py + selector + workflow**~~ | `scripts/collect_picks.py`, `scripts/picks_config.py`, `data/picks/selector_versions.json`, `.github/workflows/collect_picks.yml`, `.github/workflows/collect.yml`, `tests/test_collect_picks.py` | L | ✅ **Code complete 2026-06-25 (branch `claude/brave-hypatia-pfzhu1`).** Pure `select_groups()` (4-bucket priority-fill, ≤20 unique, dedup-tagged, 19 `grp_*` snapshot), paginated scrape (`PAGE_CAP`/`GLOBAL_FETCH_CAP=50`), append/dedup + `picks_latest.csv`, G4 `validated` flip, stale-read guard. Shared `concurrency: finviz-data-commit` on BOTH workflows (G1). v1 registry w/ immutability tests. 30 tests, 480 pass. **Remaining: one live Actions dispatch to start daily capture + confirm 84-col scrape on Azure.** |
+| PICKS-2-LIVE | **Dispatch collect_picks.yml — start the daily clock** | — | XS | Manual `workflow_dispatch` on `collect_picks.yml` after PICKS-2 merges. Irreplaceable daily capture; every missed day is unrecoverable point-in-time data. Confirm 84-col scrape populated on Azure, check `picks_latest.csv` written, `validated` flags flip. |
+| PICKS-2-ADR8 | **Reconcile ADR-008 grp_* table with the 19-col plan spec** | `knowledge/decisions/ADR-008-picks-collection-architecture.md` | XS | ADR-008's grp_* table lists 16 cols incl. `grp_selection_priority`; the plan §grp_* spec (implemented) lists 19 incl. `grp_category_rank`. Plan was the canonical just-merged spec. Either update ADR-008 to match, or VP decides to also add `grp_selection_priority` (two-way-door superset migration). |
+| PICKS-3 | **Phase 3: PWA surfaces** | `docs/index.html`, `docs/sw.js`, `docs/releases.json`, `knowledge/moaty-metrics.md` | L | Picks tab (reads `picks_latest.csv`, grouped by `list_category`→group→stocks; sort least-extended first; breadth count) + Lookup-tab Stage-2 section + deep-link button (tight `v=311`). Release triplet + GUIDE entries for any new surfaced metric. Do NOT start until live data flows. |
+| PICKS-4 | **Phase 4: attribution (eval_picks.py)** | `scripts/eval_picks.py` | XL | Offline: reconstruct positions from the log, OHLC backfill for exited names (Stooq/yfinance/Tiingo spike), forward returns vs SPY+group, methodology head-to-head. Own session, later. Also the D11 **sunset** review — narrow the stored net back toward tight Stage-2. |
+
+---
+
 #### Ticker Lookup Feature
 
 Full plan: `planning/PLAN_ticker_lookup.md`

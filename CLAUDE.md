@@ -201,6 +201,63 @@ in `index.js` when `isEtf: true`. Response adds `classification_source` ("etf_ov
 
 ---
 
+## Picks pipeline (`scripts/collect_picks.py`)
+
+Daily Stage-2 stock-picks scraper: selects leading industry groups from
+`data/industries/deltas.csv`, then scrapes the individual stocks inside them from the Finviz
+screener and logs them to an append-only event log. **Phase 2 of
+`planning/stock-picks-from-leading-groups.md`.** Required reading before editing:
+**ADR-007** (selector policy) + **ADR-008** (collection architecture) in `knowledge/decisions/`.
+
+> Like `collect.py`, the scrape MUST run on GitHub Actions (Azure IPs) — Cloudflare blocks the
+> headless screener scrape from Google Cloud IPs. `select_groups` and all row-building/pagination
+> helpers are **pure and fully unit-tested in cloud** (no Finviz access).
+
+**Key scripts/config:**
+| File | Role |
+|------|------|
+| `scripts/collect_picks.py` | `select_groups()` (pure selector) + paginated scrape + append. Inherits `slugify_industry`/`_build_url`/`_parse_table` from `probe_picks.py`. |
+| `scripts/picks_config.py` | Single source of truth: schema (`picks_columns()`, 19 `grp_*` cols) + all tunable constants. |
+| `data/picks/picks.csv` | Append-only log; one row per `(date, list_category, ticker)`. Lead cols + 84 Finviz cols + 19 `grp_*`. **Offline attribution only — never fetched by the PWA.** |
+| `data/picks/picks_latest.csv` | Max-date slice of `picks.csv` — **this is what the PWA fetches.** |
+| `data/picks/screener_config.json` | Modular URL config (`wide` net + `button`); 84-col `c=` list. Labels stay verbatim-synced to `tests/fixtures/probe_header_84col.txt`. |
+| `data/picks/finviz_industry_slugs.csv` | 144 industry→slug rows. `validated` flips to `true` the first time a group scrapes >0 rows (G4). |
+| `data/picks/selector_versions.json` | Append-only registry of every selector policy; newest-first. `current` must equal `SELECTOR_VERSION` and `versions[0].version` (test-enforced; published entries immutable). |
+
+**Selector (ADR-007, VP-locked):** four buckets filled in priority order to ≤ `DAILY_GROUP_CAP`
+(20) unique groups; a group qualifying in multiple buckets is **scraped once but tagged per
+bucket**. A 0-group bucket is normal (e.g. `momentum_accel` is NaN until 11 sessions) — fill from
+the next priority, never error.
+1. **leaders** ≤10 — 8 by sustained strength (`rank_month+rank_quarter+rank_half` asc) + 2 freshness fills (`momentum_confirmed` desc).
+2. **emerging** ≤4 — `regime_short_long > 0.15` AND `rs_score > 0.5`.
+3. **accel** ≤3 — `momentum_accel > 0.08` AND top-40% by `momentum_score` AND `rs_score > 0.5`.
+4. **rs_new_high** ≤3 — `rs_new_high == 1` AND `rs_score ≥ 0.6` AND top-40% by `momentum_score`.
+
+The anti-flash floor is a **cross-sectional `momentum_score` percentile** (`ANTIFLASH_PCTILE = 0.40`),
+not an absolute cutoff — invariant to `PERF_RANK_METRICS` rescaling.
+
+**`grp_*` columns (19):** each pick row snapshots the selecting group's `deltas.csv` metrics at
+selection time (so Phase-4 attribution never re-derives them). Includes `grp_rank_basis`,
+`grp_category_rank` (within-bucket rank among qualifying candidates, independent per category for
+dedup groups), `grp_momentum_score_pctile` (the floor value actually used), and stored
+rejected-alternatives (`grp_rs_confirmed`, `grp_momentum_weighted_mid`, `grp_rank_agreement`) for
+head-to-head Phase-4 comparison. Renaming/removing one is one-way once data flows; **adding** one is
+a two-way-door superset migration (`ensure_deltas_csv()` pattern).
+
+**Workflow & guards:**
+- `.github/workflows/collect_picks.yml` — separate workflow, own EOD cron (`8 20 * * 1-5`, ~20 min
+  after `collect.yml`). `workflow_dispatch` for manual runs.
+- **Shared concurrency guard (G1):** both `collect_picks.yml` AND `collect.yml` declare
+  `concurrency: { group: finviz-data-commit, cancel-in-progress: false }` — a group only serializes
+  workflows sharing the name, so **both files must have it.** Rebase-before-push.
+- **Stale-read guard:** `collect_picks.py` asserts `deltas['date'].max() == trading_date()` before
+  scraping — a too-early run is a safe no-op, never a wrong-day scrape.
+- **Fetch caps:** per-group `PAGE_CAP` and **hard global `GLOBAL_FETCH_CAP = 50` pages/day** (VP-set
+  2026-06-25). Scrapes in priority order (leaders first) and stops at 50. A wrong slug returns HTTP
+  200 with an empty table (NOT a 404) — the scraper checks row count, not status.
+
+---
+
 ## What Playwright in cloud unlocks (verified 2026-06-16)
 
 Playwright + Chromium install and run correctly in cloud sessions. This opens up capabilities that didn't exist before:
