@@ -231,29 +231,37 @@ Prefix all with **`grp_`** to avoid collision with the 84 Finviz stock columns:
 
 | Column | Source (`deltas.csv` unless noted) | Purpose |
 |--------|-------------------------------------|---------|
-| `grp_rank_basis` | computed | `"sustained_strength"` (the 8) / `"freshness_fill"` (the 2) / category name for the other buckets — which rule won the slot |
-| `grp_selection_priority` | computed | **Integer 1–N: position in the daily priority fill (1 = picked first).** Cannot be added retroactively — it depends on the full day's group competition, not stored in `deltas.csv`. |
-| `grp_sum_mid_rank` | `rank_month + rank_quarter + rank_half` | the leaders ranking value |
-| `grp_rank_month`, `grp_rank_quarter`, `grp_rank_half` | as named | transparency / re-derive sum |
+| `grp_rank_basis` | computed | `"sustained_strength"` (the 8) / `"freshness_fill"` (the 2) for leaders rows; **blank for all other buckets** (the bucket IS the rule; `list_category` already carries that). Captures the within-leaders sub-rule for attribution — "did freshness fills underperform core slots?" |
+| `grp_category_rank` | computed | **Integer: within-bucket rank among all qualifying candidates for that bucket**, sorted by the bucket's rank-within criterion (sum-of-ranks asc for leaders SS; `momentum_confirmed` desc for leaders freshness-fill; `regime_short_long` desc for emerging; `momentum_accel` desc for accel; `rs_slope` desc for rs_new_high). Rank 1 = strongest qualifying candidate in that category that day. For dedup groups appearing in multiple categories, each category row independently assigns the counterfactual within-bucket rank — meaningful for per-category attribution even though the slot was already claimed by a higher-priority bucket. Cannot be added retroactively — requires the full daily candidate pool, not stored in `deltas.csv`. |
+| `grp_sum_mid_rank` | `rank_month + rank_quarter + rank_half` | the leaders sustained_strength ranking value; pre-computed convenience (derivable from the three component columns below) |
+| `grp_rank_month`, `grp_rank_quarter`, `grp_rank_half` | as named | components of sum; re-derive sum or diagnose which timeframe drove the ranking |
 | `grp_momentum_confirmed` | `momentum_confirmed` | leaders freshness-fill basis; strength × agreement |
-| `grp_momentum_score` | `momentum_score` | floor input |
-| `grp_momentum_score_pctile` | computed cross-sectionally that day | the top-40% anti-flash floor value actually used; invariant to formula rescaling |
-| `grp_momentum_accel` | `momentum_accel` | `accel` bucket basis |
+| `grp_momentum_score` | `momentum_score` | floor input for accel/rs_new_high anti-flash; also cross-sectional peer-rank momentum signal |
+| `grp_momentum_score_pctile` | computed cross-sectionally that day | the top-40% anti-flash floor value actually used; invariant to formula rescaling (see §anti-flash floor) |
+| `grp_momentum_accel` | `momentum_accel` | `accel` bucket basis; NaN until 11 sessions of history |
+| `grp_momentum_weighted_mid` | `momentum_weighted_mid` | explicit spike runner-up (Jaccard 0.650 vs sustained_strength 0.691); stored so Phase-4 can test head-to-head whether it would have selected better groups (same rationale as `grp_rs_confirmed`) |
+| `grp_rank_agreement` | `rank_agreement` | cross-timeframe rank sign agreement; explicitly tested in spike (Jaccard 0.578, rejected as primary); stored for Phase-4 head-to-head comparison |
 | `grp_regime_short_long` | `regime_short_long` | `emerging` bucket basis |
-| `grp_rs_score` | `rs_score` | floor input for emerging/accel/rs_new_high |
+| `grp_rs_score` | `rs_score` | floor input for emerging/accel/rs_new_high; already a stable 0–1 fraction (fraction of timeframes beating SPY) — no `_pctile` variant needed (see note (e) below) |
 | `grp_rs_agreement` | `rs_agreement` | RS directional consistency across mo/qtr/half; needed to independently re-derive `rs_confirmed` |
 | `grp_rs_confirmed` | `rs_confirmed` | rs_score × rs_agreement; **explicitly rejected as the leaders metric** (see ADR-007) but stored so Phase-4 can test head-to-head whether it would have selected better groups |
+| `grp_rs_accel` | `rs_accel` | RS-score acceleration over ACCEL_WINDOW sessions; RS-domain analog of `grp_momentum_accel`; measures whether outperformance vs SPY is building at selection time |
 | `grp_rs_new_high` | `rs_new_high` | `rs_new_high` bucket basis |
-| `grp_rs_slope` | `rs_slope` | `rs_new_high` rank-within basis |
+| `grp_rs_slope` | `rs_slope` | `rs_new_high` rank-within basis; LS slope of `rs_month` over trailing window |
 
-**Decisions baked in here:** (a) **inline columns, not a sidecar file** — a manageable fixed
-set (~16), and inline means attribution joins nothing and the row is self-contained. (b) These
-`grp_*` columns are **append-only under the same header-migration discipline** as the 84 stock
-columns (adding one later is a schema bump via superset rewrite). (c) Storing
-`grp_momentum_score_pctile` (the *computed percentile*, not just the raw score) is deliberate —
-it records the actual floor decision, invariant to later `momentum_score` formula rescaling.
-(d) `grp_rs_confirmed` and `grp_rs_agreement` are stored even though not used as gates — so
-Phase-4 can test the explicitly-rejected rs_confirmed selector without re-joining to `deltas.csv`.
+**Decisions baked in here:**
+
+(a) **Inline columns, not a sidecar file** — 19 columns is manageable, and inline means attribution joins nothing and the row is self-contained.
+
+(b) These `grp_*` columns are **append-only under the same header-migration discipline** as the 84 stock columns (adding one later is a schema bump via superset rewrite).
+
+(c) **`grp_momentum_score_pctile`** (the *computed percentile*, not just the raw score) records the actual floor decision, invariant to `momentum_score` formula rescaling.
+
+(d) **No `grp_rs_score_pctile`** — `rs_score` is already an absolute cross-sectionally stable fraction (fraction of timeframes where the group beats SPY). Unlike `momentum_score` which is a peer-rank metric that rescales if timeframes are added/removed, `rs_score` has a fixed denominator tied to market behavior. A percentile-of-a-fraction would lose the economic meaning. The raw value is the right thing to store.
+
+(e) **`grp_category_rank` for dedup groups**: when a group qualifies in multiple buckets (e.g. Semis as both `leaders` and `accel`), each category row gets its own independently-computed within-bucket rank. The `accel` row's `grp_category_rank` is the counterfactual rank — "where would this group rank if only considering accel candidates?" The slot was already claimed by the leaders bucket, but the rank is still meaningful for per-category attribution ("did the #1-ranked accel candidate, even if it was also a leader, have better picks than the #3-ranked accel candidate?").
+
+(f) **Rejected-alternative storage policy**: `grp_rs_confirmed`, `grp_momentum_weighted_mid`, and `grp_rank_agreement` are all stored despite not being active gates — they are the explicitly-measured alternatives from the selector spike. Phase-4 head-to-head comparison is the payoff.
 
 ### COMPLETED - Spike (Phase 1.5) — selector design, live with VP
 
@@ -577,8 +585,10 @@ derived from the log — never hand-maintained.
 2. **Phase 2 — scraper + collection** (core, irreplaceable). **No blockers remain — all inputs are
    in hand.** Executable checklist:
    - `select_groups(deltas_df)` → leaders (8 sum-of-ranks + 2 momentum_confirmed fills), emerging,
-     accel, rs_new_high with top-40% floors; dedup to ≤ 20 unique groups; emit `grp_*` snapshot +
-     `selector_version`. (No Finviz access; fully unit-testable against `deltas.csv`.)
+     accel, rs_new_high with top-40% floors; dedup to ≤ 20 unique groups; emit `grp_*` snapshot
+     (19 columns, see §grp_* spec) including `grp_category_rank` (within-bucket rank among all
+     qualifying candidates, independently computed per category for dedup groups) + `selector_version`.
+     (No Finviz access; fully unit-testable against `deltas.csv`.)
    - `collect_picks.py` paginated scrape (`&r=` walk, stop at empty/short page or `PAGE_CAP`),
      header→label map, **stop at `GLOBAL_FETCH_CAP = 50` pages** in priority order, append to
      `picks.csv` (dedup key `(date, list_category, ticker)`), rewrite `picks_latest.csv` (max-date
@@ -635,7 +645,9 @@ derived from the log — never hand-maintained.
   - **Global-cap test:** with many qualifying groups, scrape stops at `GLOBAL_FETCH_CAP = 50` pages
     in priority order (leaders first); assert no 51st page is requested.
   - **`grp_*` snapshot test:** a selected leader's row carries the correct `grp_rank_basis`,
-    `grp_sum_mid_rank`, and floor `grp_momentum_score_pctile` for that day.
+    `grp_category_rank`, `grp_sum_mid_rank`, and floor `grp_momentum_score_pctile` for that day.
+    A dedup row (group selected as both `leaders` and `accel`) independently carries the correct
+    within-bucket `grp_category_rank` for each category row.
   - **Empty-bucket test (G2):** all-NaN `momentum_accel` ⇒ `accel` bucket = 0 groups, no error,
     total still ≤ 20 by filling next priority.
 - **`selector_version` registry tests:** (a) active `SELECTOR_VERSION` has exactly one matching
