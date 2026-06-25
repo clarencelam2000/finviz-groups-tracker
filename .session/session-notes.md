@@ -6,6 +6,21 @@
 
 ## Current Status
 
+**Status (2026-06-25) — PICKS PIPELINE PHASE 2 CODE COMPLETE (branch `claude/brave-hypatia-pfzhu1`).**
+Stage-2 stock-picks data pipeline implemented and tested (480 tests pass). New files:
+`scripts/collect_picks.py` (pure `select_groups()` selector + paginated scrape + append/dedup +
+`picks_latest.csv` + G4 validation flip + stale-read guard), `scripts/picks_config.py` (schema +
+all triple-doc'd constants), `data/picks/selector_versions.json` (v1, immutable registry),
+`.github/workflows/collect_picks.yml` (own EOD cron). Added shared
+`concurrency: finviz-data-commit` to BOTH `collect.yml` and `collect_picks.yml` (G1). Docs:
+README §Picks pipeline params + CLAUDE.md §Picks pipeline + plan status. Dry-run on 2026-06-24 deltas
+= 18 unique groups / 20 rows, all 4 buckets populated.
+**Open for VP:** (1) one live `collect_picks.yml` dispatch needed to start the irreplaceable daily
+capture + confirm the 84-col scrape on Azure — cannot run from cloud (Cloudflare). (2) grp_* schema:
+implemented the plan's **19-col** spec (`grp_category_rank`); ADR-008's table shows a 16-col variant
+(`grp_selection_priority`) — went with the plan as the canonical just-merged spec; VP may want
+ADR-008 reconciled. **Safe to close once the PR is reviewed.** Next workstream: Phase 3 (PWA surfaces).
+
 **Status (2026-06-24) — SECTOR→INDUSTRY HIERARCHY: FOUNDATION COMPLETE. ROADMAP DOCUMENTED.**
 `data/finviz_sector_industry_map.json` merged (PR #171) — 11 sectors, 144 industries, 100% match against live snapshots. Full 22-feature hierarchy roadmap written to `planning/PLAN_sector_industry_hierarchy.md`. Sprint board updated with HIR-* tasks. Two items immediately unblocked: TASK-6B (Streamlit sidebar filter, S effort) and INS-7 (Sector Breadth, M effort) — build these first to validate map end-to-end. **Safe to close this session.**
 

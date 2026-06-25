@@ -1,5 +1,11 @@
 # Plan: Top-stock picks from leading groups (Stage-2 screener pipeline)
 
+> Status: **PHASE 2 CODE COMPLETE (2026-06-25)** — pending one live GitHub Actions run to start
+> the daily clock + verify the scrape. `scripts/collect_picks.py` + `scripts/picks_config.py` +
+> `select_groups` + pagination/append + `collect_picks.yml` (shared concurrency added to BOTH
+> workflows) + `selector_versions.json` v1 + tests + docs all landed. Next: dispatch
+> `collect_picks.yml` to begin daily capture, then Phase 3 (PWA surfaces). See WORK_LOG 2026-06-25.
+>
 > Status: **READY TO EXECUTE PHASE 2.** All major decisions VP-confirmed (2026-06-23 → 2026-06-25).
 > Phase-1.5 spike COMPLETE (2026-06-24) — selector policy locked (see §Spike results).
 > Phase-1 probe state: **84-col anonymous/headless/Azure validation DONE** — golden header
@@ -582,8 +588,11 @@ derived from the log — never hand-maintained.
 1.5 **COMPLETED Spike — selector design, live with VP** (see §Spike): pick the leaders ranking metric, the
    floors/cap split, and the Stage-2-net decision by running candidates against historical
    `deltas.csv`. Runs in cloud (no scraping). Gates Phase 2's `select_groups`.
-2. **Phase 2 — scraper + collection** (core, irreplaceable). **No blockers remain — all inputs are
-   in hand.** Executable checklist:
+2. **Phase 2 — scraper + collection** (core, irreplaceable). **CODE COMPLETE 2026-06-25** — all
+   checklist items below landed (`collect_picks.py`, `picks_config.py`, `collect_picks.yml` + shared
+   concurrency on both workflows, `selector_versions.json` v1, 30 unit tests, triple-doc'd
+   constants). Remaining: one live Actions dispatch to start the daily capture + confirm the scrape
+   on Azure. Executable checklist:
    - `select_groups(deltas_df)` → leaders (8 sum-of-ranks + 2 momentum_confirmed fills), emerging,
      accel, rs_new_high with top-40% floors; dedup to ≤ 20 unique groups; emit `grp_*` snapshot
      (19 columns, see §grp_* spec) including `grp_category_rank` (within-bucket rank among all
@@ -632,6 +641,23 @@ derived from the log — never hand-maintained.
       revisit rotation / git-LFS / yearly partition later. PWA insulated via `picks_latest.csv`.
 - [ ] **Phase-4 OHLC provider** for exited-name backfill — Stooq / yfinance / Tiingo; validate
       coverage + quota. Not yet integrated (see §Context correction).
+- [ ] **PICKS-2-HDR — validate scraped header against `finviz_cols` at scrape time** (fast-follow,
+      non-blocking). `build_pick_rows` maps each scraped cell by the config's 84 `label`s
+      (`stock.get(col, "")`). If Finviz renames/reorders a header so it stops matching
+      `screener_config.json`, the affected columns write **blank silently** — no error, lost data
+      on the irreplaceable capture. The live header IS captured (`paginate_group` returns it) but
+      unused for validation. Fix: in `main()`, WARN (and list mismatched labels) when a group's
+      scraped header isn't a superset of `finviz_cols(config)`; consider exit 1 below a coverage
+      threshold so CI reddens and the debug-HTML artifact uploads. The golden-header test pins the
+      *config*, not the *live* response.
+- [ ] **PICKS-2-CRON — promote `collect_picks.yml` to the Cloudflare-cron dispatcher** (fast-follow,
+      non-blocking). Currently a **single** GitHub `schedule:` cron (`8 20 * * 1-5`). GitHub cron
+      drifts/drops under load (§Automation in CLAUDE.md — the reason the Cloudflare dispatcher
+      exists), and the shared `concurrency` group prevents overlap but does **not** order the two
+      workflows: if deltas aren't pushed before picks runs, the stale-read guard aborts safely but
+      yields **no picks capture that day** (unrecoverable). Fix: add a Cloudflare cron that POSTs a
+      `workflow_dispatch` to `collect_picks.yml` ~20–30 min after the EOD `collect.yml` dispatch;
+      keep the GitHub `schedule:` as a backstop. Tune the margin after live timing data.
 
 ## Testing
 
