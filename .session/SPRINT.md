@@ -284,7 +284,9 @@ Full plan: `planning/PLAN_sector_industry_hierarchy.md` — 22 features across 5
 
 ### 🟢 In Progress
 
-_(nothing)_
+| # | Task | Branch | Notes |
+|---|------|--------|-------|
+| PICKS-2-CRON | **Promote collect_picks.yml to CF-cron dispatcher** | `claude/picks-cloudflare-cron-f0t7fz` | Plan written + docs updated (planning/cloudflare-cron-scheduler.md Phase 5, CLAUDE.md §Automation). Implementation (worker-cron/ + collect_picks.yml) in next session. VP action item: create healthchecks.io monitor (period=24h, grace=2h) and add `PICKS_HEALTHCHECK_URL` repo secret before implementation merges. |
 
 ---
 

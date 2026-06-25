@@ -143,3 +143,72 @@ tests + add `worker-cron-test:` job to `.github/workflows/tests.yml` (mirrors th
 ## Prerequisites / VP action items
 - Mint a GitHub fine-grained PAT (this repo only, **Actions: Read and write**) for `GITHUB_DISPATCH_TOKEN`.
 - Confirm the existing Cloudflare account/headless deploy token can create a second Worker + a small KV namespace (expected yes, per `knowledge/cloudflare-headless-deploy.md`).
+
+---
+
+## Phase 5 — Extend dispatcher for `collect_picks.yml` (PICKS-2-CRON) ⏳ PLANNED
+
+### Context
+
+`collect_picks.yml` currently fires on a single GitHub `schedule:` cron (`8 20 * * 1-5`). Same
+reliability problem that drove `collect.yml` to the CF dispatcher: GitHub cron drifts hours and
+is dropped under load. The shared concurrency group serialises the two workflows but does **not**
+order them — if deltas aren't pushed before the picks cron fires, the stale-read guard aborts
+safely but that day's picks are **unrecoverable** (no backfill). A GitHub cron backstop is not
+appropriate for picks: `collect_picks.py` scrapes up to 50 Finviz screener pages per run —
+misfiring that from an unreliable backstop is too expensive. Instead, a 90-minute margin gives
+the CF cron high confidence that deltas are ready, and a healthchecks.io dead-man's-switch
+provides the before-bed alert if the CF flow fails silently.
+
+### Architecture
+
+Extend the existing `finviz-cron-dispatcher` Worker — no new Worker needed. The `scheduled()`
+handler routes by `event.cron` string. The three existing entries continue dispatching only
+`collect.yml`; the new 4th entry dispatches only `collect_picks.yml` (once/day).
+
+### Timing
+
+| UTC cron | EDT (summer) | PDT (summer) | PST (winter) | What |
+|----------|--------------|--------------|--------------|------|
+| `30 14 * * 1-5` | 10:30 AM | 9:30 AM | 9:30 AM | collect — intraday |
+| `48 19 * * 1-5` |  3:48 PM | 2:48 PM | 2:48 PM | collect — pre-close |
+| `01 21 * * 1-5` |  5:01 PM | 3:01 PM | 4:01 PM | collect — EOD post-close |
+| `31 22 * * 1-5` | **6:31 PM** | **3:31 PM** | **2:31 PM** | picks — EOD +90 min |
+
+90 min after the EOD post-close collect (`01 21`) gives ample time for
+`collect.yml + compute_deltas + git push` before picks selects groups from `deltas.csv`.
+
+DST: same rule as existing entries — adjust manually on 2nd Sunday March and 1st Sunday November.
+
+### Implementation (next session)
+
+1. **`worker-cron/wrangler.toml`** — add `"31 22 * * 1-5"` to `[triggers] crons`.
+
+2. **`worker-cron/src/index.js`** — refactor around `dispatchWorkflow(env, cron, url, kvKey)`:
+   - `PICKS_CRON = '31 22 * * 1-5'` constant (must match `wrangler.toml` exactly)
+   - `scheduled()` routes: `event.cron === PICKS_CRON` → picks, else → collect
+   - Separate KV keys: `last_dispatch_collect` / `last_dispatch_picks`
+   - All `log()` calls gain `workflow: "collect"|"picks"` for `wrangler tail` filtering
+   - `/last` returns `{ collect: {...}, picks: {...} }`
+
+3. **`worker-cron/test/index.test.js`** — extend with picks routing + separate KV key tests.
+
+4. **`.github/workflows/collect_picks.yml`** — remove `schedule:` block; keep `workflow_dispatch:`;
+   add healthcheck ping step (see §Observability).
+
+### Observability / before-bed alert
+
+Add to `collect_picks.yml` on success:
+```yaml
+- name: Ping healthcheck on success
+  if: success()
+  env:
+    PICKS_HEALTHCHECK_URL: ${{ secrets.PICKS_HEALTHCHECK_URL }}
+  run: |
+    [ -n "$PICKS_HEALTHCHECK_URL" ] && curl -fsS "$PICKS_HEALTHCHECK_URL" || true
+```
+
+Failure modes: CF+picks succeed → ping sent; CF+picks fail → GitHub emails; CF never fires →
+no ping → healthchecks.io alerts. **VP action item:** create a healthchecks.io monitor
+(period=24h, grace=2h; picks completes ~23:00 UTC so grace to ~01:00 UTC covers before-bed
+review). Add `PICKS_HEALTHCHECK_URL` as a repo secret. Same pattern as `HEALTHCHECK_URL`.

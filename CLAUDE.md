@@ -325,14 +325,21 @@ There is no need for a conditional or auto-detection — just run it when you ne
 ## Automation
 
 - **Primary scheduler: the Cloudflare Worker `finviz-cron-dispatcher` (`worker-cron/`).** Its
-  Cron Triggers fire **weekdays only**, three times a day: `13:49`, `14:51`, and `19:48` UTC
-  (~9:49am / 10:51am / 3:48pm ET in summer; one hour earlier in ET during winter — Cloudflare
-  cron is fixed-UTC and cannot follow DST). Each trigger POSTs a GitHub `workflow_dispatch` to
-  launch `collect.yml` on Azure runners. The cron expressions live in `worker-cron/wrangler.toml`
-  `[triggers] crons`. The last run is the EOD snapshot just before the close. **Why a separate
-  scheduler:** GitHub's `schedule:` cron drifts hours and is dropped under load;
-  `workflow_dispatch` is event-driven and prompt. See `planning/cloudflare-cron-scheduler.md`
-  and `knowledge/decisions/` for the full rationale.
+  Cron Triggers fire **weekdays only** and POST GitHub `workflow_dispatch` events to launch
+  workflows on Azure runners. All cron expressions live in `worker-cron/wrangler.toml`
+  `[triggers] crons`. Cloudflare cron is fixed-UTC and cannot follow DST — adjust manually on
+  2nd Sunday March (EST→EDT) and 1st Sunday November (EDT→EST).
+  - **`collect.yml` — 3 daily triggers:** `30 14` (10:30 AM EDT intraday), `48 19` (3:48 PM EDT
+    pre-close), `01 21` (5:01 PM EDT EOD post-close). The EOD run captures the day's final
+    closing data.
+  - **`collect_picks.yml` — 1 daily trigger:** `31 22` (6:31 PM EDT / 3:31 PM PDT / 2:31 PM PST
+    winter) — 90 min after the EOD collect, giving `collect.yml + compute_deltas + push` time to
+    complete before picks selects groups from `deltas.csv`. No GitHub cron backstop for picks
+    (scrapes up to 50 pages — misfiring is too expensive). A healthchecks.io dead-man's-switch
+    on `collect_picks.yml` provides a before-bed alert if the CF flow fails silently.
+  - **Why a separate scheduler:** GitHub's `schedule:` cron drifts hours and is dropped under
+    load; `workflow_dispatch` is event-driven and prompt. See `planning/cloudflare-cron-scheduler.md`
+    and `knowledge/decisions/` for the full rationale.
 - **Backstop: one GitHub cron** (`48 19 * * 1-5`) remains in `collect.yml` as redundancy. It
   fires at the *same time* as the Cloudflare EOD trigger (not a delayed fallback — GitHub cron is
   too timing-unreliable for that). The expected double-run is harmless: last-write-wins per date.
