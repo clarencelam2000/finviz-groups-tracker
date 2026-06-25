@@ -40,6 +40,7 @@ git diff origin/claude/elegant-babbage-hlxnfy -- scripts/   # empty diff = alrea
 
 Mark every PR as ready for review immediately after opening it. Only leave it as a draft if you're explicitly mid-task with more commits coming, or waiting on user input before proceeding.
 
+You should mark PRs as ready for review more often than not.
 ---
 
 ## Cutting a release (PWA "What's New")
@@ -179,7 +180,7 @@ A working block ends when you push a commit, finish a feature slice, or are abou
 
 > These three files live in `.session/` (not `.claude/`) so Claude can edit them without permission prompts.
 
-**`.session/session-notes.md`** — overwrite the "Current Status" block at the top (see template in that file), then append a new session section below. The status block is what the next Claude reads first to decide whether to proceed or wait.
+**`.session/session-notes.md`** — the intent is to capture the most recent active work — not to erase parallel in-flight threads. Make best effort to reduce chances of merge conflicts (and see template in that file), then append a new session section below. The status block for your workstream is what the next Claude reads first to decide whether to proceed or wait.
 
 **`.session/WORK_LOG.md`** — append a milestone entry when:
 - A new script or feature works end-to-end
