@@ -215,31 +215,45 @@ picked for high `regime_short_long`?"* — and we want to answer that **without 
 `deltas.csv`** (which is replayable but couples attribution to selector internals that may have
 changed). So we **snapshot the qualifying group metrics onto every stock row** at selection time.
 
-**Spec (fixed header, every category writes the same columns; blank where N/A for that category).**
+**One-way/two-way door analysis:**
+- *Adding `grp_*` columns later:* **two-way door** — superset migration (same as
+  `ensure_deltas_csv()`) adds columns with blank backfill for old rows.
+- *Renaming/removing existing columns:* **effectively one-way** once data flows — historical
+  rows carry the old name, attribution queries referencing it break or silently get blanks.
+  The column names chosen below are sticky. Pick them carefully before Phase 2 starts.
+- *Column semantics changing:* acceptable if the value genuinely changes (e.g.
+  `grp_momentum_score_pctile` records the actual computed percentile per day — it can shift
+  if the formula or floor changes, and that's correct). Document any semantic shift with a
+  `selector_version` bump.
+
+**Spec (fixed header, every category writes all columns; blank where N/A for that category).**
 Prefix all with **`grp_`** to avoid collision with the 84 Finviz stock columns:
 
 | Column | Source (`deltas.csv` unless noted) | Purpose |
 |--------|-------------------------------------|---------|
 | `grp_rank_basis` | computed | `"sustained_strength"` (the 8) / `"freshness_fill"` (the 2) / category name for the other buckets — which rule won the slot |
+| `grp_selection_priority` | computed | **Integer 1–N: position in the daily priority fill (1 = picked first).** Cannot be added retroactively — it depends on the full day's group competition, not stored in `deltas.csv`. |
 | `grp_sum_mid_rank` | `rank_month + rank_quarter + rank_half` | the leaders ranking value |
 | `grp_rank_month`, `grp_rank_quarter`, `grp_rank_half` | as named | transparency / re-derive sum |
-| `grp_momentum_confirmed` | `momentum_confirmed` | leaders freshness-fill basis |
+| `grp_momentum_confirmed` | `momentum_confirmed` | leaders freshness-fill basis; strength × agreement |
 | `grp_momentum_score` | `momentum_score` | floor input |
-| `grp_momentum_score_pctile` | computed cross-sectionally that day | the top-40% anti-flash floor value actually used |
+| `grp_momentum_score_pctile` | computed cross-sectionally that day | the top-40% anti-flash floor value actually used; invariant to formula rescaling |
 | `grp_momentum_accel` | `momentum_accel` | `accel` bucket basis |
 | `grp_regime_short_long` | `regime_short_long` | `emerging` bucket basis |
 | `grp_rs_score` | `rs_score` | floor input for emerging/accel/rs_new_high |
+| `grp_rs_agreement` | `rs_agreement` | RS directional consistency across mo/qtr/half; needed to independently re-derive `rs_confirmed` |
+| `grp_rs_confirmed` | `rs_confirmed` | rs_score × rs_agreement; **explicitly rejected as the leaders metric** (see ADR-007) but stored so Phase-4 can test head-to-head whether it would have selected better groups |
 | `grp_rs_new_high` | `rs_new_high` | `rs_new_high` bucket basis |
 | `grp_rs_slope` | `rs_slope` | `rs_new_high` rank-within basis |
 
-**Decisions baked in here:** (a) **inline columns, not a sidecar file** — a modest fixed set (~13),
-and inline means attribution joins nothing and the row is self-contained; a sidecar would add a
-second append-only file to keep consistent. (b) These `grp_*` columns are **append-only under the
-same header-migration discipline** as the 84 stock columns (adding one later is a schema bump via
-the `ensure_deltas_csv()`-style superset rewrite). (c) Storing `grp_momentum_score_pctile` (the
-*computed percentile*, not just the raw score) is deliberate — it records the actual floor decision,
-which is invariant to later `momentum_score` formula rescaling (the whole point of the percentile
-floor per §anti-flash).
+**Decisions baked in here:** (a) **inline columns, not a sidecar file** — a manageable fixed
+set (~16), and inline means attribution joins nothing and the row is self-contained. (b) These
+`grp_*` columns are **append-only under the same header-migration discipline** as the 84 stock
+columns (adding one later is a schema bump via superset rewrite). (c) Storing
+`grp_momentum_score_pctile` (the *computed percentile*, not just the raw score) is deliberate —
+it records the actual floor decision, invariant to later `momentum_score` formula rescaling.
+(d) `grp_rs_confirmed` and `grp_rs_agreement` are stored even though not used as gates — so
+Phase-4 can test the explicitly-rejected rs_confirmed selector without re-joining to `deltas.csv`.
 
 ### COMPLETED - Spike (Phase 1.5) — selector design, live with VP
 
@@ -648,17 +662,14 @@ derived from the log — never hand-maintained.
 ## Documentation ATTENTION: Cross-cutting docs — picks pipeline (you must update alongside the phase that introduces the feature)
 
 Phase 2 (collect_picks.py + workflow):
-  knowledge/decisions/ADR-007-picks-selector-policy.md — document the leaders **sum-of-ranks (8) +
-    momentum_confirmed freshness-fill (2)** decision and why it deliberately does NOT reuse the PWA
-    `sustained` intersection-gate logic; why rs_confirmed was rejected; anti-flash floor (top-40%
-    percentile) rationale; `selector_version` bump rule + the "registry captures constants not code"
-    caveat; fetch-budget trade-offs.
-  knowledge/decisions/ADR-008-picks-collection-architecture.md (NEW — VP asked, 2026-06-25) — this
-    is a heavy workstream with many structural decisions that don't belong in the selector ADR:
-    separate `collect_picks.yml` workflow + shared concurrency group (D7); store-wide-columns vs
-    tight-filters axis (D5/D11) and the 50-page hard cap; membership-only append-only log + derive
-    positions offline (D9); `picks_latest.csv` PWA-fetch split; `grp_*` snapshot-at-selection
-    columns; survivorship trade-off (only in-screen names are ever logged). Cross-link ADR-007.
+  knowledge/decisions/ADR-007-picks-selector-policy.md — ✅ WRITTEN (2026-06-25). Covers:
+    leaders sum-of-ranks decision; why not PWA intersection gate; why not rs_confirmed alone;
+    anti-flash floor rationale; selector_version registry scheme + constants-not-code caveat;
+    alternatives considered. **Implementer reads this; does not need to write it.**
+  knowledge/decisions/ADR-008-picks-collection-architecture.md — ✅ WRITTEN (2026-06-25). Covers:
+    separate workflow + shared concurrency (D7); store-wide vs tight-filters (D5/D11) + 50-page
+    cap; ta_highlow52w_a20h semantics; membership-only log (D9); picks_latest.csv split; grp_*
+    column spec + one-way/two-way door analysis. **Implementer reads this; does not need to write it.**
   README.md § Configurable parameters — rows for every cap/slot/delay constant:
     DAILY_GROUP_CAP (20), LEADER_SS_SLOTS (8), LEADER_MC_SLOTS (2), EMERGING_SLOTS (4),
     ACCEL_SLOTS (3), RS_NH_SLOTS (3), ANTIFLASH_PCTILE (0.40), per-group PAGE_CAP,
