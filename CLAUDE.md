@@ -255,6 +255,13 @@ a two-way-door superset migration (`ensure_deltas_csv()` pattern).
 - **Fetch caps:** per-group `PAGE_CAP` and **hard global `GLOBAL_FETCH_CAP = 50` pages/day** (VP-set
   2026-06-25). Scrapes in priority order (leaders first) and stops at 50. A wrong slug returns HTTP
   200 with an empty table (NOT a 404) — the scraper checks row count, not status.
+- **Empty-scrape guard (D14):** if **no** selected group returns a single row (the signature of a
+  Cloudflare block — every page is HTTP 200 with an empty table, no exception), `collect_picks.py`
+  **aborts with `exit(1)` BEFORE writing** instead of letting `write_picks` evict the date and
+  silently wipe an earlier same-day capture. The daily list is irreplaceable (no backfill), so a
+  blocked run must be a loud no-op: CI goes red and `collect_picks.yml`'s `if:failure()` step
+  uploads the debug HTML. Last-write-wins per date still applies to *non-empty* re-runs (the EOD
+  run's picks win over an earlier intraday run's).
 
 ---
 

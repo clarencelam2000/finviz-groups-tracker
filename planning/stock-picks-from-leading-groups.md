@@ -641,6 +641,23 @@ derived from the log — never hand-maintained.
       revisit rotation / git-LFS / yearly partition later. PWA insulated via `picks_latest.csv`.
 - [ ] **Phase-4 OHLC provider** for exited-name backfill — Stooq / yfinance / Tiingo; validate
       coverage + quota. Not yet integrated (see §Context correction).
+- [ ] **PICKS-2-HDR — validate scraped header against `finviz_cols` at scrape time** (fast-follow,
+      non-blocking). `build_pick_rows` maps each scraped cell by the config's 84 `label`s
+      (`stock.get(col, "")`). If Finviz renames/reorders a header so it stops matching
+      `screener_config.json`, the affected columns write **blank silently** — no error, lost data
+      on the irreplaceable capture. The live header IS captured (`paginate_group` returns it) but
+      unused for validation. Fix: in `main()`, WARN (and list mismatched labels) when a group's
+      scraped header isn't a superset of `finviz_cols(config)`; consider exit 1 below a coverage
+      threshold so CI reddens and the debug-HTML artifact uploads. The golden-header test pins the
+      *config*, not the *live* response.
+- [ ] **PICKS-2-CRON — promote `collect_picks.yml` to the Cloudflare-cron dispatcher** (fast-follow,
+      non-blocking). Currently a **single** GitHub `schedule:` cron (`8 20 * * 1-5`). GitHub cron
+      drifts/drops under load (§Automation in CLAUDE.md — the reason the Cloudflare dispatcher
+      exists), and the shared `concurrency` group prevents overlap but does **not** order the two
+      workflows: if deltas aren't pushed before picks runs, the stale-read guard aborts safely but
+      yields **no picks capture that day** (unrecoverable). Fix: add a Cloudflare cron that POSTs a
+      `workflow_dispatch` to `collect_picks.yml` ~20–30 min after the EOD `collect.yml` dispatch;
+      keep the GitHub `schedule:` as a backstop. Tune the margin after live timing data.
 
 ## Testing
 

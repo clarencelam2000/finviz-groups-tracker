@@ -290,6 +290,13 @@ prepending an entry to `data/picks/selector_versions.json` (enforced by tests â€
 | `GLOBAL_FETCH_CAP` | `50` | **Hard global daily page cap (VP-set).** Job scrapes in priority order (leaders first) and stops at 50 pages. Revisit after live data. |
 | `PAGE_DELAY_S` | `3` | Polite inter-fetch delay (s). `PICKS_PAGE_DELAY=0` to skip during debugging. |
 
+> **Behavior note (not a constant) â€” empty-scrape guard:** if **no** selected group returns any
+> rows (the signature of a Cloudflare block: HTTP 200 with an empty table), `collect_picks.py`
+> aborts with `exit(1)` **before** writing, rather than letting the date's existing rows be evicted
+> and silently wiping a same-day capture. The daily picks list is irreplaceable, so a blocked run
+> is a loud no-op (CI red + debug-HTML artifact uploaded), not a destructive overwrite. Non-empty
+> re-runs still follow last-write-wins per date.
+
 ### PWA display thresholds (`docs/index.html`)
 
 These constants control when visual indicators appear or change state. All are near the top of the `<script>` block.
