@@ -11,14 +11,7 @@
 > Status: **PHASE 2 CODE COMPLETE (2026-06-25)** — all checklist items landed: `collect_picks.py`,
 > `picks_config.py`, `select_groups`, pagination/append, `collect_picks.yml` (shared concurrency on
 > BOTH workflows), `selector_versions.json` v1, 30 unit tests, triple-doc'd constants, ADR-007/008.
->
-> Status: **READY TO EXECUTE PHASE 2.** All major decisions VP-confirmed (2026-06-23 → 2026-06-25).
-> Phase-1.5 spike COMPLETE (2026-06-24) — selector policy locked (see §Spike results).
-> Phase-1 probe state: **84-col anonymous/headless/Azure validation DONE** — golden header
-> committed (`tests/fixtures/probe_header_84col.txt`, 84 cols populated). **Fetch volume was NOT
-> separately measured/recorded;** instead the VP set a **hard 50-page global cap** (2026-06-25,
-> revisit after live data flows) — so the daily job is bounded by decision, not by a probe number.
-> No remaining gate before Phase 2.
+
 
 > Ensure you check the cross cutting docs section at the end of this plan for documentation requirements.
 ## Context & thesis
