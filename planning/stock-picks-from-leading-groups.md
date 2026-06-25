@@ -1,10 +1,12 @@
 # Plan: Top-stock picks from leading groups (Stage-2 screener pipeline)
 
-> Status: **READY TO EXECUTE PHASE 2.** All major decisions VP-confirmed (2026-06-23 + 2026-06-24).
+> Status: **READY TO EXECUTE PHASE 2.** All major decisions VP-confirmed (2026-06-23 → 2026-06-25).
 > Phase-1.5 spike COMPLETE (2026-06-24) — selector policy locked (see §Spike results).
-> Completed tasks before Phase 2 starts: (1) DONE - Phase-1 probe run on GitHub Actions — validate 84-col
-> anon fetch on one large industry (Semiconductors) + measure real daily fetch count;
-> (2) DONE - VP sign-off on the real fetch number.
+> Phase-1 probe state: **84-col anonymous/headless/Azure validation DONE** — golden header
+> committed (`tests/fixtures/probe_header_84col.txt`, 84 cols populated). **Fetch volume was NOT
+> separately measured/recorded;** instead the VP set a **hard 50-page global cap** (2026-06-25,
+> revisit after live data flows) — so the daily job is bounded by decision, not by a probe number.
+> No remaining gate before Phase 2.
 
 > Ensure you check the cross cutting docs section at the end of this plan for documentation requirements.
 ## Context & thesis
@@ -51,7 +53,7 @@ is a later session.
 | D8 | PWA surface | **Both:** standalone **"Picks" tab** (cross-group destination) + a per-group **"Stage-2 names →" section inside the Lookup tab** (contextual, when an industry is pulled up). No generic-card surface. |
 | D9 | Attribution schema | **Membership-only, append-only event log** (`picks.csv`, one row per stock × list × day). Entry/exit/forward-returns are derived OFFLINE later (Option C hybrid view), never hand-maintained. |
 | D10 | TwelveData / extended indicators | **Deferred.** Finviz's custom view already serves SMA distances, 52w-high distance, ATR, RSI. Optional spike later (§Deferred). |
-| D11 | Stored-net breadth + fetch budget | **Store wide (generous superset, relaxed trend gates), tag Stage-2 in-house — bounded & explicitly NOT long-term** (VP accepted cautiously 2026-06-23). Keep `sh_avgvol_o100` liquidity floor, hard per-group + global fetch caps (~120/day), Phase-1 volume probe, Phase-4 sunset back toward the tight net. Honest volume ~60–120 fetches/day. See §Fetch-volume budget & guardrails. |
+| D11 | Stored-net breadth + fetch budget | **Store wide (generous superset, relaxed trend gates), tag Stage-2 in-house — bounded & explicitly NOT long-term** (VP accepted cautiously 2026-06-23). Keep `sh_avgvol_o100` liquidity floor, hard per-group + global fetch caps. **Global cap = 50 pages/day (VP-set 2026-06-25; revisit after live data).** Phase-4 sunset back toward the tight net. See §Fetch-volume budget & guardrails. |
 
 ## Architecture
 
@@ -81,10 +83,12 @@ PWA:
 
 ```
 data/picks/
-  picks.csv                    # append-only; date, list_category, selector_version, group, ticker, <84 finviz cols>, <group-metric values at selection>
+  picks.csv                    # append-only; date, list_category, selector_version, group, ticker,
+                               #   <84 finviz cols>, <grp_* group-metric cols at selection — see spec>
   picks_latest.csv             # latest trading date only — what the PWA fetches (see PWA note)
-  finviz_industry_slugs.csv    # industry_name, ind_slug, validated (bool), note
+  finviz_industry_slugs.csv    # industry_name, ind_slug, validated (bool), note  (144 rows; see G4/G5 below)
   screener_config.json         # modular URL config (base f= filters, ordered c= columns, v/o/ft) — see §VP URL handoff
+  selector_versions.json       # append-only registry of every selector policy (see §selector_version scheme)
 ```
 
 > **PWA fetch size (VP-confirmed: per-date latest artifact).** `picks.csv` is the full
@@ -106,7 +110,7 @@ rows written to `picks.csv` with `list_category`:
 
 | Category | Primary signal | **Baseline-strength floor (anti-flash)** |
 |----------|----------------|------------------------------------------|
-| `leaders` | **sustained strength top-N across 1mo+3mo+6mo** — membership pinned to the PWA `sustained strength` definition (top N in the three main mid-length timeframes, `docs/index.html`), possibly ranked / tiebroken by momentum_confirmed score. **Ranking metric has been discussed in the selector spike** - NOT `rs_confirmed` alone — that conflates RS-vs-SPY with absolute strength. | n/a — already an absolute-strength definition |
+| `leaders` | **sum-of-ranks across 1mo+3mo+6mo, no hard gate** (VP-locked 2026-06-24/25): rank all groups by `sum(rank_month + rank_quarter + rank_half)` ascending (lowest sum = strongest mid-TF leader), take the top **8**; then **2 freshness fills** by `momentum_confirmed` desc among groups not already in the 8. **NOT** a top-N intersection gate, and **NOT** the PWA `sustained` view's logic — the PWA's "Sustained" tab gates on top-N in all three timeframes *then* sorts by `momentum_confirmed`; we deliberately do **not** replicate that here (sum-of-ranks degrades gracefully when fewer than 8 groups are top-N in all three). **NOT** `rs_confirmed` alone — that conflates RS-vs-SPY with absolute strength. | n/a — already an absolute-strength definition |
 | `emerging` | `regime_short_long` > `REGIME_THRESHOLD` | `rs_score` > 0.5 (must already be net-positive vs SPY) |
 | `accel` | `momentum_accel` > `ACCEL_STRONG` | **top 40% by `momentum_score` percentile** AND `rs_score` > 0.5 — reject bottom-of-pack dead-cat flashes |
 | `rs_new_high` | `rs_new_high` = 1 | `rs_score` ≥ 0.6 AND **top 40% by `momentum_score` percentile** — IBD "true leadership", not a low-base RS pop |
@@ -135,6 +139,12 @@ Rationale & design properties:
   gets its stock rows **tagged per category** in `picks.csv` (clean per-methodology attribution);
   it is only **scraped once**.
 - **Self-shrinks in a correction** — correct behavior, not a bug.
+- **G2 — expected empty buckets early are NOT failures (Phase-2 executor):** `momentum_accel` is
+  NaN until 11 sessions of history exist, so the `accel` bucket legitimately yields **0 groups** on
+  the earliest runs (unlocked ~2026-06-25 per the spike). Likewise `rs_new_high`/`rs_score` floors
+  need their own history. `select_groups` must treat a 0-group bucket as normal (fill from the next
+  priority, total stays ≤ 20), never error, and the run summary should report per-bucket counts so
+  an empty bucket is visibly *expected*, not a silent miss.
 
 #### Anti-flash floor: express as a percentile, NOT an absolute cutoff (robustness)
 
@@ -158,13 +168,92 @@ The selector is the *one* part of this pipeline that is cheap to change and **fu
 `deltas.csv` is a complete historical archive, so any group-selection policy can be re-run over
 all past days at any time. To keep that property usable:
 1. **Stamp each pick with `selector_version`** and record the group-level metric values used at
-   selection time (sidecar or extra `picks.csv` cols). Then a later formula change doesn't strand
+   selection time (the `grp_*` columns spec'd below). Then a later formula change doesn't strand
    past analysis — you re-select historically and compare versions head-to-head.
 2. **Keep selection logic in one small module** (`select_groups`) reading named config constants,
    so swapping the leaders rank metric or a floor is a one-line, tested change.
 
 This is also why the *stock filter* (not the group selector) is the irreplaceable axis: group
 selection is replayable from `deltas.csv`; per-stock point-in-time technicals are not.
+
+#### `selector_version` scheme (VP-confirmed direction 2026-06-25) — versioned registry
+
+The VP's intent: **keep a permanent historical record of every selector policy ever used**, with
+enforced version uniqueness, AWS-revision-style. Recommended implementation (decided here; mirrors
+the repo's existing `releases.json` pattern rather than inventing a new convention):
+
+- **`SELECTOR_VERSION`** is a single monotonic string constant in `collect_picks.py`, starting at
+  **`"v1"`** (`v2`, `v3`, … — like AWS task-definition *revisions*: integers, immutable once
+  published, never reused). It is stamped onto every `picks.csv` row as the `selector_version`
+  column.
+- **A committed append-only registry `data/picks/selector_versions.json`** records, newest-first,
+  one entry per version: `version`, `effective_date`, `description` (prose: what changed and why),
+  and a `params` block snapshotting **every** constant the selector used (slot split, floors,
+  percentile cutoff, ranking-metric name, cap). This makes each version *self-describing* — a reader
+  reconstructs the exact policy without `git blame`.
+- **The rule (enforced by test):** any change to selection **logic OR any `params` value** ⇒ a new
+  version id + a new prepended registry entry. **Published entries are immutable** — a test pins a
+  hash of each non-active entry so an accidental edit to history fails CI; a second test asserts the
+  active `SELECTOR_VERSION` has exactly one matching registry entry and that all versions are unique
+  and monotonic.
+- **Why a single registry file, not one config-file-per-version:** a JSON the implementer asked
+  about (per-version files) gives the same immutability guarantee but adds directory ceremony and a
+  loader that must pick the active file; the append-only registry is one diff-friendly file,
+  consistent with how `docs/releases.json` already works here, and the immutability is enforced by
+  the hash test either way. **Important caveat documented for both approaches:** the registry
+  captures *constants*, not arbitrary *code* changes. If someone alters the ranking math in
+  `select_groups` without bumping `SELECTOR_VERSION`, the stamp lies. The mitigation is the same
+  bump rule above + code review — note it explicitly in ADR-007 so the obligation is visible.
+
+#### Group-metric columns stamped onto `picks.csv` (`grp_*`) — exact spec
+
+**Why these exist (VP-level):** when `select_groups` picks a group on a given day, the group
+qualified *because* of specific group-level numbers from `deltas.csv` (its sum-of-mid-ranks, its
+`momentum_confirmed`, its `regime_short_long`, its `rs_score`, etc.). Phase-4 attribution will ask
+questions like *"did groups picked for high `momentum_confirmed` produce better stocks than groups
+picked for high `regime_short_long`?"* — and we want to answer that **without re-deriving from
+`deltas.csv`** (which is replayable but couples attribution to selector internals that may have
+changed). So we **snapshot the qualifying group metrics onto every stock row** at selection time.
+
+**One-way/two-way door analysis:**
+- *Adding `grp_*` columns later:* **two-way door** — superset migration (same as
+  `ensure_deltas_csv()`) adds columns with blank backfill for old rows.
+- *Renaming/removing existing columns:* **effectively one-way** once data flows — historical
+  rows carry the old name, attribution queries referencing it break or silently get blanks.
+  The column names chosen below are sticky. Pick them carefully before Phase 2 starts.
+- *Column semantics changing:* acceptable if the value genuinely changes (e.g.
+  `grp_momentum_score_pctile` records the actual computed percentile per day — it can shift
+  if the formula or floor changes, and that's correct). Document any semantic shift with a
+  `selector_version` bump.
+
+**Spec (fixed header, every category writes all columns; blank where N/A for that category).**
+Prefix all with **`grp_`** to avoid collision with the 84 Finviz stock columns:
+
+| Column | Source (`deltas.csv` unless noted) | Purpose |
+|--------|-------------------------------------|---------|
+| `grp_rank_basis` | computed | `"sustained_strength"` (the 8) / `"freshness_fill"` (the 2) / category name for the other buckets — which rule won the slot |
+| `grp_selection_priority` | computed | **Integer 1–N: position in the daily priority fill (1 = picked first).** Cannot be added retroactively — it depends on the full day's group competition, not stored in `deltas.csv`. |
+| `grp_sum_mid_rank` | `rank_month + rank_quarter + rank_half` | the leaders ranking value |
+| `grp_rank_month`, `grp_rank_quarter`, `grp_rank_half` | as named | transparency / re-derive sum |
+| `grp_momentum_confirmed` | `momentum_confirmed` | leaders freshness-fill basis; strength × agreement |
+| `grp_momentum_score` | `momentum_score` | floor input |
+| `grp_momentum_score_pctile` | computed cross-sectionally that day | the top-40% anti-flash floor value actually used; invariant to formula rescaling |
+| `grp_momentum_accel` | `momentum_accel` | `accel` bucket basis |
+| `grp_regime_short_long` | `regime_short_long` | `emerging` bucket basis |
+| `grp_rs_score` | `rs_score` | floor input for emerging/accel/rs_new_high |
+| `grp_rs_agreement` | `rs_agreement` | RS directional consistency across mo/qtr/half; needed to independently re-derive `rs_confirmed` |
+| `grp_rs_confirmed` | `rs_confirmed` | rs_score × rs_agreement; **explicitly rejected as the leaders metric** (see ADR-007) but stored so Phase-4 can test head-to-head whether it would have selected better groups |
+| `grp_rs_new_high` | `rs_new_high` | `rs_new_high` bucket basis |
+| `grp_rs_slope` | `rs_slope` | `rs_new_high` rank-within basis |
+
+**Decisions baked in here:** (a) **inline columns, not a sidecar file** — a manageable fixed
+set (~16), and inline means attribution joins nothing and the row is self-contained. (b) These
+`grp_*` columns are **append-only under the same header-migration discipline** as the 84 stock
+columns (adding one later is a schema bump via superset rewrite). (c) Storing
+`grp_momentum_score_pctile` (the *computed percentile*, not just the raw score) is deliberate —
+it records the actual floor decision, invariant to later `momentum_score` formula rescaling.
+(d) `grp_rs_confirmed` and `grp_rs_agreement` are stored even though not used as gates — so
+Phase-4 can test the explicitly-rejected rs_confirmed selector without re-joining to `deltas.csv`.
 
 ### COMPLETED - Spike (Phase 1.5) — selector design, live with VP
 
@@ -242,29 +331,32 @@ All analysis run in cloud against `data/industries/deltas.csv` + `data/industrie
 **Decision (D11): store wide (generous superset of signals, relaxed *trend* gates), tag Stage-2
 in-house — BUT bounded and explicitly temporary.** The VP accepted the "store wide" recommendation
 *cautiously*, on the record that it is **not a long-term solution** and that fetch volume is a real
-concern. Honoring that requires honesty about the number and hard guardrails:
+concern. Honoring that requires a hard cap and guardrails:
 
-- **Honest volume estimate.** The VP's "~40 fetches/day" (20 groups × 2 pages) reflects the
-  *tight* Stage-2 net. "Store wide" *loosens the row filter*, so big industries (Semis ≈ 100–200
-  names) become 5–10 pages each. **Realistic generous-capture volume is ~60–120 fetches/day**, not
-  40. Do not plan around 40.
+- **Volume is bounded by decision, not estimate.** "Store wide" *loosens the row filter*, so big
+  industries (Semis ≈ 100–200 names) become several pages each. Rather than gate on a probe-measured
+  number, **the VP set a hard global cap of 50 screener pages/day (2026-06-25)**. The job scrapes in
+  priority order (leaders first) and **stops at 50 pages**, so the worst case is bounded regardless
+  of how many names each group has. Revisit the cap once live data shows real daily page demand.
 - **Keep the liquidity floor as a volume ally.** Retain `sh_avgvol_o100` (avg vol > 100K) even in
   the "wide" net — it is defensible on its own merits (we want liquid, institutional-friendly
-  names) AND it is the single biggest reducer of junk rows / pages. Relax only the *trend* gates
-  (`ta_highlow52w_a30h`, `ta_sma200_sb50`, `ta_sma50_pa`) that cause survivorship; recompute strict
-  Stage-2 as an in-house boolean column.
-- **Measure before committing (Phase-1 probe).** Before turning on the daily job, do a **one-time
-  probe scrape** that counts names/pages per selected group at the proposed breadth and reports the
-  real projected daily fetch total. The spike's "row-count" step needs this probe — existing CSVs
-  are group-level only, so stock counts must be measured, not estimated. **VP signs off on the
-  actual number, not my estimate.**
-- **Hard guardrails in `collect_picks.py`:** per-group page cap, global daily fetch cap (start
-  ~120), polite inter-fetch delay, and **abort if projected fetches exceed the cap** rather than
-  silently scraping more. Caps are configurable constants (triple-doc per house rules).
+  names) AND it is a large reducer of junk rows / pages. Relax only the *trend* gates that cause
+  survivorship — `ta_sma200_sb50` (50SMA > 200SMA) and `ta_sma50_pa` (price > 50SMA), **both
+  removed 2026-06-24** — and recompute strict Stage-2 as an in-house boolean column.
+  **`ta_highlow52w_a20h` is KEPT** — and note its semantics: it means **more than 20% ABOVE the
+  52-week LOW** (a bottom-of-the-barrel exclusion that filters out beaten-down names), *not* "within
+  20% of the 52-week high." It is a floor-above-lows quality filter, not a near-high trend gate, so
+  it does not create the same survivorship problem the SMA gates did. (Earlier drafts mislabeled
+  this as `ta_highlow52w_a30h` "within 20% of high" — that was wrong on both the threshold and the
+  direction.)
+- **Hard guardrails in `collect_picks.py`:** per-group page cap (`PAGE_CAP`), **global daily page
+  cap `GLOBAL_FETCH_CAP = 50`**, polite inter-fetch delay, and **stop scraping once the global cap
+  is reached** (priority order ensures leaders are captured first) rather than silently exceeding
+  it. Caps are configurable constants (triple-doc per house rules).
 - **Sunset trigger (the "not LT" promise, in writing).** Once Phase-4 attribution identifies which
   signals actually predict winners, **narrow the stored net** to those — dropping back toward the
   tight Stage-2 volume. This is a tracked obligation, not an aspiration: revisit at the first
-  attribution review.
+  attribution review, alongside the 50-page cap.
 
 ## Finviz scraping notes (carry-over from collect.py + new)
 
@@ -276,12 +368,12 @@ concern. Honoring that requires honesty about the number and hard guardrails:
   isolates this from the core EOD snapshot). ~20–30 groups × pages = real volume — keep it
   human-paced and consider a daily cap.
 - **Volume is the #1 feasibility risk — see §Fetch-volume budget & guardrails (D11).** With the
-  chosen "store wide" breadth, realistic load is **~60–120 screener page loads/day** from one
-  Azure IP (NOT the ~40 a tight net implies) — a large escalation over today's 2 group page loads,
-  against Finviz's *screener* (more bot-sensitive than the groups view). Mitigations are mandatory,
-  not optional: liquidity floor, per-group + global fetch caps, polite delays, a Phase-1 volume
-  probe to confirm the real number, and a Phase-4 sunset back toward the tight net. At a 3–5s
-  delay this is a ~10–20 min Actions job.
+  chosen "store wide" breadth, load is a real escalation over today's 2 group page loads, against
+  Finviz's *screener* (more bot-sensitive than the groups view). It is **bounded by the VP-set hard
+  cap of 50 screener pages/day** (not estimated): the job scrapes in priority order and stops at 50.
+  Mitigations are mandatory, not optional: liquidity floor, per-group + global page caps, polite
+  delays, and a Phase-4 sunset back toward the tight net. At a 3–5s delay, 50 pages is a ~3–5 min
+  Actions job.
 - **"Wide net" = wide on COLUMNS, not on FILTERS (clarification).** Two orthogonal axes:
   *column breadth* (`c=`, 84 IDs — how many attributes per passing stock) vs *filter width*
   (`f=` tokens — how many stocks pass at all). D5 is the column axis; D4/D11 is the filter axis.
@@ -297,6 +389,13 @@ concern. Honoring that requires honesty about the number and hard guardrails:
   simultaneously, **rebase (or `git pull --rebase`) before push**, and **assert the deltas are
   current** before scraping: `deltas['date'].max() == trading_date()` — abort/skip otherwise so
   cron drift can't make picks scrape against yesterday's group rankings.
+  > **GOTCHA (verified 2026-06-25): `collect.yml` currently has NO `concurrency:` block** (only
+  > `generate_ai.yml` does). A concurrency group only serializes workflows that *both* declare the
+  > **same group name**. So Phase 2 must edit **both** files — add an identical
+  > `concurrency: { group: finviz-data-commit, cancel-in-progress: false }` (use
+  > `cancel-in-progress: false` so neither data job is killed mid-run) to `collect.yml` **and**
+  > `collect_picks.yml`. Adding it to only the new workflow gives no protection. This is a required
+  > edit to an existing file, not net-new code.
 - **Slug derivation:** `ind_<slug>` where `slug` = `name.lower()` with all non-alphanumerics
   stripped. Verified: `Aerospace & Defense → aerospacedefense`, `Software - Application →
   softwareapplication`. **Build the 144 from `data/industries/snapshots.csv`, NOT
@@ -306,6 +405,19 @@ concern. Honoring that requires honesty about the number and hard guardrails:
   with the slug and group name, skip that group, and surface it in the run summary. **GOTCHA: a
   wrong slug does NOT 404** — Finviz returns HTTP 200 with an empty table. So the scraper must
   check row count > 0, not just HTTP status.
+  - **G4 — `validated` column lifecycle (VP-confirmed 2026-06-25):** the slug map ships with
+    `validated=false` for all rows (it's derived math, never live-checked). **Phase 2 flips a
+    row's `validated` to `true` the first time that group is actually scraped and returns
+    row-count > 0** — i.e. validation is a side effect of a successful live scrape, written back to
+    `finviz_industry_slugs.csv` (committed on the same run). A row that scrapes 0 rows stays
+    `validated=false` and is surfaced in the run summary as a suspect slug. This gives a
+    self-building, evidence-backed validation record without a separate pre-flight pass.
+  - **G5 — count is 144, not 145; `Infrastructure Operations` excluded (VP-confirmed 2026-06-25):**
+    Finviz no longer carries an `Infrastructure Operations` industry. The slug map is built from
+    `data/industries/snapshots.csv` (144 industries) which already excludes it, so no action is
+    needed *here*. (Separate, out-of-scope cleanup: stale `Infrastructure Operations` references
+    still live in `data/finviz_sector_industry_map.{json,csv}`, `tests/test_seed_taxonomy.py`, and
+    `CLAUDE.md` — track as its own follow-up PR since it touches `seed_taxonomy` validation.)
 - **URL templates (VP-supplied 2026-06-23, decoded below).** Handling, validation, and
   modularity are specified in §VP URL handoff & modular screener config.
 
@@ -328,11 +440,15 @@ https://finviz.com/screener?v=311&f=cap_midover,ind_<slug>,ta_sma20_sa50,ta_sma5
 **Wide net (storage scrape), view `v=151`, 84 columns (revised URL, 2026-06-24):**
 ```
 https://finviz.com/screener?v=151&f=cap_midover,ind_<slug>,sh_avgvol_o100,ta_highlow52w_a20h&ft=4&o=-marketcap&c=1,2,4,5,6,7,67,65,66,68,79,8,9,10,13,145,146,33,32,34,37,38,149,16,77,17,18,142,19,20,143,21,23,22,132,133,39,40,41,27,29,42,43,44,45,47,46,138,49,51,48,52,53,54,59,63,64,81,86,87,88,62,69,135,137,136,150,3,12,144,35,36,82,78,28,139,50,57,58,60,61,148,127,128
-  filters: cap_midover · sh_avgvol_o100 (avg vol > 100K — liquidity floor) · ta_highlow52w_a20h (within 20% of 52w high)
+  filters: cap_midover · sh_avgvol_o100 (avg vol > 100K — liquidity floor) · ta_highlow52w_a20h
+           (more than 20% ABOVE the 52-week LOW — a bottom-of-barrel exclusion, NOT "near the
+            52w high"; VP-clarified 2026-06-25)
   sort: o=-marketcap (biggest first — institutional-friendly leaders on top)
   84 columns (exceeds the original "~70" estimate — even better for attribution)
   Note: ta_sma200_sb50 (50SMA > 200SMA) and ta_sma50_pa (price > 50SMA) removed 2026-06-24 per VP —
-  trend gates cause survivorship bias; Stage-2 qualification recomputed in-house from stored columns.
+  those SMA trend gates cause survivorship bias; Stage-2 qualification recomputed in-house from
+  stored columns. ta_highlow52w_a20h is KEPT: as a floor-above-the-low it screens out beaten-down
+  names without the near-high survivorship problem the SMA gates had.
 ```
 > Revision: the first paste had `o=wiimdailydigest` (accidental leftover sort) and no avg-vol
 > floor. Revised URL **adds `sh_avgvol_o100`** (a real filter change — liquidity gate) and sorts
@@ -458,10 +574,22 @@ derived from the log — never hand-maintained.
 1.5 **COMPLETED Spike — selector design, live with VP** (see §Spike): pick the leaders ranking metric, the
    floors/cap split, and the Stage-2-net decision by running candidates against historical
    `deltas.csv`. Runs in cloud (no scraping). Gates Phase 2's `select_groups`.
-2. **Phase 2 — scraper + collection** (core, irreplaceable): `collect_picks.py` (selectors +
-   paginated scrape + append), `collect_picks.yml` separate workflow, `data/picks/picks.csv` +
-   `picks_latest.csv`. **Start the daily clock ASAP.** URL templates in hand; needs Phase-1
-   validation + the spike's selector policy.
+2. **Phase 2 — scraper + collection** (core, irreplaceable). **No blockers remain — all inputs are
+   in hand.** Executable checklist:
+   - `select_groups(deltas_df)` → leaders (8 sum-of-ranks + 2 momentum_confirmed fills), emerging,
+     accel, rs_new_high with top-40% floors; dedup to ≤ 20 unique groups; emit `grp_*` snapshot +
+     `selector_version`. (No Finviz access; fully unit-testable against `deltas.csv`.)
+   - `collect_picks.py` paginated scrape (`&r=` walk, stop at empty/short page or `PAGE_CAP`),
+     header→label map, **stop at `GLOBAL_FETCH_CAP = 50` pages** in priority order, append to
+     `picks.csv` (dedup key `(date, list_category, ticker)`), rewrite `picks_latest.csv` (max-date
+     slice), flip `validated=true` on groups that returned rows (G4). Assert
+     `deltas['date'].max() == trading_date()` before scraping.
+   - `collect_picks.yml` separate workflow, own EOD cron after `collect.py`, **shared
+     `concurrency: { group: finviz-data-commit, cancel-in-progress: false }` added to BOTH this
+     file and `collect.yml`** (G1), rebase-before-push.
+   - Seed `selector_versions.json` `v1`; add all tests above; triple-doc the constants; write
+     ADR-007 + ADR-008.
+   - **Start the daily clock ASAP** — the daily capture is the irreplaceable work.
 3. **Phase 3 — PWA surfaces:** Picks tab + Lookup-tab section + deep-link button + release.
 4. **Phase 4 — attribution** (later, own session): `eval_picks.py`, OHLC backfill, methodology
    comparison.
@@ -473,8 +601,8 @@ derived from the log — never hand-maintained.
       handoff). 84-col `c=` list, `cap_midover` + Stage-2 `ta_*` filters, `v=151`/`v=311`.
 - [x] **Stored-net breadth (D11)** — VP chose **store wide + tag in-house**, *cautiously*, as an
       explicitly **non-LT** solution. Keep liquidity floor, relax trend gates, hard fetch caps,
-      Phase-1 volume probe, Phase-4 sunset. Honest volume ~60–120 fetches/day (not 40). See
-      §Fetch-volume budget.
+      Phase-4 sunset. Volume bounded by a **hard 50-page/day cap** (VP-set 2026-06-25), not a
+      probe estimate. See §Fetch-volume budget.
 - [x] **Selector spike COMPLETE (2026-06-24)** — leaders ranking metric + cap/floor split locked.
       See §Spike results. Metric: Approach 1 (8 SS + 2 MC freshness fills). Floor: top 40%
       by momentum_score percentile. Slot split: 10/4/3/3 confirmed. NOT `rs_confirmed` alone.
@@ -484,7 +612,9 @@ derived from the log — never hand-maintained.
       screener. Rate limiting is request-velocity-based, not IP-based. Mitigated by polite
       inter-fetch delays and a hard fetch cap. Existing `collect.py` already runs from Azure
       without issues (different endpoint, same IP pool).
-- [x] **VP sign-off on the real fetch number** after the Phase-1 probe (gate before daily job on).
+- [x] **Fetch volume bound** — superseded: rather than gate on a probe-measured number, the VP set
+      a **hard 50-page/day global cap** (2026-06-25). `GLOBAL_FETCH_CAP = 50`; revisit after live
+      data shows real daily page demand. No probe sign-off blocks Phase 2.
 - [x] **Free-tier 84-col validation (engineer, Phase 1)** — one GitHub Actions run against one
       large industry (Semiconductors) confirms all 84 columns return populated anonymously.
       Also measures real page count / daily fetch volume for VP sign-off.
@@ -498,6 +628,19 @@ derived from the log — never hand-maintained.
 - `collect_picks.py` pure functions: `slugify_industry`, `select_groups` (each category +
   floor), pagination loop (mock pages), append/dedup, **URL build from `screener_config.json`**
   (asserts `ind_<slug>` injection + ordered `c=`). Use `tmp_path`/`StringIO` per house rule.
+  - **`select_groups` leaders test must assert sum-of-ranks ordering** (8 by lowest
+    `rank_month+rank_quarter+rank_half`, then 2 by `momentum_confirmed` not already chosen) — and a
+    regression case where **fewer than 8 groups are top-N in all three timeframes**, proving we do
+    NOT use a hard intersection gate (degrades gracefully, still fills 8).
+  - **Global-cap test:** with many qualifying groups, scrape stops at `GLOBAL_FETCH_CAP = 50` pages
+    in priority order (leaders first); assert no 51st page is requested.
+  - **`grp_*` snapshot test:** a selected leader's row carries the correct `grp_rank_basis`,
+    `grp_sum_mid_rank`, and floor `grp_momentum_score_pctile` for that day.
+  - **Empty-bucket test (G2):** all-NaN `momentum_accel` ⇒ `accel` bucket = 0 groups, no error,
+    total still ≤ 20 by filling next priority.
+- **`selector_version` registry tests:** (a) active `SELECTOR_VERSION` has exactly one matching
+  entry in `selector_versions.json`; (b) versions are unique + monotonic; (c) immutability — a
+  committed hash of each non-active entry fails CI if history is edited.
 - Slug-map anti-drift test: every industry in `snapshots.csv` has a row in
   `finviz_industry_slugs.csv` (mirrors taxonomy validation discipline).
 - **Header / schema smoke tests (VP asked) — guard the discouraged behaviors explicitly:**
@@ -519,16 +662,25 @@ derived from the log — never hand-maintained.
 ## Documentation ATTENTION: Cross-cutting docs — picks pipeline (you must update alongside the phase that introduces the feature)
 
 Phase 2 (collect_picks.py + workflow):
-  knowledge/decisions/ADR-007-picks-selector-policy.md — document the sustained_strength +
-    momentum_confirmed freshness fill decision; why rs_confirmed was rejected; anti-flash floor
-    rationale; fetch-budget trade-offs.
+  knowledge/decisions/ADR-007-picks-selector-policy.md — ✅ WRITTEN (2026-06-25). Covers:
+    leaders sum-of-ranks decision; why not PWA intersection gate; why not rs_confirmed alone;
+    anti-flash floor rationale; selector_version registry scheme + constants-not-code caveat;
+    alternatives considered. **Implementer reads this; does not need to write it.**
+  knowledge/decisions/ADR-008-picks-collection-architecture.md — ✅ WRITTEN (2026-06-25). Covers:
+    separate workflow + shared concurrency (D7); store-wide vs tight-filters (D5/D11) + 50-page
+    cap; ta_highlow52w_a20h semantics; membership-only log (D9); picks_latest.csv split; grp_*
+    column spec + one-way/two-way door analysis. **Implementer reads this; does not need to write it.**
   README.md § Configurable parameters — rows for every cap/slot/delay constant:
     DAILY_GROUP_CAP (20), LEADER_SS_SLOTS (8), LEADER_MC_SLOTS (2), EMERGING_SLOTS (4),
-    ACCEL_SLOTS (3), RS_NH_SLOTS (3), per-group PAGE_CAP, GLOBAL_FETCH_CAP, PAGE_DELAY_S.
-  CLAUDE.md — add § Picks pipeline: key scripts, data layout (picks.csv / picks_latest.csv),
-    workflow trigger and concurrency guard, selector categories, fetch budget.
+    ACCEL_SLOTS (3), RS_NH_SLOTS (3), ANTIFLASH_PCTILE (0.40), per-group PAGE_CAP,
+    GLOBAL_FETCH_CAP (50), PAGE_DELAY_S, SELECTOR_VERSION ("v1").
+  CLAUDE.md — add § Picks pipeline: key scripts, data layout (picks.csv / picks_latest.csv /
+    selector_versions.json), workflow trigger and **shared concurrency guard (note collect.yml must
+    gain the group too)**, selector categories, `grp_*` columns, 50-page fetch cap.
   data/picks/screener_config.json labels — must stay verbatim-synced to
     tests/fixtures/probe_header_84col.txt; re-run probe if Finviz view changes.
+  data/picks/selector_versions.json — seed the `v1` entry in the same PR that lands select_groups;
+    add the immutability + uniqueness tests (see §selector_version scheme).
 
 Phase 3 (PWA surfaces):
   docs/releases.json + docs/sw.js CACHE bump (house rule: every user-facing change).
