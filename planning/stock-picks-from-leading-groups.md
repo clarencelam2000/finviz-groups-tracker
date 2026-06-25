@@ -1,6 +1,6 @@
 # Plan: Top-stock picks from leading groups (Stage-2 screener pipeline)
 
-> Status: **READY TO EXECUTE.** All major decisions VP-confirmed (2026-06-23 + 2026-06-24).
+> Status: **READY TO EXECUTE PHASE 2.** All major decisions VP-confirmed (2026-06-23 + 2026-06-24).
 > Phase-1.5 spike COMPLETE (2026-06-24) — selector policy locked (see §Spike results).
 > Completed tasks before Phase 2 starts: (1) DONE - Phase-1 probe run on GitHub Actions — validate 84-col
 > anon fetch on one large industry (Semiconductors) + measure real daily fetch count;
@@ -515,3 +515,28 @@ derived from the log — never hand-maintained.
 - **`picks_latest.csv` test:** equals the max-date slice of `picks.csv` after a run.
 - PWA: Playwright fixture-intercept tests for Picks tab + Lookup section (per CLAUDE.md
   pattern).
+
+## Documentation ATTENTION: Cross-cutting docs — picks pipeline (you must update alongside the phase that introduces the feature)
+
+Phase 2 (collect_picks.py + workflow):
+  knowledge/decisions/ADR-007-picks-selector-policy.md — document the sustained_strength +
+    momentum_confirmed freshness fill decision; why rs_confirmed was rejected; anti-flash floor
+    rationale; fetch-budget trade-offs.
+  README.md § Configurable parameters — rows for every cap/slot/delay constant:
+    DAILY_GROUP_CAP (20), LEADER_SS_SLOTS (8), LEADER_MC_SLOTS (2), EMERGING_SLOTS (4),
+    ACCEL_SLOTS (3), RS_NH_SLOTS (3), per-group PAGE_CAP, GLOBAL_FETCH_CAP, PAGE_DELAY_S.
+  CLAUDE.md — add § Picks pipeline: key scripts, data layout (picks.csv / picks_latest.csv),
+    workflow trigger and concurrency guard, selector categories, fetch budget.
+  data/picks/screener_config.json labels — must stay verbatim-synced to
+    tests/fixtures/probe_header_84col.txt; re-run probe if Finviz view changes.
+
+Phase 3 (PWA surfaces):
+  docs/releases.json + docs/sw.js CACHE bump (house rule: every user-facing change).
+  knowledge/moaty-metrics.md — one-liner for any new metric surfaced in the Picks tab
+    (extension from 50SMA, 52w-high distance, etc.).
+  planning/stock-picks-from-leading-groups.md — update Phase 3 status to COMPLETE.
+
+Per-phase (always):
+  .session/SPRINT.md — move completed tasks, add new backlog items.
+  .session/WORK_LOG.md — milestone entry when each phase lands end-to-end.
+  planning/stock-picks-from-leading-groups.md — update phase status at top of file and mark phases complete as you go.
