@@ -4,6 +4,13 @@
 
 ---
 
+## 2026-06-26 — Phase 3a COMPLETE: Picks tab MVP + backend derived metrics
+
+`picks_metrics.py` backend module (5 METRICS_COLS: atr_ext_50, risk_20ma_pct, risk_50ma_pct, range_atr, stage2).
+PWA Picks tab rendering: grouped category→industry→stock, C4 ATR color bands, C6 base filter. 39 unit tests
+verify formulas against EOD worked examples (ANET ≈ 0.67×, STX ≈ 3.16×, DELL ≈ 3.64×, SNDK ≈ 4.55×).
+Historical data backfilled. Release v2026.06.26. 522/522 non-Playwright tests pass.
+
 ## 2026-06-25 — PICKS-2-CRON: plan + docs committed, implementation queued
 
 Full implementation plan written to `planning/cloudflare-cron-scheduler.md` § Phase 5.

@@ -248,6 +248,56 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   highs. The 5-session window keeps it tight so it doesn't fire on noise.
 - **User one-liner:** "This group's RS spread just flipped from lagging to beating the market within the last 5 sessions — a rotation trigger."
 
+## atr_ext_50 (ATR extension — picks pipeline, Phase 3a)
+- **Source:** `compute_metrics_row` (`scripts/picks_metrics.py`). `(Price − sma50_price) / ATR`
+  where `sma50_price = Price / (1 + SMA50/100)`. Finviz `SMA50` = "% above 50MA"; we reconstruct
+  the MA price level. NaN when ATR or SMA50 is blank.
+- **PWA thresholds:** `ATR_EXT_ACTIONABLE = 5.0` and `ATR_EXT_TRIM = 8.0` in `docs/index.html`.
+  ≤5× = emerald (actionable); 5–8× = amber (caution); ≥8× = red with "trim" tag.
+- **Signals:** the CEO "rubber-band stretch". Over-extension from the 50MA increases mean-reversion
+  risk; entries above 5× carry a poor risk-reward profile even in strong groups.
+- **User one-liner:** "How many ATR multiples above its 50-day MA the stock is — the rubber-band
+  stretch: ≤5× is actionable, ≥8× is a trim candidate."
+
+## risk_20ma_pct (risk to 20MA — picks pipeline, Phase 3a)
+- **Source:** `compute_metrics_row` (`scripts/picks_metrics.py`). `(Price − sma20_price) / Price`
+  where `sma20_price = Price / (1 + SMA20/100)`. Stored as a raw fraction (0.0115 = 1.15%).
+  NaN when Price or SMA20 is blank.
+- **PWA display:** rendered as a percentage. $-risk = fraction × price.
+- **Signals:** the stop-risk to the near-term MA. Tight (<2%) = low per-share risk; >5% = requires
+  wider position sizing to stay within standard risk limits.
+- **User one-liner:** "What fraction of the current price you'd give back if stopped at the 20-day
+  MA — shown as a % (e.g. 1.1% means a tight $1.82 stop on a $165 stock)."
+
+## risk_50ma_pct (risk to 50MA — picks pipeline, Phase 3a)
+- **Source:** `compute_metrics_row` (`scripts/picks_metrics.py`). `(Price − sma50_price) / Price`.
+  Stored as a raw fraction. NaN when Price or SMA50 is blank.
+- **PWA display:** rendered as a percentage. $-risk = fraction × price.
+- **Signals:** wider-stop alternative. Use when a position needs more room to breathe through
+  intraday volatility without getting shaken out.
+- **User one-liner:** "What fraction of the current price you'd give back if stopped at the 50-day
+  MA — the wider-stop alternative to the 20MA stop."
+
+## range_atr (day range / ATR — picks pipeline, Phase 3a)
+- **Source:** `compute_metrics_row` (`scripts/picks_metrics.py`). `(High − Low) / ATR`.
+  NaN when ATR is blank.
+- **Signals:** the C1 tightness proxy. <1× = a quiet constructive bar (stock is resting, not
+  thrashing); >2× = a wide volatile day. Small values identify stocks that are still coiling inside
+  a base rather than breaking out aggressively.
+- **User one-liner:** "How much the stock moved today (High−Low) relative to its ATR — below 1×
+  is a quiet constructive day; above 2× is a volatile day."
+
+## stage2 (Stage-2 flag — picks pipeline, Phase 3a)
+- **Source:** `compute_metrics_row` (`scripts/picks_metrics.py`).
+  `1 if SMA50_pct > 0 AND SMA200_pct > SMA50_pct else 0`.
+  Equivalence proof: `SMA200_pct > SMA50_pct` ↔ `sma50_price > sma200_price` ↔ 50MA > 200MA.
+  NaN when SMA50 or SMA200 is blank.
+- **Signals:** the William O'Neil / IBD Stage-2 base condition. The majority of big winning stocks
+  spend their best run in Stage 2. Stocks below the 50MA or with an inverted MA stack are in
+  Stage 1, 3, or 4 — outside the sweet spot.
+- **User one-liner:** "Whether the stock is in Stage 2: price above the 50-day MA and the 50MA
+  above the 200MA — the technical configuration where most big winning stocks reside."
+
 ## Rotation Phase (AI — sectors only)
 - **Definition:** an AI-generated read of where the broad market sits in its
   cycle, labeled Early Cycle, Mid Cycle, Late Cycle, or Defensive, with a short

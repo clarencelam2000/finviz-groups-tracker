@@ -1,6 +1,18 @@
 {
-  "current": "2026.06.24.1",
+  "current": "2026.06.26",
   "releases": [
+    {
+      "version": "2026.06.26",
+      "date": "2026-06-26",
+      "title": "Picks tab: daily Stage-2 stocks inside leading groups",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "New Picks tab shows the daily list of Stage-2 stock picks scraped from leading industry groups — grouped by category (Leaders, Emerging, Accel, RS New High), then by industry, sorted least-extended first.",
+        "ATR extension color bands: emerald (≤5×, actionable), amber (5–8×, caution), red (≥8×, trim candidate). Base filter hides micro-caps and stocks not in a Stage-2 configuration.",
+        "Five new backend metrics now stored per pick: ATR extension (×50MA), risk to 20MA (%), risk to 50MA (%), day range / ATR tightness, and Stage-2 flag."
+      ]
+    },
     {
       "version": "2026.06.24.1",
       "date": "2026-06-24",

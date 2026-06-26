@@ -42,7 +42,7 @@ Finviz shows today's snapshot — who's winning right now. We keep the history a
 
 ---
 
-## Slide 4 — Your 6 tabs
+## Slide 4 — Your 7 tabs
 
 | Tab | Description |
 |-----|-------------|
@@ -52,6 +52,7 @@ Finviz shows today's snapshot — who's winning right now. We keep the history a
 | Strength | Proven, sustained leaders. |
 | AI | A plain-English daily rotation briefing. |
 | Lookup | Type any ticker — see if its group is a tailwind or headwind. |
+| Picks | Daily stock picks inside leading groups — the strongest names in the strongest groups. |
 
 ---
 

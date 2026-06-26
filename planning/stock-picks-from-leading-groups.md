@@ -1,12 +1,19 @@
 # Plan: Top-stock picks from leading groups (Stage-2 screener pipeline)
 
+> Status: **PHASE 3a COMPLETE (2026-06-26)** — Picks tab MVP shipped. Backend metrics
+> (`atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`, `range_atr`, `stage2`) in picks.csv/picks_latest.csv;
+> one historical date backfilled via `ensure_picks_csv`. PWA Picks tab renders grouped by
+> category→industry, sorted least-extended first, C4 color bands, C6 base filter. All acceptance
+> criteria met; 80 tests pass. Release triplet present (v2026.06.26). Phase 3b (risk panel + Focus
+> List) is next.
+>
 > Status: **PHASE 2 LIVE (2026-06-25)** — first `collect_picks.yml` dispatch GREEN. Daily capture
 > started. 273 stock picks / 262 unique tickers / 19 industry groups across all 4 buckets.
 > 19/19 scraped slugs validated. Dedup logic confirmed (Packaging & Containers tagged in both
 > `emerging` + `accel`, scraped once). `picks_latest.csv` correct. **Phase 3 (PWA surfaces) is
 > unblocked — gate cleared.** Phase 3 is now **SPEC LOCKED (CEO-aligned 2026-06-26)** — see the
 > detailed §"Phase 3 — PWA surfaces (DETAILED SPEC)" below; ready for an implementer (subphases
-> 3a→3d, with acceptance criteria + tests). Not started.
+> 3a→3d, with acceptance criteria + tests). Phase 3a COMPLETE.
 > Fast-follows still open: PICKS-2-ADR8 (ADR-008 grp_* reconciliation), PICKS-2-HDR (live
 > header drift detection), PICKS-2-CRON (Cloudflare cron dispatcher for picks). See SPRINT.
 >
@@ -812,23 +819,23 @@ and `knowledge/moaty-metrics.md`): `atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct
 
 ## Acceptance criteria (Phase 3, by subphase)
 
-**3a**
-- [ ] Backend: `atr_ext_50, risk_20ma_pct, risk_50ma_pct, range_atr, stage2` present in
+**3a** ✅ COMPLETE (2026-06-26)
+- [x] Backend: `atr_ext_50, risk_20ma_pct, risk_50ma_pct, range_atr, stage2` present in
       `picks_latest.csv` and `picks.csv`; the one historical date is backfilled; golden-header
       superset test still passes.
-- [ ] `atr_ext_50` matches the worked examples within ±0.1×: **ANET ≈ 0.67×, STX ≈ 3.16×,
+- [x] `atr_ext_50` matches the worked examples within ±0.1×: **ANET ≈ 0.67×, STX ≈ 3.16×,
       DELL ≈ 3.64×, SNDK ≈ 4.55×** (2026-06-25 **EOD** data). Values at 10:30am intraday were
       ANET≈0.96×/STX≈3.2×/DELL≈3.5×/SNDK≈4.3× — the test fixture must use EOD data only.
-- [ ] `risk_20ma_pct` and `risk_50ma_pct` for ANET within ±0.3%: **risk_20ma_pct ≈ 1.15%,
+- [x] `risk_20ma_pct` and `risk_50ma_pct` for ANET within ±0.3%: **risk_20ma_pct ≈ 1.15%,
       risk_50ma_pct ≈ 3.40%** (ANET EOD 2026-06-25: price=165.45, sma20≈163.55, sma50≈159.82;
       formula is `(price − smaX_price) / price`, NOT High-based). ANET is the canonical worked
       example — both risks <4% confirm it as actionable; SNDK's ~20% 20MA stop makes it a poor
       example. `risk_*` values are stored as fractions (0.0115, 0.0340); display as % in the PWA.
-- [ ] Picks tab renders, grouped category→industry→stock, base filter applied (≈141 rows on the
+- [x] Picks tab renders, grouped category→industry→stock, base filter applied (≈141 rows on the
       2026-06-25 EOD fixture), least-extended-first within each industry, breadth count per group.
-- [ ] Extension color bands render per C4; `≥8×` shows the trim tag.
-- [ ] Empty/blocked-day CSV → placeholder, no crash.
-- [ ] Release triplet present; `tests/test_guide_releases.py` passes (`current === releases[0].version`).
+- [x] Extension color bands render per C4; `≥8×` shows the trim tag.
+- [x] Empty/blocked-day CSV → placeholder, no crash.
+- [x] Release triplet present; `tests/test_guide_releases.py` passes (`current === releases[0].version`).
 
 **3b**
 - [ ] Risk panel shows trigger (prev-day high), 20MA stop + risk $/%, 50MA wider-stop alternative,

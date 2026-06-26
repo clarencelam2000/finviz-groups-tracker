@@ -88,6 +88,7 @@
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="vsmarket">vs Mkt</button>
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="ai">AI</button>
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="lookup">Lookup</button>
+    <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="picks">Picks</button>
   </nav>
 
   <main>
@@ -257,6 +258,18 @@
       <div id="lookup-result" class="space-y-3"></div>
     </section>
 
+    <!-- TAB: Picks -->
+    <section id="tab-picks" class="px-3 pt-3 pb-24 hidden">
+      <div class="flex items-center flex-wrap gap-x-2 gap-y-1 mb-3 text-xs text-slate-400">
+        ATR extension bands:
+        <span class="text-emerald-400 font-medium">≤5× actionable</span> ·
+        <span class="text-amber-400 font-medium">5–8× caution</span> ·
+        <span class="text-red-400 font-medium">≥8× trim</span>
+        <button class="underline text-slate-500 hover:text-slate-300" onclick="__openHub('guide','atr_ext_50')">why this matters</button>
+      </div>
+      <div id="picks-list" class="space-y-1"></div>
+    </section>
+
   </main>
 
   <!-- First-run intro carousel overlay (z-50 sits above the hub at z-40) -->
@@ -311,6 +324,7 @@
     };
     const FETCH_LOG_URL = `${BASE}/fetch_log.csv`;
     const TAXONOMY_URL  = `${BASE}/finviz_sector_industry_map.json`;
+    const PICKS_URL     = `${BASE}/picks/picks_latest.csv`;
     const WORKER_URL = 'https://finviz-ticker-lookup.salmonbaby8.workers.dev';
 
     // localStorage keys for Lookup tab persistence (Ideas 5+7, planning/lookup-search-enhancements.md).
@@ -359,6 +373,7 @@
       fetchLog: null,
       taxonomy: null,  // { SectorName: [industry, ...] } from finviz_sector_industry_map.json
       aiData: null,
+      picksData: null,   // rows from picks_latest.csv; null = not yet loaded
       provenanceData: null,
       latestAiDate: null,
       latestSnapshotDate: null,
@@ -388,6 +403,14 @@
     // Defaults chosen conservatively — adjust after observing live distributions.
     const RS_STRONG = 2.0;   // ≥ 2pp vs SPY → deep green / deep red badge
     const RS_SLIGHT = 0.5;   // ≥ 0.5pp → mild badge; within ±0.5pp → neutral
+
+    // Picks tab constants (Phase 3a, ADR-008). Triple-documented: here, README § Configurable
+    // parameters, CLAUDE.md § PWA display thresholds.
+    // MIN_MARKET_CAP_B — C6 base display filter; exclude micro/nano-cap noise.
+    const MIN_MARKET_CAP_B   = 5;    // $B floor; rows below this are hidden from the Picks tab
+    // ATR extension color bands (C4). ≤ ACTIONABLE = emerald; ACTIONABLE–TRIM = amber; ≥ TRIM = red.
+    const ATR_EXT_ACTIONABLE = 5.0;  // over-extended hard cutoff; also Focus hard-DQ line (Phase 3b)
+    const ATR_EXT_TRIM       = 8.0;  // flags a held position as a trim-10% candidate
 
     // ── Guide / Glossary content ───────────────────────────────────────────
     // The metric `oneLiner` strings are copied VERBATIM from the "User one-liner"
@@ -467,6 +490,21 @@
         { id: 'rs_cross', label: 'RS cross (↑ cross)', tabs: ['vsmarket'],
           oneLiner: 'This group\'s RS spread just flipped from lagging to beating the market within the last 5 sessions — a rotation trigger.',
           detail: '1 when rs_month crossed from ≤ 0 to > 0 within the last 5 trading sessions. Today must be positive; at least one prior session in the window must have been ≤ 0. 0 if the group has been above 0 throughout, or if today\'s RS is non-positive.' },
+        { id: 'atr_ext_50', label: 'ATR extension (×50MA)', tabs: ['picks'],
+          oneLiner: "How many ATR multiples above its 50-day MA the stock is — the rubber-band stretch: ≤5× is actionable, ≥8× is a trim candidate.",
+          detail: '(Price − 50MA_price) / ATR. Finviz SMA50 = % above 50MA; reconstruct 50MA_price = Price / (1 + SMA50/100). Color-banded: emerald ≤5×, amber 5–8×, red ≥8×. Formula from CEO / Ariel Hernandez (Phase 3a).' },
+        { id: 'risk_20ma_pct', label: 'Risk to 20MA (%)', tabs: ['picks'],
+          oneLiner: "What fraction of the current price you'd give back if stopped at the 20-day MA — shown as a % (e.g. 1.1% means a tight $1.82 stop on a $165 stock).",
+          detail: '(Price − 20MA_price) / Price. Stored as a fraction (0.0115 = 1.15%); displayed as % in the PWA. Tighter = lower risk per share. The canonical near-term stop (Phase 3a / Phase 3b).' },
+        { id: 'risk_50ma_pct', label: 'Risk to 50MA (%)', tabs: ['picks'],
+          oneLiner: "What fraction of the current price you'd give back if stopped at the 50-day MA — the wider-stop alternative to the 20MA stop.",
+          detail: '(Price − 50MA_price) / Price. Fraction; displayed as % in the PWA. Larger than risk_20ma_pct; use when you want to give the position more room to breathe (Phase 3a / Phase 3b).' },
+        { id: 'range_atr', label: 'Day range / ATR', tabs: ['picks'],
+          oneLiner: "How much the stock moved today (High−Low) relative to its ATR — below 1× is a quiet constructive day; above 2× is a volatile day.",
+          detail: '(High − Low) / ATR. A narrow-range day (range_atr < 1) is the C1 tightness proxy — the stock is resting, not thrashing. Day-of-capture value; not predictive on its own but informative when combined with extension and position in the base (Phase 3a).' },
+        { id: 'stage2', label: 'Stage 2 (IBD)', tabs: ['picks'],
+          oneLiner: "Whether the stock is in Stage 2: price above the 50-day MA and the 50MA above the 200MA — the technical configuration where most big winning stocks reside.",
+          detail: '1 when SMA50 > 0 (price above 50MA) AND SMA200 > SMA50 in % terms (equivalent to 50MA price > 200MA price). 0 otherwise. NaN when either MA is unavailable. Classic O\'Neil / IBD Stage-2 base condition (Phase 3a).' },
       ],
       howto: [
         'Each card is one group: a rank badge on the left, the selected timeframe’s % on the right, and momentum below the name.',
@@ -506,7 +544,7 @@
       },
       {
         id: 'tabs-tour',
-        title: 'Your 6 tabs',
+        title: 'Your 7 tabs',
         body: '',
         items: [
           { label: 'Today',    tab: 'today',    desc: 'Every group ranked by current strength.' },
@@ -515,6 +553,7 @@
           { label: 'Strength', tab: 'strength', desc: 'Proven, sustained leaders.' },
           { label: 'AI',       tab: 'ai',       desc: 'A plain-English daily rotation briefing.' },
           { label: 'Lookup',   tab: 'lookup',   desc: 'Type any ticker — see if its group is a tailwind or headwind.' },
+          { label: 'Picks',    tab: 'picks',    desc: 'Daily stock picks inside leading groups — the strongest names in the strongest groups.' },
         ],
       },
       {
@@ -537,6 +576,7 @@
       { id: 'vsmarket', label: 'vs Mkt'  },
       { id: 'ai',       label: 'AI'       },
       { id: 'lookup',   label: 'Lookup'   },
+      { id: 'picks',    label: 'Picks'    },
     ];
     // Active Guide chip. Reset on each hub open from context (see setHubSection):
     // the metric you deep-linked to, or the tab you opened the hub from.
@@ -1026,6 +1066,16 @@
         state.taxonomy = data.sectors || {};
       } catch (e) {
         state.taxonomy = {};
+      }
+    }
+
+    async function loadPicks(force = false) {
+      if (!force && state.picksData !== null) return;
+      try {
+        const res = await fetchCSV(PICKS_URL, force);
+        state.picksData = res.data || [];
+      } catch (e) {
+        state.picksData = [];
       }
     }
 
@@ -3004,6 +3054,178 @@
       renderLookupChips();
     }
 
+    // ── Picks tab ──────────────────────────────────────────────────────────────
+
+    function renderPicks() {
+      const el = document.getElementById('picks-list');
+      if (!el) return;
+
+      const rows = state.picksData;
+      if (!rows || rows.length === 0) {
+        el.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">No picks captured yet — the daily job runs after the close.</p>';
+        return;
+      }
+
+      // Inline parsers (mirrors picks_metrics.py for consistency)
+      function parsePct(v) {
+        if (!v || v === '-') return NaN;
+        return parseFloat(String(v).replace('%', ''));
+      }
+      function parseCapB(v) {
+        if (!v || v === '-') return NaN;
+        const s = String(v).trim();
+        const suf = { T: 1000, B: 1, M: 0.001, K: 0.000001 };
+        const last = s.slice(-1).toUpperCase();
+        if (suf[last] !== undefined) return parseFloat(s.slice(0, -1)) * suf[last];
+        return parseFloat(s);
+      }
+      function parseF(v) {
+        if (!v || v === '-') return NaN;
+        return parseFloat(String(v).replace(/,/g, ''));
+      }
+
+      // C6 base display filter: Market Cap > MIN_MARKET_CAP_B AND
+      // (price>50MA OR price>200MA OR 20MA>50MA).
+      // sma20_price > sma50_price ↔ SMA50_pct > SMA20_pct (same price denominates both).
+      const filtered = rows.filter(r => {
+        const capB = parseCapB(r['Market Cap']);
+        if (isNaN(capB) || capB <= MIN_MARKET_CAP_B) return false;
+        const sma50  = parsePct(r['SMA50']);
+        const sma200 = parsePct(r['SMA200']);
+        const sma20  = parsePct(r['SMA20']);
+        if (!isNaN(sma50)  && sma50  > 0) return true;
+        if (!isNaN(sma200) && sma200 > 0) return true;
+        if (!isNaN(sma50) && !isNaN(sma20) && sma50 > sma20) return true;
+        return false;
+      });
+
+      if (filtered.length === 0) {
+        el.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">No picks pass the base filter today.</p>';
+        return;
+      }
+
+      // Group by list_category → group (industry) → [rows]
+      const CAT_ORDER  = ['leaders', 'emerging', 'accel', 'rs_new_high'];
+      const CAT_LABELS = { leaders: 'Leaders', emerging: 'Emerging', accel: 'Accel', rs_new_high: 'RS New High' };
+      const CAT_COLORS = {
+        leaders:    'bg-sky-900 text-sky-200',
+        emerging:   'bg-emerald-900 text-emerald-200',
+        accel:      'bg-amber-900 text-amber-200',
+        rs_new_high:'bg-purple-900 text-purple-200',
+      };
+
+      const catMap = {};
+      for (const r of filtered) {
+        const cat = r.list_category || 'unknown';
+        const grp = r.group || 'Unknown';
+        if (!catMap[cat]) catMap[cat] = {};
+        if (!catMap[cat][grp]) catMap[cat][grp] = [];
+        catMap[cat][grp].push(r);
+      }
+
+      // Within each group sort least-extended first (atr_ext_50 asc; NaN last).
+      for (const cat of Object.keys(catMap)) {
+        for (const grp of Object.keys(catMap[cat])) {
+          catMap[cat][grp].sort((a, b) => {
+            const av = parseF(a.atr_ext_50), bv = parseF(b.atr_ext_50);
+            if (isNaN(av) && isNaN(bv)) return 0;
+            if (isNaN(av)) return 1;
+            if (isNaN(bv)) return -1;
+            return av - bv;
+          });
+        }
+      }
+
+      // C4 ATR extension color bands
+      function atrTextColor(ext) {
+        if (isNaN(ext) || ext < 0) return 'text-slate-400';
+        if (ext >= ATR_EXT_TRIM)       return 'text-red-400';
+        if (ext >= ATR_EXT_ACTIONABLE) return 'text-amber-400';
+        return 'text-emerald-400';
+      }
+
+      let html = '';
+      const catsPresent = CAT_ORDER.filter(c => catMap[c]);
+
+      for (const cat of catsPresent) {
+        const groups = catMap[cat];
+        const catLabel = CAT_LABELS[cat] || cat;
+        const catColor = CAT_COLORS[cat] || 'bg-slate-800 text-slate-200';
+        const totalStocks = Object.values(groups).reduce((s, a) => s + a.length, 0);
+
+        html += `<div class="mb-5">
+          <div class="flex items-center gap-2 mb-2 px-1">
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full ${catColor}">${catLabel}</span>
+            <span class="text-xs text-slate-500">${totalStocks} name${totalStocks !== 1 ? 's' : ''}</span>
+          </div>`;
+
+        const sortedGroups = Object.keys(groups).sort();
+        for (const grp of sortedGroups) {
+          const stocks = groups[grp];
+          html += `<div class="mb-2 bg-slate-800/60 rounded-lg overflow-hidden border border-slate-700/50">
+            <div class="flex items-center justify-between px-3 py-2 bg-slate-800 border-b border-slate-700">
+              <span class="text-xs font-medium text-slate-200 truncate">${grp}</span>
+              <span class="text-xs text-slate-500 ml-2 flex-shrink-0">${stocks.length} name${stocks.length !== 1 ? 's' : ''}</span>
+            </div>`;
+
+          for (const r of stocks) {
+            const ticker  = r.ticker || r.Ticker || '';
+            const company = (r.Company || '').slice(0, 18);
+            const atrExt  = parseF(r.atr_ext_50);
+            const atrStr  = isNaN(atrExt) ? '—' : atrExt.toFixed(1) + '×';
+            const isTrim  = !isNaN(atrExt) && atrExt >= ATR_EXT_TRIM;
+            const atrCls  = atrTextColor(atrExt);
+
+            const sma50v   = parsePct(r['SMA50']);
+            const sma50Str = isNaN(sma50v) ? '—' : (sma50v >= 0 ? '+' : '') + sma50v.toFixed(1) + '%';
+
+            const rsi    = parseF(r['RSI']);
+            const rsiStr = isNaN(rsi) ? '—' : rsi.toFixed(0);
+
+            const perfW    = parsePct(r['Perf Week']);
+            const perfWStr = isNaN(perfW) ? '—' : (perfW >= 0 ? '+' : '') + perfW.toFixed(1) + '%';
+            const perfM    = parsePct(r['Perf Month']);
+            const perfMStr = isNaN(perfM) ? '—' : (perfM >= 0 ? '+' : '') + perfM.toFixed(1) + '%';
+            const perfWCls = isNaN(perfW) ? 'text-slate-400' : (perfW >= 0 ? 'text-emerald-400' : 'text-red-400');
+            const perfMCls = isNaN(perfM) ? 'text-slate-400' : (perfM >= 0 ? 'text-emerald-400' : 'text-red-400');
+
+            html += `<div class="flex items-center gap-2 px-3 py-2 border-b border-slate-700/40 last:border-0">
+              <div class="w-16 flex-shrink-0">
+                <div class="text-xs font-bold text-white leading-tight">${ticker}</div>
+                <div class="text-xs text-slate-400 truncate leading-tight">${company}</div>
+              </div>
+              <div class="w-12 flex-shrink-0 text-right">
+                <div class="text-sm font-semibold ${atrCls} leading-tight">${atrStr}</div>
+                <div class="text-xs leading-tight ${isTrim ? 'text-red-500' : 'text-slate-500'}">${isTrim ? 'trim' : 'ext'}</div>
+              </div>
+              <div class="w-12 flex-shrink-0 text-right">
+                <div class="text-xs text-slate-500 leading-tight">%>50</div>
+                <div class="text-xs text-white leading-tight">${sma50Str}</div>
+              </div>
+              <div class="flex-1 flex gap-2 justify-end">
+                <div class="text-right">
+                  <div class="text-xs text-slate-500 leading-tight">RSI</div>
+                  <div class="text-xs text-white leading-tight">${rsiStr}</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-xs text-slate-500 leading-tight">Wk</div>
+                  <div class="text-xs ${perfWCls} leading-tight">${perfWStr}</div>
+                </div>
+                <div class="text-right">
+                  <div class="text-xs text-slate-500 leading-tight">Mo</div>
+                  <div class="text-xs ${perfMCls} leading-tight">${perfMStr}</div>
+                </div>
+              </div>
+            </div>`;
+          }
+          html += '</div>';
+        }
+        html += '</div>';
+      }
+
+      el.innerHTML = html;
+    }
+
     function render() {
       if (state.tab === 'today')    { renderToday(); renderPipeline(); }
       if (state.tab === 'movers')   renderMovers();
@@ -3012,6 +3234,7 @@
       if (state.tab === 'vsmarket') renderVsMarket();
       if (state.tab === 'ai')       renderAI();
       if (state.tab === 'lookup')   { renderLookup(); renderLookupChips(); }
+      if (state.tab === 'picks')    renderPicks();
     }
 
     function setLoading(on) {
@@ -3036,6 +3259,7 @@
         Promise.all([loadGroup('sectors', force), loadGroup('industries', force)]),
         loadFetchLog(force),
         loadTaxonomy(force),
+        loadPicks(force),
         new Promise(r => setTimeout(r, minMs)),
       ]);
       // AI JSON is keyed by the latest data date — derive it after CSVs are loaded
@@ -3069,7 +3293,7 @@
       document.querySelectorAll('main section').forEach(s => {
         s.classList.toggle('hidden', s.id !== `tab-${tab}`);
       });
-      if (!state.data[state.group].snap) {
+      if (!state.data[state.group].snap || (tab === 'picks' && state.picksData === null)) {
         loadAndRender();
       } else {
         render();
@@ -3313,7 +3537,7 @@
 
     // ── First-run intro carousel ───────────────────────────────────────────────
 
-    const INTRO_KEY = 'fvt_intro_seen_v1';
+    const INTRO_KEY = 'fvt_intro_seen_v2';  // bumped Phase 3a: Picks tab added to intro tour
     function getIntroSeen() { try { return localStorage.getItem(INTRO_KEY) === 'true'; } catch(e) { return false; } }
     function setIntroSeen() { try { localStorage.setItem(INTRO_KEY, 'true'); } catch(e) {} }
 
