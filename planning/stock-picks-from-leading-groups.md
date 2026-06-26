@@ -4,7 +4,9 @@
 > started. 273 stock picks / 262 unique tickers / 19 industry groups across all 4 buckets.
 > 19/19 scraped slugs validated. Dedup logic confirmed (Packaging & Containers tagged in both
 > `emerging` + `accel`, scraped once). `picks_latest.csv` correct. **Phase 3 (PWA surfaces) is
-> unblocked — do not start until daily data has been flowing (gate now cleared).**
+> unblocked — gate cleared.** Phase 3 is now **SPEC LOCKED (CEO-aligned 2026-06-26)** — see the
+> detailed §"Phase 3 — PWA surfaces (DETAILED SPEC)" below; ready for an implementer (subphases
+> 3a→3d, with acceptance criteria + tests). Not started.
 > Fast-follows still open: PICKS-2-ADR8 (ADR-008 grp_* reconciliation), PICKS-2-HDR (live
 > header drift detection), PICKS-2-CRON (Cloudflare cron dispatcher for picks). See SPRINT.
 >
@@ -555,6 +557,333 @@ the human lands on a clean list, even though our stored scrape uses the wide net
   yourself →").
 - Release triplet per house rules (releases.json entry + `current` + `sw.js` CACHE bump).
 
+---
+
+# Phase 3 — PWA surfaces (DETAILED SPEC, CEO-aligned 2026-06-26)
+
+> Status: **SPEC LOCKED, NOT STARTED.** This section supersedes the terse §PWA (D8) bullets above
+> for implementation. Read it top-to-bottom before touching code. The §PWA (D8) bullets remain as
+> the original D8 intent; where they differ, **this section wins** (CEO refinements 2026-06-26).
+>
+> **The product, in one line:** *every trading day, the strongest individual stocks inside the
+> strongest groups — with a "Focus/Ready" highlights list of A++ actionable setups that are not
+> over-extended, carry tight logical-stop risk, and sit in the leading groups.* This is the new
+> crown-jewel feature.
+
+## CEO decisions locked (2026-06-26)
+
+| # | Decision | Choice |
+|---|----------|--------|
+| C1 | Inside-day / tightness fidelity | **Range/ATR proxy now** (`(High−Low)/ATR`, single-row). True inside-day deferred to 3d. |
+| C2 | Focus List placement | **Toggle inside the Picks tab** (`All / Focus` segment), not a separate tab. |
+| C3 | Logical-stop default | **20MA tight stop is the default; 50MA shown as the wider alternative.** |
+| C4 | ATR-extension bands | **`atr_ext_50 ≤ 5` actionable; `5–8` caution; `≥ 8` trim-candidate.** |
+| C5 | Where the math lives | **Raw derived metrics → backend columns** (single source of truth, pytest-testable, reused by Phase-4 attribution). **Decision thresholds + Focus weights → PWA constants** (tuned frequently; one-line edit + cache bump). See §C5 rationale. |
+| C6 | Picks-tab base display filter | **`market_cap > 5B` AND (`price>50MA` OR `price>200MA` OR `20MA>50MA`).** Cuts the daily list from ~273 rows to ~165 (verified on 2026-06-25 data). |
+| C7 | Focus scoring philosophy | **Blended multi-factor quality rank** (not a single-axis sort). Proximity-to-50MA is NOT a positive factor. See §Focus List. |
+| C8 | RSI gate | **None.** RSI is display-only. |
+| C9 | Fundamental floor | **Deferred to 3d**, and when applied, **show an "Honorable mentions" sub-list** of names the floor removed (so we can eyeball whether the floor is too aggressive — it's an un-calibrated judgment call at first). |
+
+### §C5 rationale — backend vs PWA split (answers CEO's "does it matter?")
+
+It matters, and here is the principled line:
+
+- **Backend (new columns in `picks.csv` + `picks_latest.csv`, computed at write time in
+  `collect_picks.py` using helpers in `picks_config.py`):** the *raw derived metrics* —
+  `atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`, `range_atr`, `stage2`. Why backend: (1) **single
+  source of truth** — the extension number a trader sees on the card is byte-identical to the one
+  Phase-4 attribution analyses; (2) **pytest-testable** — our test suite covers Python, not the
+  PWA's inline JS; (3) keeps PWA rendering thin; (4) **the migration is free right now** — history
+  is a single day (2026-06-25), so the append-only schema bump backfills exactly one date. This is
+  the cheapest this change will ever be. These columns are deterministic functions of already-stored
+  Finviz columns, so they need **no `selector_version` bump** — document them as a plain schema
+  addition (superset append, same discipline as `ensure_deltas_csv()`).
+- **PWA constants (`index.html`, alongside the existing `REGIME_THRESHOLD` / `ACCEL_*` / `SLOPE_*`
+  family):** the *decision thresholds and Focus scoring weights* — `ATR_EXT_ACTIONABLE` (5),
+  `ATR_EXT_TRIM` (8), `ATR_EXT_PENALTY_START` (3.5), `MIN_MARKET_CAP_B` (5), and the Focus weight
+  set. Why PWA: these are the knobs we will tune frequently ("we're just starting off, we'll adjust
+  over time" — CEO), and the repo's established pattern is that PWA display/decision thresholds live
+  in `index.html`. Tuning one = a one-line edit + a `sw.js` CACHE bump, with **no scraper re-run and
+  no data migration**.
+
+> **Note for the implementer:** adding the backend derived columns is a small post-scrape transform
+> — it does **not** change *what we fetch from Finviz* (the `c=`/`f=` URL is untouched). It runs on
+> the already-scraped rows. Do not confuse this with a scrape change.
+
+## Phase 3a — Picks tab MVP (the crown-jewel list)
+
+**Goal:** a new top-level **Picks** tab that renders the daily list, grouped and sorted, with the
+ATR-extension metric as the headline number. Shippable on its own.
+
+### 3a.0 — Backend derived metrics (do this first; it's the data foundation)
+
+Add a pure helper module **`scripts/picks_metrics.py`** (mirrors the `compute_deltas.py` /
+`delta_config.py` split: schema/constants in config, computation logic in a dedicated script)
+computing, per row, from the already-stored Finviz columns. **All Finviz percent columns are strings
+like `"51.84%"`; market cap like `"336.47B"` / `"850.00M"`; ATR/Price/High/Low are plain floats.**
+Provide robust parsers (`_pct()`, `_cap_b()` handling `T/B/M/K`, empty→NaN).
+
+Derivations (note: Finviz `SMA20/SMA50/SMA200` columns are **percent of price above that MA**):
+
+```
+sma50_price   = Price / (1 + SMA50/100)          # reconstruct the MA level in dollars
+sma20_price   = Price / (1 + SMA20/100)
+dist_to_50ma  = Price - sma50_price              # dollars; negative if price below 50MA
+atr_ext_50    = dist_to_50ma / ATR               # CEO's "rubber-band" stretch, in ATR multiples
+risk_20ma_pct = (High - sma20_price) / High      # entry=prev-day high, stop=20MA; fraction
+risk_50ma_pct = (High - sma50_price) / High      # wider stop alternative
+range_atr     = (High - Low) / ATR               # tightness proxy (C1); small = quiet/narrow bar
+stage2        = (SMA50 > 0) AND (sma50_price > sma200_price)   # price>50MA AND 50MA>200MA, in-house
+```
+
+`stage2` uses `sma200_price = Price/(1+SMA200/100)`; `sma50_price > sma200_price` ⟺ `SMA50 < SMA200`
+in percent terms (lower %-above means the higher MA level). Implement via the dollar levels to avoid
+sign confusion.
+
+- New columns appended to **both** `picks.csv` and `picks_latest.csv`:
+  `atr_ext_50, risk_20ma_pct, risk_50ma_pct, range_atr, stage2`.
+- **Migration: use the `ensure_picks_csv()` pattern** (analogue to `ensure_deltas_csv()` in
+  `compute_deltas.py`). At the top of `collect_picks.py main()`, call `ensure_picks_csv(PICKS_CSV)`
+  which: (a) checks if the header already contains the new columns; if so, no-op; (b) if not,
+  recomputes the derived values row-by-row from the already-stored Finviz columns and rewrites the
+  file in-place (atomic tmp-rename). Then slice `picks_latest.csv` from the updated `picks.csv`.
+  This is a one-time auto-migration — after day 1 it is a pure no-op. Do **not** write a one-off
+  migration script; the `ensure_picks_csv()` in-main pattern is self-documenting and survives
+  future column additions the same way.
+- NaN-safe: any missing input (blank ATR, blank SMA) → NaN for that derived field; the PWA renders a
+  dim `—` and the row is never crashed or silently zeroed.
+- Place these **after** the `grp_*` block to preserve the existing golden-header superset guard
+  (append-only; reorder/removal still fails the header test).
+
+### 3a.1 — Tab + data load
+
+- Add a `Picks` tab button (`data-tab="picks"`) to `#tab-bar` and a `<section id="tab-picks">`
+  (mirror the existing 7-tab pattern at `docs/index.html:82-90` / `:96+`). Wire into `switchTab`.
+- Fetch `${BASE}/picks/picks_latest.csv` (same `RAW_BASE` pattern as the other CSVs, `docs/index.html:306`).
+- Empty/headers-only CSV → friendly placeholder ("No picks captured yet — the daily job runs after
+  the close."). Never crash on a blocked-scrape day.
+- **Adding a tab triggers anti-drift test requirements — do ALL of the following in the same PR:**
+  1. Add `"picks"` entry to the `tabs-tour` slide in the `WELCOME` constant (`docs/index.html` near
+     the `id: 'tabs-tour'` block — the slide currently says "Your 6 tabs"; update to "Your 7 tabs"
+     and add a Picks item). Add matching verbatim copy to `knowledge/product-intro-copy.md`.
+  2. Add `"picks"` to `VALID_TAB_IDS` in `tests/test_pwa_intro.py:25`.
+  3. Add `"picks"` to `VALID_GUIDE_TABS` in `tests/test_guide_releases.py:26`.
+  4. Add a `"picks"` chip to `GUIDE_TAB_CHIPS` in `docs/index.html` (near the `GUIDE_TAB_CHIPS`
+     constant ~line 530) so Guide tab-filter works for Picks metrics.
+  5. **Also fix the pre-existing `vsmarket` gap in the same commit:** `VALID_TAB_IDS` currently
+     lists only 6 tabs and is missing `"vsmarket"` (the 7th real tab). Add it so the guard actually
+     covers all tabs. `WELCOME` does not currently reference `vsmarket` in its tour items; that is
+     intentional (vs-Mkt was added after the carousel was written and is not in the tour). Confirm
+     the test allows a tab to exist without a WELCOME entry — if not, add a stub tour entry.
+  6. Decide whether to bump `fvt_intro_seen_v1` to `v2` (CLAUDE.md rule: bump only when existing
+     users should see the intro again — a new tab qualifies). If bumping, update `setIntroSeen()` and
+     the `localStorage` key in `docs/index.html` and note the rationale in the commit message.
+
+### 3a.2 — Base display filter (C6)
+
+Render only rows where `cap_b(Market Cap) > MIN_MARKET_CAP_B` **AND**
+(`SMA50 > 0` OR `SMA200 > 0` OR `sma20_price > sma50_price`). Document `MIN_MARKET_CAP_B = 5` as a
+PWA constant. (Verified on 2026-06-25 **EOD** data: **141 rows / 134 unique tickers**. An earlier
+10:30am intraday snapshot showed ~165 rows — ATR and Price shift through the trading day, changing
+which rows pass. Tests must use a fixture derived from EOD data.)
+
+### 3a.3 — Grouping, sort, layout
+
+- Group **`list_category` → group (industry) → stocks** (D8). Category order: `leaders`, `emerging`,
+  `accel`, `rs_new_high`. Within each industry, **sort least-extended first** (`atr_ext_50` asc;
+  NaN last).
+- Per-group header shows **breadth** = count of qualifying names (health signal, D8).
+- Per-stock row (compact, mobile-first — match existing card density):
+  - Ticker + Company (truncate)
+  - **Extension** `atr_ext_50` formatted `4.3×` — **color-banded** by C4 (≤5 emerald, 5–8 amber,
+    ≥8 red + a small "trim" tag). This is the visual headline.
+  - `%>50MA` (raw `SMA50`), 52W-high distance (`52W High`), RSI (plain, no gate per C8)
+  - Perf Week / Perf Month
+  - EPS Q/Q (growth signal)
+- A one-line legend at the top of the tab linking the extension bands to the Guide entry.
+
+### 3a.4 — Release triplet
+
+`releases.json` entry (tag `feature`, `tab: "picks"`) + bump `current` + bump `sw.js` CACHE. Per
+house rule, all three in the same PR.
+
+## Phase 3b — Extension & risk engine + Focus List
+
+Builds on 3a's rendered rows. Adds the Ariel/Minervini decision layer.
+
+### 3b.1 — Per-row risk panel
+
+For every Picks row, surface (expandable or inline secondary line):
+- **Trigger (prev-day high):** the stored `High` (EOD scrape ⇒ today's high = next session's
+  breakout trigger). Label it so the trader understands it is valid **for the next session only**.
+  > **Known gap (TODO PICKS-3D-STALE):** our cron runs EOD (after close), so intraday captures
+  > show a partial-day `High`. No stale-data warning is shown in 3b MVP. Track in SPRINT as a
+  > follow-up task (PICKS-3D-STALE): add a `run_at` timestamp column to `picks.csv` (stamped from
+  > the workflow run time) and surface a banner in the PWA when the picks data is from an intraday
+  > capture (run_at time < 16:00 ET on the data date).
+- **Stop (20MA):** `sma20_price`, with **Risk** = `risk_20ma_pct` shown as % and as $/share
+  (`High − sma20_price`). Default per C3.
+- **Wider stop (50MA):** `sma50_price` + `risk_50ma_pct`, shown as the secondary alternative.
+- **Extension:** `atr_ext_50` (same color band as 3a). Trim tag at `≥ ATR_EXT_TRIM`.
+
+### 3b.2 — Focus List (C2, C7) — `All / Focus` toggle inside the Picks tab
+
+A segmented control at the top of the Picks tab toggles between **All** (the 3a grouped list) and
+**Focus** (a flat, ranked highlights list — A++ actionable setups).
+
+**Focus membership (hard gates):**
+- Passes the 3a base filter (C6), **and**
+- `atr_ext_50` is a real positive value with `0 < atr_ext_50 ≤ ATR_EXT_ACTIONABLE (5)` — i.e. above
+  the 50MA (extension is meaningful) and not over-extended. **`> 5` auto-DQs** (CEO explicit).
+- No RSI gate (C8). No fundamental gate in 3b (that's 3d).
+
+**Focus rank — blended quality score (higher = better A++), all weights PWA constants, tunable:**
+Compute each component, normalize cross-sectionally (min–max) across the day's Focus candidates,
+then `score = Σ(w_i · component_i) − extension_penalty`:
+
+| Component | Direction | Source | Notes |
+|-----------|-----------|--------|-------|
+| Group strength | **+** | **`grp_sum_mid_rank` inverted** — `(max − x) / (max − min)` across Focus candidates (lower sum-of-ranks = stronger group → higher normalized score) | Same ranking basis as the leaders bucket; consistent with selection. If you change this metric, write an ADR. Do **not** use `grp_momentum_score_pctile` here — that value is a cross-sectional percentile across ALL industry groups at selection time, not across the day's Focus candidates. |
+| 20MA tightness | **+** | `risk_20ma_pct` inverted — `1 − (x / max)` across Focus candidates (smaller = better) | CEO: "close to 20MA as positive weight" — tight logical stop = low risk. |
+| Quiet bar | **+ (mild)** | `range_atr` inverted — `1 − (x / max)` across Focus candidates (smaller = better) | C1 tightness proxy; constructive low-volatility day. |
+| Extension penalty | **−** | `atr_ext_50` | **0 for `≤ ATR_EXT_PENALTY_START (3.5)`; linear ramp to `−PENALTY_MAX (0.5)` from 3.5→5.0.** CEO explicit. |
+
+> **Small Focus pool edge case:** if the day has fewer than `FOCUS_MIN_POOL = 5` candidates,
+> min–max normalization is degenerate (denominator → 0). Fall back to **rank-based normalization**
+> (assign percentile ranks 0–1 across the pool, even if tiny) so the score is still meaningful and
+> ordering is preserved. If only 1–2 candidates exist, show them all — don't show an empty Focus.
+
+> **Explicitly NOT a positive factor: proximity to the 50MA.** Being close to the 50MA does not make
+> a setup good (CEO 2026-06-26). The 50MA only appears as the *extension penalty* (a negative beyond
+> 3.5×) and as the wider-stop risk line — never as a reward for being near it.
+
+Sort Focus descending by `score`. Show the same row + risk panel as 3a, plus a small score/setup
+badge. (This is the "ranked best setups" approach — multi-factor — that the CEO endorsed over a
+naive "filter then sort by one axis.")
+
+### 3b.3 — Release triplet (as 3a.4).
+
+## Phase 3c — Lookup-tab Stage-2 section + deep-link button
+
+- When an industry is pulled up in the **Lookup** tab, render a **"Stage-2 names"** section:
+  - If the industry was in today's selected universe (present in `picks_latest.csv`), list its names
+    (reuse the 3a row renderer + risk panel).
+  - Always render a **"Stage-2 stocks on Finviz →"** deep-link button built from the slug map +
+    `screener_config.json` `button` block (the **tight `v=311`** template: `cap_midover`,
+    `ta_sma20_sa50`, `ta_sma50_pa`, `o=sma50`, `ind_<slug>`). Available for **all 144** industries,
+    even ones not selected today ("not currently a leading group — screen it yourself →").
+- Pure URL construction; no backend. Mirror the existing Lookup card wiring (`docs/index.html:241`,
+  `switchTab('lookup')` paths).
+- Release triplet.
+
+## Phase 3d — Polish & refinements (optional, post-MVP)
+
+- **True inside-day / NR7** (upgrade from the C1 proxy): have `collect_picks.py` self-join the prior
+  session from `picks.csv` to stamp `prev_high`/`prev_low`, enabling a real inside-day flag. Schema
+  bump + migration; only worth it if the proxy proves too noisy.
+- **Loose fundamental floor on Focus (C9):** e.g. `EPS Q/Q > 0 AND Sales Q/Q > 0`. **When it removes
+  a name, surface it under an "Honorable mentions (failed fundamental floor)" sub-list** so we can
+  judge whether the floor is mis-calibrated. The floor + the honorable-mention behavior are tunable
+  PWA constants.
+- Search/filter, sort toggles, target/R-multiple framing (distance to 52W high as rough upside),
+  Guide glossary entries for any newly surfaced metric.
+
+> **AI integration is explicitly OUT of Phase 3** — separate future task (CEO 2026-06-26).
+
+## Configurable constants introduced in Phase 3 (triple-doc per house rules)
+
+PWA constants (`docs/index.html`, near the `REGIME_THRESHOLD` block; also document in README
+§Configurable parameters and CLAUDE.md §PWA display thresholds):
+
+| Constant | Default | Controls |
+|----------|---------|----------|
+| `MIN_MARKET_CAP_B` | `5` | Picks-tab base display filter (C6); min market cap in $B. |
+| `ATR_EXT_ACTIONABLE` | `5.0` | Extension band cutoff: ≤ is actionable (emerald); also the Focus hard-DQ line. |
+| `ATR_EXT_TRIM` | `8.0` | ≥ flags a held position as a trim-10% candidate (red). |
+| `ATR_EXT_PENALTY_START` | `3.5` | Focus-score extension penalty ramp start (0 below, ramps to PENALTY_MAX at ATR_EXT_ACTIONABLE). |
+| `PENALTY_MAX` | `0.5` | Max extension penalty applied at `ATR_EXT_ACTIONABLE (5×)`. Caps at 50% of a full normalized-component contribution. Tune after first few weeks of live Focus data. |
+| Focus weights | `w_group = 0.4`, `w_tight20 = 0.4`, `w_quiet = 0.2` | Blended Focus quality score weights (§3b.2). Starting allocation; all three are PWA constants and tunable with a one-line edit + cache bump. |
+| `FOCUS_MIN_POOL` | `5` | Minimum Focus candidates before falling back from min–max to rank-based normalization. Not displayed to the user. |
+
+Backend columns (deterministic; document in README §Delta/Picks columns, CLAUDE.md §Picks pipeline,
+and `knowledge/moaty-metrics.md`): `atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`, `range_atr`,
+`stage2`.
+
+## Acceptance criteria (Phase 3, by subphase)
+
+**3a**
+- [ ] Backend: `atr_ext_50, risk_20ma_pct, risk_50ma_pct, range_atr, stage2` present in
+      `picks_latest.csv` and `picks.csv`; the one historical date is backfilled; golden-header
+      superset test still passes.
+- [ ] `atr_ext_50` matches the worked examples within ±0.1×: **ANET ≈ 0.67×, STX ≈ 3.16×,
+      DELL ≈ 3.64×, SNDK ≈ 4.55×** (2026-06-25 **EOD** data). Values at 10:30am intraday were
+      ANET≈0.96×/STX≈3.2×/DELL≈3.5×/SNDK≈4.3× — the test fixture must use EOD data only.
+- [ ] `risk_20ma_pct` and `risk_50ma_pct` for ANET within ±0.3%: **risk_20ma_pct ≈ 3.88%,
+      risk_50ma_pct ≈ 6.07%** (ANET is the canonical worked example — tight 20MA stop confirms it
+      as an actionable setup; SNDK's 20% stop makes it a poor example). `risk_*` values are stored
+      as fractions (0.0388, 0.0607); display as percentages in the PWA.
+- [ ] Picks tab renders, grouped category→industry→stock, base filter applied (≈141 rows on the
+      2026-06-25 EOD fixture), least-extended-first within each industry, breadth count per group.
+- [ ] Extension color bands render per C4; `≥8×` shows the trim tag.
+- [ ] Empty/blocked-day CSV → placeholder, no crash.
+- [ ] Release triplet present; `tests/test_guide_releases.py` passes (`current === releases[0].version`).
+
+**3b**
+- [ ] Risk panel shows trigger (prev-day high), 20MA stop + risk $/%, 50MA wider-stop alternative,
+      extension.
+- [ ] `All / Focus` toggle works; Focus excludes every `atr_ext_50 > 5` and every row below the 50MA.
+- [ ] Focus ranks by the blended score; proximity-to-50MA contributes **no** positive weight; the
+      3.5×→5× extension penalty is observable in ordering.
+- [ ] Release triplet present.
+
+**3c**
+- [ ] Lookup tab shows the Stage-2 section for a selected industry and the `v=311` deep-link button
+      for any of the 144 industries; button URL is well-formed (`ind_<slug>`, tight filters).
+- [ ] Release triplet present.
+
+## Validation & testing steps
+
+- **Backend metrics (pytest, `tests/test_picks_metrics.py`):** parsers (`%`, `B/M/K/T`, empty→NaN);
+  each derivation on the worked examples; NaN-safety when ATR/SMA blank; `stage2` truth table;
+  migration test (old `picks.csv` row gains the new columns, backfilled, header is a superset).
+- **PWA (Playwright fixture-intercept, per CLAUDE.md pattern):** route
+  `**/raw.githubusercontent.com/**picks_latest.csv` to a committed fixture
+  `tests/fixtures/picks_latest.csv`. Create this fixture from EOD 2026-06-25 data — it must contain
+  at minimum:
+  - ANET, STX, DELL, SNDK (the four worked-example tickers; use real EOD values)
+  - One row with `ATR` blank (NaN-safety: should produce NaN derived cols, not a crash)
+  - One row with `atr_ext_50 > 8` (trim candidate — verify the red trim tag renders)
+  - One row with `atr_ext_50 > 5` (Focus DQ — verify it is excluded from Focus view)
+  - One row with `SMA50 < 0` / price below 50MA (Focus DQ — verify exclusion)
+  - At least one row with `Market Cap < 5B` (base filter exclusion check)
+  - Rows across at least 2 `list_category` values (`leaders`, `emerging`) to exercise grouping
+  Commit the fixture alongside the first Playwright test. Assert: tab appears; base filter row count
+  matches fixture-visible rows; grouping + least-extended order; extension band colors; trim tag at
+  ≥8×; `All/Focus` toggle filters out >5× and below-50MA names; Focus order respects the penalty;
+  Lookup deep-link URL format; empty-CSV placeholder (separate test with a headers-only fixture).
+- **Run before every commit:** `python3 -m pytest tests/ -q`.
+- **Manual smoke (cloud OK — no Finviz needed):** serve `docs/` on `http.server`, intercept the CSV,
+  eyeball the three subphase surfaces (the CLAUDE.md "PWA functional testing" recipe).
+
+## Implementer hand-off obligations (CEO 2026-06-26 — do ALL of these)
+
+1. **Write a "Notes to VP" hand-off** (append to `.session/session-notes.md`, and a milestone in
+   `.session/WORK_LOG.md`) covering: **what to test**, **how to use the new surfaces** (what the
+   Picks tab / Focus toggle / Lookup deep-link do and how a trader reads them), and any caveats
+   (e.g. the trigger is next-session-only; the C1 tightness is a proxy until 3d).
+2. **For every user-facing change, give VP-level context** in the PR description and session notes:
+   the **user experience** (what the trader now sees/does) and the **implications** (what it changes
+   about how they act, what it does *not* yet do).
+3. **Update all non-code docs alongside the code** (do not defer): README §Configurable parameters
+   (new constants + backend columns), CLAUDE.md (§Picks pipeline data layout + new columns + §PWA
+   display thresholds), `knowledge/moaty-metrics.md` (one-liner for `atr_ext_50`, `range_atr`,
+   `stage2`, risk metrics), the in-app **Guide** glossary (`GUIDE` constant — verbatim-synced to
+   moaty-metrics per the anti-drift test), `docs/releases.json` + `docs/sw.js`, `.session/SPRINT.md`,
+   and this plan's Phase-3 status. If any of these don't yet have a home for the new content,
+   **create it.**
+4. **ADR if a non-obvious design call is made** during build (e.g. the canonical `grp_` metric for
+   Focus group-strength) → `knowledge/decisions/`.
+
 ## Attribution (D9) — LATER session, schema-locked NOW
 
 Collection is **membership-only** (`picks.csv` append-only). Nothing stateful is maintained
@@ -729,3 +1058,4 @@ Per-phase (always):
   .session/SPRINT.md — move completed tasks, add new backlog items.
   .session/WORK_LOG.md — milestone entry when each phase lands end-to-end.
   planning/stock-picks-from-leading-groups.md — update phase status at top of file and mark phases complete as you go.
+
