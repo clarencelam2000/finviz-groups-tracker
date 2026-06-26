@@ -721,8 +721,8 @@ Builds on 3a's rendered rows. Adds the Ariel/Minervini decision layer.
 ### 3b.1 — Per-row risk panel
 
 For every Picks row, surface (expandable or inline secondary line):
-- **Trigger (prev-day high):** the stored `High` (EOD scrape ⇒ today's high = next session's
-  breakout trigger). Label it so the trader understands it is valid **for the next session only**.
+- **Trigger (current day high becomes tomorrow's prev day high - a common buy trigger for Ariel):** the stored `High` (EOD scrape ⇒ today's high = next session's
+  breakout trigger).
   > **Known gap (TODO PICKS-3D-STALE):** our cron runs EOD (after close), so intraday captures
   > show a partial-day `High`. No stale-data warning is shown in 3b MVP. Track in SPRINT as a
   > follow-up task (PICKS-3D-STALE): add a `run_at` timestamp column to `picks.csv` (stamped from
