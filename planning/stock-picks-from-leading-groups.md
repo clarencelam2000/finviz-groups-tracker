@@ -630,8 +630,8 @@ sma50_price   = Price / (1 + SMA50/100)          # reconstruct the MA level in d
 sma20_price   = Price / (1 + SMA20/100)
 dist_to_50ma  = Price - sma50_price              # dollars; negative if price below 50MA
 atr_ext_50    = dist_to_50ma / ATR               # CEO's "rubber-band" stretch, in ATR multiples
-risk_20ma_pct = (High - sma20_price) / High      # entry=prev-day high, stop=20MA; fraction
-risk_50ma_pct = (High - sma50_price) / High      # wider stop alternative
+risk_20ma_pct = (price - sma20_price) / price     # current price to 20MA stop; fraction
+risk_50ma_pct = (price - sma50_price) / price    # wider stop alternative
 range_atr     = (High - Low) / ATR               # tightness proxy (C1); small = quiet/narrow bar
 stage2        = (SMA50 > 0) AND (sma50_price > sma200_price)   # price>50MA AND 50MA>200MA, in-house
 ```
@@ -722,7 +722,8 @@ For every Picks row, surface (expandable or inline secondary line):
   > the workflow run time) and surface a banner in the PWA when the picks data is from an intraday
   > capture (run_at time < 16:00 ET on the data date).
 - **Stop (20MA):** `sma20_price`, with **Risk** = `risk_20ma_pct` shown as % and as $/share
-  (`High − sma20_price`). Default per C3.
+  (`price − sma20_price`). Default per C3. Note: `High` is the breakout trigger shown to the
+  trader; risk is measured from current `price` (the stored value in picks.csv), not from `High`.
 - **Wider stop (50MA):** `sma50_price` + `risk_50ma_pct`, shown as the secondary alternative.
 - **Extension:** `atr_ext_50` (same color band as 3a). Trim tag at `≥ ATR_EXT_TRIM`.
 
@@ -818,10 +819,11 @@ and `knowledge/moaty-metrics.md`): `atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct
 - [ ] `atr_ext_50` matches the worked examples within ±0.1×: **ANET ≈ 0.67×, STX ≈ 3.16×,
       DELL ≈ 3.64×, SNDK ≈ 4.55×** (2026-06-25 **EOD** data). Values at 10:30am intraday were
       ANET≈0.96×/STX≈3.2×/DELL≈3.5×/SNDK≈4.3× — the test fixture must use EOD data only.
-- [ ] `risk_20ma_pct` and `risk_50ma_pct` for ANET within ±0.3%: **risk_20ma_pct ≈ 3.88%,
-      risk_50ma_pct ≈ 6.07%** (ANET is the canonical worked example — tight 20MA stop confirms it
-      as an actionable setup; SNDK's 20% stop makes it a poor example). `risk_*` values are stored
-      as fractions (0.0388, 0.0607); display as percentages in the PWA.
+- [ ] `risk_20ma_pct` and `risk_50ma_pct` for ANET within ±0.3%: **risk_20ma_pct ≈ 1.15%,
+      risk_50ma_pct ≈ 3.40%** (ANET EOD 2026-06-25: price=165.45, sma20≈163.55, sma50≈159.82;
+      formula is `(price − smaX_price) / price`, NOT High-based). ANET is the canonical worked
+      example — both risks <4% confirm it as actionable; SNDK's ~20% 20MA stop makes it a poor
+      example. `risk_*` values are stored as fractions (0.0115, 0.0340); display as % in the PWA.
 - [ ] Picks tab renders, grouped category→industry→stock, base filter applied (≈141 rows on the
       2026-06-25 EOD fixture), least-extended-first within each industry, breadth count per group.
 - [ ] Extension color bands render per C4; `≥8×` shows the trim tag.
