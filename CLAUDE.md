@@ -125,6 +125,9 @@ These constants gate visual indicators in the PWA. Edit them directly in `index.
 | `SLOPE_SLIGHT` | `0.01` | `rank_trend_slope` threshold for single-arrow (↑/↓) glyph. Within ±`SLOPE_SLIGHT` = `~`. |
 | `RS_STRONG` | `2.0` | RS spread (pp vs S&P) threshold for deep-color badge in vs Market tab and Today cards. |
 | `RS_SLIGHT` | `0.5` | RS spread threshold for mild-color badge. Within ±`RS_SLIGHT` = neutral chip. |
+| `MIN_MARKET_CAP_B` | `5` | Picks tab base display filter (C6); rows below this market cap ($B) are hidden. |
+| `ATR_EXT_ACTIONABLE` | `5.0` | ATR-extension emerald band cap; also the Focus hard-DQ line (Phase 3b). |
+| `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start; flags a held position as a trim-10% candidate. |
 
 ---
 
@@ -217,8 +220,9 @@ screener and logs them to an append-only event log. **Phase 2 of
 | File | Role |
 |------|------|
 | `scripts/collect_picks.py` | `select_groups()` (pure selector) + paginated scrape + append. Inherits `slugify_industry`/`_build_url`/`_parse_table` from `probe_picks.py`. |
-| `scripts/picks_config.py` | Single source of truth: schema (`picks_columns()`, 19 `grp_*` cols) + all tunable constants. |
-| `data/picks/picks.csv` | Append-only log; one row per `(date, list_category, ticker)`. Lead cols + 84 Finviz cols + 19 `grp_*`. **Offline attribution only — never fetched by the PWA.** |
+| `scripts/picks_config.py` | Single source of truth: schema (`picks_columns()`, 113 cols = 5 lead + 84 Finviz + 19 `grp_*` + 5 metrics) + all tunable constants. |
+| `scripts/picks_metrics.py` | Pure helper module: parsers + `compute_metrics_row()` → 5 `METRICS_COLS` (`atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`, `range_atr`, `stage2`). Fully unit-tested. |
+| `data/picks/picks.csv` | Append-only log; 113 cols per row. Lead + 84 Finviz + 19 `grp_*` + 5 metrics. **Offline attribution only — never fetched by the PWA.** |
 | `data/picks/picks_latest.csv` | Max-date slice of `picks.csv` — **this is what the PWA fetches.** |
 | `data/picks/screener_config.json` | Modular URL config (`wide` net + `button`); 84-col `c=` list. Labels stay verbatim-synced to `tests/fixtures/probe_header_84col.txt`. |
 | `data/picks/finviz_industry_slugs.csv` | 144 industry→slug rows. `validated` flips to `true` the first time a group scrapes >0 rows (G4). |

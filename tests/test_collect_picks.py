@@ -495,8 +495,11 @@ class TestSchema:
     def test_picks_columns_layout(self):
         cols = pc.picks_columns()
         assert cols[:5] == pc.PICKS_LEAD_COLS
-        assert cols[-len(pc.PICKS_GRP_COLS):] == pc.PICKS_GRP_COLS
-        assert len(cols) == 5 + 84 + len(pc.PICKS_GRP_COLS)
+        # grp_* block is followed by METRICS_COLS (Phase 3a superset append)
+        grp_start = 5 + 84
+        assert cols[grp_start:grp_start + len(pc.PICKS_GRP_COLS)] == pc.PICKS_GRP_COLS
+        assert cols[-len(pc.METRICS_COLS):] == pc.METRICS_COLS
+        assert len(cols) == 5 + 84 + len(pc.PICKS_GRP_COLS) + len(pc.METRICS_COLS)
 
     def test_grp_cols_count_is_19(self):
         assert len(pc.PICKS_GRP_COLS) == 19

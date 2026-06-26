@@ -144,6 +144,19 @@ PICKS_GRP_COLS = [
     "grp_rs_slope",
 ]
 
+# METRICS_COLS — 5 backend-derived columns appended AFTER grp_* (Phase 3a, ADR-008).
+# Deterministic transforms of already-stored Finviz columns; computed at write time in
+# collect_picks.py. No selector_version bump needed. Adding one later is a two-way-door
+# superset migration (ensure_picks_csv pattern). Renaming/removing is one-way once data flows.
+# Triple-documented: here, README § Configurable parameters, CLAUDE.md § Picks pipeline.
+METRICS_COLS = [
+    "atr_ext_50",      # (price − sma50_price) / ATR; ATR multiples from 50MA (CEO "rubber-band")
+    "risk_20ma_pct",   # (price − sma20_price) / price; fraction at risk to 20MA stop
+    "risk_50ma_pct",   # (price − sma50_price) / price; fraction at risk to 50MA stop
+    "range_atr",       # (High − Low) / ATR; day-tightness proxy (C1)
+    "stage2",          # 1 if price>50MA AND 50MA>200MA; 0 otherwise; NaN if SMAs absent
+]
+
 
 def load_config() -> dict:
     return json.loads(CONFIG_PATH.read_text())
@@ -156,5 +169,5 @@ def finviz_cols(config: dict = None) -> list:
 
 
 def picks_columns(config: dict = None) -> list:
-    """Full ordered picks.csv header: lead + 84 Finviz + 19 grp_*."""
-    return PICKS_LEAD_COLS + finviz_cols(config) + PICKS_GRP_COLS
+    """Full ordered picks.csv header: lead (5) + Finviz (84) + grp_* (19) + metrics (5) = 113."""
+    return PICKS_LEAD_COLS + finviz_cols(config) + PICKS_GRP_COLS + METRICS_COLS

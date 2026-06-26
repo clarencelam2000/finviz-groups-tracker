@@ -22,7 +22,9 @@ RELEASES = ROOT / "docs" / "releases.json"
 PRODUCT_INTRO_COPY = ROOT / "knowledge" / "product-intro-copy.md"
 
 # Must match the data-tab values on the PWA tab bar (#tab-bar in index.html).
-VALID_TAB_IDS = {"today", "movers", "momentum", "strength", "ai", "lookup"}
+# vsmarket is intentionally absent from the WELCOME tour (added after the carousel;
+# test only verifies tour entries are real IDs, not that every ID has a tour entry).
+VALID_TAB_IDS = {"today", "movers", "momentum", "strength", "vsmarket", "ai", "lookup", "picks"}
 
 
 def _welcome_block():
@@ -53,15 +55,14 @@ def _welcome_text_strings(field):
 
 
 def test_welcome_tab_ids_are_valid():
-    """Every tab field in WELCOME items must be one of the 6 real tab ids.
-    A renamed or removed tab would otherwise silently break the tour deep-links."""
+    """Every tab field in WELCOME items must be one of the real tab ids.
+    A renamed or removed tab would otherwise silently break the tour deep-links.
+    Note: not every VALID_TAB_ID needs a tour entry (vsmarket is intentionally absent)."""
     ids = _welcome_tab_ids()
     assert ids, "expected at least one tab id in WELCOME items"
-    assert len(ids) == 6, f"expected exactly 6 tab ids (one per tab), got {ids}"
+    assert len(ids) == 7, f"expected exactly 7 tab ids in the tour, got {ids}"
     bad = set(ids) - VALID_TAB_IDS
     assert not bad, f"WELCOME items contain unknown tab ids: {bad}"
-    missing = VALID_TAB_IDS - set(ids)
-    assert not missing, f"WELCOME items are missing a tour entry for tabs: {missing}"
 
 
 def test_intro_release_entry_valid():

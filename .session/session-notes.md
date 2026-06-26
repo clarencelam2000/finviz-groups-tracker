@@ -6,6 +6,27 @@
 
 ## Current Status
 
+**Status (2026-06-26) — PHASE 3a COMPLETE. SAFE TO CLOSE.**
+Phase 3a shipped on branch `claude/phase-3a-implementation-5rsek8`. PR created.
+What landed:
+- `scripts/picks_metrics.py` — pure backend module: parsers + `compute_metrics_row()` for 5 METRICS_COLS
+- `scripts/picks_config.py` — updated: METRICS_COLS added, `picks_columns()` now returns 113 cols
+- `scripts/collect_picks.py` — updated: `ensure_picks_csv()` migration + `build_pick_rows()` computes metrics at scrape time
+- `tests/test_picks_metrics.py` — 39 tests (parsers, worked examples, NaN safety, stage2 truth table, migration)
+- `tests/fixtures/picks_latest.csv` — 12-row 113-col EOD fixture
+- `docs/index.html` — Picks tab button, section, loadPicks, renderPicks, C6 filter, C4 color bands, 5 GUIDE entries, WELCOME updated to 7 tabs, GUIDE_TAB_CHIPS updated, INTRO_KEY bumped to v2
+- `docs/releases.json` — v2026.06.26 entry with tag "feature", tab "picks"
+- `docs/sw.js` — CACHE bumped to finviz-v31
+- `tests/test_pwa_intro.py` — VALID_TAB_IDS now includes vsmarket + picks; tour count updated to 7
+- `tests/test_guide_releases.py` — VALID_GUIDE_TABS now includes picks
+- `knowledge/moaty-metrics.md` — 5 new metric sections (source of truth for GUIDE one-liners)
+- `knowledge/product-intro-copy.md` — "Your 7 tabs" + Picks entry
+- `CLAUDE.md` / `README.md` — triple-documented 3 new PWA constants (MIN_MARKET_CAP_B, ATR_EXT_ACTIONABLE, ATR_EXT_TRIM)
+- `data/picks/picks.csv` + `data/picks/picks_latest.csv` — 5 new columns backfilled via `ensure_picks_csv`
+- `planning/stock-picks-from-leading-groups.md` — Phase 3a acceptance criteria checked off
+522/522 non-Playwright tests pass. Playwright tests fail due to pre-existing Chromium path mismatch (unrelated to this PR).
+**Phase 3b next:** risk panel (20MA stop + 50MA wider stop + trigger), All/Focus toggle, Focus blended score.
+
 **Status (2026-06-25) — PICKS-2-CRON PLAN COMPLETE. IMPLEMENTATION READY FOR NEXT SESSION.**
 Plan written and docs committed to `claude/picks-cloudflare-cron-f0t7fz`.
 Extend `finviz-cron-dispatcher` with a 4th cron `31 22 * * 1-5` (22:31 UTC = 6:31 PM EDT /

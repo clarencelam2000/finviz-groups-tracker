@@ -54,6 +54,7 @@ from picks_config import (
     GLOBAL_FETCH_CAP,
     PAGE_DELAY_S,
 )
+from picks_metrics import METRICS_COLS, compute_metrics_row
 # Inherit the pure scrape/url/parse helpers from the Phase-1 probe — no need to
 # rewrite them. They are import-safe (Playwright is imported inside probe main()).
 from probe_picks import slugify_industry, _build_url, _parse_table, SCREENER_TABLE_SELECTOR
@@ -276,7 +277,7 @@ def build_pick_rows(date_str, selections_for_group, scraped_rows, finviz_cols):
 
     selections_for_group: the selection dicts whose group == this group (1 per
     category the group qualified in). Each scraped stock row produces one picks
-    row per category tag, carrying that category's grp_* snapshot.
+    row per category tag, carrying that category's grp_* snapshot + computed metrics.
     """
     out = []
     for stock in scraped_rows:
@@ -284,6 +285,8 @@ def build_pick_rows(date_str, selections_for_group, scraped_rows, finviz_cols):
         if not ticker:
             continue
         finviz_part = {col: stock.get(col, "") for col in finviz_cols}
+        # Compute Phase-3a backend metrics from the scraped Finviz columns.
+        metrics = compute_metrics_row(stock)
         for sel in selections_for_group:
             row = {
                 "date": date_str,
@@ -295,6 +298,8 @@ def build_pick_rows(date_str, selections_for_group, scraped_rows, finviz_cols):
             row.update(finviz_part)
             for col in pc.PICKS_GRP_COLS:
                 row[col] = _f(sel.get(col))
+            for col in METRICS_COLS:
+                row[col] = _f(metrics.get(col))
             out.append(row)
     return out
 
@@ -351,20 +356,12 @@ def write_picks(picks_csv, latest_csv, new_rows, date_str, columns):
     deduped = list(by_key.values())
 
     all_rows = kept + deduped
-    with open(picks_csv, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
-        writer.writeheader()
-        for r in all_rows:
-            writer.writerow({c: r.get(c, "") for c in columns})
+    _write_csv(picks_csv, all_rows, columns)
 
     # picks_latest.csv = max-date slice (written atomically alongside the append).
     max_date = max((r["date"] for r in all_rows), default=date_str)
     latest_rows = [r for r in all_rows if r.get("date") == max_date]
-    with open(latest_csv, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
-        writer.writeheader()
-        for r in latest_rows:
-            writer.writerow({c: r.get(c, "") for c in columns})
+    _write_csv(latest_csv, latest_rows, columns)
 
     return len(deduped), len(latest_rows)
 
@@ -393,6 +390,64 @@ def flip_validated(slugs_path, validated_groups):
 
 
 # ---------------------------------------------------------------------------
+# Migration guard (Phase 3a — superset schema append)
+# ---------------------------------------------------------------------------
+
+def ensure_picks_csv(picks_csv, latest_csv=None):
+    """Backfill METRICS_COLS into picks.csv if they are absent from its header.
+
+    Pattern: analogue of ensure_deltas_csv() in compute_deltas.py.
+    (a) Read current header. If METRICS_COLS are already present → no-op.
+    (b) Otherwise: read all rows, compute the 5 derived values for every row from its
+        already-stored Finviz columns, and atomically rewrite picks_csv with the new
+        113-col header. Then rewrite latest_csv (max-date slice) from the updated rows.
+
+    This is a one-time auto-migration on the first run after Phase 3a is deployed —
+    after that it is a pure no-op (header check is O(1)).
+    """
+    if not picks_csv.exists():
+        return
+    existing = _read_rows(picks_csv)
+    if not existing:
+        return
+    first_keys = set(existing[0].keys())
+    if all(c in first_keys for c in METRICS_COLS):
+        return  # already migrated
+
+    print(f"ensure_picks_csv: backfilling {METRICS_COLS} into {picks_csv} "
+          f"({len(existing)} rows)…")
+
+    config = pc.load_config()
+    columns = pc.picks_columns(config)
+
+    # Recompute metrics for every existing row.
+    for r in existing:
+        m = compute_metrics_row(r)
+        for col in METRICS_COLS:
+            v = m[col]
+            r[col] = _f(v)
+
+    picks_csv.parent.mkdir(parents=True, exist_ok=True)
+    _write_csv(picks_csv, existing, columns)
+
+    # Rewrite latest_csv from the updated full log.
+    if latest_csv is not None and existing:
+        max_date = max(r.get("date", "") for r in existing)
+        latest_rows = [r for r in existing if r.get("date") == max_date]
+        _write_csv(latest_csv, latest_rows, columns)
+    print(f"ensure_picks_csv: done.")
+
+
+def _write_csv(path, rows, columns):
+    """Write rows to path using columns as the header (extrasaction='ignore')."""
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=columns, extrasaction="ignore")
+        writer.writeheader()
+        for r in rows:
+            writer.writerow({c: r.get(c, "") for c in columns})
+
+
+# ---------------------------------------------------------------------------
 # Main (network path — runs on GitHub Actions only)
 # ---------------------------------------------------------------------------
 
@@ -402,6 +457,10 @@ def main():
     parser.add_argument("--dry-run", action="store_true",
                         help="Run select_groups and print the plan; no Finviz scrape")
     args = parser.parse_args()
+
+    # Phase-3a migration: backfill METRICS_COLS into any existing picks.csv that
+    # predates the column addition. One-time auto-migration; pure no-op after day 1.
+    ensure_picks_csv(pc.PICKS_CSV, pc.PICKS_LATEST_CSV)
 
     if not DELTAS_CSV.exists():
         print(f"FATAL: {DELTAS_CSV} not found — run collect.py + compute_deltas.py first")
