@@ -749,9 +749,8 @@ The risk panel is an **expandable** secondary block per row (a subtle chevron to
 track open rows in a JS `Set` of tickers). Always-inline would roughly double every row's height on
 mobile — rejected. Surface, when open:
 
-- **Prev-day high (buy trigger):** the stored `High` (EOD scrape ⇒ today's high = next session's
-  breakout trigger). Label it **"Prev-day high (buy trigger)"** so the trader understands it is the
-  trigger for the **next session only**.
+- **High of day (next buy trigger):** the stored `High` (EOD scrape ⇒ today's high = next session's prev day high 
+  breakout trigger). Label it **"HoD (next buy trigger)"**.
   > **Known gap (TODO PICKS-3D-STALE):** our cron runs EOD (after close), so intraday captures
   > show a partial-day `High`. No stale-data warning is shown in 3b MVP. Track in SPRINT as a
   > follow-up task (PICKS-3D-STALE): add a `run_at` timestamp column to `picks.csv` (stamped from
