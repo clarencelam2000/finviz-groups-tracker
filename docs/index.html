@@ -267,6 +267,15 @@
         <span class="text-red-400 font-medium">≥8× trim</span>
         <button class="underline text-slate-500 hover:text-slate-300" onclick="__openHub('guide','atr_ext_50')">why this matters</button>
       </div>
+      <!-- All / Focus toggle (Phase 3b, A4) — resets to All on every tab entry -->
+      <div class="flex gap-1 mb-3">
+        <button id="picks-toggle-all"
+                class="px-3 py-1 text-xs rounded-full font-medium bg-slate-600 text-white"
+                onclick="__setPicksView('all')">All</button>
+        <button id="picks-toggle-focus"
+                class="px-3 py-1 text-xs rounded-full font-medium bg-slate-700 text-slate-400"
+                onclick="__setPicksView('focus')">Focus <span class="text-indigo-400">★</span></button>
+      </div>
       <div id="picks-list" class="space-y-1"></div>
     </section>
 
@@ -374,6 +383,7 @@
       taxonomy: null,  // { SectorName: [industry, ...] } from finviz_sector_industry_map.json
       aiData: null,
       picksData: null,   // rows from picks_latest.csv; null = not yet loaded
+      picksView: 'all', // 'all' | 'focus'; always reset to 'all' on tab entry (A4)
       provenanceData: null,
       latestAiDate: null,
       latestSnapshotDate: null,
@@ -411,6 +421,18 @@
     // ATR extension color bands (C4). ≤ ACTIONABLE = emerald; ACTIONABLE–TRIM = amber; ≥ TRIM = red.
     const ATR_EXT_ACTIONABLE = 5.0;  // over-extended hard cutoff; also Focus hard-DQ line (Phase 3b)
     const ATR_EXT_TRIM       = 8.0;  // flags a held position as a trim-10% candidate
+    // Focus List constants (Phase 3b). score = base × (1 − penalty_fraction). Triple-documented:
+    // here, README § Configurable parameters, CLAUDE.md § PWA display thresholds.
+    // Extension penalty ramps from 0 at PENALTY_START to PENALTY_MAX at ATR_EXT_ACTIONABLE (=5.0).
+    // Denominator (1.5) is derived from the two constants — retuning either keeps the ramp correct.
+    const ATR_EXT_PENALTY_START = 3.5;  // penalty starts here; no discount below this extension
+    const PENALTY_MAX           = 0.5;  // max multiplicative discount (50% haircut at 5× extension)
+    // Focus component weights — must sum to 1. Group strength, nearest-MA stop tightness, quiet bar.
+    const FOCUS_W_GROUP = 0.4;
+    const FOCUS_W_TIGHT = 0.4;
+    const FOCUS_W_QUIET = 0.2;
+    // Min Focus pool for min–max normalization; smaller pools fall back to rank-based percentile.
+    const FOCUS_MIN_POOL = 5;
 
     // ── Guide / Glossary content ───────────────────────────────────────────
     // The metric `oneLiner` strings are copied VERBATIM from the "User one-liner"
@@ -505,6 +527,9 @@
         { id: 'stage2', label: 'Stage 2 (IBD)', tabs: ['picks'],
           oneLiner: "Whether the stock is in Stage 2: price above the 50-day MA and the 50MA above the 200MA — the technical configuration where most big winning stocks reside.",
           detail: '1 when SMA50 > 0 (price above 50MA) AND SMA200 > SMA50 in % terms (equivalent to 50MA price > 200MA price). 0 otherwise. NaN when either MA is unavailable. Classic O\'Neil / IBD Stage-2 base condition (Phase 3a).' },
+        { id: 'focus_score', label: 'Focus score', tabs: ['picks'],
+          oneLiner: 'A blended 0–100 quality score ranking Focus picks by group strength, how tight the nearest MA stop is, and how quiet today\'s bar was — then discounted for extension beyond 3.5×.',
+          detail: 'score = base × (1 − extension_penalty). base = 40% group strength (grp_sum_mid_rank, inverted) + 40% stop tightness (nearest positive MA below price, inverted) + 20% quiet bar (range/ATR, inverted). Extension penalty ramps from 0 at 3.5× to 50% at 5× (ATR_EXT_ACTIONABLE). All three components use the same min–max ruler across today\'s Focus pool so weights are literal. Score always ∈ [0, 1]. Shown as a debug breakdown inside the expandable risk panel while tuning (Phase 3b).' },
       ],
       howto: [
         'Each card is one group: a rank badge on the left, the selected timeframe’s % on the right, and momentum below the name.',
@@ -3056,6 +3081,283 @@
 
     // ── Picks tab ──────────────────────────────────────────────────────────────
 
+    // Module-level parsers reused by renderPickRow, computeFocusScores, and renderPicks.
+    // Mirrors picks_metrics.py for consistency.
+    function _pPct(v) {
+      if (!v || v === '-') return NaN;
+      return parseFloat(String(v).replace('%', ''));
+    }
+    function _pF(v) {
+      if (!v || v === '-') return NaN;
+      return parseFloat(String(v).replace(/,/g, ''));
+    }
+    function _pCapB(v) {
+      if (!v || v === '-') return NaN;
+      const s = String(v).trim();
+      const suf = { T: 1000, B: 1, M: 0.001, K: 0.000001 };
+      const last = s.slice(-1).toUpperCase();
+      if (suf[last] !== undefined) return parseFloat(s.slice(0, -1)) * suf[last];
+      return parseFloat(s);
+    }
+
+    // C4 ATR extension color bands — shared by renderPickRow and renderPicks.
+    function atrTextColor(ext) {
+      if (isNaN(ext) || ext < 0) return 'text-slate-400';
+      if (ext >= ATR_EXT_TRIM)       return 'text-red-400';
+      if (ext >= ATR_EXT_ACTIONABLE) return 'text-amber-400';
+      return 'text-emerald-400';
+    }
+
+    // renderPickRow(r, opts) — shared row renderer (3b.0).
+    // Called from renderPicks (All + Focus views) and will be reused by 3c Lookup section.
+    // opts: { rowIndex, expandable, showScore, score, base, penaltyFrac, group_n, tight_n, quiet_n }
+    function renderPickRow(r, opts) {
+      opts = opts || {};
+      const ticker  = r.ticker || r.Ticker || '';
+      const company = (r.Company || '').slice(0, 18);
+      const atrExt  = _pF(r.atr_ext_50);
+      const atrStr  = isNaN(atrExt) ? '—' : atrExt.toFixed(1) + '×';
+      const isTrim  = !isNaN(atrExt) && atrExt >= ATR_EXT_TRIM;
+      const atrCls  = atrTextColor(atrExt);
+
+      const sma50v   = _pPct(r['SMA50']);
+      const sma50Str = isNaN(sma50v) ? '—' : (sma50v >= 0 ? '+' : '') + sma50v.toFixed(1) + '%';
+
+      const rsi    = _pF(r['RSI']);
+      const rsiStr = isNaN(rsi) ? '—' : rsi.toFixed(0);
+
+      const perfW    = _pPct(r['Perf Week']);
+      const perfWStr = isNaN(perfW) ? '—' : (perfW >= 0 ? '+' : '') + perfW.toFixed(1) + '%';
+      const perfM    = _pPct(r['Perf Month']);
+      const perfMStr = isNaN(perfM) ? '—' : (perfM >= 0 ? '+' : '') + perfM.toFixed(1) + '%';
+      const perfWCls = isNaN(perfW) ? 'text-slate-400' : (perfW >= 0 ? 'text-emerald-400' : 'text-red-400');
+      const perfMCls = isNaN(perfM) ? 'text-slate-400' : (perfM >= 0 ? 'text-emerald-400' : 'text-red-400');
+
+      // Unique key for expand/collapse DOM targets
+      const key = ticker + '_' + (r.list_category || '') + '_' + (opts.rowIndex !== undefined ? opts.rowIndex : 0);
+
+      // Score badge shown in Focus view (next to ticker)
+      let scoreBadge = '';
+      if (opts.showScore && !isNaN(opts.score)) {
+        scoreBadge = `<span class="text-xs font-mono text-indigo-300 ml-1">${Math.round(opts.score * 100)}</span>`;
+      }
+
+      // Expandable chevron
+      const chevronHtml = opts.expandable ? `
+        <svg id="chev-${key}" class="w-4 h-4 text-slate-500 flex-shrink-0 transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>` : '';
+
+      // Risk panel (always built when expandable; hidden by default)
+      let riskHtml = '';
+      if (opts.expandable) {
+        const price    = _pF(r['Price']);
+        const sma20v   = _pPct(r['SMA20']);
+        const sma20Price = (!isNaN(price) && !isNaN(sma20v)) ? price / (1 + sma20v / 100) : NaN;
+        const sma50Price = (!isNaN(price) && !isNaN(sma50v)) ? price / (1 + sma50v / 100) : NaN;
+
+        // risk_*_pct stored as fractions (e.g. 0.0115 = 1.15%)
+        const risk20f = _pF(r['risk_20ma_pct']);
+        const risk50f = _pF(r['risk_50ma_pct']);
+        const risk20Pct = isNaN(risk20f) ? NaN : risk20f * 100;
+        const risk50Pct = isNaN(risk50f) ? NaN : risk50f * 100;
+        // Dollar risk = price × risk_fraction (preserves sign: negative = MA above price)
+        const risk20Dol = (!isNaN(price) && !isNaN(risk20f)) ? price * risk20f : NaN;
+        const risk50Dol = (!isNaN(price) && !isNaN(risk50f)) ? price * risk50f : NaN;
+
+        const atr      = _pF(r['ATR']);
+        const high     = _pF(r['High']);
+        const rangeAtr = _pF(r['range_atr']);
+        // Volatility (ATR %) = ATR / Price as %
+        const atrp = (!isNaN(atr) && !isNaN(price) && price > 0) ? (atr / price * 100) : NaN;
+        // Stop distance (ATR) = nearest positive-risk MA stop in ATR units
+        const pos20 = (!isNaN(risk20f) && risk20f > 0) ? risk20f : null;
+        const pos50 = (!isNaN(risk50f) && risk50f > 0) ? risk50f : null;
+        let nearestFrac = null;
+        if (pos20 !== null && pos50 !== null) nearestFrac = Math.min(pos20, pos50);
+        else if (pos50 !== null) nearestFrac = pos50;
+        else if (pos20 !== null) nearestFrac = pos20;
+        const stopDistAtr = (!isNaN(atr) && !isNaN(price) && nearestFrac !== null && atr > 0)
+          ? (nearestFrac * price / atr) : NaN;
+
+        const hodStr = isNaN(high) ? '—' : '$' + high.toFixed(2);
+        const fmtPct = v => isNaN(v) ? '—' : (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+        const fmtDol = v => isNaN(v) ? '—' : (v >= 0 ? '' : '−') + '$' + Math.abs(v).toFixed(2);
+        const fmtF1  = v => isNaN(v) ? '—' : v.toFixed(2);
+        const fmtLvl = v => isNaN(v) ? '—' : '$' + v.toFixed(2);
+        const riskCls = v => isNaN(v) ? 'text-slate-500' : (v >= 0 ? 'text-sky-400' : 'text-amber-400');
+
+        // Score debug breakdown (tuning aid — shows math inside risk panel)
+        let scoreDebug = '';
+        if (opts.showScore && !isNaN(opts.score)) {
+          const fn = v => (isNaN(v) ? '—' : v.toFixed(2));
+          const pf  = isNaN(opts.penaltyFrac) ? 0 : opts.penaltyFrac;
+          const g   = isNaN(opts.group_n) ? 0 : opts.group_n;
+          const t   = isNaN(opts.tight_n) ? 0 : opts.tight_n;
+          const q   = isNaN(opts.quiet_n) ? 0 : opts.quiet_n;
+          scoreDebug = `
+            <div class="mt-2 pt-2 border-t border-slate-700/50 font-mono text-xs text-slate-500 space-y-0.5">
+              <div>Group&nbsp;&nbsp;${fn(g)} × ${FOCUS_W_GROUP.toFixed(2)} = ${(g * FOCUS_W_GROUP).toFixed(2)}</div>
+              <div>Tight&nbsp;&nbsp;${fn(t)} × ${FOCUS_W_TIGHT.toFixed(2)} = ${(t * FOCUS_W_TIGHT).toFixed(2)}</div>
+              <div>Quiet&nbsp;&nbsp;${fn(q)} × ${FOCUS_W_QUIET.toFixed(2)} = ${(q * FOCUS_W_QUIET).toFixed(2)} → base ${fn(opts.base)}</div>
+              <div>Ext&nbsp;&nbsp;&nbsp;&nbsp;${isNaN(atrExt) ? '—' : atrExt.toFixed(1) + '×'} → ×${(1 - pf).toFixed(2)} → score ${fn(opts.score)}</div>
+            </div>`;
+        }
+
+        riskHtml = `
+          <div id="risk-panel-${key}" class="hidden px-3 pb-3 pt-1 bg-slate-800/40 border-t border-slate-700/30 text-xs">
+            <div class="grid grid-cols-3 gap-x-3 gap-y-2 mb-2">
+              <div>
+                <div class="text-slate-500 mb-0.5">HoD (next buy trigger)</div>
+                <div class="text-white font-medium">${hodStr}</div>
+              </div>
+              <div>
+                <div class="text-slate-500 mb-0.5">20MA stop</div>
+                <div class="text-slate-300">${fmtLvl(sma20Price)}</div>
+                <div class="${riskCls(risk20Pct)}">${fmtPct(risk20Pct)} · ${fmtDol(risk20Dol)}/sh</div>
+              </div>
+              <div>
+                <div class="text-slate-500 mb-0.5">50MA stop (wider)</div>
+                <div class="text-slate-300">${fmtLvl(sma50Price)}</div>
+                <div class="${riskCls(risk50Pct)}">${fmtPct(risk50Pct)} · ${fmtDol(risk50Dol)}/sh</div>
+              </div>
+            </div>
+            <div class="grid grid-cols-3 gap-x-3 gap-y-2 border-t border-slate-700/30 pt-2">
+              <div>
+                <div class="text-slate-500 mb-0.5">Ext (×50MA)</div>
+                <div class="${atrCls} font-medium">${atrStr}${isTrim ? ' <span class="text-red-500 font-normal">trim</span>' : ''}</div>
+              </div>
+              <div>
+                <div class="text-slate-500 mb-0.5">Range/ATR</div>
+                <div class="text-slate-300">${fmtF1(rangeAtr)}</div>
+              </div>
+              <div>
+                <div class="text-slate-500 mb-0.5">Volatility (ATR %)</div>
+                <div class="text-slate-300">${isNaN(atrp) ? '—' : atrp.toFixed(1) + '%'}</div>
+              </div>
+              <div>
+                <div class="text-slate-500 mb-0.5">Stop dist (ATR)</div>
+                <div class="text-slate-300">${fmtF1(stopDistAtr)}</div>
+              </div>
+            </div>
+            ${scoreDebug}
+          </div>`;
+      }
+
+      const rowClick = opts.expandable ? `onclick="__togglePickRow('${key}')" style="cursor:pointer"` : '';
+
+      return `<div>
+        <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-700/40 last:border-0" ${rowClick}>
+          <div class="w-16 flex-shrink-0">
+            <div class="text-xs font-bold text-white leading-tight">${ticker}${scoreBadge}</div>
+            <div class="text-xs text-slate-400 truncate leading-tight">${company}</div>
+          </div>
+          <div class="w-12 flex-shrink-0 text-right">
+            <div class="text-sm font-semibold ${atrCls} leading-tight">${atrStr}</div>
+            <div class="text-xs leading-tight ${isTrim ? 'text-red-500' : 'text-slate-500'}">${isTrim ? 'trim' : 'ext'}</div>
+          </div>
+          <div class="w-12 flex-shrink-0 text-right">
+            <div class="text-xs text-slate-500 leading-tight">%>50</div>
+            <div class="text-xs text-white leading-tight">${sma50Str}</div>
+          </div>
+          <div class="flex-1 flex gap-2 justify-end">
+            <div class="text-right">
+              <div class="text-xs text-slate-500 leading-tight">RSI</div>
+              <div class="text-xs text-white leading-tight">${rsiStr}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs text-slate-500 leading-tight">Wk</div>
+              <div class="text-xs ${perfWCls} leading-tight">${perfWStr}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-xs text-slate-500 leading-tight">Mo</div>
+              <div class="text-xs ${perfMCls} leading-tight">${perfMStr}</div>
+            </div>
+          </div>
+          ${chevronHtml}
+        </div>
+        ${riskHtml}
+      </div>`;
+    }
+
+    // computeFocusScores(candidates) — cross-sectional scoring for Focus view (3b.2).
+    // All three components use the same inverted min–max ruler; score = base × (1−penalty).
+    function computeFocusScores(candidates) {
+      const n = candidates.length;
+      if (n === 0) return [];
+      if (n === 1) return [{ r: candidates[0], score: 1.0, base: 1.0, penaltyFrac: 0,
+                             group_n: 1.0, tight_n: 1.0, quiet_n: 1.0 }];
+
+      // Raw component values (lower = better for all three → use inverted normalization)
+      const rawGroup = candidates.map(r => _pF(r.grp_sum_mid_rank));
+
+      // Nearest positive MA stop: only MAs below price (positive risk fraction) qualify as stops.
+      // risk_50ma_pct is always positive for Focus members (price > 50MA is the Focus gate).
+      const rawTight = candidates.map(r => {
+        const r20 = _pF(r.risk_20ma_pct);
+        const r50 = _pF(r.risk_50ma_pct);
+        const opts = [];
+        if (!isNaN(r50) && r50 > 0) opts.push(r50);
+        if (!isNaN(r20) && r20 > 0) opts.push(r20);
+        return opts.length > 0 ? Math.min(...opts) : NaN;
+      });
+
+      const rawQuiet = candidates.map(r => _pF(r.range_atr));
+
+      // Inverted min–max: lower raw → higher score (1.0 = tightest/quietest/strongest).
+      // Edge cases: all-equal → 0.5; pool < FOCUS_MIN_POOL → rank-based percentile.
+      function normalizeInv(arr) {
+        const valid = arr.filter(v => !isNaN(v));
+        if (valid.length === 0) return arr.map(() => 0.5);
+
+        if (n < FOCUS_MIN_POOL) {
+          // Rank-based percentile for small pools (jumpy min–max avoided)
+          const sorted = [...valid].sort((a, b) => a - b);
+          const m = sorted.length;
+          return arr.map(v => {
+            if (isNaN(v)) return 0.5;
+            const rank = sorted.indexOf(v);  // 0 = lowest = best for inverted
+            return m === 1 ? 1.0 : 1 - rank / (m - 1);
+          });
+        }
+
+        const mn = Math.min(...valid), mx = Math.max(...valid);
+        if (mx === mn) return arr.map(() => 0.5);  // all-equal → neutral
+        return arr.map(v => isNaN(v) ? 0.5 : (mx - v) / (mx - mn));
+      }
+
+      const normGroup = normalizeInv(rawGroup);
+      const normTight = normalizeInv(rawTight);
+      const normQuiet = normalizeInv(rawQuiet);
+
+      return candidates.map((r, i) => {
+        const atrExt = _pF(r.atr_ext_50);
+        const base   = FOCUS_W_GROUP * normGroup[i] + FOCUS_W_TIGHT * normTight[i] + FOCUS_W_QUIET * normQuiet[i];
+
+        // Extension penalty: 0 below PENALTY_START; ramps to PENALTY_MAX at ATR_EXT_ACTIONABLE.
+        const penaltyT = isNaN(atrExt) ? 0
+          : Math.max(0, Math.min(1, (atrExt - ATR_EXT_PENALTY_START) / (ATR_EXT_ACTIONABLE - ATR_EXT_PENALTY_START)));
+        const penaltyFrac = PENALTY_MAX * penaltyT;
+        const score = base * (1 - penaltyFrac);  // always ∈ [0, 1]
+
+        return { r, score, base, penaltyFrac, group_n: normGroup[i], tight_n: normTight[i], quiet_n: normQuiet[i] };
+      });
+    }
+
+    // Expand/collapse a risk panel row without re-rendering the list.
+    window.__togglePickRow = function(key) {
+      const panel = document.getElementById('risk-panel-' + key);
+      const chev  = document.getElementById('chev-' + key);
+      if (panel) panel.classList.toggle('hidden');
+      if (chev)  chev.classList.toggle('rotate-180');
+    };
+
+    // Switch between All and Focus views; updates button styles and re-renders.
+    window.__setPicksView = function(v) {
+      state.picksView = v;
+      renderPicks();
+    };
+
     function renderPicks() {
       const el = document.getElementById('picks-list');
       if (!el) return;
@@ -3066,33 +3368,14 @@
         return;
       }
 
-      // Inline parsers (mirrors picks_metrics.py for consistency)
-      function parsePct(v) {
-        if (!v || v === '-') return NaN;
-        return parseFloat(String(v).replace('%', ''));
-      }
-      function parseCapB(v) {
-        if (!v || v === '-') return NaN;
-        const s = String(v).trim();
-        const suf = { T: 1000, B: 1, M: 0.001, K: 0.000001 };
-        const last = s.slice(-1).toUpperCase();
-        if (suf[last] !== undefined) return parseFloat(s.slice(0, -1)) * suf[last];
-        return parseFloat(s);
-      }
-      function parseF(v) {
-        if (!v || v === '-') return NaN;
-        return parseFloat(String(v).replace(/,/g, ''));
-      }
-
       // C6 base display filter: Market Cap > MIN_MARKET_CAP_B AND
       // (price>50MA OR price>200MA OR 20MA>50MA).
-      // sma20_price > sma50_price ↔ SMA50_pct > SMA20_pct (same price denominates both).
       const filtered = rows.filter(r => {
-        const capB = parseCapB(r['Market Cap']);
+        const capB = _pCapB(r['Market Cap']);
         if (isNaN(capB) || capB <= MIN_MARKET_CAP_B) return false;
-        const sma50  = parsePct(r['SMA50']);
-        const sma200 = parsePct(r['SMA200']);
-        const sma20  = parsePct(r['SMA20']);
+        const sma50  = _pPct(r['SMA50']);
+        const sma200 = _pPct(r['SMA200']);
+        const sma20  = _pPct(r['SMA20']);
         if (!isNaN(sma50)  && sma50  > 0) return true;
         if (!isNaN(sma200) && sma200 > 0) return true;
         if (!isNaN(sma50) && !isNaN(sma20) && sma50 > sma20) return true;
@@ -3104,7 +3387,54 @@
         return;
       }
 
-      // Group by list_category → group (industry) → [rows]
+      // Sync toggle button appearance
+      const isAll = state.picksView !== 'focus';
+      const btnAll   = document.getElementById('picks-toggle-all');
+      const btnFocus = document.getElementById('picks-toggle-focus');
+      if (btnAll) {
+        btnAll.className   = 'px-3 py-1 text-xs rounded-full font-medium ' + (isAll ? 'bg-slate-600 text-white' : 'bg-slate-700 text-slate-400');
+      }
+      if (btnFocus) {
+        btnFocus.className = 'px-3 py-1 text-xs rounded-full font-medium ' + (!isAll ? 'bg-slate-600 text-white' : 'bg-slate-700 text-slate-400');
+      }
+
+      // ── Focus view ─────────────────────────────────────────────────────────
+      if (state.picksView === 'focus') {
+        // Hard gates: atr_ext_50 must be a real positive value ≤ ATR_EXT_ACTIONABLE (price > 50MA, not over-extended)
+        const candidates = filtered.filter(r => {
+          const ext = _pF(r.atr_ext_50);
+          return !isNaN(ext) && ext > 0 && ext <= ATR_EXT_ACTIONABLE;
+        });
+
+        if (candidates.length === 0) {
+          el.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">No Focus candidates — all actionable names are over-extended or below the 50MA.</p>';
+          return;
+        }
+
+        const scored = computeFocusScores(candidates);
+        scored.sort((a, b) => b.score - a.score);
+
+        let html = '<div class="space-y-0 bg-slate-800/60 rounded-lg overflow-hidden border border-slate-700/50">';
+        scored.forEach((item, i) => {
+          html += renderPickRow(item.r, {
+            rowIndex: i,
+            expandable: true,
+            showScore: true,
+            score: item.score,
+            base: item.base,
+            penaltyFrac: item.penaltyFrac,
+            group_n: item.group_n,
+            tight_n: item.tight_n,
+            quiet_n: item.quiet_n,
+          });
+        });
+        html += '</div>';
+        el.innerHTML = html;
+        return;
+      }
+
+      // ── All view ───────────────────────────────────────────────────────────
+      // Grouped: category → industry → stocks, sorted least-extended first within each group.
       const CAT_ORDER  = ['leaders', 'emerging', 'accel', 'rs_new_high'];
       const CAT_LABELS = { leaders: 'Leaders', emerging: 'Emerging', accel: 'Accel', rs_new_high: 'RS New High' };
       const CAT_COLORS = {
@@ -3123,11 +3453,10 @@
         catMap[cat][grp].push(r);
       }
 
-      // Within each group sort least-extended first (atr_ext_50 asc; NaN last).
       for (const cat of Object.keys(catMap)) {
         for (const grp of Object.keys(catMap[cat])) {
           catMap[cat][grp].sort((a, b) => {
-            const av = parseF(a.atr_ext_50), bv = parseF(b.atr_ext_50);
+            const av = _pF(a.atr_ext_50), bv = _pF(b.atr_ext_50);
             if (isNaN(av) && isNaN(bv)) return 0;
             if (isNaN(av)) return 1;
             if (isNaN(bv)) return -1;
@@ -3136,21 +3465,14 @@
         }
       }
 
-      // C4 ATR extension color bands
-      function atrTextColor(ext) {
-        if (isNaN(ext) || ext < 0) return 'text-slate-400';
-        if (ext >= ATR_EXT_TRIM)       return 'text-red-400';
-        if (ext >= ATR_EXT_ACTIONABLE) return 'text-amber-400';
-        return 'text-emerald-400';
-      }
-
       let html = '';
       const catsPresent = CAT_ORDER.filter(c => catMap[c]);
+      let globalRowIdx = 0;
 
       for (const cat of catsPresent) {
-        const groups = catMap[cat];
-        const catLabel = CAT_LABELS[cat] || cat;
-        const catColor = CAT_COLORS[cat] || 'bg-slate-800 text-slate-200';
+        const groups    = catMap[cat];
+        const catLabel  = CAT_LABELS[cat] || cat;
+        const catColor  = CAT_COLORS[cat] || 'bg-slate-800 text-slate-200';
         const totalStocks = Object.values(groups).reduce((s, a) => s + a.length, 0);
 
         html += `<div class="mb-5">
@@ -3159,64 +3481,15 @@
             <span class="text-xs text-slate-500">${totalStocks} name${totalStocks !== 1 ? 's' : ''}</span>
           </div>`;
 
-        const sortedGroups = Object.keys(groups).sort();
-        for (const grp of sortedGroups) {
+        for (const grp of Object.keys(groups).sort()) {
           const stocks = groups[grp];
           html += `<div class="mb-2 bg-slate-800/60 rounded-lg overflow-hidden border border-slate-700/50">
             <div class="flex items-center justify-between px-3 py-2 bg-slate-800 border-b border-slate-700">
               <span class="text-xs font-medium text-slate-200 truncate">${grp}</span>
               <span class="text-xs text-slate-500 ml-2 flex-shrink-0">${stocks.length} name${stocks.length !== 1 ? 's' : ''}</span>
             </div>`;
-
           for (const r of stocks) {
-            const ticker  = r.ticker || r.Ticker || '';
-            const company = (r.Company || '').slice(0, 18);
-            const atrExt  = parseF(r.atr_ext_50);
-            const atrStr  = isNaN(atrExt) ? '—' : atrExt.toFixed(1) + '×';
-            const isTrim  = !isNaN(atrExt) && atrExt >= ATR_EXT_TRIM;
-            const atrCls  = atrTextColor(atrExt);
-
-            const sma50v   = parsePct(r['SMA50']);
-            const sma50Str = isNaN(sma50v) ? '—' : (sma50v >= 0 ? '+' : '') + sma50v.toFixed(1) + '%';
-
-            const rsi    = parseF(r['RSI']);
-            const rsiStr = isNaN(rsi) ? '—' : rsi.toFixed(0);
-
-            const perfW    = parsePct(r['Perf Week']);
-            const perfWStr = isNaN(perfW) ? '—' : (perfW >= 0 ? '+' : '') + perfW.toFixed(1) + '%';
-            const perfM    = parsePct(r['Perf Month']);
-            const perfMStr = isNaN(perfM) ? '—' : (perfM >= 0 ? '+' : '') + perfM.toFixed(1) + '%';
-            const perfWCls = isNaN(perfW) ? 'text-slate-400' : (perfW >= 0 ? 'text-emerald-400' : 'text-red-400');
-            const perfMCls = isNaN(perfM) ? 'text-slate-400' : (perfM >= 0 ? 'text-emerald-400' : 'text-red-400');
-
-            html += `<div class="flex items-center gap-2 px-3 py-2 border-b border-slate-700/40 last:border-0">
-              <div class="w-16 flex-shrink-0">
-                <div class="text-xs font-bold text-white leading-tight">${ticker}</div>
-                <div class="text-xs text-slate-400 truncate leading-tight">${company}</div>
-              </div>
-              <div class="w-12 flex-shrink-0 text-right">
-                <div class="text-sm font-semibold ${atrCls} leading-tight">${atrStr}</div>
-                <div class="text-xs leading-tight ${isTrim ? 'text-red-500' : 'text-slate-500'}">${isTrim ? 'trim' : 'ext'}</div>
-              </div>
-              <div class="w-12 flex-shrink-0 text-right">
-                <div class="text-xs text-slate-500 leading-tight">%>50</div>
-                <div class="text-xs text-white leading-tight">${sma50Str}</div>
-              </div>
-              <div class="flex-1 flex gap-2 justify-end">
-                <div class="text-right">
-                  <div class="text-xs text-slate-500 leading-tight">RSI</div>
-                  <div class="text-xs text-white leading-tight">${rsiStr}</div>
-                </div>
-                <div class="text-right">
-                  <div class="text-xs text-slate-500 leading-tight">Wk</div>
-                  <div class="text-xs ${perfWCls} leading-tight">${perfWStr}</div>
-                </div>
-                <div class="text-right">
-                  <div class="text-xs text-slate-500 leading-tight">Mo</div>
-                  <div class="text-xs ${perfMCls} leading-tight">${perfMStr}</div>
-                </div>
-              </div>
-            </div>`;
+            html += renderPickRow(r, { rowIndex: globalRowIdx++, expandable: true });
           }
           html += '</div>';
         }
@@ -3285,6 +3558,7 @@
 
     function switchTab(tab) {
       state.tab = tab;
+      if (tab === 'picks') state.picksView = 'all';  // A4: always reset to All on tab entry
       document.querySelectorAll('.tab-btn').forEach(btn => {
         const active = btn.dataset.tab === tab;
         btn.classList.toggle('tab-active', active);

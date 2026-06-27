@@ -1,5 +1,12 @@
 # Plan: Top-stock picks from leading groups (Stage-2 screener pipeline)
 
+> Status: **PHASE 3b COMPLETE (2026-06-27)** — Focus List + expandable risk panel shipped.
+> `renderPickRow()` extracted as top-level helper; expandable risk panel shows HoD, 20MA/50MA stop levels
+> (price/$/%/sh), extension, Range/ATR, Volatility(ATR%), Stop distance(ATR); score debug breakdown while
+> tuning. Focus scoring: one min–max ruler, multiplicative discount, nearest-positive-MA stop (TESTAB20
+> regression row added to fixture). All/Focus toggle with A4 reset on tab entry. Release triplet v2026.06.27.
+> 519 tests pass; 6 new Focus constants triple-documented; moaty-metrics.md + GUIDE + CLAUDE.md updated.
+>
 > Status: **PHASE 3a COMPLETE (2026-06-26)** — Picks tab MVP shipped. Backend metrics
 > (`atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`, `range_atr`, `stage2`) in picks.csv/picks_latest.csv;
 > one historical date backfilled via `ensure_picks_csv`. PWA Picks tab renders grouped by

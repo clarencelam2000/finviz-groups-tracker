@@ -6,6 +6,25 @@
 
 ## Current Status
 
+**Status (2026-06-27) — PHASE 3b COMPLETE. PR OPEN. SAFE TO CLOSE.**
+Phase 3b shipped on branch `claude/phase-3b-implementation-u2flw1`. PR created and ready for review.
+What landed:
+- `docs/index.html` — `renderPickRow()` (module-level, 3b.0), expandable risk panel (3b.1), All/Focus
+  toggle + `computeFocusScores()` (3b.2), 6 new constants (ATR_EXT_PENALTY_START, PENALTY_MAX,
+  FOCUS_W_GROUP, FOCUS_W_TIGHT, FOCUS_W_QUIET, FOCUS_MIN_POOL), GUIDE entry for `focus_score`,
+  `switchTab()` resets picksView='all' on tab entry (A4)
+- `docs/releases.json` — v2026.06.27 entry, tag "feature", tab "picks"
+- `docs/sw.js` — CACHE bumped to finviz-v32
+- `knowledge/moaty-metrics.md` — `focus_score` entry (source of truth for GUIDE one-liner)
+- `CLAUDE.md` — 6 Focus constants added to PWA display thresholds table
+- `README.md` — 6 Focus constants added to Configurable parameters table
+- `planning/stock-picks-from-leading-groups.md` — Phase 3b marked COMPLETE
+- `tests/fixtures/picks_latest.csv` — 13th row: TESTAB20 (above50/below20 test case)
+- `.session/SPRINT.md` — PICKS-3B marked Done
+Playwright tests for 3b (`tests/test_pwa_picks.py`) written but deferred to separate branch
+`claude/pwa-picks-playwright-tests` pending cloud infra fix (glob route intercept). Non-blocking.
+**Phase 3c next:** `renderLookup()` reuses `renderPickRow()` for consistent pick card in lookup flow.
+
 **Status (2026-06-26) — PHASE 3a COMPLETE. SAFE TO CLOSE.**
 Phase 3a shipped on branch `claude/phase-3a-implementation-5rsek8`. PR created.
 What landed:

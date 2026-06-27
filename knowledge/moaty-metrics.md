@@ -298,6 +298,22 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
 - **User one-liner:** "Whether the stock is in Stage 2: price above the 50-day MA and the 50MA
   above the 200MA — the technical configuration where most big winning stocks reside."
 
+## focus_score (Focus quality score — PWA Picks tab, Phase 3b)
+- **Source:** PWA-computed (`docs/index.html` `computeFocusScores()`). Not stored in any CSV — derived
+  cross-sectionally from today's Focus pool at render time.
+- **Formula:** `score = base × (1 − extension_penalty_fraction)`.
+  - `base = FOCUS_W_GROUP × group_n + FOCUS_W_TIGHT × tight_n + FOCUS_W_QUIET × quiet_n` (0.4/0.4/0.2 weights, sum to 1).
+  - Each component uses the same inverted min–max ruler: `(max − x) / (max − min)` across Focus candidates.
+  - Group strength = `grp_sum_mid_rank` (lower = stronger group). Stop tightness = nearest positive MA stop
+    (`min(risk_20ma_pct, risk_50ma_pct)` keeping only positive values; 20MA dropped when price is below it).
+    Quiet bar = `range_atr` (lower = tighter day).
+  - Extension penalty ramps 0 → 0.5 from 3.5× to 5× (`ATR_EXT_PENALTY_START` → `ATR_EXT_ACTIONABLE`).
+- **Range:** always [0, 1]; score × 100 displayed as integer in PWA.
+- **Normalization edge cases:** all-equal component → 0.5; pool < 5 → rank-based percentile; n == 1 → 1.0.
+- **Focus gate (hard gates before scoring):** `atr_ext_50 > 0` (price above 50MA) AND `atr_ext_50 ≤ 5.0`
+  (not over-extended). No RSI gate; no Stage-2 gate (3b decision — revisit via PICKS-3B-FOCUSGATE).
+- **User one-liner:** "A blended 0–100 quality score ranking Focus picks by group strength, how tight the nearest MA stop is, and how quiet today's bar was — then discounted for extension beyond 3.5×."
+
 ## Rotation Phase (AI — sectors only)
 - **Definition:** an AI-generated read of where the broad market sits in its
   cycle, labeled Early Cycle, Mid Cycle, Late Cycle, or Defensive, with a short
