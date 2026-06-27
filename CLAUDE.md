@@ -128,6 +128,12 @@ These constants gate visual indicators in the PWA. Edit them directly in `index.
 | `MIN_MARKET_CAP_B` | `5` | Picks tab base display filter (C6); rows below this market cap ($B) are hidden. |
 | `ATR_EXT_ACTIONABLE` | `5.0` | ATR-extension emerald band cap; also the Focus hard-DQ line (Phase 3b). |
 | `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start; flags a held position as a trim-10% candidate. |
+| `ATR_EXT_PENALTY_START` | `3.5` | Focus-score extension penalty ramp start; 0 penalty below this, ramps to `PENALTY_MAX` at `ATR_EXT_ACTIONABLE`. |
+| `PENALTY_MAX` | `0.5` | Max Focus extension-discount fraction (50% haircut at 5×). `score = base × (1 − penalty_fraction)`, always ∈ [0, 1]. |
+| `FOCUS_W_GROUP` | `0.4` | Focus score weight for group sustained-strength component (`grp_sum_mid_rank`). |
+| `FOCUS_W_TIGHT` | `0.4` | Focus score weight for nearest-MA stop tightness component. |
+| `FOCUS_W_QUIET` | `0.2` | Focus score weight for quiet-bar component (`range_atr`). |
+| `FOCUS_MIN_POOL` | `5` | Min Focus candidates before falling back from min–max to rank-based normalization. |
 
 ---
 

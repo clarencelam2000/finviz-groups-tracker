@@ -313,6 +313,12 @@ These constants control when visual indicators appear or change state. All are n
 | `MIN_MARKET_CAP_B` | `5` | Picks tab C6 base display filter: hides rows whose Market Cap is ≤ 5B. Cuts noise from micro/nano-caps. |
 | `ATR_EXT_ACTIONABLE` | `5.0` | ATR-extension emerald band cap (≤5× = actionable / entry-zone). Also the Focus hard-DQ line (Phase 3b). |
 | `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start (≥8× = trim-10% candidate for held positions). Amber band is 5–8×. |
+| `ATR_EXT_PENALTY_START` | `3.5` | ATR-extension at which the Focus-score extension penalty begins ramping. Zero penalty below this; full `PENALTY_MAX` at `ATR_EXT_ACTIONABLE` (5×). |
+| `PENALTY_MAX` | `0.5` | Maximum Focus-score extension discount fraction (50% haircut at 5×). `score = base × (1 − penalty_fraction)`, always ∈ [0, 1]. |
+| `FOCUS_W_GROUP` | `0.4` | Focus score weight for the sustained group-strength component (`grp_sum_mid_rank` inverted min-max). |
+| `FOCUS_W_TIGHT` | `0.4` | Focus score weight for the nearest-MA stop tightness component (`min(risk_20ma_pct, risk_50ma_pct)` where both > 0, inverted min-max). |
+| `FOCUS_W_QUIET` | `0.2` | Focus score weight for the quiet-bar component (`range_atr`, inverted min-max — lower range = quieter = better). |
+| `FOCUS_MIN_POOL` | `5` | Minimum Focus candidates before switching from min-max to rank-based normalization (avoids degenerate single-point scaling). |
 
 > The Guide's **legend** renders these thresholds live (read from JS scope), so the in-app explanation can never drift from the numbers above.
 

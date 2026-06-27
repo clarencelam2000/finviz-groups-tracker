@@ -1,6 +1,19 @@
 {
-  "current": "2026.06.26",
+  "current": "2026.06.27",
   "releases": [
+    {
+      "version": "2026.06.27",
+      "date": "2026-06-27",
+      "title": "Picks: Focus list + expandable risk panel",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "New Focus toggle on the Picks tab surfaces the best actionable setups from the daily pick list — ranked by a blended quality score: group sustained-strength (40%), tightness of the nearest MA stop (40%), and how quiet today's bar was (20%), then discounted for extension beyond 3.5×.",
+        "Extension penalty ramps from 0 at 3.5× to a 50% haircut at 5× (the hard-DQ line) — so a stretched name is downranked but not hidden from Focus unless it's truly over-extended.",
+        "Tap any row to expand the risk panel: prev-day high (next-session buy trigger), 20MA and 50MA stop levels in price and % and $/share, plus three tightness lines (Range/ATR, Volatility ATR%, Stop distance in ATRs). Score component breakdown is shown in the panel during the tuning period.",
+        "Focus resets to All on every tab entry — no stale-Focus confusion when data reloads."
+      ]
+    },
     {
       "version": "2026.06.26",
       "date": "2026-06-26",

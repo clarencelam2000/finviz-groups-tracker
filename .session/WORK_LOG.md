@@ -4,6 +4,18 @@
 
 ---
 
+## 2026-06-27 — Phase 3b COMPLETE: expandable risk panel + All/Focus toggle + Focus scoring
+
+`renderPickRow()` extracted as module-level function (3b.0). Expandable risk panel in each
+pick card (3b.1): 20MA stop, 50MA stop, trigger vs support, ATR extension badge. All/Focus
+toggle (3b.2): `computeFocusScores()` with 3-component blended score (group strength 40%,
+stop tightness 40%, bar quietness 20%), extension penalty ramp 3.5×→5×, hard DQ above 5×.
+Focus pool min-max normalization with rank fallback below FOCUS_MIN_POOL=5.
+6 new constants triple-documented (CLAUDE.md + README + code): ATR_EXT_PENALTY_START,
+PENALTY_MAX, FOCUS_W_GROUP, FOCUS_W_TIGHT, FOCUS_W_QUIET, FOCUS_MIN_POOL. Release v2026.06.27
+(sw.js → finviz-v32). Playwright tests written (tests/test_pwa_picks.py) but held on
+separate branch pending cloud infra fix — non-blocking for ship.
+
 ## 2026-06-26 — Phase 3a COMPLETE: Picks tab MVP + backend derived metrics
 
 `picks_metrics.py` backend module (5 METRICS_COLS: atr_ext_50, risk_20ma_pct, risk_50ma_pct, range_atr, stage2).
