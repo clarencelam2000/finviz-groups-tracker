@@ -7,6 +7,15 @@
 > criteria met; 80 tests pass. Release triplet present (v2026.06.26). Phase 3b (risk panel + Focus
 > List) is next.
 >
+> Status: **PHASE 3b/3c SPEC REFINED & LOCKED (2026-06-27, staff review + CEO).** §3b/§3c rewritten:
+> `renderPickRow()` refactor (3b.0); expandable risk panel + 3 tightness lines (Range/ATR, Volatility
+> (ATR %), Stop distance (ATR)); Focus score now **one min–max ruler for all components** +
+> **multiplicative extension discount** (`score = base × (1 − penalty)`, always ∈ [0,1]) +
+> **nearest-MA stop tightness** (`min(positive risk_20, risk_50)` — fixes the below-20MA bug, gives the
+> "either MA" reward); 3c button **inlined + anti-drift test** (no fetch), inline slugify, **both
+> `renderLookup()` branches**, **sector `sec_<slug>` button**. New tracked tasks: PICKS-3B-FOCUSGATE,
+> PICKS-3B-FOCUSTEST, PICKS-3D-STACKEDSTOP. **Ready for an implementer — no open blockers.**
+>
 > Status: **PHASE 2 LIVE (2026-06-25)** — first `collect_picks.yml` dispatch GREEN. Daily capture
 > started. 273 stock picks / 262 unique tickers / 19 industry groups across all 4 buckets.
 > 19/19 scraped slugs validated. Dedup logic confirmed (Packaging & Containers tagged in both
@@ -718,21 +727,61 @@ house rule, all three in the same PR.
 
 Builds on 3a's rendered rows. Adds the Ariel/Minervini decision layer.
 
-### 3b.1 — Per-row risk panel
+> **Depends on 3a; do 3b before 3c.** 3c (Lookup section) reuses 3b's per-row renderer **with**
+> the risk panel, so 3b lands first. Run the phases in order.
 
-For every Picks row, surface (expandable or inline secondary line):
-- **Trigger (current day high becomes tomorrow's prev day high - a common buy trigger for Ariel):** the stored `High` (EOD scrape ⇒ today's high = next session's
-  breakout trigger).
+### 3b.0 — Refactor: extract `renderPickRow(r)` (do this first) — **B4**
+
+Today `renderPicks()` (`docs/index.html:~3171–3219`) builds each stock row's HTML **inline inside
+nested loops** — there is no callable "render one row" function. 3b adds the risk panel and 3c
+renders the same rows inside the Lookup tab; without a shared helper that's ~30 lines of row HTML
+copy-pasted into two places that will drift.
+
+**Action:** extract a single **`renderPickRow(r, opts)`** helper that returns the row HTML
+(ticker/company/extension band/`%>50`/RSI/perf + the 3b risk panel). `renderPicks()` calls it in
+its loop; 3c's Lookup section calls the same function. One row layout, one place to change.
+`opts` carries per-surface flags (e.g. `opts.expandable` for the risk panel). Add/extend the
+Playwright test so both surfaces assert against the same rendered structure.
+
+### 3b.1 — Per-row risk panel (expandable — **A1**)
+
+The risk panel is an **expandable** secondary block per row (a subtle chevron toggles it open;
+track open rows in a JS `Set` of tickers). Always-inline would roughly double every row's height on
+mobile — rejected. Surface, when open:
+
+- **High of day (next buy trigger):** the stored `High` (EOD scrape ⇒ today's high = next session's prev day high 
+  breakout trigger). Label it **"HoD (next buy trigger)"**.
   > **Known gap (TODO PICKS-3D-STALE):** our cron runs EOD (after close), so intraday captures
   > show a partial-day `High`. No stale-data warning is shown in 3b MVP. Track in SPRINT as a
   > follow-up task (PICKS-3D-STALE): add a `run_at` timestamp column to `picks.csv` (stamped from
   > the workflow run time) and surface a banner in the PWA when the picks data is from an intraday
   > capture (run_at time < 16:00 ET on the data date).
-- **Stop (20MA):** `sma20_price`, with **Risk** = `risk_20ma_pct` shown as % and as $/share
-  (`price − sma20_price`). Default per C3. Note: `High` is the breakout trigger shown to the
-  trader; risk is measured from current `price` (the stored value in picks.csv), not from `High`.
-- **Wider stop (50MA):** `sma50_price` + `risk_50ma_pct`, shown as the secondary alternative.
+- **Stop (20MA, default per C3):** show the **stop level** `sma20_price` and **Risk** =
+  `risk_20ma_pct` as % **and** as $/share.
+  - **Reconstruct the stop level** in JS from stored columns: `sma20_price = Price / (1 + SMA20/100)`
+    (use the same parser pattern already in `renderPicks()`). `SMA20` is the Finviz "% of price above
+    the 20MA" column.
+  - **$/share risk is simpler — do NOT reconstruct for the dollar figure:** `$risk = Price ×
+    risk_20ma_pct`. (`risk_20ma_pct` is stored as a fraction; e.g. ANET EOD 2026-06-25:
+    `165.45 × 0.0115 = $1.90/share`, stop level `165.45/(1+1.16/100) ≈ $163.55`. Verified.)
+  - Risk is measured from current `Price` (the stored value), **not** from `High`. `High` is only the
+    breakout trigger.
+- **Wider stop (50MA):** `sma50_price = Price/(1+SMA50/100)` + `risk_50ma_pct`, shown as the
+  secondary alternative.
 - **Extension:** `atr_ext_50` (same color band as 3a). Trim tag at `≥ ATR_EXT_TRIM`.
+- **Tightness metrics (display-only; PWA-computed from stored `ATR`/`Price`/`High`/`Low` — no backend
+  column, they are trivial functions attribution can recompute offline).** Label each so a trader
+  reads it without a glossary:
+  - **"Range/ATR" (`range_atr`, already a 3a backend column):** today's high–low range ÷ ATR.
+    `< 1` = an inside-its-normal-swing, quiet day. Self-normalizes for the stock's own volatility and
+    price level (a $500 and a $20 name are comparable), so it directly answers *"tight for THIS
+    stock today?"*.
+  - **"Volatility (ATR %)" (`atrp = ATR / Price`):** average daily move as a % of price. Lower = a
+    structurally calmer name. Price-level-independent baseline volatility.
+  - **"Stop distance (ATR)" (`nearest_stop$ / ATR`):** how many ATRs sit between price and the
+    nearest logical MA stop below it (`nearest_stop$ = min` of the *positive* of `Price−sma20_price`,
+    `Price−sma50_price`). Smaller = a tighter stop in volatility terms. Uses the same nearest-stop
+    definition as the Focus tightness component (§3b.2) for consistency.
 
 ### 3b.2 — Focus List (C2, C7) — `All / Focus` toggle inside the Picks tab
 
@@ -744,48 +793,140 @@ A segmented control at the top of the Picks tab toggles between **All** (the 3a 
 - `atr_ext_50` is a real positive value with `0 < atr_ext_50 ≤ ATR_EXT_ACTIONABLE (5)` — i.e. above
   the 50MA (extension is meaningful) and not over-extended. **`> 5` auto-DQs** (CEO explicit).
 - No RSI gate (C8). No fundamental gate in 3b (that's 3d).
+  > **Gate is `price > 50MA`, NOT full Stage-2 (`stage2 == 1`).** A Focus name only needs price above
+  > its 50MA (positive extension); it does **not** need 50MA > 200MA. So a stock emerging from a base
+  > (rising above its 50MA while the 50MA is still below the 200MA) is admitted. This looser gate is a
+  > **judgment call, not a settled decision** — track **PICKS-3B-FOCUSGATE** (SPRINT): after live
+  > data, decide whether to tighten Focus to require `stage2 == 1`.
 
-**Focus rank — blended quality score (higher = better A++), all weights PWA constants, tunable:**
-Compute each component, normalize cross-sectionally (min–max) across the day's Focus candidates,
-then `score = Σ(w_i · component_i) − extension_penalty`:
+**Focus rank — blended quality score (higher = better), all weights PWA constants, tunable.**
+Compute each component, **normalize all of them cross-sectionally with the SAME min–max recipe**
+across the day's Focus candidates, weight, then apply the extension as a **multiplicative discount**
+(never a subtraction):
 
-| Component | Direction | Source | Notes |
-|-----------|-----------|--------|-------|
-| Group strength | **+** | **`grp_sum_mid_rank` inverted** — `(max − x) / (max − min)` across Focus candidates (lower sum-of-ranks = stronger group → higher normalized score) | Same ranking basis as the leaders bucket; consistent with selection. If you change this metric, write an ADR. Do **not** use `grp_momentum_score_pctile` here — that value is a cross-sectional percentile across ALL industry groups at selection time, not across the day's Focus candidates. |
-| 20MA tightness | **+** | `risk_20ma_pct` inverted — `1 − (x / max)` across Focus candidates (smaller = better) | CEO: "close to 20MA as positive weight" — tight logical stop = low risk. |
-| Quiet bar | **+ (mild)** | `range_atr` inverted — `1 − (x / max)` across Focus candidates (smaller = better) | C1 tightness proxy; constructive low-volatility day. |
-| Extension penalty | **−** | `atr_ext_50` | **0 for `≤ ATR_EXT_PENALTY_START (3.5)`; linear ramp to `−PENALTY_MAX (0.5)` from 3.5→5.0.** CEO explicit. |
+```
+base   = w_group·group_strength + w_tight·stop_tightness + w_quiet·quiet_bar      # base ∈ [0, 1]
+score  = base × (1 − extension_penalty_fraction)                                   # score ∈ [0, 1]
+```
 
-> **Small Focus pool edge case:** if the day has fewer than `FOCUS_MIN_POOL = 5` candidates,
-> min–max normalization is degenerate (denominator → 0). Fall back to **rank-based normalization**
-> (assign percentile ranks 0–1 across the pool, even if tiny) so the score is still meaningful and
-> ordering is preserved. If only 1–2 candidates exist, show them all — don't show an empty Focus.
+**Why one normalization recipe + a multiplicative discount (design decisions locked 2026-06-27):**
+- **One ruler for all three components (min–max), not a mix.** The earlier draft normalized group
+  strength with `(max−x)/(max−min)` (full 0→1 span) but tightness/quiet with `1−(x/max)` (compressed
+  0→<1 span). Mixed rulers silently re-weight: a component on a compressed span contributes less than
+  its stated weight. With one ruler, `w=0.4` genuinely means 0.4. `1−(x/max)` also breaks on the
+  negative-`risk_20ma_pct` case (price below the 20MA → score `> 1`, wrongly topping the ranking).
+- **Multiplicative discount keeps `score ∈ [0, 1]`.** The old `base − penalty` could go negative
+  (`base` near 0, penalty up to 0.5 ⇒ −0.39). `base × (1 − penalty_fraction)` with `base ∈ [0,1]` and
+  `(1−penalty) ∈ [0.5, 1]` is always non-negative, and the haircut scales with how good the setup
+  otherwise is — "A++ but stretched, dock it up to 50%."
+
+| Component | Dir | Source | Min–max normalization (across Focus candidates) |
+|-----------|-----|--------|--------------------------------------------------|
+| Group strength | **+** | `grp_sum_mid_rank` (lower sum-of-ranks = stronger group) | inverted: `(max − x) / (max − min)`. Same basis as the leaders bucket; consistent with selection. If you change this metric, write an ADR. Do **not** use `grp_momentum_score_pctile` — that is a percentile across ALL groups at selection time, not across today's Focus pool. |
+| Stop tightness (nearest MA) | **+** | `min(positive of risk_20ma_pct, risk_50ma_pct)` | inverted: `(max − x) / (max − min)`. Smaller nearest-stop = tighter logical stop = better. **Either MA earns the points (the "OR"):** a logical stop must be an MA *below* price, so consider only positive risks; the nearer one is the stop. `risk_50ma_pct` is always positive for a Focus member (Focus requires `atr_ext_50 > 0 ⇔ price > 50MA`), so a valid stop always exists; `risk_20ma_pct` is dropped from the min when price is below the 20MA. This replaces the old "20MA tightness" component and fixes the negative-risk bug. |
+| Quiet bar | **+ (mild)** | `range_atr` (3a backend col) | inverted: `(max − x) / (max − min)`. C1 tightness proxy. Already self-normalizes per stock (range ÷ its own ATR), so an expensive high-ATR name and a cheap low-ATR name are comparable — exactly "tight for THIS stock today". No change needed beyond switching to the min–max ruler. |
+
+**Extension penalty (multiplicative, applied to `base`):**
+```
+extension_penalty_fraction = PENALTY_MAX × clamp( (atr_ext_50 − ATR_EXT_PENALTY_START)
+                                                  / (ATR_EXT_ACTIONABLE − ATR_EXT_PENALTY_START), 0, 1 )
+```
+`0` below `ATR_EXT_PENALTY_START (3.5)`; ramps linearly to `PENALTY_MAX (0.5)` at
+`ATR_EXT_ACTIONABLE (5.0)`. The denominator is derived from the two constants (`= 1.5`), never
+hardcoded — retuning either constant keeps the ramp correct.
+
+> **Optional 50MA double-support bonus → deferred to 3d (PICKS-3D-STACKEDSTOP).** The v1
+> nearest-stop component already gives the "either MA" reward. A stock where BOTH MAs are tight AND
+> close together (`|sma20_price − sma50_price| / price` small) has two stacked supports and deserves a
+> small extra bump. Defer the bonus to 3d to keep v1 simple.
+
+**Normalization edge cases (implement all three):**
+- **All-equal component (`max == min`, denominator 0):** assign every candidate `0.5` for that
+  component (neutral) — never divide by zero.
+- **Small pool (`< FOCUS_MIN_POOL = 5`):** min–max is too jumpy; fall back to **rank-based
+  normalization** (percentile rank 0–1 across the pool).
+- **Single candidate (`n == 1`):** score `= 1.0` (sole candidate is by definition the best); show it,
+  never an empty Focus.
 
 > **Explicitly NOT a positive factor: proximity to the 50MA.** Being close to the 50MA does not make
-> a setup good (CEO 2026-06-26). The 50MA only appears as the *extension penalty* (a negative beyond
+> a setup good (CEO 2026-06-26). The 50MA appears only as the *extension penalty* (a discount beyond
 > 3.5×) and as the wider-stop risk line — never as a reward for being near it.
 
-Sort Focus descending by `score`. Show the same row + risk panel as 3a, plus a small score/setup
-badge. (This is the "ranked best setups" approach — multi-factor — that the CEO endorsed over a
-naive "filter then sort by one axis.")
+Sort Focus descending by `score`. Render each row with the shared `renderPickRow()` (§3b.0) + risk
+panel, plus a small score badge.
+
+> **Show the score math while tuning (A2).** In the early weeks, inside the row's expandable, show
+> the component breakdown so we can calibrate the weights, e.g.:
+> ```
+> Group   0.82 × 0.40 = 0.33
+> Tight   1.00 × 0.40 = 0.40
+> Quiet   0.50 × 0.20 = 0.10   → base 0.83
+> Ext     4.1× → ×0.85         → score 0.71
+> ```
+> This is a tuning aid, removable later by flipping one flag.
+
+> **Freshness-fill leaders are basis-blind in the Focus score (M3).** The group-strength component
+> reads `grp_sum_mid_rank` and ignores `grp_rank_basis`, so SS leaders and freshness-fill leaders run
+> through the identical formula. Consequence: freshness fills (selected by `momentum_confirmed`, often
+> *because* their sum-of-ranks was too weak for the top-8) will tend to score lower on group strength
+> and get **no credit for the freshness that selected them**. Acceptable for v1; revisit if freshness
+> names systematically sink (note it alongside PICKS-3B-FOCUSGATE).
+
+> **Deterministic Focus-order test → fast-follow (PICKS-3B-FOCUSTEST), NOT a 3b blocker.** Because the
+> score is cross-sectionally normalized, you cannot pin one stock's score in isolation — but you *can*
+> freeze a small fixture pool and assert the whole-pool ordering + scores within ±0.01. Tabled as a
+> fast-follow per CEO (2026-06-27): the feature is heuristic/judgment anyway; do not block on it. The
+> 3b acceptance test asserts the qualitative properties below (penalty observable, below-MA names
+> excluded) rather than exact scores.
 
 ### 3b.3 — Release triplet (as 3a.4).
 
 ## Phase 3c — Lookup-tab Stage-2 section + deep-link button
 
-- When an industry is pulled up in the **Lookup** tab, render a **"Stage-2 names"** section:
-  - If the industry was in today's selected universe (present in `picks_latest.csv`), list its names
-    (reuse the 3a row renderer + risk panel).
-  - Always render a **"Stage-2 stocks on Finviz →"** deep-link button built from the slug map +
-    `screener_config.json` `button` block (the **tight `v=311`** template: `cap_midover`,
-    `ta_sma20_sa50`, `ta_sma50_pa`, `o=sma50`, `ind_<slug>`). Available for **all 144** industries,
-    even ones not selected today ("not currently a leading group — screen it yourself →").
-- Pure URL construction; no backend. Mirror the existing Lookup card wiring (`docs/index.html:241`,
-  `switchTab('lookup')` paths).
+> Reuses the **3b** `renderPickRow()` helper (rows + risk panel) — land 3b first.
+
+**Hook into BOTH `renderLookup()` code paths (B3).** `renderLookup()` (`docs/index.html:~2896`) has
+two branches that resolve a group, and the Stage-2 section must be added to **both** (missing one is
+the easy bug):
+1. **`if (groupResult)` branch (`~:2917`)** — a group looked up *by name*. The industry name is
+   `groupResult.name` (only when `groupResult.groupKey === 'industries'`).
+2. **Ticker branch (`else`, `~:3004`)** — a ticker resolved to a group. The industry name is
+   `data.finviz_industry`; the sector is `data.finviz_sector`.
+
+For the resolved **industry**, render a **"Stage-2 names"** section:
+- If the industry is present in today's `picks_latest.csv` (already loaded in `state.picksData`),
+  list its names with the shared `renderPickRow()` (rows + risk panel).
+- Otherwise show the button alone ("not currently a leading group — screen it yourself →").
+
+**Deep-link button — inline template + anti-drift test (B1/B2), NO runtime fetch:**
+- **Button params live as PWA constants** in `index.html` (alongside `ATR_EXT_*`), mirroring the
+  `button` block of `screener_config.json` (the tight `v=311` template: `cap_midover`,
+  `ta_sma20_sa50`, `ta_sma50_pa`, `o=sma50`, `ft=4`). **Single source of truth stays
+  `screener_config.json`** — add **`tests/test_picks_button_config.py`** asserting the inlined PWA
+  constants equal the config's `button` block, so a future button change in the config reddens CI
+  until `index.html` is updated. This matches the repo's existing anti-drift idiom (GUIDE ↔
+  moaty-metrics, screener labels ↔ probe fixture). Runtime-fetching the 84-col `screener_config.json`
+  just to build a URL is rejected; there is no server-side inject point (GitHub Pages branch-deploy).
+- **Slug is computed inline, no CSV fetch (B2):** the JS equivalent of `slugify_industry` —
+  `name.toLowerCase().replace(/[^a-z0-9]/g, '')` — builds `ind_<slug>`. The `finviz_industry_slugs.csv`
+  `validated` column is a backend concern, irrelevant to URL construction; do not fetch it.
+- **Industry button** available for **all 144** industries (selected or not): `ind_<slug>`.
+- **Sector button (A3):** when a *sector* is the resolved group (sector-name lookup, or the ticker
+  branch's `data.finviz_sector`), render the same button with **`sec_<slug>`** instead of `ind_<slug>`.
+  All 11 sector names slugify cleanly to Finviz sector tokens (`Real Estate → sec_realestate`,
+  `Communication Services → sec_communicationservices`, `Healthcare → sec_healthcare`, …); a unit test
+  asserts the 11 mappings. (No Stage-2 *names* list for sectors — `picks_latest.csv` is industry-keyed
+  — only the button.)
+- Pure URL construction; no backend.
 - Release triplet.
 
 ## Phase 3d — Polish & refinements (optional, post-MVP)
 
+- **50MA double-support bonus (PICKS-3D-STACKEDSTOP):** add the "AND" reward to the Focus score — a
+  small bump (or second multiplier) when BOTH MA stops are tight AND the 20MA and 50MA sit close
+  together (`|sma20_price − sma50_price| / price` below a threshold), i.e. two stacked supports under
+  price. The v1 nearest-stop component (§3b.2) already covers the "either MA" reward; this adds the
+  "both, and close" case.
 - **True inside-day / NR7** (upgrade from the C1 proxy): have `collect_picks.py` self-join the prior
   session from `picks.csv` to stamp `prev_high`/`prev_low`, enabling a real inside-day flag. Schema
   bump + migration; only worth it if the proxy proves too noisy.
@@ -809,13 +950,20 @@ PWA constants (`docs/index.html`, near the `REGIME_THRESHOLD` block; also docume
 | `ATR_EXT_ACTIONABLE` | `5.0` | Extension band cutoff: ≤ is actionable (emerald); also the Focus hard-DQ line. |
 | `ATR_EXT_TRIM` | `8.0` | ≥ flags a held position as a trim-10% candidate (red). |
 | `ATR_EXT_PENALTY_START` | `3.5` | Focus-score extension penalty ramp start (0 below, ramps to PENALTY_MAX at ATR_EXT_ACTIONABLE). |
-| `PENALTY_MAX` | `0.5` | Max extension penalty applied at `ATR_EXT_ACTIONABLE (5×)`. Caps at 50% of a full normalized-component contribution. Tune after first few weeks of live Focus data. |
-| Focus weights | `w_group = 0.4`, `w_tight20 = 0.4`, `w_quiet = 0.2` | Blended Focus quality score weights (§3b.2). Starting allocation; all three are PWA constants and tunable with a one-line edit + cache bump. |
-| `FOCUS_MIN_POOL` | `5` | Minimum Focus candidates before falling back from min–max to rank-based normalization. Not displayed to the user. |
+| `PENALTY_MAX` | `0.5` | Max extension-discount fraction at `ATR_EXT_ACTIONABLE (5×)`. Applied multiplicatively: `score = base × (1 − penalty_fraction)`, so 0.5 = up to a 50% haircut, `score` always ∈ [0,1]. Tune after first few weeks of live Focus data. |
+| Focus weights | `w_group = 0.4`, `w_tight = 0.4`, `w_quiet = 0.2` | Blended Focus quality score weights (§3b.2): group strength, nearest-MA stop tightness, quiet bar. Starting allocation; all three are PWA constants, tunable with a one-line edit + cache bump. (Sensible starting split — two-way door; do not over-optimize.) |
+| `FOCUS_MIN_POOL` | `5` | Minimum Focus candidates before falling back from min–max to rank-based normalization (§3b.2 edge cases). Not displayed to the user. |
+| Button template (`BUTTON_*`) | mirrors `screener_config.json` `button` block | The `v=311` deep-link params inlined for the 3c button (B1). Single source of truth = `screener_config.json`; `tests/test_picks_button_config.py` asserts they match. |
+
+> **`All / Focus` toggle is NOT persisted (A4):** the segment **resets to `All` on every Picks-tab
+> entry / data reload.** Avoids stale-Focus confusion when the underlying pool reloads. No constant —
+> just reset `state` on `switchTab('picks')`.
 
 Backend columns (deterministic; document in README §Delta/Picks columns, CLAUDE.md §Picks pipeline,
 and `knowledge/moaty-metrics.md`): `atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`, `range_atr`,
-`stage2`.
+`stage2`. The 3b tightness display metrics (`atrp = ATR/Price`, stop-distance-in-ATR) are
+**PWA-computed display-only** — trivial functions of stored `ATR`/`Price`/`risk_*`, no backend column
+(attribution can recompute them offline).
 
 ## Acceptance criteria (Phase 3, by subphase)
 
@@ -838,16 +986,29 @@ and `knowledge/moaty-metrics.md`): `atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct
 - [x] Release triplet present; `tests/test_guide_releases.py` passes (`current === releases[0].version`).
 
 **3b**
-- [ ] Risk panel shows trigger (prev-day high), 20MA stop + risk $/%, 50MA wider-stop alternative,
-      extension.
-- [ ] `All / Focus` toggle works; Focus excludes every `atr_ext_50 > 5` and every row below the 50MA.
-- [ ] Focus ranks by the blended score; proximity-to-50MA contributes **no** positive weight; the
-      3.5×→5× extension penalty is observable in ordering.
+- [ ] `renderPickRow()` helper extracted (§3b.0); `renderPicks()` uses it; Playwright asserts the
+      shared structure.
+- [ ] Risk panel is **expandable**; shows prev-day high (buy trigger), 20MA stop level + risk $/%,
+      50MA wider-stop alternative, extension, and the three tightness lines (Range/ATR, Volatility
+      (ATR %), Stop distance (ATR)).
+- [ ] `All / Focus` toggle works and **resets to All on tab entry/reload**; Focus excludes every
+      `atr_ext_50 > 5` and every row at/below the 50MA (`atr_ext_50 ≤ 0`).
+- [ ] Focus uses **one min–max ruler for all three components** and the **multiplicative** extension
+      discount (`score = base × (1 − penalty)`); **all scores ∈ [0,1], never negative**.
+- [ ] Stop-tightness component uses the **nearest positive MA stop** (`min(positive risk_20, risk_50)`),
+      so a below-20MA Focus name is scored on its 50MA stop, not rewarded for a negative risk.
+- [ ] Proximity-to-50MA contributes **no** positive weight; the 3.5×→5× extension discount is
+      observable in ordering (qualitative assert; exact-score test is PICKS-3B-FOCUSTEST fast-follow).
+- [ ] Normalization edge cases handled: all-equal → 0.5; pool `< 5` → rank-based; `n == 1` → 1.0.
 - [ ] Release triplet present.
 
 **3c**
-- [ ] Lookup tab shows the Stage-2 section for a selected industry and the `v=311` deep-link button
-      for any of the 144 industries; button URL is well-formed (`ind_<slug>`, tight filters).
+- [ ] Stage-2 section added to **both** `renderLookup()` branches (group-by-name AND ticker→group).
+- [ ] Lookup shows the Stage-2 names list (via `renderPickRow()`) for a selected industry, and the
+      `v=311` deep-link button for any of the 144 industries; **sector** lookups get a `sec_<slug>`
+      button. Button URL is well-formed (correct `ind_`/`sec_` slug, tight filters).
+- [ ] `tests/test_picks_button_config.py` asserts inlined button constants == `screener_config.json`
+      `button` block; sector-slug unit test covers all 11 sectors.
 - [ ] Release triplet present.
 
 ## Validation & testing steps
@@ -855,21 +1016,28 @@ and `knowledge/moaty-metrics.md`): `atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct
 - **Backend metrics (pytest, `tests/test_picks_metrics.py`):** parsers (`%`, `B/M/K/T`, empty→NaN);
   each derivation on the worked examples; NaN-safety when ATR/SMA blank; `stage2` truth table;
   migration test (old `picks.csv` row gains the new columns, backfilled, header is a superset).
-- **PWA (Playwright fixture-intercept, per CLAUDE.md pattern):** route
-  `**/raw.githubusercontent.com/**picks_latest.csv` to a committed fixture
-  `tests/fixtures/picks_latest.csv`. Create this fixture from EOD 2026-06-25 data — it must contain
-  at minimum:
-  - ANET, STX, DELL, SNDK (the four worked-example tickers; use real EOD values)
-  - One row with `ATR` blank (NaN-safety: should produce NaN derived cols, not a crash)
+- **PWA (Playwright fixture-intercept, per CLAUDE.md pattern).** The Picks PWA test file does
+  **NOT exist yet** — 3b/3c must create `tests/test_pwa_picks.py` from scratch (http.server +
+  route-intercept setup per the CLAUDE.md recipe; run `pip install playwright &&
+  python3 -m playwright install chromium --with-deps` in-session). Route
+  `**/raw.githubusercontent.com/**picks_latest.csv` to the existing committed fixture
+  `tests/fixtures/picks_latest.csv` (EOD 2026-06-25 data); extend it to contain at minimum:
+  - ANET, STX, DELL, SNDK (the four worked-example tickers; real EOD values)
+  - One row with `ATR` blank (NaN-safety: NaN derived cols, no crash)
   - One row with `atr_ext_50 > 8` (trim candidate — verify the red trim tag renders)
-  - One row with `atr_ext_50 > 5` (Focus DQ — verify it is excluded from Focus view)
-  - One row with `SMA50 < 0` / price below 50MA (Focus DQ — verify exclusion)
-  - At least one row with `Market Cap < 5B` (base filter exclusion check)
+  - One row with `atr_ext_50 > 5` (Focus DQ — excluded from Focus view)
+  - One row with price **at/below the 50MA** (`SMA50 ≤ 0` ⇒ `atr_ext_50 ≤ 0`; Focus DQ — verify exclusion)
+  - One row **above 50MA but below the 20MA** (`SMA20 < 0`, `SMA50 > 0`): a Focus member whose
+    nearest stop must fall back to the 50MA — verify the stop-tightness component uses the 50MA and the
+    score stays in [0,1] (the negative-`risk_20` regression).
+  - At least one row with `Market Cap < 5B` (base-filter exclusion check)
   - Rows across at least 2 `list_category` values (`leaders`, `emerging`) to exercise grouping
-  Commit the fixture alongside the first Playwright test. Assert: tab appears; base filter row count
-  matches fixture-visible rows; grouping + least-extended order; extension band colors; trim tag at
-  ≥8×; `All/Focus` toggle filters out >5× and below-50MA names; Focus order respects the penalty;
-  Lookup deep-link URL format; empty-CSV placeholder (separate test with a headers-only fixture).
+  Assert: tab appears; base-filter row count matches fixture-visible rows; grouping + least-extended
+  order; extension band colors; trim tag at ≥8×; risk panel expands and shows the stop level + $/%
+  risk + tightness lines; `All/Focus` toggle filters out >5× and at/below-50MA names and resets to All
+  on tab re-entry; **every Focus score is in [0,1]** and the extension discount is observable in
+  ordering; Lookup Stage-2 section appears in both branches; deep-link URL format (`ind_`/`sec_`);
+  empty-CSV placeholder (separate headers-only fixture).
 - **Run before every commit:** `python3 -m pytest tests/ -q`.
 - **Manual smoke (cloud OK — no Finviz needed):** serve `docs/` on `http.server`, intercept the CSV,
   eyeball the three subphase surfaces (the CLAUDE.md "PWA functional testing" recipe).
@@ -995,6 +1163,18 @@ derived from the log — never hand-maintained.
       yields **no picks capture that day** (unrecoverable). Fix: add a Cloudflare cron that POSTs a
       `workflow_dispatch` to `collect_picks.yml` ~20–30 min after the EOD `collect.yml` dispatch;
       keep the GitHub `schedule:` as a backstop. Tune the margin after live timing data.
+- [ ] **PICKS-3B-FOCUSGATE — revisit the Focus gate (`price>50MA` vs full `stage2`)** (post-live,
+      non-blocking). 3b admits any Focus name above its 50MA; it does NOT require 50MA>200MA. After a
+      few weeks of live Focus data, decide whether sub-Stage-2 names pollute the list and the gate
+      should tighten to `stage2 == 1`. Tracked per CEO 2026-06-27. Also revisit whether freshness-fill
+      leaders should get credit for `momentum_confirmed` in the Focus group-strength component (M3).
+- [ ] **PICKS-3B-FOCUSTEST — deterministic Focus-order regression test** (fast-follow, non-blocking).
+      Freeze a small fixture pool and assert whole-pool ordering + scores within ±0.01 (a single
+      stock's score can't be pinned in isolation because the score is cross-sectionally normalized).
+      Tabled per CEO 2026-06-27 — the 3b acceptance test asserts qualitative properties (scores in
+      [0,1], discount observable, below-MA names excluded) instead.
+- [ ] **PICKS-3D-STACKEDSTOP — 50MA double-support bonus on the Focus score** (3d polish). Add the
+      "both MAs tight AND close together" reward on top of the v1 nearest-stop component. See §3d.
 
 ## Testing
 
