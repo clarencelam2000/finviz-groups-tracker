@@ -6,6 +6,24 @@
 
 ## Current Status
 
+**Status (2026-06-28) — PHASE 3c COMPLETE. PR OPEN. SAFE TO CLOSE.**
+Phase 3c shipped on branch `claude/phase-3c-implementation-azc5vs`. PR created and ready for review.
+What landed:
+- `docs/index.html` — `slugifyGroup()` + `buildScreenerUrl()` helpers; `renderLookupStage2()`;
+  Stage-2 section hooked into BOTH `renderLookup()` branches (group-by-name + ticker→group);
+  4 BUTTON_* constants (BUTTON_V, BUTTON_BASE_FILTERS, BUTTON_SORT, BUTTON_FT) inlined near
+  ATR_EXT_* constants block
+- `docs/releases.json` — v2026.06.28 entry, tag "feature", tab "lookup"
+- `docs/sw.js` — CACHE bumped to finviz-v33
+- `tests/test_picks_button_config.py` — NEW: 9 tests (4 BUTTON_* anti-drift + 5 sector-slug tests)
+- `CLAUDE.md` — 4 BUTTON_* constants added to PWA display thresholds table
+- `README.md` — 4 BUTTON_* constants added to Configurable parameters table
+- `planning/stock-picks-from-leading-groups.md` — Phase 3c marked COMPLETE + 3c acceptance criteria checked off
+- `.session/SPRINT.md` — PICKS-3C marked Done
+- `.session/WORK_LOG.md` — 2026-06-28 milestone entry added
+478 tests pass (9 new for Phase 3c).
+**Phase 3d next:** inside-day polish, fundamental floor, Focus stacked-stop bonus, staleness banner.
+
 **Status (2026-06-27) — PHASE 3b COMPLETE. PR OPEN. SAFE TO CLOSE.**
 Phase 3b shipped on branch `claude/phase-3b-implementation-u2flw1`. PR created and ready for review.
 What landed:

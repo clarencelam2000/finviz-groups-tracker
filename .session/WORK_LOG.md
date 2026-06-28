@@ -4,6 +4,15 @@
 
 ---
 
+## 2026-06-28 — Phase 3c COMPLETE: Lookup Stage-2 section + Finviz deep-link button
+
+Both `renderLookup()` branches (group-by-name + ticker→group) now show today's Stage-2 picks
+for the resolved industry (C6 filtered, deduplicated by ticker, sorted least-extended first).
+`slugifyGroup()` + `buildScreenerUrl()` emit `ind_<slug>` / `sec_<slug>` deep-link URLs.
+4 BUTTON_* constants inlined in `index.html` and guarded by a 9-test anti-drift suite
+(`tests/test_picks_button_config.py`) that asserts PWA constants match `screener_config.json`
+`button` block. Triple-documented. Release v2026.06.28 (sw.js → finviz-v33). 478 tests pass.
+
 ## 2026-06-27 — Phase 3b COMPLETE: expandable risk panel + All/Focus toggle + Focus scoring
 
 `renderPickRow()` extracted as module-level function (3b.0). Expandable risk panel in each

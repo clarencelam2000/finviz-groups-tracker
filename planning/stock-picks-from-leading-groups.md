@@ -1,5 +1,12 @@
 # Plan: Top-stock picks from leading groups (Stage-2 screener pipeline)
 
+> Status: **PHASE 3c COMPLETE (2026-06-28)** — Lookup tab Stage-2 section + Finviz deep-link button shipped.
+> Both `renderLookup()` branches (group-by-name + ticker→group) show Stage-2 picks filtered by C6,
+> deduped by ticker, sorted least-extended first. `buildScreenerUrl()` emits `ind_<slug>` / `sec_<slug>`
+> deep-links. 4 BUTTON_* constants inlined in `index.html`, mirroring `screener_config.json` `button` block;
+> anti-drift guard `tests/test_picks_button_config.py` (9 tests). Triple-documented. Release v2026.06.28 (sw.js v33).
+> 478 tests pass. Phase 3d (polish) is next.
+>
 > Status: **PHASE 3b COMPLETE (2026-06-27)** — Focus List + expandable risk panel shipped.
 > `renderPickRow()` extracted as top-level helper; expandable risk panel shows HoD, 20MA/50MA stop levels
 > (price/$/%/sh), extension, Range/ATR, Volatility(ATR%), Stop distance(ATR); score debug breakdown while
@@ -992,31 +999,31 @@ and `knowledge/moaty-metrics.md`): `atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct
 - [x] Empty/blocked-day CSV → placeholder, no crash.
 - [x] Release triplet present; `tests/test_guide_releases.py` passes (`current === releases[0].version`).
 
-**3b**
-- [ ] `renderPickRow()` helper extracted (§3b.0); `renderPicks()` uses it; Playwright asserts the
+**3b** ✅ COMPLETE (2026-06-27)
+- [x] `renderPickRow()` helper extracted (§3b.0); `renderPicks()` uses it; Playwright asserts the
       shared structure.
-- [ ] Risk panel is **expandable**; shows prev-day high (buy trigger), 20MA stop level + risk $/%,
+- [x] Risk panel is **expandable**; shows prev-day high (buy trigger), 20MA stop level + risk $/%,
       50MA wider-stop alternative, extension, and the three tightness lines (Range/ATR, Volatility
       (ATR %), Stop distance (ATR)).
-- [ ] `All / Focus` toggle works and **resets to All on tab entry/reload**; Focus excludes every
+- [x] `All / Focus` toggle works and **resets to All on tab entry/reload**; Focus excludes every
       `atr_ext_50 > 5` and every row at/below the 50MA (`atr_ext_50 ≤ 0`).
-- [ ] Focus uses **one min–max ruler for all three components** and the **multiplicative** extension
+- [x] Focus uses **one min–max ruler for all three components** and the **multiplicative** extension
       discount (`score = base × (1 − penalty)`); **all scores ∈ [0,1], never negative**.
-- [ ] Stop-tightness component uses the **nearest positive MA stop** (`min(positive risk_20, risk_50)`),
+- [x] Stop-tightness component uses the **nearest positive MA stop** (`min(positive risk_20, risk_50)`),
       so a below-20MA Focus name is scored on its 50MA stop, not rewarded for a negative risk.
-- [ ] Proximity-to-50MA contributes **no** positive weight; the 3.5×→5× extension discount is
+- [x] Proximity-to-50MA contributes **no** positive weight; the 3.5×→5× extension discount is
       observable in ordering (qualitative assert; exact-score test is PICKS-3B-FOCUSTEST fast-follow).
-- [ ] Normalization edge cases handled: all-equal → 0.5; pool `< 5` → rank-based; `n == 1` → 1.0.
-- [ ] Release triplet present.
+- [x] Normalization edge cases handled: all-equal → 0.5; pool `< 5` → rank-based; `n == 1` → 1.0.
+- [x] Release triplet present.
 
-**3c**
-- [ ] Stage-2 section added to **both** `renderLookup()` branches (group-by-name AND ticker→group).
-- [ ] Lookup shows the Stage-2 names list (via `renderPickRow()`) for a selected industry, and the
+**3c** ✅ COMPLETE (2026-06-28)
+- [x] Stage-2 section added to **both** `renderLookup()` branches (group-by-name AND ticker→group).
+- [x] Lookup shows the Stage-2 names list (via `renderPickRow()`) for a selected industry, and the
       `v=311` deep-link button for any of the 144 industries; **sector** lookups get a `sec_<slug>`
       button. Button URL is well-formed (correct `ind_`/`sec_` slug, tight filters).
-- [ ] `tests/test_picks_button_config.py` asserts inlined button constants == `screener_config.json`
+- [x] `tests/test_picks_button_config.py` asserts inlined button constants == `screener_config.json`
       `button` block; sector-slug unit test covers all 11 sectors.
-- [ ] Release triplet present.
+- [x] Release triplet present (v2026.06.28, sw.js v33).
 
 ## Validation & testing steps
 

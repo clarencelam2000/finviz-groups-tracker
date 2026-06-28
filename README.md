@@ -319,6 +319,10 @@ These constants control when visual indicators appear or change state. All are n
 | `FOCUS_W_TIGHT` | `0.4` | Focus score weight for the nearest-MA stop tightness component (`min(risk_20ma_pct, risk_50ma_pct)` where both > 0, inverted min-max). |
 | `FOCUS_W_QUIET` | `0.2` | Focus score weight for the quiet-bar component (`range_atr`, inverted min-max — lower range = quieter = better). |
 | `FOCUS_MIN_POOL` | `5` | Minimum Focus candidates before switching from min-max to rank-based normalization (avoids degenerate single-point scaling). |
+| `BUTTON_V` | `'311'` | Finviz screener view number used by the Lookup deep-link button (tight Stage-2 layout). Must stay in sync with `data/picks/screener_config.json` `button.v`. |
+| `BUTTON_BASE_FILTERS` | `['cap_midover','ta_sma20_sa50','ta_sma50_pa']` | Base Finviz screener filters prepended before the `ind_<slug>` / `sec_<slug>` token. Must stay in sync with `data/picks/screener_config.json` `button.base_filters`. |
+| `BUTTON_SORT` | `'sma50'` | Sort order for the Lookup deep-link screener (ascending distance from 50MA). Must stay in sync with `data/picks/screener_config.json` `button.sort`. |
+| `BUTTON_FT` | `'4'` | `ft` (filter type) parameter for the Lookup deep-link screener. Must stay in sync with `data/picks/screener_config.json` `button.ft`. Anti-drift guard: `tests/test_picks_button_config.py`. |
 
 > The Guide's **legend** renders these thresholds live (read from JS scope), so the in-app explanation can never drift from the numbers above.
 
