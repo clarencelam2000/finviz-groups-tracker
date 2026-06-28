@@ -434,6 +434,15 @@
     // Min Focus pool for min–max normalization; smaller pools fall back to rank-based percentile.
     const FOCUS_MIN_POOL = 5;
 
+    // Deep-link button constants (Phase 3c, B1). Mirror screener_config.json "button" block.
+    // Single source of truth stays screener_config.json; tests/test_picks_button_config.py
+    // asserts these match so a future config change in the JSON reddens CI until index.html is updated.
+    // Triple-documented: here, README § Configurable parameters, CLAUDE.md § PWA display thresholds.
+    const BUTTON_V            = '311';                                         // Finviz view number (tight Stage-2 layout)
+    const BUTTON_BASE_FILTERS = ['cap_midover', 'ta_sma20_sa50', 'ta_sma50_pa']; // tight Stage-2 filters
+    const BUTTON_SORT         = 'sma50';                                       // sort by distance from 50MA
+    const BUTTON_FT           = '4';                                           // ft=4 = descriptive mode
+
     // ── Guide / Glossary content ───────────────────────────────────────────
     // The metric `oneLiner` strings are copied VERBATIM from the "User one-liner"
     // lines in knowledge/moaty-metrics.md — that file is the single source of
@@ -2943,7 +2952,11 @@
         const { name, groupKey } = groupResult;
         const label = groupKey === 'sectors' ? 'Sector' : 'Industry';
         const pinRow = `<div class="flex justify-end mb-1">${pinButtonHtml('group', name, groupKey)}</div>`;
-        el.innerHTML = pinRow + groupPerfCard(name, groupKey, label, true) + lookupGlossary();
+        // 3c: Stage-2 section for both industry and sector group lookups.
+        const stage2 = groupKey === 'industries'
+          ? renderLookupStage2(name, null)
+          : renderLookupStage2(null, name);
+        el.innerHTML = pinRow + groupPerfCard(name, groupKey, label, true) + stage2 + lookupGlossary();
         renderLookupChips();
         return;
       }
@@ -3029,6 +3042,8 @@
         if (data.finviz_industry) html += groupPerfCard(data.finviz_industry, 'industries', 'Industry', true);
         if (data.finviz_sector)   html += groupPerfCard(data.finviz_sector, 'sectors', 'Sector', true);
         html += contextSignalCard(data.finviz_industry, data.finviz_sector);
+        // 3c: Stage-2 section — industry names list + ind_<slug> button; sec_<slug> button for the sector.
+        html += renderLookupStage2(data.finviz_industry || null, data.finviz_sector || null);
       }
       html += lookupGlossary();
 
@@ -3080,6 +3095,98 @@
     }
 
     // ── Picks tab ──────────────────────────────────────────────────────────────
+
+    // Slug helper (B2): JS mirror of slugify_industry() in collect_picks.py.
+    // name.toLowerCase() + strip all non-alphanumeric → ind_<slug> / sec_<slug> tokens.
+    function slugifyGroup(name) {
+      return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    // Build a tight Stage-2 Finviz screener URL for the given group slug.
+    // type: 'ind' for industry, 'sec' for sector.
+    function buildScreenerUrl(type, slug) {
+      const f = [...BUTTON_BASE_FILTERS, `${type}_${slug}`].join(',');
+      return `https://finviz.com/screener?v=${BUTTON_V}&f=${f}&ft=${BUTTON_FT}&o=${BUTTON_SORT}`;
+    }
+
+    // Render the Stage-2 section for the Lookup tab (3c).
+    // industryName: the resolved Finviz industry name, or null.
+    // sectorName: the resolved Finviz sector name, or null (shows a sec_<slug> button only).
+    function renderLookupStage2(industryName, sectorName) {
+      let html = '';
+
+      if (industryName) {
+        const indSlug = slugifyGroup(industryName);
+        const indUrl  = buildScreenerUrl('ind', indSlug);
+        const btnHtml = `<a href="${escapeHtml(indUrl)}" target="_blank" rel="noopener noreferrer"
+          class="inline-flex items-center gap-1 text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 whitespace-nowrap shrink-0">
+          Stage-2 screener ↗</a>`;
+
+        const allPicks = state.picksData;
+        let industryPicks = [];
+
+        if (allPicks && allPicks.length > 0) {
+          // Filter picks for this industry, apply C6 base filter, then deduplicate by ticker.
+          const seen = new Set();
+          for (const r of allPicks) {
+            if ((r.group || '') !== industryName) continue;
+            const capB = _pCapB(r['Market Cap']);
+            if (isNaN(capB) || capB <= MIN_MARKET_CAP_B) continue;
+            const sma50  = _pPct(r['SMA50']);
+            const sma200 = _pPct(r['SMA200']);
+            const sma20  = _pPct(r['SMA20']);
+            const passes = (!isNaN(sma50) && sma50 > 0)
+                        || (!isNaN(sma200) && sma200 > 0)
+                        || (!isNaN(sma50) && !isNaN(sma20) && sma50 > sma20);
+            if (!passes) continue;
+            const t = r.ticker || r.Ticker || '';
+            if (seen.has(t)) continue;
+            seen.add(t);
+            industryPicks.push(r);
+          }
+          // Sort least-extended first.
+          industryPicks.sort((a, b) => {
+            const av = _pF(a.atr_ext_50), bv = _pF(b.atr_ext_50);
+            if (isNaN(av) && isNaN(bv)) return 0;
+            if (isNaN(av)) return 1;
+            if (isNaN(bv)) return -1;
+            return av - bv;
+          });
+        }
+
+        html += `<div class="mt-4">
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <span class="text-xs font-medium text-slate-300">Stage-2 names in this group</span>
+            ${btnHtml}
+          </div>`;
+
+        if (industryPicks.length > 0) {
+          html += `<div class="bg-slate-800/60 rounded-lg overflow-hidden border border-slate-700/50">`;
+          industryPicks.forEach((r, i) => {
+            html += renderPickRow(r, { rowIndex: i, expandable: true });
+          });
+          html += `</div>`;
+        } else if (!allPicks) {
+          html += `<p class="text-slate-500 text-xs py-1">Picks data still loading…</p>`;
+        } else {
+          html += `<p class="text-slate-500 text-xs py-1">Not in today's leading groups — screen it yourself with the button above.</p>`;
+        }
+
+        html += `</div>`;
+      }
+
+      if (sectorName) {
+        const secSlug = slugifyGroup(sectorName);
+        const secUrl  = buildScreenerUrl('sec', secSlug);
+        html += `<div class="mt-3 flex justify-end">
+          <a href="${escapeHtml(secUrl)}" target="_blank" rel="noopener noreferrer"
+            class="inline-flex items-center gap-1 text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 whitespace-nowrap">
+            Stage-2 in sector ↗</a>
+        </div>`;
+      }
+
+      return html;
+    }
 
     // Module-level parsers reused by renderPickRow, computeFocusScores, and renderPicks.
     // Mirrors picks_metrics.py for consistency.

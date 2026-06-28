@@ -1,6 +1,18 @@
 {
-  "current": "2026.06.27",
+  "current": "2026.06.28",
   "releases": [
+    {
+      "version": "2026.06.28",
+      "date": "2026-06-28",
+      "title": "Lookup: Stage-2 names + Finviz deep-link button",
+      "tag": "feature",
+      "tab": "lookup",
+      "notes": [
+        "The Lookup tab now shows today's Stage-2 picks from the daily list whenever you look up an industry group that is currently in the leading-group universe — rows sorted least-extended first, expandable risk panel included.",
+        "A 'Stage-2 screener ↗' button on every industry and sector lookup opens the tight Stage-2 Finviz screener (20MA>50MA, price>50MA, mid-cap+) pre-filtered for that exact group in a new tab — works for all 144 industries and all 11 sectors.",
+        "If the group is not in today's leading groups, the button still appears so you can screen it manually."
+      ]
+    },
     {
       "version": "2026.06.27",
       "date": "2026-06-27",
