@@ -178,28 +178,17 @@ A working block ends when you push a commit, finish a feature slice, or are abou
 
 ### Always do before ending
 
-> These three files live in `.session/` (not `.claude/`) so Claude can edit them without permission prompts.
+> These files live in `.session/` (not `.claude/`) so Claude can edit them without permission prompts.
 
-**`.session/session-notes.md`** — the intent is to capture the most recent active work — not to erase parallel in-flight threads. Make best effort to reduce chances of merge conflicts (and see template in that file), then append a new session section below. The status block for your workstream is what the next Claude reads first to decide whether to proceed or wait.
+**`.session/session-notes.md`** — **append** a new `---` delimited block. Header: `## YYYY-MM-DD — <workstream description>` (use the workstream topic, not the branch name — branches are ephemeral). Include: status (safe-to-close or blocking-on), what landed, any blockers, next steps. Do NOT replace existing entries. The file holds the last 4 sessions; a human reviewer periodically moves older entries to `.session/archive/session-notes-archive.md` — you don't manage the archive.
 
-**`.session/WORK_LOG.md`** — append a milestone entry when:
-- A new script or feature works end-to-end
-- A significant data milestone is hit
-- A dashboard tab or visualization is added
-- A CI/workflow change lands
-
-Entry format:
-```
-## YYYY-MM-DD — <short description>
-<1–3 sentences: what now works, any caveats>
-```
+**`.session/WORK_LOG.md`** — retired, do not update.
 
 **`.session/SPRINT.md`** — move completed tasks to Done, add new tasks to Backlog if discovered.
 
 ### Session-end checklist
 - [ ] All working changes committed and pushed
-- [ ] `session-notes.md` Current Status block updated (status, safe-to-close, blocking-on)
-- [ ] `WORK_LOG.md` updated if a milestone was reached
+- [ ] `session-notes.md` — new entry appended (date + workstream header, status, what landed, next steps)
 - [ ] `SPRINT.md` board reflects current task states
 - [ ] **PR open for every commit on the branch** — run `git log --oneline origin/claude/elegant-babbage-hlxnfy..HEAD` to confirm nothing is stranded
 - [ ] `git status` clean — no untracked files containing work
@@ -210,7 +199,7 @@ Entry format:
 **Never push session-notes commits to a feature branch after its last PR is already merged.**
 Commits pushed after the last PR is merged are stranded — they sit on the feature branch but have no path into the base branch.
 
-**Rule:** Update `session-notes.md`, `WORK_LOG.md`, and `SPRINT.md` *before* merging the last PR of a session. Either:
+**Rule:** Update `session-notes.md` (and `SPRINT.md`) *before* merging the last PR of a session. Either:
 - Include the notes update in the last substantive PR (commit it, then merge), or
 - Open an immediate follow-up chore PR for the notes commit before ending the session
 
