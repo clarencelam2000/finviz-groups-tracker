@@ -3217,11 +3217,12 @@
 
     // renderPickRow(r, opts) — shared row renderer (3b.0).
     // Called from renderPicks (All + Focus views) and will be reused by 3c Lookup section.
-    // opts: { rowIndex, expandable, showScore, score, base, penaltyFrac, group_n, tight_n, quiet_n }
+    // opts: { rowIndex, expandable, showScore, showGroupSubtitle, score, base, penaltyFrac, group_n, tight_n, quiet_n }
     function renderPickRow(r, opts) {
       opts = opts || {};
       const ticker  = r.ticker || r.Ticker || '';
       const company = (r.Company || '').slice(0, 18);
+      const CATEGORY_LABEL = { leaders: 'Leaders', emerging: 'Emerging', accel: 'Accel', rs_new_high: 'RS New High' };
       const atrExt  = _pF(r.atr_ext_50);
       const atrStr  = isNaN(atrExt) ? '—' : atrExt.toFixed(1) + '×';
       const isTrim  = !isNaN(atrExt) && atrExt >= ATR_EXT_TRIM;
@@ -3348,6 +3349,10 @@
               </div>
             </div>
             ${scoreDebug}
+            <div class="flex gap-3 mt-2 pt-2 border-t border-slate-700/50">
+              <a href="https://finviz.com/quote.ashx?t=${encodeURIComponent(ticker)}" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-400 hover:text-indigo-300 transition-colors" onclick="event.stopPropagation()">Finviz ↗</a>
+              <a href="https://www.tradingview.com/symbols/${encodeURIComponent(ticker)}/" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-400 hover:text-indigo-300 transition-colors" onclick="event.stopPropagation()">TradingView ↗</a>
+            </div>
           </div>`;
       }
 
@@ -3358,6 +3363,7 @@
           <div class="w-16 flex-shrink-0">
             <div class="text-xs font-bold text-white leading-tight">${ticker}${scoreBadge}</div>
             <div class="text-xs text-slate-400 truncate leading-tight">${company}</div>
+            ${opts.showGroupSubtitle && r.group ? `<button data-pick-group-lookup="${escapeHtml(r.group)}" class="text-xs text-slate-500 hover:text-indigo-300 transition-colors text-left leading-tight mt-0.5 truncate max-w-full block">${escapeHtml(r.group)} · ${CATEGORY_LABEL[r.list_category] || r.list_category || ''}</button>` : ''}
           </div>
           <div class="w-12 flex-shrink-0 text-right">
             <div class="text-sm font-semibold ${atrCls} leading-tight">${atrStr}</div>
@@ -3527,6 +3533,7 @@
             rowIndex: i,
             expandable: true,
             showScore: true,
+            showGroupSubtitle: true,
             score: item.score,
             base: item.base,
             penaltyFrac: item.penaltyFrac,
@@ -3541,6 +3548,14 @@
       }
 
       // ── All view ───────────────────────────────────────────────────────────
+      // Pre-compute Focus scores for qualifying stocks so All view can show score badges.
+      const allFocusCandidates = filtered.filter(r => {
+        const ext = _pF(r.atr_ext_50);
+        return !isNaN(ext) && ext > 0 && ext <= ATR_EXT_ACTIONABLE;
+      });
+      const allFocusScored = computeFocusScores(allFocusCandidates);
+      const focusScoreMap = new Map(allFocusScored.map(s => [s.r.ticker + '_' + (s.r.list_category || ''), s]));
+
       // Grouped: category → industry → stocks, sorted least-extended first within each group.
       const CAT_ORDER  = ['leaders', 'emerging', 'accel', 'rs_new_high'];
       const CAT_LABELS = { leaders: 'Leaders', emerging: 'Emerging', accel: 'Accel', rs_new_high: 'RS New High' };
@@ -3596,7 +3611,15 @@
               <span class="text-xs text-slate-500 ml-2 flex-shrink-0">${stocks.length} name${stocks.length !== 1 ? 's' : ''}</span>
             </div>`;
           for (const r of stocks) {
-            html += renderPickRow(r, { rowIndex: globalRowIdx++, expandable: true });
+            const fsKey = r.ticker + '_' + (r.list_category || '');
+            const fs = focusScoreMap.get(fsKey);
+            html += renderPickRow(r, {
+              rowIndex: globalRowIdx++,
+              expandable: true,
+              ...(fs ? { showScore: true, score: fs.score, base: fs.base,
+                         penaltyFrac: fs.penaltyFrac, group_n: fs.group_n,
+                         tight_n: fs.tight_n, quiet_n: fs.quiet_n } : {}),
+            });
           }
           html += '</div>';
         }
@@ -4243,6 +4266,19 @@
       const name = card.dataset.name;
       state.expandedName = state.expandedName === name ? null : name;
       renderToday();
+    });
+
+    // Picks Focus card group subtitle tap → Lookup (picks are always industries).
+    document.getElementById('picks-list').addEventListener('click', e => {
+      const btn = e.target.closest('[data-pick-group-lookup]');
+      if (!btn) return;
+      e.stopPropagation();
+      const name = btn.dataset.pickGroupLookup;
+      if (!name) return;
+      switchTab('lookup');
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0; // iOS Safari
+      doGroupLookup(name, 'industry');
     });
 
     document.getElementById('refresh-btn').addEventListener('click', window.__refresh);
