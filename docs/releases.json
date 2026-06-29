@@ -1,6 +1,18 @@
 {
-  "current": "2026.06.28",
+  "current": "2026.06.29",
   "releases": [
+    {
+      "version": "2026.06.29",
+      "date": "2026-06-29",
+      "title": "Picks: group context, external links, Focus scores in All",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "Focus cards now show a tappable 'Group · Category' subtitle (e.g. Semiconductors · Leaders) — tap it to jump straight to Lookup for that industry's full rotation picture.",
+        "Expanded risk panels in both Focus and All views now include Finviz ↗ and TradingView ↗ links for the stock.",
+        "Stocks that qualify for Focus (not over-extended, above 50MA) show their Focus score badge in the All view too — same indigo score as in the Focus list."
+      ]
+    },
     {
       "version": "2026.06.28",
       "date": "2026-06-28",
