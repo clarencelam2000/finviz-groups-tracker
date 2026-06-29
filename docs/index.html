@@ -3358,12 +3358,16 @@
 
       const rowClick = opts.expandable ? `onclick="__togglePickRow('${key}')" style="cursor:pointer"` : '';
 
+      const groupSubtitleHtml = opts.showGroupSubtitle && r.group ? `
+        <div class="px-3 pb-1.5 border-b border-slate-700/40">
+          <button data-pick-group-lookup="${escapeHtml(r.group)}" class="text-xs text-slate-500 hover:text-indigo-300 transition-colors text-left">${escapeHtml(r.group)} · ${CATEGORY_LABEL[r.list_category] || r.list_category || ''}</button>
+        </div>` : '';
+
       return `<div>
-        <div class="flex items-center gap-2 px-3 py-2 border-b border-slate-700/40 last:border-0" ${rowClick}>
+        <div class="flex items-center gap-2 px-3 py-2 ${opts.showGroupSubtitle && r.group ? 'pb-0.5' : 'border-b border-slate-700/40 last:border-0'}" ${rowClick}>
           <div class="w-16 flex-shrink-0">
             <div class="text-xs font-bold text-white leading-tight">${ticker}${scoreBadge}</div>
             <div class="text-xs text-slate-400 truncate leading-tight">${company}</div>
-            ${opts.showGroupSubtitle && r.group ? `<button data-pick-group-lookup="${escapeHtml(r.group)}" class="text-xs text-slate-500 hover:text-indigo-300 transition-colors text-left leading-tight mt-0.5 truncate max-w-full block">${escapeHtml(r.group)} · ${CATEGORY_LABEL[r.list_category] || r.list_category || ''}</button>` : ''}
           </div>
           <div class="w-12 flex-shrink-0 text-right">
             <div class="text-sm font-semibold ${atrCls} leading-tight">${atrStr}</div>
@@ -3389,6 +3393,7 @@
           </div>
           ${chevronHtml}
         </div>
+        ${groupSubtitleHtml}
         ${riskHtml}
       </div>`;
     }
