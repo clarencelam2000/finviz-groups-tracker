@@ -45,6 +45,11 @@ For A/B testing that touches both simultaneously, join by `effective_date`.
 **Version lookup:** to find the methodology in effect on date D, take the entry with
 the largest `effective_date ≤ D`. This mirrors how `selector_versions.json` works.
 
+> **Invariant:** `versions[]` must stay sorted newest-first. The lookup compares
+> `YYYY-MM-DD` strings lexicographically — this only works correctly in ISO 8601 format;
+> never use `MM/DD/YYYY`. There is no programmatic enforcement of the sort order; it is a
+> mandatory authoring convention (same implicit rule as `selector_versions.json`).
+
 **No column added to `picks.csv`.** The dated version entries are sufficient; there is
 no need to stamp each row.
 
@@ -54,7 +59,8 @@ no need to stamp each row.
 
 The v1 entry captures the methodology that was in effect from the first day of the picks
 pipeline (2026-06-25) through the present. All values below are read from the current
-`docs/index.html` constants and rendering logic.
+`docs/index.html` constants and rendering logic. There is no v0 entry because there were
+no picks before 2026-06-25.
 
 ```json
 {
@@ -76,13 +82,14 @@ pipeline (2026-06-25) through the present. All values below are read from the cu
               "SMA50 > SMA20"
             ],
             "columns": ["SMA50", "SMA200", "SMA20"],
-            "note": "SMA* columns are % distance from MA (e.g. 5.2 = price is 5.2% above that MA). A row passes if ANY condition holds. All three NaN = fails."
+            "note": "SMA* columns are % distance from MA (e.g. 5.2 = price is 5.2% above that MA). SMA50 > SMA20 in % terms is equivalent to 20MA price > 50MA price (classic uptrend). A row passes if ANY condition holds. All three NaN = fails."
           }
         },
         "all_view_sort": {
           "primary": "list_category",
           "category_order": ["leaders", "emerging", "accel", "rs_new_high"],
-          "secondary": "grp_name",
+          "secondary": "group",
+          "secondary_note": "Column name in picks.csv is 'group' (part of PICKS_LEAD_COLS). Within each category, groups appear alphabetically.",
           "tertiary": {
             "col": "atr_ext_50",
             "direction": "asc",
@@ -96,7 +103,7 @@ pipeline (2026-06-25) through the present. All values below are read from the cu
           "note": "atr_ext_50 <= 0 means price is at or below the 50MA (not actionable). > ATR_EXT_ACTIONABLE means over-extended. Both are hard disqualifications."
         },
         "focus_score": {
-          "formula": "score = base * (1 - penaltyFrac)",
+          "formula": "focus_score = base * (1 - penaltyFrac)",
           "base_formula": "FOCUS_W_GROUP * normGroup + FOCUS_W_TIGHT * normTight + FOCUS_W_QUIET * normQuiet",
           "weights": {
             "group": 0.4,
@@ -113,7 +120,7 @@ pipeline (2026-06-25) through the present. All values below are read from the cu
               "cols": ["risk_20ma_pct", "risk_50ma_pct"],
               "selection": "min of positive values only",
               "direction": "lower_is_better",
-              "note": "Nearest MA stop below the price. risk_50ma_pct is always positive for Focus members (price > 50MA is the DQ gate). risk_20ma_pct only qualifies if > 0 (20MA is below price). Takes the smaller of the two qualifying values."
+              "note": "Nearest MA stop below the price. risk_50ma_pct is always positive for Focus members (price > 50MA is the DQ gate). risk_20ma_pct only qualifies if > 0 (20MA is below price). Takes the smaller of the two qualifying values. If both are NaN or non-positive → NaN (treated as 0.5 by normalization)."
             },
             "quiet": {
               "col": "range_atr",
@@ -128,7 +135,8 @@ pipeline (2026-06-25) through the present. All values below are read from the cu
             "fallback_threshold": 5,
             "all_equal_default": 0.5,
             "nan_default": 0.5,
-            "note": "Inverted: lower raw value → higher normalized score (1.0 = best). When pool < 5, rank-based percentile replaces min–max to avoid jumpy scores. All-equal in a component → everyone gets 0.5. NaN → 0.5 (neutral contribution)."
+            "n1_default": 1.0,
+            "note": "Inverted: lower raw value → higher normalized score (1.0 = best). When pool < 5, rank-based percentile replaces min–max to avoid jumpy scores. All-equal in a component → everyone gets 0.5. NaN → 0.5 (neutral contribution). n=1 candidate → JS short-circuits and assigns score 1.0 before normalization runs (no extension penalty applied)."
           },
           "extension_penalty": {
             "col": "atr_ext_50",
@@ -136,17 +144,17 @@ pipeline (2026-06-25) through the present. All values below are read from the cu
             "ramp_end": 4.0,
             "max_fraction": 0.5,
             "formula": "penaltyT = clamp((atr_ext - 2.5) / (4.0 - 2.5), 0, 1); penaltyFrac = 0.5 * penaltyT",
-            "note": "0 penalty below 2.5×. Ramps linearly to 50% haircut at 4.0× (ATR_EXT_ACTIONABLE). score is always in [0, 1]."
+            "note": "0 penalty below 2.5×. Ramps linearly to 50% haircut at 4.0× (ATR_EXT_ACTIONABLE). focus_score is always in [0, 1]."
           }
         },
         "focus_sort": {
-          "col": "score",
+          "col": "focus_score",
           "direction": "desc"
         },
         "atr_bands": {
           "emerald_max": 4.0,
           "amber_max": 8.0,
-          "note": "Display-only color bands on atr_ext_50. Emerald = actionable zone; amber = caution; red = trim candidate."
+          "note": "Display-only color bands on atr_ext_50. Emerald = actionable zone (< 4.0×); amber = caution (4.0–8.0×); red = trim candidate (≥ 8.0×). NOTE: the Guide tooltip in docs/index.html (near line 526) incorrectly says 'emerald ≤5×' — the actual code cutoff is 4.0× (ATR_EXT_ACTIONABLE). Do not 'fix' this JSON to say 5.0; the code is the source of truth. Fix the guide text separately."
         }
       }
     }
@@ -154,13 +162,20 @@ pipeline (2026-06-25) through the present. All values below are read from the cu
 }
 ```
 
+> **Enforcement note:** Unlike `selector_versions.json` (which has a corresponding
+> `SELECTOR_VERSION` constant in `picks_config.py` that a test can enforce), there is no
+> `DISPLAY_METHODOLOGY_VERSION` Python constant. Enforcement is solely via the anti-drift
+> test (`test_picks_methodology.py`) which checks that every param in `versions[0]` matches
+> the live constants in `docs/index.html`. A version bump that forgets to update `index.html`
+> will be caught by CI; a bump that forgets to update the JSON won't. Update both in the same PR.
+
 ---
 
 ## When to add a new version entry
 
 Whenever any value in `params` changes in `docs/index.html`, the implementer must:
 
-1. Append a new entry to `display_methodology.json` `versions[]` (prepend, keeping
+1. Prepend a new entry to `display_methodology.json` `versions[]` (keeping
    newest-first).
 2. Update `current` to the new version label.
 3. Set `effective_date` to the first date the new constants are live.
@@ -168,6 +183,10 @@ Whenever any value in `params` changes in `docs/index.html`, the implementer mus
 
 The same discipline already applies to `selector_versions.json`. Both files should be
 updated in the same PR as the `index.html` or `picks_config.py` change that triggers it.
+
+> If a change touches both the display methodology and selector logic simultaneously
+> (rare), update both `display_methodology.json` and `selector_versions.json` in the
+> same PR.
 
 ---
 
@@ -184,13 +203,47 @@ This section is a complete specification for whoever writes `scripts/replay_pick
 | Display methodology | `data/picks/display_methodology.json`, latest version with `effective_date ≤ date` |
 | Group selector | `data/picks/selector_versions.json`, latest version with `effective_date ≤ date` (informational only for replay; data already reflects which groups were selected) |
 
+### Function signature
+
+```python
+def replay(
+    date: str,                        # 'YYYY-MM-DD'; default: max date in picks.csv
+    view: str = 'all',                # 'all' or 'focus'
+    methodology_version: str = None,  # 'vN'; default: version effective on date
+) -> pd.DataFrame:
+    """Return picks in display order for the given date and view."""
+```
+
+Returns a DataFrame in display order. Minimum columns: `ticker`, `group`,
+`list_category`, `atr_ext_50`; Focus view adds `focus_score`.
+
 ### Step-by-step replay algorithm
 
 **Step 1 — Load and filter to date**
+
 ```python
 df = pd.read_csv('data/picks/picks.csv')
 df = df[df['date'] == target_date]
+if len(df) == 0:
+    raise ValueError(
+        f"No picks for {target_date}. "
+        "Picks pipeline started 2026-06-25 — earlier dates have no data."
+    )
 ```
+
+> **Column note:** use the lowercase `ticker` column (position 5 in `PICKS_LEAD_COLS`)
+> as the identity key. `picks.csv` also contains a capitalized `'Ticker'` column (part
+> of the 84-col Finviz block) — do not use it for joining or keying; the lowercase one
+> is the stable dedup key.
+>
+> **Multi-category rows:** the same ticker can appear multiple rows for the same date
+> when its industry group qualifies in more than one selector bucket (e.g. a group that
+> is both a leader and an rs_new_high). Each `(ticker, list_category)` pair is a
+> separate row. Do NOT deduplicate before applying the base filter — both the All and
+> Focus views preserve multi-category entries, showing a stock in every section where
+> its group qualified. The Focus `focus_score` is computed independently for each
+> `(ticker, list_category)` row (same as JS, which keys the score map on
+> `ticker + '_' + list_category`).
 
 **Step 2 — Apply base display filter**
 
@@ -210,9 +263,13 @@ df = df[ma_pass]
 
 **Step 3A — All view output**
 
-Group by `list_category`, then within each category group by `grp_name`, then sort by
-`atr_ext_50` ascending (least-extended first within each group). Category display order:
+Group by `list_category`, then within each category group by `group` (the column name
+in `picks.csv` — part of `PICKS_LEAD_COLS`; not `grp_name`), then sort by `atr_ext_50`
+ascending (least-extended first within each group). Category display order:
 `['leaders', 'emerging', 'accel', 'rs_new_high']`.
+
+Within each category, `group` names appear in alphabetical order (matching the JS
+`Object.keys(groups).sort()` behaviour).
 
 **Step 3B — Focus view output**
 
@@ -224,32 +281,58 @@ atr = pd.to_numeric(df['atr_ext_50'], errors='coerce')
 focus_candidates = df[(atr > p['focus_dq']['min_exclusive']) &
                       (atr <= p['focus_dq']['max_inclusive'])].copy()
 
+# JS short-circuits when n=1: single candidate gets score 1.0 with no normalization
+# and no extension penalty applied. Mirror that here.
+if len(focus_candidates) == 1:
+    focus_candidates['focus_score'] = 1.0
+    return focus_candidates
+
 # Component raw values
 raw_group = pd.to_numeric(focus_candidates['grp_sum_mid_rank'], errors='coerce')
 
 r20 = pd.to_numeric(focus_candidates['risk_20ma_pct'], errors='coerce')
 r50 = pd.to_numeric(focus_candidates['risk_50ma_pct'], errors='coerce')
-# Nearest positive MA stop: smallest of the qualifying (positive) values
+# Nearest positive MA stop: smallest of the qualifying (positive) values.
+# default=nan handles the edge case where both MAs are NaN or non-positive
+# (e.g. stock whose 20MA data is unavailable and price is exactly at 50MA).
 raw_tight = pd.DataFrame({'r20': r20, 'r50': r50}).apply(
-    lambda row: min(v for v in [row.r20, row.r50] if pd.notna(v) and v > 0),
+    lambda row: min(
+        (v for v in [row.r20, row.r50] if pd.notna(v) and v > 0),
+        default=float('nan')
+    ),
     axis=1
 )
 
 raw_quiet = pd.to_numeric(focus_candidates['range_atr'], errors='coerce')
 
-# Inverted min–max normalization (or rank-based for small pools)
-def normalize_inv(series, min_pool):
+
+def normalize_inv(series: pd.Series, min_pool: int) -> pd.Series:
+    """Inverted normalization: lower raw → higher score (1.0 = best).
+    Mirrors JS computeFocusScores normalizeInv() exactly.
+    NaN always → 0.5 (neutral). n=1 valid value → 1.0.
+    """
     valid = series.dropna()
     if len(valid) == 0:
         return pd.Series(0.5, index=series.index)
-    if len(series) < min_pool:
-        ranked = series.rank(ascending=True, na_option='keep')  # lower raw = better (rank 1)
-        m = valid.count()
-        return (1 - (ranked - 1) / (m - 1)).fillna(0.5) if m > 1 else pd.Series(1.0, index=series.index)
+    n = len(series)
+    if n < min_pool:
+        # Rank-based percentile for small pools (avoids jumpy min–max).
+        # lower raw → rank index 0 → score 1.0 after inversion.
+        sorted_valid = sorted(valid.tolist())
+        m = len(sorted_valid)
+
+        def _rank_score(v):
+            if pd.isna(v):
+                return 0.5  # NaN → neutral (not 1.0 even when m=1)
+            rank = sorted_valid.index(v)  # 0 = lowest raw = best
+            return 1.0 if m == 1 else 1.0 - rank / (m - 1)
+
+        return series.map(_rank_score)
     mn, mx = valid.min(), valid.max()
     if mx == mn:
         return pd.Series(0.5, index=series.index)
     return ((mx - series) / (mx - mn)).fillna(0.5)
+
 
 min_pool = p['focus_score']['normalization']['fallback_threshold']
 w = p['focus_score']['weights']
@@ -273,48 +356,64 @@ focus_candidates = focus_candidates.sort_values('focus_score', ascending=False)
 
 ### A/B testing pattern
 
-To compare two methodology versions on the same date:
+To compare two methodology versions on the same date, call `replay()` with different
+`methodology_version` values. The same raw `picks.csv` data drives both runs; only the
+filter/ranking constants differ.
 
 ```python
-output_a = replay(date='2026-06-25', methodology_version='v1')
-output_b = replay(date='2026-06-25', methodology_version='v2')
+output_a = replay(date='2026-06-25', view='focus', methodology_version='v1')
+output_b = replay(date='2026-06-25', view='focus', methodology_version='v2')
 # Compare top-N overlap, rank correlation, score distribution
 ```
-
-The same `picks.csv` data is used for both; only the constants differ. This makes it
-straightforward to test: "if we had used heavier group-strength weighting (0.6/0.3/0.1),
-how would the Focus ranking have changed on a given day?"
 
 ### CLI design (sketch)
 
 ```
-python scripts/replay_picks.py [--date YYYY-MM-DD] [--view all|focus] [--methodology-version vN]
+python scripts/replay_picks.py [--date YYYY-MM-DD] [--view all|focus] [--methodology-version vN] [--pretty]
 ```
 
-- `--date`: defaults to max date in picks.csv
+- `--date`: defaults to max date in `picks.csv`; raises a clear error for dates before
+  2026-06-25 (pipeline start)
 - `--view`: `all` (default) or `focus`
-- `--methodology-version`: defaults to the version that was effective on `--date`; can be
-  overridden for A/B testing
+- `--methodology-version`: defaults to the version effective on `--date`; override for
+  A/B testing
+- `--pretty`: styled terminal table; **default output is TSV** (tab-separated, pipeable)
 
-Output: TSV or styled terminal table of stocks in display order, with key columns
-(`ticker`, `grp_name`, `list_category`, `atr_ext_50`, `focus_score` for Focus view).
+Output columns: `ticker`, `group`, `list_category`, `atr_ext_50`; Focus view adds
+`focus_score`.
 
 ---
 
 ## Implementation checklist
 
+> **Atomicity rule:** create `data/picks/display_methodology.json` AND write
+> `tests/test_picks_methodology.py` in the same commit. The JSON is untested until the
+> drift guard exists — don't let them land separately.
+
 - [ ] Create `data/picks/display_methodology.json` with v1 entry (values above)
+- [ ] Add anti-drift guard: `tests/test_picks_methodology.py` — reads every numeric
+  and string param from `display_methodology.json` `versions[0]` and asserts each
+  matches the corresponding JS constant in `docs/index.html` (same pattern as
+  `tests/test_picks_button_config.py`). **Important:** numeric constants like
+  `FOCUS_W_GROUP = 0.4` require `float()` conversion after regex extraction — add a
+  `_parse_js_float(raw)` helper alongside the existing `_parse_js_string` /
+  `_parse_js_array` pattern. String constants use `_parse_js_string`; array constants
+  use `_parse_js_array`.
+
+  > **Enforcement note:** there is no `DISPLAY_METHODOLOGY_VERSION` Python constant in
+  > `picks_config.py`, so there is no code ↔ JSON version-label test (unlike
+  > `SELECTOR_VERSION`). If you add such a constant later, enforce
+  > `current == versions[0].version` here. For now, CI catches drift only via the
+  > param-value assertions in this test.
+
 - [ ] Update `CLAUDE.md` — add `display_methodology.json` to the data directory structure
   table and add a note in the "Picks pipeline" section about when to bump the version
 - [ ] Update `README.md` § Configurable parameters — add a row for `display_methodology.json`
 - [ ] Write `scripts/replay_picks.py` per the algorithm above
-- [ ] Write `tests/test_replay_picks.py` — unit tests for the normalize_inv function and
-  the full replay pipeline against a small fixture CSV
-- [ ] Add anti-drift guard: a test (`tests/test_picks_methodology.py`) that reads the
-  current v1 `params` from `display_methodology.json` and asserts each constant matches
-  the corresponding constant in `docs/index.html` (same pattern as
-  `tests/test_picks_button_config.py`). This prevents silent drift when someone edits
-  `index.html` and forgets to bump the version.
+- [ ] Write `tests/test_replay_picks.py` — unit tests for `normalize_inv` (cover: the
+  n=1 guard, NaN → 0.5 in both the min–max and rank-based paths, the small-pool
+  rank-based path, all-equal → 0.5) and the full replay pipeline against a small fixture
+  CSV with at least one multi-category ticker row
 
 ---
 
