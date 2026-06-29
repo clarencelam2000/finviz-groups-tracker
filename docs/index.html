@@ -262,8 +262,8 @@
     <section id="tab-picks" class="px-3 pt-3 pb-24 hidden">
       <div class="flex items-center flex-wrap gap-x-2 gap-y-1 mb-3 text-xs text-slate-400">
         ATR extension bands:
-        <span class="text-emerald-400 font-medium">≤5× actionable</span> ·
-        <span class="text-amber-400 font-medium">5–8× caution</span> ·
+        <span class="text-emerald-400 font-medium">≤4× actionable</span> ·
+        <span class="text-amber-400 font-medium">4–8× caution</span> ·
         <span class="text-red-400 font-medium">≥8× trim</span>
         <button class="underline text-slate-500 hover:text-slate-300" onclick="__openHub('guide','atr_ext_50')">why this matters</button>
       </div>
@@ -419,14 +419,14 @@
     // MIN_MARKET_CAP_B — C6 base display filter; exclude micro/nano-cap noise.
     const MIN_MARKET_CAP_B   = 5;    // $B floor; rows below this are hidden from the Picks tab
     // ATR extension color bands (C4). ≤ ACTIONABLE = emerald; ACTIONABLE–TRIM = amber; ≥ TRIM = red.
-    const ATR_EXT_ACTIONABLE = 5.0;  // over-extended hard cutoff; also Focus hard-DQ line (Phase 3b)
+    const ATR_EXT_ACTIONABLE = 4.0;  // over-extended hard cutoff; also Focus hard-DQ line (Phase 3b)
     const ATR_EXT_TRIM       = 8.0;  // flags a held position as a trim-10% candidate
     // Focus List constants (Phase 3b). score = base × (1 − penalty_fraction). Triple-documented:
     // here, README § Configurable parameters, CLAUDE.md § PWA display thresholds.
-    // Extension penalty ramps from 0 at PENALTY_START to PENALTY_MAX at ATR_EXT_ACTIONABLE (=5.0).
+    // Extension penalty ramps from 0 at PENALTY_START to PENALTY_MAX at ATR_EXT_ACTIONABLE (=4.0).
     // Denominator (1.5) is derived from the two constants — retuning either keeps the ramp correct.
-    const ATR_EXT_PENALTY_START = 3.5;  // penalty starts here; no discount below this extension
-    const PENALTY_MAX           = 0.5;  // max multiplicative discount (50% haircut at 5× extension)
+    const ATR_EXT_PENALTY_START = 2.5;  // penalty starts here; no discount below this extension
+    const PENALTY_MAX           = 0.5;  // max multiplicative discount (50% haircut at 4× extension)
     // Focus component weights — must sum to 1. Group strength, nearest-MA stop tightness, quiet bar.
     const FOCUS_W_GROUP = 0.4;
     const FOCUS_W_TIGHT = 0.4;
@@ -538,7 +538,7 @@
           detail: '1 when SMA50 > 0 (price above 50MA) AND SMA200 > SMA50 in % terms (equivalent to 50MA price > 200MA price). 0 otherwise. NaN when either MA is unavailable. Classic O\'Neil / IBD Stage-2 base condition (Phase 3a).' },
         { id: 'focus_score', label: 'Focus score', tabs: ['picks'],
           oneLiner: 'A blended 0–100 quality score ranking Focus picks by group strength, how tight the nearest MA stop is, and how quiet today\'s bar was — then discounted for extension beyond 3.5×.',
-          detail: 'score = base × (1 − extension_penalty). base = 40% group strength (grp_sum_mid_rank, inverted) + 40% stop tightness (nearest positive MA below price, inverted) + 20% quiet bar (range/ATR, inverted). Extension penalty ramps from 0 at 3.5× to 50% at 5× (ATR_EXT_ACTIONABLE). All three components use the same min–max ruler across today\'s Focus pool so weights are literal. Score always ∈ [0, 1]. Shown as a debug breakdown inside the expandable risk panel while tuning (Phase 3b).' },
+          detail: 'score = base × (1 − extension_penalty). base = 40% group strength (grp_sum_mid_rank, inverted) + 40% stop tightness (nearest positive MA below price, inverted) + 20% quiet bar (range/ATR, inverted). Extension penalty ramps from 0 at 2.5× to 50% at 4× (ATR_EXT_ACTIONABLE). All three components use the same min–max ruler across today\'s Focus pool so weights are literal. Score always ∈ [0, 1]. Shown as a debug breakdown inside the expandable risk panel while tuning (Phase 3b).' },
       ],
       howto: [
         'Each card is one group: a rank badge on the left, the selected timeframe’s % on the right, and momentum below the name.',
@@ -3532,7 +3532,11 @@
         const scored = computeFocusScores(candidates);
         scored.sort((a, b) => b.score - a.score);
 
-        let html = '<div class="space-y-0 bg-slate-800/60 rounded-lg overflow-hidden border border-slate-700/50">';
+        const focusNote = `<div class="mb-4 px-3 py-2.5 bg-indigo-950/50 border border-indigo-800/40 rounded-lg text-xs text-indigo-200/80 leading-relaxed">
+          Our best setups — stocks in leading industry groups that are above the 50MA and still in the actionable zone (under ${ATR_EXT_ACTIONABLE}× ATR), so there's room to run without chasing. Ranked top to bottom by setup quality: group strength, how tight the stop is, and how calm today's price action was. <strong class="text-indigo-200">Start at the top.</strong>
+        </div>`;
+
+        let html = focusNote + '<div class="space-y-0 bg-slate-800/60 rounded-lg overflow-hidden border border-slate-700/50">';
         scored.forEach((item, i) => {
           html += renderPickRow(item.r, {
             rowIndex: i,
@@ -3592,7 +3596,11 @@
         }
       }
 
-      let html = '';
+      const allNote = `<div class="mb-4 px-3 py-2.5 bg-slate-800/60 border border-slate-700/40 rounded-lg text-xs text-slate-400 leading-relaxed">
+        Stocks from today's leading and emerging industry groups — sectors showing sustained relative strength vs. the S&P 500. Every name is above its 50-day moving average. Browse the full universe here by group, or switch to <strong class="text-white">Focus ★</strong> for today's highest-conviction setups ranked by quality score.
+      </div>`;
+
+      let html = allNote;
       const catsPresent = CAT_ORDER.filter(c => catMap[c]);
       let globalRowIdx = 0;
 
