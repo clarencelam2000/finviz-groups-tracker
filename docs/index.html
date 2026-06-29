@@ -3761,16 +3761,13 @@
 
     function updateTabBarPosition() {
       const header = document.getElementById('header');
-      const banner = document.getElementById('update-banner');
       const tabBar = document.getElementById('tab-bar');
       if (!tabBar) return;
+      // header.offsetHeight already includes the safe-area-inset-top from the header's
+      // own internal padding; don't add safe area again. The banner scrolls naturally
+      // with page content — the tab bar should always stick just below the header.
       const headerHeight = header ? header.offsetHeight : 58;
-      const bannerVisible = banner && !banner.classList.contains('hidden');
-      const bannerHeight = bannerVisible ? banner.offsetHeight : 0;
-      const rootStyles = getComputedStyle(document.documentElement);
-      const safeAreaStr = rootStyles.getPropertyValue('--safe-area-inset-top').trim();
-      const safeAreaTop = safeAreaStr.includes('px') ? parseInt(safeAreaStr) : 0;
-      tabBar.style.top = `${safeAreaTop + headerHeight + bannerHeight}px`;
+      tabBar.style.top = `${headerHeight}px`;
     }
 
     function clearUnseen() {
