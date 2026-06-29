@@ -93,7 +93,7 @@ your entry. Buying higher doesn't make the stock less volatile or its bar narrow
 
 **This was verified against the code before approval. Both phases share one engine.**
 
-Today, all four ranking/scoring/gating consumers read the risk metrics **straight off the CSV
+Today, all five ranking/scoring/gating consumers read the risk metrics **straight off the CSV
 row** (`r.atr_ext_50`, `r.risk_20ma_pct`, `r.risk_50ma_pct`), which the pipeline computed at
 close:
 
@@ -103,7 +103,13 @@ close:
 | Focus score (tightness)      | `index.html` ~`:3414`        | `risk_20ma_pct`, `risk_50ma_pct` |
 | Focus extension penalty      | `index.html` ~`:3452`        | `r.atr_ext_50`        |
 | All-view sort                | `index.html` ~`:3590`        | `r.atr_ext_50`        |
+| All-view pre-scored Focus map| `index.html` ~`:3561`–`3566` | `r.atr_ext_50` (via `computeFocusScores`) |
 | Card display (risk panel)    | `index.html` ~`:3260`–`3340` | all of the above      |
+
+> **Note:** the All-view pre-scored Focus map (`:3561`–`:3566`) computes Focus scores for All-view
+> score badges (shown on collapsed rows next to the ticker in All view). This is a 6th call site
+> that must use derived metrics in Phase B, not just the four gate/score/sort/card consumers listed
+> above. It goes through `computeFocusScores` which also reads `r.atr_ext_50` directly.
 
 Both phases need the **identical** primitive: those three numbers re-derived from a chosen
 basis. So the mandated foundation (built in Phase A, reused verbatim in Phase B) is one pure
@@ -114,11 +120,28 @@ function:
 function deriveRiskMetrics(row, basis) {
   const price = _pF(row['Price']);
   const high  = _pF(row['High']);
+  const atr   = _pF(row['ATR']);
   const P     = (basis === 'hod' && !isNaN(high)) ? high : price;
   // sma20_price, sma50_price reconstructed from row SMA20/SMA50 pct (close-based, fixed)
-  // returns { atr_ext_50, risk_20ma_pct, risk_50ma_pct, sma20_price, sma50_price, ...display }
+  // sma20_price = price / (1 + _pPct(row['SMA20']) / 100)  ← denominator is always close price
+  // sma50_price = price / (1 + _pPct(row['SMA50']) / 100)
+  //
+  // Explicit return shape — all fields required:
+  //   atr_ext_50:      (P − sma50_price) / atr
+  //   risk_20ma_pct:   (P − sma20_price) / P          ← denominator is P, not close
+  //   risk_50ma_pct:   (P − sma50_price) / P
+  //   sma20_price, sma50_price                         (dollar levels, for card display)
+  //   risk20DolPerSh:  P − sma20_price                 (=P × risk_20ma_pct; separate key for clarity)
+  //   risk50DolPerSh:  P − sma50_price
+  //   stopDistAtr:     (nearest positive risk_fraction × P) / atr
+  // NaN-safe throughout — any blank/missing input → NaN for that field, never throws.
 }
 ```
+
+> **Note on the existing inline block:** `renderPickRow` already computes `sma20Price`, `sma50Price`,
+> `risk20f`, `risk50f`, `stopDistAtr` etc. inline at ~`:3262`–`3289`. Phase A **replaces** that
+> block with a call to `deriveRiskMetrics(r, cardBasis)` — do not add `deriveRiskMetrics` alongside
+> the existing code. The inline block is superseded.
 
 - **Phase A** routes *one expanded card's display* through `deriveRiskMetrics(r, cardBasis)`.
 - **Phase B** routes *the gate + score + sort + every card* through the **same function** with a
@@ -163,6 +186,11 @@ Risk basis:  [ Last ]  ·  HoD
   change on the collapsed row.
 - When `HoD` is active, show a one-line context note: *"risk measured from $103.00 entry (last
   session high)."*
+- **Cosmetic note:** the expanded card already has a cell labelled *"HoD (next buy trigger): $103.00"*
+  (~`:3319`). In HoD mode the context note and that cell will both reference the same price — this is
+  redundant but not wrong (one names the price, one explains how it's used). This is acceptable for v1.
+  If it feels noisy in use, remove the context note and rely on the existing HoD cell label alone
+  (do not rename the cell).
 
 ### 5.3 Trim / extension color under HoD (resolved decision)
 - **Color ramp** (emerald → amber → red on `atr_ext_50`): **apply in HoD mode.** Coloring the
@@ -199,15 +227,34 @@ state.picksBasis)` **before** gating/scoring/sorting. Concretely:
 4. **Every card render** — `renderPickRow` shows derived numbers consistent with the global
    basis.
 
-Cleanest implementation: compute a derived-metrics object per row once at the top of
-`renderPicks()` and pass it down, rather than re-calling `deriveRiskMetrics` in each consumer
-(avoids drift and redundant work).
+**Threading mechanism (use this exact pattern):** compute derived metrics once per row at the
+top of `renderPicks()` using a spread overlay — `const dr = {...r, ...deriveRiskMetrics(r, state.picksBasis)}` —
+and pass `dr` (not `r`) into every downstream call. This is zero-mutation (the original CSV row
+is untouched, so toggling back to Last mode just re-calls `renderPicks()` with fresh spreads),
+and it requires no signature change to `renderPickRow` or `computeFocusScores` — both already
+read fields off their row argument, so passing `dr` instead of `r` is the only change at each
+call site. Do NOT mutate `r` directly (original values are lost, toggling back fails) and do NOT
+add a new parameter to `renderPickRow` (it would require updating `renderIndustryCard` on the
+Today tab, which this feature should not touch).
+
+> **Note on collapsed-row badges in Phase B:** the All and Focus views both show the ATR badge
+> and `trim` chip on the collapsed row. Under Phase B, these **also** reflect the global basis
+> (not just the expanded panel). Concretely: `atrExt`, `isTrim`, and `atrCls` at the top of
+> `renderPickRow` (~`:3226`–`3229`) are computed from the row argument — passing the spread `dr`
+> (derived) row means the collapsed badge automatically reflects HoD when that's the global basis.
+> No extra work needed if the threading pattern above is followed; just confirm the collapsed badge
+> updates correctly in the Phase B test.
 
 ### 6.3 Interaction between the global toggle (B) and per-card toggle (A)
 **Decision for v1:** the global basis sets the default each card opens in. The per-card toggle
 (A) remains available as a **local override** for a single open card (e.g. global = Last, but I
 want to peek at one name's HoD risk). Collapsing the card discards the override and it reverts to
 the global basis. This keeps A useful after B ships rather than making it redundant.
+
+> **Implementation note:** Phase A initialises per-card state to `'last'`. Phase B changes that
+> initialisation to `state.picksBasis` (the global default). The reset-on-collapse behaviour
+> (currently resets to `'last'`) must become "resets to `state.picksBasis`" — not hardcoded to
+> `'last'` — otherwise a Phase B card always opens in Last even when global = HoD.
 > If this dual-control proves confusing in use, the fallback is to drop the per-card toggle once
 > B exists and rely on the global switch alone. Flagged as a post-use evaluation (§8).
 
@@ -229,7 +276,7 @@ threshold retuning in v1.
 ## 7. Testing
 
 Playwright PWA functional tests run in cloud (see CLAUDE.md § "What Playwright in cloud
-unlocks"); intercept the `picks_latest.csv` fetch with a fixture.
+unlocks"); intercept the `picks_latest.csv` fetch with a fixture. Test file: **`tests/test_pwa_picks_hod.py`**.
 
 **Phase A:**
 - **Regression anchor:** `deriveRiskMetrics(row, 'last')` reproduces the stored CSV
