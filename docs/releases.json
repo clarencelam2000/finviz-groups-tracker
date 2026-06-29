@@ -1,6 +1,18 @@
 {
-  "current": "2026.06.29",
+  "current": "2026.06.29.1",
   "releases": [
+    {
+      "version": "2026.06.29.1",
+      "date": "2026-06-29",
+      "title": "Focus: tighter criteria + tab descriptions",
+      "tag": "improvement",
+      "tab": "picks",
+      "notes": [
+        "Focus list now requires stocks to be within 4× ATR of the 50MA (down from 5×) — a tighter actionable zone that cuts the field to your sharpest setups.",
+        "Extension penalty now starts at 2.5× ATR instead of 3.5×, so scores reflect a stock's stretch more precisely.",
+        "Both All and Focus tabs now show a plain-language description of what's in the list and how it's ranked — no jargon required."
+      ]
+    },
     {
       "version": "2026.06.29",
       "date": "2026-06-29",
