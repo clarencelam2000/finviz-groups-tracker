@@ -1,6 +1,18 @@
 {
-  "current": "2026.06.30.3",
+  "current": "2026.06.30.4",
   "releases": [
+    {
+      "version": "2026.06.30.4",
+      "date": "2026-06-30",
+      "title": "Lookup: Focus scores on Stage-2 stock cards",
+      "tag": "improvement",
+      "tab": "lookup",
+      "notes": [
+        "Stage-2 stock cards in the Lookup tab now show a Focus score badge (the indigo number next to the ticker), identical to what you see in the Picks Focus ★ view.",
+        "Scores are computed against all of today's leading-group picks — so a 72 here means the same 72 as in the Picks tab. Group strength, stop tightness, and bar quietness all factor in exactly the same way.",
+        "Stocks below the 50MA or over-extended (≥ 4× ATR from the 50MA) get no badge — same qualification gate as Picks Focus. Expand a card to see the Group / Tight / Quiet / Ext breakdown."
+      ]
+    },
     {
       "version": "2026.06.30.3",
       "date": "2026-06-30",
