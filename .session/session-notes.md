@@ -71,3 +71,29 @@ Plan written and docs committed to `claude/picks-cloudflare-cron-f0t7fz`. Extend
 **VP action item:** create healthchecks.io monitor (period=24h, grace=2h) and add `PICKS_HEALTHCHECK_URL` as repo secret before implementation merges.
 
 **Safe to close.** Next session: implementation (worker-cron/ + collect_picks.yml).
+
+---
+
+## 2026-06-30 — Phase A: HoD price-basis toggle for Picks risk panel
+
+**Status: PHASE A COMPLETE. SAFE TO CLOSE. PR #205 open.**
+
+What landed (all in one commit on `claude/hod-price-basis-toggle-phase-a-8o28by`):
+- `docs/index.html` — 4 edits:
+  1. `deriveRiskMetrics(row, basis)` pure JS function + `window.__buildRiskBasisContent(rowData, basis)`
+  2. `renderPickRow` if-expandable block: `data-row-json` attribute, `[ Last | HoD ]` toggle buttons, `risk-basis-content-{key}` wrapper
+  3. `__togglePickRow` resets basis on collapse; new `__setPickBasis(key, basis)` function
+  4. GUIDE `price_basis` entry (verbatim-synced with moaty-metrics.md)
+- `docs/releases.json` — v2026.06.30 entry; `current` bumped
+- `docs/sw.js` — CACHE finviz-v35 → finviz-v36
+- `knowledge/moaty-metrics.md` — `price_basis` section added
+- `planning/picks-hod-price-basis-toggle.md` — status line updated to Phase A shipped
+- `tests/fixtures/picks_latest.csv` — TESTHOD row added (Price=100, High=200, ATR=5 for trim→extended test)
+- `tests/test_pwa_picks_hod.py` — 5 new Playwright tests (require chromium)
+- `.session/SPRINT.md` — PICKS-3E done; PICKS-3E-HOD-PHASE-B tracking task added
+
+531 non-Playwright tests pass. Playwright HoD tests require `playwright install chromium` to run.
+
+Next for this workstream:
+- **Phase B** (PICKS-3E-HOD-PHASE-B): global tab-level [ Last | HoD ] toggle that re-ranks the entire Focus list on HoD metrics. Design complete in `planning/picks-hod-price-basis-toggle.md` §4. Prerequisite: validate Phase A in prod first.
+- **PICKS-3D polish**: true inside-day H/L (schema bump), fundamental floor, search/filter, sort toggles.
