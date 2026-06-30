@@ -1,6 +1,17 @@
 {
-  "current": "2026.06.30.1",
+  "current": "2026.06.30.2",
   "releases": [
+    {
+      "version": "2026.06.30.2",
+      "date": "2026-06-30",
+      "title": "Lookup: group category + filter context in Stage-2 section",
+      "tag": "improvement",
+      "tab": "lookup",
+      "notes": [
+        "The Stage-2 section on the Lookup tab now shows which selection bucket(s) the group qualified for — Leaders (sustained strength), Emerging (short-term rotation), Accel (momentum building), or RS New High — as color-coded chips under the section header.",
+        "A filter context note explains what the picks list shows vs the Finviz screener button: picks are from today's collection (>$5B market cap, above MA), while the screener button shows all names in the group including smaller caps."
+      ]
+    },
     {
       "version": "2026.06.30.1",
       "date": "2026-06-30",
