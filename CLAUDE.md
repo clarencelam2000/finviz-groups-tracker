@@ -283,6 +283,16 @@ a two-way-door superset migration (`ensure_deltas_csv()` pattern).
 
 Playwright + Chromium install and run correctly in cloud sessions. This opens up capabilities that didn't exist before:
 
+> **Before running any of this in a Claude Code cloud session**, read
+> `knowledge/investigations/playwright-cloud-session-testing.md` — pinned `playwright==1.44.0` expects a
+> different Chromium revision than the cloud image's pre-installed browser (needs an explicit
+> `executable_path`), CDN scripts (Tailwind/PapaParse) and `raw.githubusercontent.com` aren't reachable
+> directly from Chromium in the sandbox even though `curl` reaches them fine (route-stub everything,
+> CDN scripts included), and route glob patterns need `**/` with a trailing slash as a segment boundary
+> — `"**X"` without it silently never matches. The snippet below has been corrected for the last gotcha;
+> the doc has the full working harness and a flagged-but-unverified concern about whether the same bug
+> is already present in `tests/test_pwa_picks_hod.py`.
+
 ### PWA functional testing (`docs/index.html`)
 The PWA fetches CSVs from `raw.githubusercontent.com`. Playwright can **intercept those requests** and return local fixture CSV data, so we can test the full UI without deploying to GitHub Pages and without live data:
 
@@ -297,11 +307,12 @@ with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
     page = browser.new_page()
 
-    # Intercept CSV fetches and return local fixture data
-    page.route('**/raw.githubusercontent.com/**snapshots.csv', lambda r: r.fulfill(
+    # Intercept CSV fetches and return local fixture data. Use "**/filename.ext" (slash
+    # immediately before the literal suffix) — "**domain**filename" silently never matches.
+    page.route('**/snapshots.csv', lambda r: r.fulfill(
         body=open('tests/fixtures/sectors_snapshots.csv').read(), content_type='text/plain'
     ))
-    page.route('**/raw.githubusercontent.com/**deltas.csv', lambda r: r.fulfill(
+    page.route('**/deltas.csv', lambda r: r.fulfill(
         body=open('tests/fixtures/sectors_deltas.csv').read(), content_type='text/plain'
     ))
 
