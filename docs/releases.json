@@ -1,6 +1,17 @@
 {
-  "current": "2026.06.30.5",
+  "current": "2026.06.30.6",
   "releases": [
+    {
+      "version": "2026.06.30.6",
+      "date": "2026-06-30",
+      "title": "Charts links now match what you're looking at",
+      "tag": "improvement",
+      "tab": "picks",
+      "notes": [
+        "Charts links now open in the same order as the list you're viewing — Focus charts in score order, group charts in the order shown on the card, and so on.",
+        "Finviz now honors that exact order in the charts grid instead of its own default sort."
+      ]
+    },
     {
       "version": "2026.06.30.5",
       "date": "2026-06-30",

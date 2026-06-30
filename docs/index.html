@@ -3143,9 +3143,11 @@
     // Build a Finviz charts-grid URL for an explicit ticker list (v=211, charts view).
     // Distinct from buildScreenerUrl: this charts EXACTLY the given tickers, not a group
     // filter. Deduplicates via Set; no cap — tickers are short, URL length is a non-issue.
+    // o=tickersfilter tells Finviz to render the charts in the same order as the t= list,
+    // so callers should pass tickers pre-sorted into whatever order they want displayed.
     function buildChartsUrl(tickers) {
       const uniq = [...new Set(tickers)].filter(Boolean);
-      return `https://finviz.com/screener?v=211&ft=3&t=${uniq.map(encodeURIComponent).join(',')}`;
+      return `https://finviz.com/screener?v=211&ft=3&t=${uniq.map(encodeURIComponent).join(',')}&o=tickersfilter`;
     }
 
     // Render the Stage-2 section for the Lookup tab (3c).
@@ -3728,7 +3730,9 @@
           Our best setups — stocks in leading industry groups that are above the 50MA and still in the actionable zone (under ${ATR_EXT_ACTIONABLE}× ATR), so there's room to run without chasing. Ranked top to bottom by setup quality: group strength, how tight the stop is, and how calm today's price action was. <strong class="text-indigo-200">Start at the top.</strong>
         </div>`;
 
-        const focusTickers = [...new Set(candidates.map(r => r.ticker || r.Ticker || ''))].filter(Boolean);
+        // Built from `scored` (already score-desc) — not `candidates` — so the chart grid
+        // order (o=tickersfilter) matches the visible list order top to bottom.
+        const focusTickers = [...new Set(scored.map(item => item.r.ticker || item.r.Ticker || ''))].filter(Boolean);
         const focusChartsLink = `<div class="text-right mb-2">
           <a href="${escapeHtml(buildChartsUrl(focusTickers))}" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">View all ${focusTickers.length} charts in Finviz ↗</a>
         </div>`;
@@ -3797,13 +3801,24 @@
         Stocks from today's leading and emerging industry groups — sectors showing sustained relative strength vs. the S&P 500. Every name is above its 50-day moving average. Browse the full universe here by group, or switch to <strong class="text-white">Focus ★</strong> for today's highest-conviction setups ranked by quality score.
       </div>`;
 
-      const allTickers = [...new Set(filtered.map(r => r.ticker || r.Ticker || ''))].filter(Boolean);
+      const catsPresent = CAT_ORDER.filter(c => catMap[c]);
+
+      // Flatten in the SAME category → group → ATR-ascending order used to render the list
+      // below, so the chart grid (o=tickersfilter) reads top-to-bottom exactly like this page.
+      // Not raw CSV/scrape order — there's no single global score to sort by here (Focus
+      // scores only exist for the subset of stocks that qualify for Focus).
+      const allTickersOrdered = [];
+      for (const cat of catsPresent) {
+        for (const grp of Object.keys(catMap[cat]).sort()) {
+          for (const r of catMap[cat][grp]) allTickersOrdered.push(r.ticker || r.Ticker || '');
+        }
+      }
+      const allTickers = [...new Set(allTickersOrdered)].filter(Boolean);
       const allChartsLink = `<div class="text-right mb-2">
         <a href="${escapeHtml(buildChartsUrl(allTickers))}" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">View all ${allTickers.length} charts in Finviz ↗</a>
       </div>`;
 
       let html = allNote + allChartsLink;
-      const catsPresent = CAT_ORDER.filter(c => catMap[c]);
       let globalRowIdx = 0;
 
       for (const cat of catsPresent) {
