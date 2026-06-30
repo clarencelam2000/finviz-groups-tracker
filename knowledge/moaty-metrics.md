@@ -314,6 +314,23 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   (not over-extended). No RSI gate; no Stage-2 gate (3b decision — revisit via PICKS-3B-FOCUSGATE).
 - **User one-liner:** "A blended 0–100 quality score ranking Focus picks by group strength, how tight the nearest MA stop is, and how quiet today's bar was — then discounted for extension beyond 3.5×."
 
+## price_basis (Price basis toggle — PWA Picks tab, Phase A)
+- **Source:** PWA UI state only — not stored in any CSV. Per-card ephemeral state; resets to Last on collapse.
+- **Two modes:**
+  - **Last** (default): all stop-distance metrics use the closing price as the entry price.
+  - **HoD** (High of Day): substitutes the prior session's High as the realistic breakout entry price.
+    Breakout buyers don't fill at the close — they trigger above the prior day's high. HoD shows what
+    the risk actually looks like from that realistic fill.
+- **Which metrics re-base (stop-distance family):** `atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`,
+  $/sh risk per stop, stop distance in ATR multiples.
+- **Which metrics stay fixed on close:** `range_atr`, ATR%, MA dollar levels (sma20_price, sma50_price).
+  Bar properties describe the instrument, not the entry — they always come from the close-price session.
+- **Label swap in HoD mode:** "trim" (position-management instruction) becomes "extended" (stretch
+  description) when atrExt ≥ ATR_EXT_TRIM. Same red color ramp still applies.
+- **Phase B (not yet built):** a global tab-level toggle that re-ranks the Focus list on HoD metrics.
+  Phase A is display-only inside the expanded risk panel.
+- **User one-liner:** "Switches the risk panel between two measurement bases: Last (closing price, the default) and HoD (High of Day — the realistic breakout entry price for the next session)."
+
 ## Rotation Phase (AI — sectors only)
 - **Definition:** an AI-generated read of where the broad market sits in its
   cycle, labeled Early Cycle, Mid Cycle, Late Cycle, or Defensive, with a short

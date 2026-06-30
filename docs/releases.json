@@ -1,6 +1,19 @@
 {
-  "current": "2026.06.29.1",
+  "current": "2026.06.30",
   "releases": [
+    {
+      "version": "2026.06.30",
+      "date": "2026-06-30",
+      "title": "Picks: HoD price-basis toggle",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "Each expanded stock card now has a [ Last | HoD ] toggle inside the risk panel. Last shows risk from the closing price; HoD shows risk from the prior session's High — the realistic breakout entry price.",
+        "Extension (ATR ×50MA), stop distances, and $/share risk all update when you switch to HoD. Bar properties (range/ATR, volatility %) stay on close — they describe the instrument, not your entry.",
+        "In HoD mode, 'trim' becomes 'extended' when a stock is over-stretched from entry — same red indicator, different meaning: stretch description, not a position instruction.",
+        "Basis resets to Last every time you collapse a card — keeping the default view clean."
+      ]
+    },
     {
       "version": "2026.06.29.1",
       "date": "2026-06-29",

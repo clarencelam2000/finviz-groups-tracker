@@ -1,8 +1,8 @@
 # Plan: HoD ↔ Last price-basis toggle for Picks risk metrics
 
-> **Status:** 📋 **Design approved, not yet implemented.** Greenlit to build **Phase A first,
-> Phase B as the committed end goal** (not a spike). This doc is written so any contributor can
-> pick it up cold. No code has been written yet.
+> **Status:** ✅ **Phase A shipped** (2026-06-30, branch `claude/hod-price-basis-toggle-phase-a-8o28by`).
+> Phase B (global Focus re-rank) is the committed end goal — not yet implemented.
+> This doc is written so any contributor can pick it up cold.
 
 ---
 
