@@ -143,3 +143,61 @@ not something introduced this session — see PICKS-3C-PLAYWRIGHT-GAP for the ex
 - All/Focus view selection always resets to All on tab entry (A4, intentional prior design) —
   retaining it would reverse that decision and needs an explicit call before changing.
 - Tracked as **PICKS-STATE-PERSIST** in SPRINT.md.
+
+---
+
+## 2026-06-30 — Charts link ordering + PICKS-STATE-PERSIST (A4 reversal) + Playwright knowledge doc
+
+**Status: COMPLETE. PR open. SAFE TO CLOSE.**
+
+Follow-up session after PR #216 merged. PR #216's branch was restarted from the latest default
+per the amendment policy (`git checkout -B claude/pensive-albattani-jm9k7q origin/claude/elegant-babbage-hlxnfy`)
+since amending a merged PR isn't possible.
+
+Three things landed, three commits on `claude/pensive-albattani-jm9k7q`:
+
+**1. Charts deep-link ordering fix + `&o=tickersfilter`** — owner noticed the All-view
+tab-level Charts link's ticker order was effectively random (raw CSV/scrape row order). Traced
+all 4 link sites:
+- Per-group header + Lookup Stage-2: already ATR-extension ascending, matches what's rendered — no change.
+- Focus tab-level: was a genuine bug — built from `candidates` *before* the `scored.sort(score desc)`
+  ran, so it never matched the visible Focus list. Fixed to read from `scored`.
+- All tab-level: switched from raw CSV order to a flatten of the same category → group →
+  ATR-ascending order already used to render the list (not "Focus score desc" — most All-view
+  stocks don't qualify for a Focus score at all, so that wouldn't generalize cleanly).
+- Added `&o=tickersfilter` to `buildChartsUrl()` so Finviz actually renders the charts grid in
+  the URL's ticker order instead of its own default sort.
+- Release triplet v2026.06.30.6.
+
+**2. PICKS-STATE-PERSIST — reverses A4 (explicit VP call)** — `state.picksExpanded` (Set of
+stable `ticker_category` keys) persists which risk panels are open; `renderPickRow` checks it
+to start a row pre-expanded; `__togglePickRow(key, expandKey)` updates the set. `switchTab()` no
+longer forces `picksView` back to `'all'`. Because `renderPickRow` is shared between the Picks
+tab and the Lookup Stage-2 section, expand-persistence applies to both for free — not scoped
+to just the Picks tab as originally planned. A4's original rationale ("stale-Focus confusion on
+data reload") is preserved as a `> Note` in `planning/stock-picks-from-leading-groups.md`, with
+the reversal appended below it (not rewritten) — same treatment in the `state.picksView` code
+comment, the All/Focus toggle HTML comment, and the PICKS-3B SPRINT.md entry (footnoted, not
+edited). Release triplet v2026.06.30.7, `sw.js` → finviz-v42.
+
+**3. `knowledge/investigations/playwright-cloud-session-testing.md`** — wrote up the debugging
+from PR #216's verification work: pinned `playwright==1.44.0` expects Chromium revision 1117 but
+this cloud session's pre-installed browser is revision 1194 (needs explicit `executable_path`);
+CDN scripts and `raw.githubusercontent.com` aren't reachable directly from Chromium in this
+sandbox even though `curl` reaches them fine (route-stub everything); and a sharp glob-pattern
+gotcha — `page.route()` patterns need `**/` with a trailing slash as a segment boundary, `"**X"`
+without it silently never matches. **Found and fixed the same bug in CLAUDE.md's own canonical
+Playwright example** (`'**/raw.githubusercontent.com/**snapshots.csv'` → `'**/snapshots.csv'`).
+Flagged but did **not** fix: `tests/test_pwa_picks_hod.py` may have the same broken pattern —
+noted in the investigation doc for whoever's next in that file, not chased further to keep this
+session scoped.
+
+**Verification:** 531 non-Playwright tests pass. Both the ordering fix and the state-persistence
+feature were verified end-to-end with a real headless Chromium session (the harness documented
+in the new investigation doc) — confirmed `o=tickersfilter` present, Focus-view expand+collapse
+persisting correctly across a tab switch away and back, and the All/Focus selection surviving
+tab navigation.
+
+**Next steps**: none outstanding from this session. `PICKS-STATE-PERSIST-LOOKUP` SPRINT entry
+from the prior session was folded into the main PICKS-STATE-PERSIST entry once it became clear
+the Lookup Stage-2 coverage was automatic, not a separate task.

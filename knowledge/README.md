@@ -15,6 +15,11 @@ knowledge/
   README.md                    ← this file
   decisions/                   ← Architecture Decision Records (ADRs)
   investigations/              ← debugging post-mortems and root cause analyses
+    playwright-cloud-session-testing.md ← Playwright/Chromium gotchas specific to running
+                                           tests in a Claude Code cloud session (browser
+                                           revision mismatch, CDN reachability, route glob
+                                           patterns) — read before writing or debugging any
+                                           Playwright test in this kind of session
   GEMINI_UPGRADE_RESEARCH.md   ← Gemini model research (June 2026)
 ```
 

@@ -267,7 +267,8 @@
         <span class="text-red-400 font-medium">≥8× trim</span>
         <button class="underline text-slate-500 hover:text-slate-300" onclick="__openHub('guide','atr_ext_50')">why this matters</button>
       </div>
-      <!-- All / Focus toggle (Phase 3b, A4) — resets to All on every tab entry -->
+      <!-- All / Focus toggle (Phase 3b). Selection persists across tab navigation
+           (A4 reversed 2026-06-30 — see PICKS-STATE-PERSIST in SPRINT.md). -->
       <div class="flex gap-1 mb-3">
         <button id="picks-toggle-all"
                 class="px-3 py-1 text-xs rounded-full font-medium bg-slate-600 text-white"
@@ -384,7 +385,12 @@
       taxonomy: null,  // { SectorName: [industry, ...] } from finviz_sector_industry_map.json
       aiData: null,
       picksData: null,   // rows from picks_latest.csv; null = not yet loaded
-      picksView: 'all', // 'all' | 'focus'; always reset to 'all' on tab entry (A4)
+      // 'all' | 'focus'; persists across tab navigation within a session (A4 REVERSED
+      // 2026-06-30 — VP call, see PICKS-STATE-PERSIST in SPRINT.md and the note in
+      // planning/stock-picks-from-leading-groups.md). Previously reset to 'all' on every
+      // Picks-tab entry.
+      picksView: 'all',
+      picksExpanded: new Set(), // stable "ticker_category" keys of currently-expanded Picks rows; survives re-renders within a session, cleared on full page reload
       provenanceData: null,
       latestAiDate: null,
       latestSnapshotDate: null,
@@ -3143,9 +3149,11 @@
     // Build a Finviz charts-grid URL for an explicit ticker list (v=211, charts view).
     // Distinct from buildScreenerUrl: this charts EXACTLY the given tickers, not a group
     // filter. Deduplicates via Set; no cap — tickers are short, URL length is a non-issue.
+    // o=tickersfilter tells Finviz to render the charts in the same order as the t= list,
+    // so callers should pass tickers pre-sorted into whatever order they want displayed.
     function buildChartsUrl(tickers) {
       const uniq = [...new Set(tickers)].filter(Boolean);
-      return `https://finviz.com/screener?v=211&ft=3&t=${uniq.map(encodeURIComponent).join(',')}`;
+      return `https://finviz.com/screener?v=211&ft=3&t=${uniq.map(encodeURIComponent).join(',')}&o=tickersfilter`;
     }
 
     // Render the Stage-2 section for the Lookup tab (3c).
@@ -3453,8 +3461,13 @@
       const perfWCls = isNaN(perfW) ? 'text-slate-400' : (perfW >= 0 ? 'text-emerald-400' : 'text-red-400');
       const perfMCls = isNaN(perfM) ? 'text-slate-400' : (perfM >= 0 ? 'text-emerald-400' : 'text-red-400');
 
-      // Unique key for expand/collapse DOM targets
-      const key = ticker + '_' + (r.list_category || '') + '_' + (opts.rowIndex !== undefined ? opts.rowIndex : 0);
+      // Stable identity for this row, independent of render position — used to persist
+      // expand state across re-renders (state.picksExpanded). Unique DOM key adds rowIndex
+      // on top, since the same (ticker, category) pair can be rendered into different
+      // DOM trees (e.g. Picks tab vs. Lookup Stage-2) within the same page.
+      const expandKey = ticker + '_' + (r.list_category || '');
+      const key = expandKey + '_' + (opts.rowIndex !== undefined ? opts.rowIndex : 0);
+      const startExpanded = state.picksExpanded.has(expandKey);
 
       // Score badge shown in Focus view (next to ticker)
       let scoreBadge = '';
@@ -3464,11 +3477,11 @@
 
       // Expandable chevron
       const chevronHtml = opts.expandable ? `
-        <svg id="chev-${key}" class="w-4 h-4 text-slate-500 flex-shrink-0 transition-transform duration-150" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg id="chev-${key}" class="w-4 h-4 text-slate-500 flex-shrink-0 transition-transform duration-150${startExpanded ? ' rotate-180' : ''}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
         </svg>` : '';
 
-      // Risk panel (always built when expandable; hidden by default)
+      // Risk panel (always built when expandable; hidden by default unless persisted as expanded)
       let riskHtml = '';
       if (opts.expandable) {
         const cardBasis = (window._pickCardBasis && window._pickCardBasis[key]) || 'last';
@@ -3505,7 +3518,7 @@
         }
 
         riskHtml = `
-          <div id="risk-panel-${key}" class="hidden px-3 pb-3 pt-1 bg-slate-800/40 border-t border-slate-700/30 text-xs" data-row-json='${rowDataJson}'>
+          <div id="risk-panel-${key}" class="${startExpanded ? '' : 'hidden '}px-3 pb-3 pt-1 bg-slate-800/40 border-t border-slate-700/30 text-xs" data-row-json='${rowDataJson}'>
             <div class="flex items-center gap-2 pb-1.5 mb-2 border-b border-slate-700/30">
               <span class="text-slate-500">Risk basis:</span>
               <div class="flex gap-1 ml-auto">
@@ -3525,7 +3538,7 @@
           </div>`;
       }
 
-      const rowClick = opts.expandable ? `onclick="__togglePickRow('${key}')" style="cursor:pointer"` : '';
+      const rowClick = opts.expandable ? `onclick="__togglePickRow('${key}','${expandKey}')" style="cursor:pointer"` : '';
 
       const groupSubtitleHtml = opts.showGroupSubtitle && r.group ? `
         <div class="px-3 pb-1.5 border-b border-slate-700/40">
@@ -3633,7 +3646,10 @@
 
     // Expand/collapse a risk panel row without re-rendering the list.
     // On collapse: resets the per-card basis to 'last' (§5.2 — ephemeral state rule).
-    window.__togglePickRow = function(key) {
+    // expandKey (stable ticker_category identity, distinct from the DOM `key`) is recorded
+    // in state.picksExpanded so the row re-opens automatically on the next renderPicks() —
+    // e.g. after switching tabs away and back (PICKS-STATE-PERSIST).
+    window.__togglePickRow = function(key, expandKey) {
       const panel = document.getElementById('risk-panel-' + key);
       const chev  = document.getElementById('chev-' + key);
       if (panel) {
@@ -3641,6 +3657,10 @@
         panel.classList.toggle('hidden');
         if (!wasHidden && window._pickCardBasis && window._pickCardBasis[key] !== 'last') {
           window.__setPickBasis(key, 'last');
+        }
+        if (expandKey) {
+          if (wasHidden) state.picksExpanded.add(expandKey);
+          else state.picksExpanded.delete(expandKey);
         }
       }
       if (chev) chev.classList.toggle('rotate-180');
@@ -3728,7 +3748,9 @@
           Our best setups — stocks in leading industry groups that are above the 50MA and still in the actionable zone (under ${ATR_EXT_ACTIONABLE}× ATR), so there's room to run without chasing. Ranked top to bottom by setup quality: group strength, how tight the stop is, and how calm today's price action was. <strong class="text-indigo-200">Start at the top.</strong>
         </div>`;
 
-        const focusTickers = [...new Set(candidates.map(r => r.ticker || r.Ticker || ''))].filter(Boolean);
+        // Built from `scored` (already score-desc) — not `candidates` — so the chart grid
+        // order (o=tickersfilter) matches the visible list order top to bottom.
+        const focusTickers = [...new Set(scored.map(item => item.r.ticker || item.r.Ticker || ''))].filter(Boolean);
         const focusChartsLink = `<div class="text-right mb-2">
           <a href="${escapeHtml(buildChartsUrl(focusTickers))}" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">View all ${focusTickers.length} charts in Finviz ↗</a>
         </div>`;
@@ -3797,13 +3819,24 @@
         Stocks from today's leading and emerging industry groups — sectors showing sustained relative strength vs. the S&P 500. Every name is above its 50-day moving average. Browse the full universe here by group, or switch to <strong class="text-white">Focus ★</strong> for today's highest-conviction setups ranked by quality score.
       </div>`;
 
-      const allTickers = [...new Set(filtered.map(r => r.ticker || r.Ticker || ''))].filter(Boolean);
+      const catsPresent = CAT_ORDER.filter(c => catMap[c]);
+
+      // Flatten in the SAME category → group → ATR-ascending order used to render the list
+      // below, so the chart grid (o=tickersfilter) reads top-to-bottom exactly like this page.
+      // Not raw CSV/scrape order — there's no single global score to sort by here (Focus
+      // scores only exist for the subset of stocks that qualify for Focus).
+      const allTickersOrdered = [];
+      for (const cat of catsPresent) {
+        for (const grp of Object.keys(catMap[cat]).sort()) {
+          for (const r of catMap[cat][grp]) allTickersOrdered.push(r.ticker || r.Ticker || '');
+        }
+      }
+      const allTickers = [...new Set(allTickersOrdered)].filter(Boolean);
       const allChartsLink = `<div class="text-right mb-2">
         <a href="${escapeHtml(buildChartsUrl(allTickers))}" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">View all ${allTickers.length} charts in Finviz ↗</a>
       </div>`;
 
       let html = allNote + allChartsLink;
-      const catsPresent = CAT_ORDER.filter(c => catMap[c]);
       let globalRowIdx = 0;
 
       for (const cat of catsPresent) {
@@ -3909,14 +3942,11 @@
 
     function switchTab(tab) {
       // Save the outgoing tab's scroll position so it can be restored on return.
-      // Skip when leaving Picks from Focus view — A4 below always resets to All on
-      // re-entry, so a Focus-view scroll position wouldn't match the All-view content.
-      if (!(state.tab === 'picks' && state.picksView === 'focus')) {
-        state.scrollPos[state.tab] = window.scrollY;
-      }
+      // picksView now persists across tab switches (A4 reversed, see state.picksView
+      // comment), so the saved position always matches whatever sub-view is showing.
+      state.scrollPos[state.tab] = window.scrollY;
       state.tab = tab;
       state.restoreScrollOnRender = true;
-      if (tab === 'picks') state.picksView = 'all';  // A4: always reset to All on tab entry
       document.querySelectorAll('.tab-btn').forEach(btn => {
         const active = btn.dataset.tab === tab;
         btn.classList.toggle('tab-active', active);

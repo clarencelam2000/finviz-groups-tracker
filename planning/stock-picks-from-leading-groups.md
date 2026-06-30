@@ -972,6 +972,14 @@ PWA constants (`docs/index.html`, near the `REGIME_THRESHOLD` block; also docume
 > **`All / Focus` toggle is NOT persisted (A4):** the segment **resets to `All` on every Picks-tab
 > entry / data reload.** Avoids stale-Focus confusion when the underlying pool reloads. No constant —
 > just reset `state` on `switchTab('picks')`.
+>
+> **A4 REVERSED 2026-06-30 (explicit VP call, PICKS-STATE-PERSIST):** `picksView` now persists
+> across tab navigation — `switchTab('picks')` no longer forces it back to `'all'`. Expanded
+> risk-panel rows are also now retained across re-entry (`state.picksExpanded`, keyed by stable
+> `ticker_category` identity, checked in `renderPickRow`). The original "stale-Focus confusion on
+> data reload" concern above still technically applies if a force-refresh lands new picks data
+> while the user is sitting on Focus view — that case is not specially handled; the VP call was a
+> blanket override of the tab-entry reset, not just the original use of the reset.
 
 Backend columns (deterministic; document in README §Delta/Picks columns, CLAUDE.md §Picks pipeline,
 and `knowledge/moaty-metrics.md`): `atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`, `range_atr`,

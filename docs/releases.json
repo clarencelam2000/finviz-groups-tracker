@@ -1,6 +1,28 @@
 {
-  "current": "2026.06.30.5",
+  "current": "2026.06.30.7",
   "releases": [
+    {
+      "version": "2026.06.30.7",
+      "date": "2026-06-30",
+      "title": "Picks tab remembers where you left off",
+      "tag": "improvement",
+      "tab": "picks",
+      "notes": [
+        "Expanded risk panels and your All / Focus selection now stay put when you switch tabs and come back — no more losing your place.",
+        "Previously the Picks tab always reset to All and collapsed every open panel on re-entry."
+      ]
+    },
+    {
+      "version": "2026.06.30.6",
+      "date": "2026-06-30",
+      "title": "Charts links now match what you're looking at",
+      "tag": "improvement",
+      "tab": "picks",
+      "notes": [
+        "Charts links now open in the same order as the list you're viewing — Focus charts in score order, group charts in the order shown on the card, and so on.",
+        "Finviz now honors that exact order in the charts grid instead of its own default sort."
+      ]
+    },
     {
       "version": "2026.06.30.5",
       "date": "2026-06-30",
