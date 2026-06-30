@@ -1,6 +1,17 @@
 {
-  "current": "2026.06.30.6",
+  "current": "2026.06.30.7",
   "releases": [
+    {
+      "version": "2026.06.30.7",
+      "date": "2026-06-30",
+      "title": "Picks tab remembers where you left off",
+      "tag": "improvement",
+      "tab": "picks",
+      "notes": [
+        "Expanded risk panels and your All / Focus selection now stay put when you switch tabs and come back — no more losing your place.",
+        "Previously the Picks tab always reset to All and collapsed every open panel on re-entry."
+      ]
+    },
     {
       "version": "2026.06.30.6",
       "date": "2026-06-30",
