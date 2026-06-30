@@ -392,6 +392,8 @@
       loading: false,
       expandedName: null,
       lookup: { symbol: null, data: null, loading: false, error: null, groupResult: null, didYouMean: null },
+      scrollPos: {},              // tab id -> last window.scrollY, restored on tab re-entry
+      restoreScrollOnRender: false,
     };
 
     // ── Preferences (localStorage) ─────────────────────────────────────────
@@ -3138,6 +3140,14 @@
       return `https://finviz.com/screener?v=${BUTTON_V}&f=${f}&ft=${BUTTON_FT}&o=${BUTTON_SORT}`;
     }
 
+    // Build a Finviz charts-grid URL for an explicit ticker list (v=211, charts view).
+    // Distinct from buildScreenerUrl: this charts EXACTLY the given tickers, not a group
+    // filter. Deduplicates via Set; no cap — tickers are short, URL length is a non-issue.
+    function buildChartsUrl(tickers) {
+      const uniq = [...new Set(tickers)].filter(Boolean);
+      return `https://finviz.com/screener?v=211&ft=3&t=${uniq.map(encodeURIComponent).join(',')}`;
+    }
+
     // Render the Stage-2 section for the Lookup tab (3c).
     // industryName: the resolved Finviz industry name, or null.
     // sectorName: the resolved Finviz sector name, or null (shows a sec_<slug> button only).
@@ -3210,10 +3220,16 @@
           .map(c => `<span class="text-[0.6rem] px-1.5 py-0.5 rounded-full ${CATEGORY_CHIP_CLS[c] || 'bg-slate-700/60 text-slate-300'}">${CATEGORY_LABEL[c] || c}</span>`)
           .join('');
 
+        const chartsBtnHtml = industryPicks.length > 0
+          ? `<a href="${escapeHtml(buildChartsUrl(industryPicks.map(r => r.ticker || r.Ticker || '')))}" target="_blank" rel="noopener noreferrer"
+              class="inline-flex items-center gap-1 text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 whitespace-nowrap shrink-0">
+              Charts ↗</a>`
+          : '';
+
         html += `<div class="mt-4">
           <div class="flex items-center justify-between gap-2 mb-1">
             <span class="text-xs font-medium text-slate-300">Stage-2 names in this group</span>
-            ${btnHtml}
+            <div class="flex items-center gap-1.5 flex-shrink-0">${chartsBtnHtml}${btnHtml}</div>
           </div>
           <div class="flex items-center gap-1 mb-2 flex-wrap">
             ${chips ? `<div class="flex items-center gap-1">${chips}</div>` : ''}
@@ -3513,7 +3529,7 @@
 
       const groupSubtitleHtml = opts.showGroupSubtitle && r.group ? `
         <div class="px-3 pb-1.5 border-b border-slate-700/40">
-          <button data-pick-group-lookup="${escapeHtml(r.group)}" class="inline-flex items-center gap-1 text-xs text-slate-300 bg-slate-700/50 px-2 py-0.5 rounded hover:bg-indigo-900/60 hover:text-indigo-300 transition-colors text-left">${escapeHtml(r.group)} · ${CATEGORY_LABEL[r.list_category] || r.list_category || ''} ↗</button>
+          <button data-pick-group-lookup="${escapeHtml(r.group)}" class="inline-flex items-center gap-1 text-xs text-slate-300 bg-slate-700/50 px-2 py-0.5 rounded hover:bg-indigo-900/60 hover:text-indigo-300 transition-colors text-left">${escapeHtml(r.group)} · ${CATEGORY_LABEL[r.list_category] || r.list_category || ''} ›</button>
         </div>` : '';
 
       return `<div>
@@ -3712,7 +3728,12 @@
           Our best setups — stocks in leading industry groups that are above the 50MA and still in the actionable zone (under ${ATR_EXT_ACTIONABLE}× ATR), so there's room to run without chasing. Ranked top to bottom by setup quality: group strength, how tight the stop is, and how calm today's price action was. <strong class="text-indigo-200">Start at the top.</strong>
         </div>`;
 
-        let html = focusNote + '<div class="space-y-0 bg-slate-800/60 rounded-lg overflow-hidden border border-slate-700/50">';
+        const focusTickers = [...new Set(candidates.map(r => r.ticker || r.Ticker || ''))].filter(Boolean);
+        const focusChartsLink = `<div class="text-right mb-2">
+          <a href="${escapeHtml(buildChartsUrl(focusTickers))}" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">View all ${focusTickers.length} charts in Finviz ↗</a>
+        </div>`;
+
+        let html = focusNote + focusChartsLink + '<div class="space-y-0 bg-slate-800/60 rounded-lg overflow-hidden border border-slate-700/50">';
         scored.forEach((item, i) => {
           html += renderPickRow(item.r, {
             rowIndex: i,
@@ -3776,7 +3797,12 @@
         Stocks from today's leading and emerging industry groups — sectors showing sustained relative strength vs. the S&P 500. Every name is above its 50-day moving average. Browse the full universe here by group, or switch to <strong class="text-white">Focus ★</strong> for today's highest-conviction setups ranked by quality score.
       </div>`;
 
-      let html = allNote;
+      const allTickers = [...new Set(filtered.map(r => r.ticker || r.Ticker || ''))].filter(Boolean);
+      const allChartsLink = `<div class="text-right mb-2">
+        <a href="${escapeHtml(buildChartsUrl(allTickers))}" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">View all ${allTickers.length} charts in Finviz ↗</a>
+      </div>`;
+
+      let html = allNote + allChartsLink;
       const catsPresent = CAT_ORDER.filter(c => catMap[c]);
       let globalRowIdx = 0;
 
@@ -3794,10 +3820,11 @@
 
         for (const grp of Object.keys(groups).sort()) {
           const stocks = groups[grp];
+          const grpChartsUrl = buildChartsUrl(stocks.map(r => r.ticker || r.Ticker || ''));
           html += `<div class="mb-2 bg-slate-800/60 rounded-lg overflow-hidden border border-slate-700/50">
             <div class="flex items-center justify-between px-3 py-2 bg-slate-800 border-b border-slate-700">
-              <button data-pick-group-lookup="${escapeHtml(grp)}" class="text-xs font-medium text-slate-200 truncate hover:text-indigo-300 transition-colors text-left">${escapeHtml(grp)} ↗</button>
-              <span class="text-xs text-slate-500 ml-2 flex-shrink-0">${stocks.length} name${stocks.length !== 1 ? 's' : ''}</span>
+              <button data-pick-group-lookup="${escapeHtml(grp)}" class="text-xs font-medium text-slate-200 truncate hover:text-indigo-300 transition-colors text-left">${escapeHtml(grp)} ›</button>
+              <span class="text-xs text-slate-500 ml-2 flex-shrink-0 whitespace-nowrap">${stocks.length} name${stocks.length !== 1 ? 's' : ''} · <a href="${escapeHtml(grpChartsUrl)}" target="_blank" rel="noopener noreferrer" class="hover:text-slate-300 transition-colors" onclick="event.stopPropagation()">Charts ↗</a></span>
             </div>`;
           for (const r of stocks) {
             const fsKey = r.ticker + '_' + (r.list_category || '');
@@ -3827,6 +3854,11 @@
       if (state.tab === 'ai')       renderAI();
       if (state.tab === 'lookup')   { renderLookup(); renderLookupChips(); }
       if (state.tab === 'picks')    renderPicks();
+
+      if (state.restoreScrollOnRender) {
+        state.restoreScrollOnRender = false;
+        window.scrollTo(0, state.scrollPos[state.tab] || 0);
+      }
     }
 
     function setLoading(on) {
@@ -3876,7 +3908,14 @@
     // ── UI wiring ──────────────────────────────────────────────────────────
 
     function switchTab(tab) {
+      // Save the outgoing tab's scroll position so it can be restored on return.
+      // Skip when leaving Picks from Focus view — A4 below always resets to All on
+      // re-entry, so a Focus-view scroll position wouldn't match the All-view content.
+      if (!(state.tab === 'picks' && state.picksView === 'focus')) {
+        state.scrollPos[state.tab] = window.scrollY;
+      }
       state.tab = tab;
+      state.restoreScrollOnRender = true;
       if (tab === 'picks') state.picksView = 'all';  // A4: always reset to All on tab entry
       document.querySelectorAll('.tab-btn').forEach(btn => {
         const active = btn.dataset.tab === tab;
