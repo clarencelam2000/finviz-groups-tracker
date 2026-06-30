@@ -41,9 +41,45 @@ git diff origin/claude/elegant-babbage-hlxnfy -- scripts/   # empty diff = alrea
 Mark every PR as ready for review immediately after opening it. Only leave it as a draft if you're explicitly mid-task with more commits coming, or waiting on user input before proceeding.
 
 You should mark PRs as ready for review more often than not.
+
+---
+
+## Amendment policy
+
+**If the PR is unmerged**: amend freely and force-push — the PR updates automatically.
+
+**If the PR is already merged**: force-pushing is futile. Amendments sit stranded on the
+feature branch and never reach default. Do not try to amend; open a new follow-up PR instead:
+
+```bash
+git checkout -B <new-branch> origin/claude/elegant-babbage-hlxnfy
+# make the fix
+git push -u origin <new-branch>
+# open PR: title "fix: <description> (follow-up to #NNN)"
+```
+
+**Post-merge verification** — after every merge, confirm the intended code actually landed:
+
+```bash
+git fetch origin
+git log --oneline origin/claude/elegant-babbage-hlxnfy | head -3   # merge commit present?
+git show origin/claude/elegant-babbage-hlxnfy:docs/index.html | grep "key_identifier"
+```
+
+A missing identifier means the wrong commit was merged (e.g. the pre-amend version).
+Catch it immediately and open a follow-up PR rather than discovering it sessions later.
+
 ---
 
 ## Cutting a release (PWA "What's New")
+
+**Hard rule: code change + `releases.json` entry + `sw.js` cache bump must all land in the
+same PR.** Splitting them across PRs creates gaps where the feature ships with a stale cache,
+or the release dot fires before the code is live. If you catch yourself opening a separate PR
+for "just the cache bump" or "just the release notes", stop — that's the failure mode.
+
+The only exception: housekeeping PRs (typos, session notes, refactors) with no user-facing
+change skip the release surface entirely.
 
 When a PR ships a user-facing change, update the release surface in the **same PR** — all
 three together, or the unseen-update dot and cache will desync:
@@ -53,6 +89,9 @@ three together, or the unseen-update dot and cache will desync:
    with `title`, `tag` (`feature|fix|data|improvement`), optional `tab`, and `notes[]`.
 2. Set top-level `current` to the new `version`.
 3. Bump `CACHE` in `docs/sw.js`.
+
+**Pre-commit check**: if your diff touches `docs/index.html` with a user-facing change, confirm
+`docs/releases.json` and `docs/sw.js` are also staged before committing.
 
 Glossary copy: the `GUIDE` constant in `docs/index.html` is kept **verbatim-synced** with the
 User one-liners in `knowledge/moaty-metrics.md`. Adding a metric ⇒ add its `GUIDE` entry.
@@ -193,6 +232,10 @@ A working block ends when you push a commit, finish a feature slice, or are abou
 - [ ] **PR open for every commit on the branch** — run `git log --oneline origin/claude/elegant-babbage-hlxnfy..HEAD` to confirm nothing is stranded
 - [ ] `git status` clean — no untracked files containing work
 - [ ] Tests pass: `python3 -m pytest tests/ -q`
+- [ ] **Post-merge spot-check**: for each PR merged this session, verify a key identifier from the change is visible in default — catches the "amended after merge" failure mode before it compounds:
+  ```bash
+  git show origin/claude/elegant-babbage-hlxnfy:docs/index.html | grep "key_identifier"
+  ```
 
 ### Session-notes commit ordering trap
 

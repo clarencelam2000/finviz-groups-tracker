@@ -398,6 +398,24 @@ When you ship a user-facing change, do **all three** of these in the same PR:
 3. **Bump** `CACHE` in `docs/sw.js` (e.g. `finviz-v10` → `v11`) so the new shell +
    `releases.json` aren't served from a stale cache.
 
+> **Hard rule:** code change + `releases.json` entry + `sw.js` cache bump must all land in the
+> same PR. Splitting them across PRs creates gaps where the feature ships with a stale cache,
+> or the release dot fires before the code is live. If you catch yourself opening a separate PR
+> for "just the cache bump", stop — that's the failure mode. The only exception: housekeeping
+> PRs (typos, session notes, refactors) with no user-facing change skip the release surface
+> entirely.
+
+**Pre-commit check**: if your diff touches `docs/index.html` with a user-facing change, confirm
+`docs/releases.json` and `docs/sw.js` are also staged before committing.
+
+**Amendment policy** — if a PR is already merged, amendments are stranded on the feature branch
+and never reach default. Do not amend; open a new follow-up PR from default. After every merge,
+spot-check that the intended code landed:
+```bash
+git show origin/claude/elegant-babbage-hlxnfy:docs/index.html | grep "key_identifier"
+```
+A missing identifier means the pre-amend version was merged. Catch it immediately.
+
 > The in-app **Guide** glossary copy lives in the `GUIDE` constant in `docs/index.html`,
 > copied **verbatim** from the User one-liners in `knowledge/moaty-metrics.md`. The legend
 > reads the live threshold constants (`REGIME_THRESHOLD`, `ACCEL_*`, `SLOPE_*`) so it can't

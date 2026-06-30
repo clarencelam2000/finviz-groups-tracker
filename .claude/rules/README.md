@@ -11,5 +11,7 @@
 
 - **Starting a session** → `branch-commit-discipline.md` § Session-start checklist
 - **About to commit** → `branch-commit-discipline.md` § Commit message style guide + Testing requirements
+- **Shipping a user-facing change** → `branch-commit-discipline.md` § Cutting a release (code + releases.json + sw.js cache bump — one PR, never split)
+- **PR already merged, need to fix** → `branch-commit-discipline.md` § Amendment policy (open a follow-up PR; never amend after merge)
 - **Touching data logic** → `data-pipeline.md`
-- **Ending a session** → `branch-commit-discipline.md` § Session handoff checklist
+- **Ending a session** → `branch-commit-discipline.md` § Session handoff checklist (includes post-merge spot-check)
