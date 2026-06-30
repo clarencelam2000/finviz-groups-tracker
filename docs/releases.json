@@ -1,6 +1,19 @@
 {
-  "current": "2026.06.30",
+  "current": "2026.06.30.1",
   "releases": [
+    {
+      "version": "2026.06.30.1",
+      "date": "2026-06-30",
+      "title": "Picks: group deep-links + visible external links",
+      "tag": "improvement",
+      "tab": "picks",
+      "notes": [
+        "Focus view: each card now shows a tappable chip (e.g. Semiconductors · Leaders) that jumps straight to the Lookup tab for that group — full rotation picture in one tap.",
+        "All view: group header names are now tappable too, linking to the same Lookup deep-dive.",
+        "Expanded card: Finviz and TradingView links are now pill buttons (more visible), and a new 'Peers in group ↗' button opens the Stage-2 Finviz screener pre-filtered to that industry.",
+        "Fixed a bug where the Lookup deep-link showed 'not separately tracked' instead of the group's data."
+      ]
+    },
     {
       "version": "2026.06.30",
       "date": "2026-06-30",
