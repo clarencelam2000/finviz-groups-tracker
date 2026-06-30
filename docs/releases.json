@@ -1,6 +1,18 @@
 {
-  "current": "2026.06.30.4",
+  "current": "2026.06.30.5",
   "releases": [
+    {
+      "version": "2026.06.30.5",
+      "date": "2026-06-30",
+      "title": "Charts deep-links across Picks and Lookup",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "New \"Charts\" links open a Finviz charts grid for an exact set of tickers — every name in a group, every Focus pick, or all of today's picks at once.",
+        "Find them next to each group's name in the Picks All view, at the top of the All and Focus lists, and in the Lookup tab's Stage-2 section.",
+        "Picks tab now remembers your scroll position when you switch tabs and come back."
+      ]
+    },
     {
       "version": "2026.06.30.4",
       "date": "2026-06-30",
