@@ -443,6 +443,16 @@
     const BUTTON_SORT         = 'sma50';                                       // sort by distance from 50MA
     const BUTTON_FT           = '4';                                           // ft=4 = descriptive mode
 
+    // Display labels and chip colors for picks list_category bucket values.
+    // Moved to module scope so renderLookupStage2() and renderPickRow() share one definition.
+    const CATEGORY_LABEL = { leaders: 'Leaders', emerging: 'Emerging', accel: 'Accel', rs_new_high: 'RS New High' };
+    const CATEGORY_CHIP_CLS = {
+      leaders:     'bg-emerald-900/40 text-emerald-400',
+      emerging:    'bg-blue-900/40 text-blue-400',
+      accel:       'bg-amber-900/40 text-amber-400',
+      rs_new_high: 'bg-purple-900/40 text-purple-400',
+    };
+
     // ── Guide / Glossary content ───────────────────────────────────────────
     // The metric `oneLiner` strings are copied VERBATIM from the "User one-liner"
     // lines in knowledge/moaty-metrics.md — that file is the single source of
@@ -3127,12 +3137,15 @@
 
         const allPicks = state.picksData;
         let industryPicks = [];
+        const groupCategories = new Set(); // buckets this group qualified for today
 
         if (allPicks && allPicks.length > 0) {
+          // Collect categories before C6 filter — shows why the group was selected.
           // Filter picks for this industry, apply C6 base filter, then deduplicate by ticker.
           const seen = new Set();
           for (const r of allPicks) {
             if ((r.group || '') !== industryName) continue;
+            if (r.list_category) groupCategories.add(r.list_category);
             const capB = _pCapB(r['Market Cap']);
             if (isNaN(capB) || capB <= MIN_MARKET_CAP_B) continue;
             const sma50  = _pPct(r['SMA50']);
@@ -3157,10 +3170,21 @@
           });
         }
 
+        // Category chips — ordered leaders → emerging → accel → rs_new_high.
+        const catOrder = ['leaders', 'emerging', 'accel', 'rs_new_high'];
+        const chips = catOrder
+          .filter(c => groupCategories.has(c))
+          .map(c => `<span class="text-[0.6rem] px-1.5 py-0.5 rounded-full ${CATEGORY_CHIP_CLS[c] || 'bg-slate-700/60 text-slate-300'}">${CATEGORY_LABEL[c] || c}</span>`)
+          .join('');
+
         html += `<div class="mt-4">
-          <div class="flex items-center justify-between gap-2 mb-2">
+          <div class="flex items-center justify-between gap-2 mb-1">
             <span class="text-xs font-medium text-slate-300">Stage-2 names in this group</span>
             ${btnHtml}
+          </div>
+          <div class="flex items-center gap-1 mb-2 flex-wrap">
+            ${chips ? `<div class="flex items-center gap-1">${chips}</div>` : ''}
+            <span class="ml-auto text-[0.6rem] text-slate-500 whitespace-nowrap shrink-0">today's picks · >$5B cap · screener shows all sizes</span>
           </div>`;
 
         if (industryPicks.length > 0) {
@@ -3354,7 +3378,6 @@
       opts = opts || {};
       const ticker  = r.ticker || r.Ticker || '';
       const company = (r.Company || '').slice(0, 18);
-      const CATEGORY_LABEL = { leaders: 'Leaders', emerging: 'Emerging', accel: 'Accel', rs_new_high: 'RS New High' };
       const atrExt  = _pF(r.atr_ext_50);
       const atrStr  = isNaN(atrExt) ? '—' : atrExt.toFixed(1) + '×';
       const isTrim  = !isNaN(atrExt) && atrExt >= ATR_EXT_TRIM;
