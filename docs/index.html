@@ -3186,13 +3186,22 @@
           });
         }
 
-        // Compute Focus scores for qualifying picks (same DQ gate as Picks tab Focus view).
-        const focusCandidates = industryPicks.filter(r => {
+        // Global Focus scoring: pool = all today's picks (same as Picks tab Focus ★ view),
+        // so scores are directly comparable across tabs. A stock in a stronger group
+        // legitimately outscores an equally tight/quiet stock in a weaker one.
+        // Deduplicate by ticker — same stock can appear in multiple categories but belongs
+        // to one group, so metrics are identical and double-counting skews normalization.
+        const _gSeen = new Set();
+        const globalFocusCandidates = (allPicks || []).filter(r => {
           const ext = _pF(r.atr_ext_50);
-          return !isNaN(ext) && ext > 0 && ext <= ATR_EXT_ACTIONABLE;
+          if (isNaN(ext) || ext <= 0 || ext > ATR_EXT_ACTIONABLE) return false;
+          const t = r.ticker || r.Ticker || '';
+          if (_gSeen.has(t)) return false;
+          _gSeen.add(t);
+          return true;
         });
-        const focusScored = computeFocusScores(focusCandidates);
-        const lookupFocusMap = new Map(focusScored.map(s => [s.r.ticker || s.r.Ticker || '', s]));
+        const globalFocusScored = computeFocusScores(globalFocusCandidates);
+        const lookupFocusMap = new Map(globalFocusScored.map(s => [s.r.ticker || s.r.Ticker || '', s]));
 
         // Category chips — ordered leaders → emerging → accel → rs_new_high.
         const catOrder = ['leaders', 'emerging', 'accel', 'rs_new_high'];
