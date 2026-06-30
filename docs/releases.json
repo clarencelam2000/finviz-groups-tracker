@@ -1,6 +1,17 @@
 {
-  "current": "2026.06.30.2",
+  "current": "2026.06.30.3",
   "releases": [
+    {
+      "version": "2026.06.30.3",
+      "date": "2026-06-30",
+      "title": "Strength: sector breadth timeframe toggles",
+      "tag": "feature",
+      "tab": "strength",
+      "notes": [
+        "The Sector Breadth card on the Strength tab now has timeframe toggle buttons: Week, Month, 3Mo (quarter), and 6Mo (half-year).",
+        "Switch between timeframes to see whether sector leadership is broad across short and long horizons, or concentrated in just one window."
+      ]
+    },
     {
       "version": "2026.06.30.2",
       "date": "2026-06-30",
