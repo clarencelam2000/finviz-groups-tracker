@@ -539,6 +539,9 @@
         { id: 'focus_score', label: 'Focus score', tabs: ['picks'],
           oneLiner: 'A blended 0–100 quality score ranking Focus picks by group strength, how tight the nearest MA stop is, and how quiet today\'s bar was — then discounted for extension beyond 3.5×.',
           detail: 'score = base × (1 − extension_penalty). base = 40% group strength (grp_sum_mid_rank, inverted) + 40% stop tightness (nearest positive MA below price, inverted) + 20% quiet bar (range/ATR, inverted). Extension penalty ramps from 0 at 2.5× to 50% at 4× (ATR_EXT_ACTIONABLE). All three components use the same min–max ruler across today\'s Focus pool so weights are literal. Score always ∈ [0, 1]. Shown as a debug breakdown inside the expandable risk panel while tuning (Phase 3b).' },
+        { id: 'price_basis', label: 'Price basis (Last / HoD)', tabs: ['picks'],
+          oneLiner: 'Switches the risk panel between two measurement bases: Last (closing price, the default) and HoD (High of Day — the realistic breakout entry price for the next session).',
+          detail: 'Last basis uses the closing price for all stop-distance metrics (atr_ext_50, risk_20ma_pct, risk_50ma_pct, $/sh risk, stop dist). HoD basis substitutes the prior session\'s High as the entry price — the level a breakout buyer would actually fill. Only stop-distance metrics re-base; bar properties (range_atr, ATR%) and MA dollar levels stay on the close price regardless of basis. State is per-card and ephemeral: resets to Last when the panel collapses. In HoD mode the "trim" label becomes "extended" to signal stretch from the real entry, not a position-management instruction. Phase B (global tab-level toggle) is planned but not yet implemented.' },
       ],
       howto: [
         'Each card is one group: a rank badge on the left, the selected timeframe’s % on the right, and momentum below the name.',
@@ -3215,6 +3218,135 @@
       return 'text-emerald-400';
     }
 
+    // Per-card HoD/Last basis state. Key = same key used for risk-panel-{key}.
+    // Ephemeral: cleared on collapse. No localStorage in Phase A (§8 deferred).
+    window._pickCardBasis = window._pickCardBasis || {};
+
+    // deriveRiskMetrics(row, basis) — pure function; re-derives the price-relative risk
+    // metrics for a given basis: 'last' uses close price, 'hod' uses the session High.
+    // §3 split: only the "where am I relative to my stop" family re-bases on P; bar/
+    // instrument properties (range_atr, volatility, MA dollar levels) always stay on close.
+    // NaN-safe throughout — any blank/missing input yields NaN for that field, never throws.
+    // Anti-drift: calling with basis='last' must reproduce stored CSV values for
+    // atr_ext_50 / risk_20ma_pct / risk_50ma_pct (regression anchor per §7 of the plan).
+    // MANDATE: both Phase A cards and Phase B global gate/score/sort read through this
+    // function — do not inline the basis swap separately.
+    function deriveRiskMetrics(row, basis) {
+      const price  = _pF(row['Price']);
+      const high   = _pF(row['High']);
+      const atr    = _pF(row['ATR']);
+      const sma20v = _pPct(row['SMA20']);
+      const sma50v = _pPct(row['SMA50']);
+
+      // P = entry price. Close denominator for MA reconstruction is always price (not P).
+      const P = (basis === 'hod' && !isNaN(high)) ? high : price;
+
+      // MA dollar levels reconstructed from close — fixed regardless of basis (§3).
+      const sma20Price = (!isNaN(price) && !isNaN(sma20v)) ? price / (1 + sma20v / 100) : NaN;
+      const sma50Price = (!isNaN(price) && !isNaN(sma50v)) ? price / (1 + sma50v / 100) : NaN;
+
+      // ATR extension: how many ATR multiples P is above the 50MA.
+      const atr_ext_50 = (!isNaN(P) && !isNaN(sma50Price) && !isNaN(atr) && atr > 0)
+        ? (P - sma50Price) / atr : NaN;
+
+      // Risk fractions: (P − MA_price) / P
+      const risk_20ma_pct = (!isNaN(P) && !isNaN(sma20Price) && P > 0)
+        ? (P - sma20Price) / P : NaN;
+      const risk_50ma_pct = (!isNaN(P) && !isNaN(sma50Price) && P > 0)
+        ? (P - sma50Price) / P : NaN;
+
+      // Dollar risk per share
+      const risk20DolPerSh = (!isNaN(P) && !isNaN(risk_20ma_pct)) ? P * risk_20ma_pct : NaN;
+      const risk50DolPerSh = (!isNaN(P) && !isNaN(risk_50ma_pct)) ? P * risk_50ma_pct : NaN;
+
+      // Stop distance in ATR: nearest positive-risk MA stop.
+      const pos20 = (!isNaN(risk_20ma_pct) && risk_20ma_pct > 0) ? risk_20ma_pct : null;
+      const pos50 = (!isNaN(risk_50ma_pct) && risk_50ma_pct > 0) ? risk_50ma_pct : null;
+      let nearestFrac = null;
+      if (pos20 !== null && pos50 !== null) nearestFrac = Math.min(pos20, pos50);
+      else if (pos50 !== null) nearestFrac = pos50;
+      else if (pos20 !== null) nearestFrac = pos20;
+      const stopDistAtr = (!isNaN(atr) && !isNaN(P) && nearestFrac !== null && atr > 0)
+        ? (nearestFrac * P / atr) : NaN;
+
+      return { atr_ext_50, risk_20ma_pct, risk_50ma_pct, sma20Price, sma50Price,
+               risk20DolPerSh, risk50DolPerSh, stopDistAtr, P };
+    }
+
+    // __buildRiskBasisContent(rowData, basis) — renders the basis-dependent section of
+    // the risk panel (the two grids + HoD context note). Returns an HTML string.
+    // Called from renderPickRow (initial render, basis='last') and __setPickBasis (toggle).
+    // rowData is the minimal serialised row object stored in data-row-json on the panel.
+    window.__buildRiskBasisContent = function(rowData, basis) {
+      const dm     = deriveRiskMetrics(rowData, basis);
+      const price  = _pF(rowData['Price']);
+      const atr    = _pF(rowData['ATR']);
+      const rangeAtr = _pF(rowData['range_atr']);
+      // Volatility stays on close (instrument property — §3).
+      const atrp   = (!isNaN(atr) && !isNaN(price) && price > 0) ? (atr / price * 100) : NaN;
+      const isHod  = (basis === 'hod');
+
+      const fmtPct  = v => isNaN(v) ? '—' : (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
+      const fmtDol  = v => isNaN(v) ? '—' : (v >= 0 ? '' : '−') + '$' + Math.abs(v).toFixed(2);
+      const fmtF1   = v => isNaN(v) ? '—' : v.toFixed(2);
+      const fmtLvl  = v => isNaN(v) ? '—' : '$' + v.toFixed(2);
+      const riskCls = v => isNaN(v) ? 'text-slate-500' : (v >= 0 ? 'text-sky-400' : 'text-amber-400');
+
+      const risk20Pct = isNaN(dm.risk_20ma_pct) ? NaN : dm.risk_20ma_pct * 100;
+      const risk50Pct = isNaN(dm.risk_50ma_pct) ? NaN : dm.risk_50ma_pct * 100;
+
+      const atrExt    = dm.atr_ext_50;
+      const atrStr    = isNaN(atrExt) ? '—' : atrExt.toFixed(1) + '×';
+      const atrCls    = atrTextColor(atrExt);
+      const isOverExt = !isNaN(atrExt) && atrExt >= ATR_EXT_TRIM;
+      // In HoD mode: "extended" replaces "trim" — "trim" is a position-management
+      // instruction (reduce a held position); in a HoD what-if you hold nothing at
+      // that price, so the honest label for the same red state is "extended" (§5.3).
+      const extLabel  = isHod ? 'extended' : 'trim';
+
+      const high   = _pF(rowData['High']);
+      const hodStr = isNaN(high) ? '—' : '$' + high.toFixed(2);
+
+      const contextNote = isHod
+        ? `<div class="mb-2 text-slate-400 italic text-xs">Risk measured from ${hodStr} entry (last session high).</div>`
+        : '';
+
+      return `${contextNote}<div class="grid grid-cols-3 gap-x-3 gap-y-2 mb-2">
+          <div>
+            <div class="text-slate-500 mb-0.5">HoD (next buy trigger)</div>
+            <div class="text-white font-medium">${hodStr}</div>
+          </div>
+          <div>
+            <div class="text-slate-500 mb-0.5">20MA stop</div>
+            <div class="text-slate-300">${fmtLvl(dm.sma20Price)}</div>
+            <div class="${riskCls(risk20Pct)}">${fmtPct(risk20Pct)} · ${fmtDol(dm.risk20DolPerSh)}/sh</div>
+          </div>
+          <div>
+            <div class="text-slate-500 mb-0.5">50MA stop (wider)</div>
+            <div class="text-slate-300">${fmtLvl(dm.sma50Price)}</div>
+            <div class="${riskCls(risk50Pct)}">${fmtPct(risk50Pct)} · ${fmtDol(dm.risk50DolPerSh)}/sh</div>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-x-3 gap-y-2 border-t border-slate-700/30 pt-2">
+          <div>
+            <div class="text-slate-500 mb-0.5">Ext (×50MA)</div>
+            <div class="${atrCls} font-medium">${atrStr}${isOverExt ? ' <span class="text-red-500 font-normal">' + extLabel + '</span>' : ''}</div>
+          </div>
+          <div>
+            <div class="text-slate-500 mb-0.5">Range/ATR</div>
+            <div class="text-slate-300">${fmtF1(rangeAtr)}</div>
+          </div>
+          <div>
+            <div class="text-slate-500 mb-0.5">Volatility (ATR %)</div>
+            <div class="text-slate-300">${isNaN(atrp) ? '—' : atrp.toFixed(1) + '%'}</div>
+          </div>
+          <div>
+            <div class="text-slate-500 mb-0.5">Stop dist (ATR)</div>
+            <div class="text-slate-300">${fmtF1(dm.stopDistAtr)}</div>
+          </div>
+        </div>`;
+    };
+
     // renderPickRow(r, opts) — shared row renderer (3b.0).
     // Called from renderPicks (All + Focus views) and will be reused by 3c Lookup section.
     // opts: { rowIndex, expandable, showScore, showGroupSubtitle, score, base, penaltyFrac, group_n, tight_n, quiet_n }
@@ -3259,43 +3391,22 @@
       // Risk panel (always built when expandable; hidden by default)
       let riskHtml = '';
       if (opts.expandable) {
-        const price    = _pF(r['Price']);
-        const sma20v   = _pPct(r['SMA20']);
-        const sma20Price = (!isNaN(price) && !isNaN(sma20v)) ? price / (1 + sma20v / 100) : NaN;
-        const sma50Price = (!isNaN(price) && !isNaN(sma50v)) ? price / (1 + sma50v / 100) : NaN;
+        const cardBasis = (window._pickCardBasis && window._pickCardBasis[key]) || 'last';
 
-        // risk_*_pct stored as fractions (e.g. 0.0115 = 1.15%)
-        const risk20f = _pF(r['risk_20ma_pct']);
-        const risk50f = _pF(r['risk_50ma_pct']);
-        const risk20Pct = isNaN(risk20f) ? NaN : risk20f * 100;
-        const risk50Pct = isNaN(risk50f) ? NaN : risk50f * 100;
-        // Dollar risk = price × risk_fraction (preserves sign: negative = MA above price)
-        const risk20Dol = (!isNaN(price) && !isNaN(risk20f)) ? price * risk20f : NaN;
-        const risk50Dol = (!isNaN(price) && !isNaN(risk50f)) ? price * risk50f : NaN;
+        // Minimal row data serialised into a data attribute so __setPickBasis can
+        // re-derive metrics without a full list re-render.
+        const rowData = {
+          'Price':     r['Price']     || '',
+          'High':      r['High']      || '',
+          'ATR':       r['ATR']       || '',
+          'SMA20':     r['SMA20']     || '',
+          'SMA50':     r['SMA50']     || '',
+          'range_atr': r['range_atr'] || '',
+        };
+        const rowDataJson = JSON.stringify(rowData).replace(/'/g, '&#39;');
 
-        const atr      = _pF(r['ATR']);
-        const high     = _pF(r['High']);
-        const rangeAtr = _pF(r['range_atr']);
-        // Volatility (ATR %) = ATR / Price as %
-        const atrp = (!isNaN(atr) && !isNaN(price) && price > 0) ? (atr / price * 100) : NaN;
-        // Stop distance (ATR) = nearest positive-risk MA stop in ATR units
-        const pos20 = (!isNaN(risk20f) && risk20f > 0) ? risk20f : null;
-        const pos50 = (!isNaN(risk50f) && risk50f > 0) ? risk50f : null;
-        let nearestFrac = null;
-        if (pos20 !== null && pos50 !== null) nearestFrac = Math.min(pos20, pos50);
-        else if (pos50 !== null) nearestFrac = pos50;
-        else if (pos20 !== null) nearestFrac = pos20;
-        const stopDistAtr = (!isNaN(atr) && !isNaN(price) && nearestFrac !== null && atr > 0)
-          ? (nearestFrac * price / atr) : NaN;
-
-        const hodStr = isNaN(high) ? '—' : '$' + high.toFixed(2);
-        const fmtPct = v => isNaN(v) ? '—' : (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
-        const fmtDol = v => isNaN(v) ? '—' : (v >= 0 ? '' : '−') + '$' + Math.abs(v).toFixed(2);
-        const fmtF1  = v => isNaN(v) ? '—' : v.toFixed(2);
-        const fmtLvl = v => isNaN(v) ? '—' : '$' + v.toFixed(2);
-        const riskCls = v => isNaN(v) ? 'text-slate-500' : (v >= 0 ? 'text-sky-400' : 'text-amber-400');
-
-        // Score debug breakdown (tuning aid — shows math inside risk panel)
+        // Score debug (tuning aid — always uses CSV-basis metrics; scores don't re-base
+        // in Phase A since gating/scoring stay on Last per §5.4).
         let scoreDebug = '';
         if (opts.showScore && !isNaN(opts.score)) {
           const fn = v => (isNaN(v) ? '—' : v.toFixed(2));
@@ -3303,50 +3414,27 @@
           const g   = isNaN(opts.group_n) ? 0 : opts.group_n;
           const t   = isNaN(opts.tight_n) ? 0 : opts.tight_n;
           const q   = isNaN(opts.quiet_n) ? 0 : opts.quiet_n;
+          const csvAtrExt = _pF(r.atr_ext_50);
           scoreDebug = `
             <div class="mt-2 pt-2 border-t border-slate-700/50 font-mono text-xs text-slate-500 space-y-0.5">
               <div>Group&nbsp;&nbsp;${fn(g)} × ${FOCUS_W_GROUP.toFixed(2)} = ${(g * FOCUS_W_GROUP).toFixed(2)}</div>
               <div>Tight&nbsp;&nbsp;${fn(t)} × ${FOCUS_W_TIGHT.toFixed(2)} = ${(t * FOCUS_W_TIGHT).toFixed(2)}</div>
               <div>Quiet&nbsp;&nbsp;${fn(q)} × ${FOCUS_W_QUIET.toFixed(2)} = ${(q * FOCUS_W_QUIET).toFixed(2)} → base ${fn(opts.base)}</div>
-              <div>Ext&nbsp;&nbsp;&nbsp;&nbsp;${isNaN(atrExt) ? '—' : atrExt.toFixed(1) + '×'} → ×${(1 - pf).toFixed(2)} → score ${fn(opts.score)}</div>
+              <div>Ext&nbsp;&nbsp;&nbsp;&nbsp;${isNaN(csvAtrExt) ? '—' : csvAtrExt.toFixed(1) + '×'} → ×${(1 - pf).toFixed(2)} → score ${fn(opts.score)}</div>
             </div>`;
         }
 
         riskHtml = `
-          <div id="risk-panel-${key}" class="hidden px-3 pb-3 pt-1 bg-slate-800/40 border-t border-slate-700/30 text-xs">
-            <div class="grid grid-cols-3 gap-x-3 gap-y-2 mb-2">
-              <div>
-                <div class="text-slate-500 mb-0.5">HoD (next buy trigger)</div>
-                <div class="text-white font-medium">${hodStr}</div>
-              </div>
-              <div>
-                <div class="text-slate-500 mb-0.5">20MA stop</div>
-                <div class="text-slate-300">${fmtLvl(sma20Price)}</div>
-                <div class="${riskCls(risk20Pct)}">${fmtPct(risk20Pct)} · ${fmtDol(risk20Dol)}/sh</div>
-              </div>
-              <div>
-                <div class="text-slate-500 mb-0.5">50MA stop (wider)</div>
-                <div class="text-slate-300">${fmtLvl(sma50Price)}</div>
-                <div class="${riskCls(risk50Pct)}">${fmtPct(risk50Pct)} · ${fmtDol(risk50Dol)}/sh</div>
+          <div id="risk-panel-${key}" class="hidden px-3 pb-3 pt-1 bg-slate-800/40 border-t border-slate-700/30 text-xs" data-row-json='${rowDataJson}'>
+            <div class="flex items-center gap-2 pb-1.5 mb-2 border-b border-slate-700/30">
+              <span class="text-slate-500">Risk basis:</span>
+              <div class="flex gap-1 ml-auto">
+                <button id="basis-btn-last-${key}" onclick="event.stopPropagation();__setPickBasis('${key}','last')" class="px-2 py-0.5 text-xs rounded font-medium ${cardBasis === 'last' ? 'bg-slate-600 text-white' : 'bg-slate-800 text-slate-400'} transition-colors">Last</button>
+                <button id="basis-btn-hod-${key}" onclick="event.stopPropagation();__setPickBasis('${key}','hod')" class="px-2 py-0.5 text-xs rounded font-medium ${cardBasis === 'hod' ? 'bg-slate-600 text-white' : 'bg-slate-800 text-slate-400'} transition-colors">HoD</button>
               </div>
             </div>
-            <div class="grid grid-cols-3 gap-x-3 gap-y-2 border-t border-slate-700/30 pt-2">
-              <div>
-                <div class="text-slate-500 mb-0.5">Ext (×50MA)</div>
-                <div class="${atrCls} font-medium">${atrStr}${isTrim ? ' <span class="text-red-500 font-normal">trim</span>' : ''}</div>
-              </div>
-              <div>
-                <div class="text-slate-500 mb-0.5">Range/ATR</div>
-                <div class="text-slate-300">${fmtF1(rangeAtr)}</div>
-              </div>
-              <div>
-                <div class="text-slate-500 mb-0.5">Volatility (ATR %)</div>
-                <div class="text-slate-300">${isNaN(atrp) ? '—' : atrp.toFixed(1) + '%'}</div>
-              </div>
-              <div>
-                <div class="text-slate-500 mb-0.5">Stop dist (ATR)</div>
-                <div class="text-slate-300">${fmtF1(stopDistAtr)}</div>
-              </div>
+            <div id="risk-basis-content-${key}">
+              ${window.__buildRiskBasisContent(rowData, cardBasis)}
             </div>
             ${scoreDebug}
             <div class="flex gap-3 mt-2 pt-2 border-t border-slate-700/50">
@@ -3463,11 +3551,34 @@
     }
 
     // Expand/collapse a risk panel row without re-rendering the list.
+    // On collapse: resets the per-card basis to 'last' (§5.2 — ephemeral state rule).
     window.__togglePickRow = function(key) {
       const panel = document.getElementById('risk-panel-' + key);
       const chev  = document.getElementById('chev-' + key);
-      if (panel) panel.classList.toggle('hidden');
-      if (chev)  chev.classList.toggle('rotate-180');
+      if (panel) {
+        const wasHidden = panel.classList.contains('hidden');
+        panel.classList.toggle('hidden');
+        if (!wasHidden && window._pickCardBasis && window._pickCardBasis[key] !== 'last') {
+          window.__setPickBasis(key, 'last');
+        }
+      }
+      if (chev) chev.classList.toggle('rotate-180');
+    };
+
+    window.__setPickBasis = function(key, basis) {
+      window._pickCardBasis = window._pickCardBasis || {};
+      window._pickCardBasis[key] = basis;
+      const btnLast = document.getElementById('basis-btn-last-' + key);
+      const btnHod  = document.getElementById('basis-btn-hod-' + key);
+      const activeCls   = 'px-2 py-0.5 text-xs rounded font-medium bg-slate-600 text-white transition-colors';
+      const inactiveCls = 'px-2 py-0.5 text-xs rounded font-medium bg-slate-800 text-slate-400 transition-colors';
+      if (btnLast) btnLast.className = (basis === 'last') ? activeCls : inactiveCls;
+      if (btnHod)  btnHod.className  = (basis === 'hod')  ? activeCls : inactiveCls;
+      const panel = document.getElementById('risk-panel-' + key);
+      const contentEl = document.getElementById('risk-basis-content-' + key);
+      if (!panel || !contentEl) return;
+      const rowData = JSON.parse(panel.dataset.rowJson || '{}');
+      contentEl.innerHTML = window.__buildRiskBasisContent(rowData, basis);
     };
 
     // Switch between All and Focus views; updates button styles and re-renders.
