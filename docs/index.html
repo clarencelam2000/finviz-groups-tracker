@@ -3186,6 +3186,14 @@
           });
         }
 
+        // Compute Focus scores for qualifying picks (same DQ gate as Picks tab Focus view).
+        const focusCandidates = industryPicks.filter(r => {
+          const ext = _pF(r.atr_ext_50);
+          return !isNaN(ext) && ext > 0 && ext <= ATR_EXT_ACTIONABLE;
+        });
+        const focusScored = computeFocusScores(focusCandidates);
+        const lookupFocusMap = new Map(focusScored.map(s => [s.r.ticker || s.r.Ticker || '', s]));
+
         // Category chips — ordered leaders → emerging → accel → rs_new_high.
         const catOrder = ['leaders', 'emerging', 'accel', 'rs_new_high'];
         const chips = catOrder
@@ -3206,7 +3214,15 @@
         if (industryPicks.length > 0) {
           html += `<div class="bg-slate-800/60 rounded-lg overflow-hidden border border-slate-700/50">`;
           industryPicks.forEach((r, i) => {
-            html += renderPickRow(r, { rowIndex: i, expandable: true });
+            const ticker = r.ticker || r.Ticker || '';
+            const fs = lookupFocusMap.get(ticker);
+            html += renderPickRow(r, {
+              rowIndex: i,
+              expandable: true,
+              ...(fs ? { showScore: true, score: fs.score, base: fs.base,
+                         penaltyFrac: fs.penaltyFrac, group_n: fs.group_n,
+                         tight_n: fs.tight_n, quiet_n: fs.quiet_n } : {}),
+            });
           });
           html += `</div>`;
         } else if (!allPicks) {
