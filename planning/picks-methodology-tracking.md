@@ -11,7 +11,7 @@
 The picks pipeline produces two artifacts every day:
 
 - `data/picks/picks.csv` — append-only log of every stock scraped, one row per
-  `(date, ticker)`. Contains all raw data needed to reconstruct the display.
+  `(date, list_category, ticker)`. Contains all raw data needed to reconstruct the display.
 - `data/picks/picks_latest.csv` — the max-date slice of `picks.csv`; this is what
   the PWA fetches.
 
@@ -73,7 +73,7 @@ no picks before 2026-06-25.
       "params": {
         "base_filter": {
           "min_market_cap_b": 5,
-          "note": "Market Cap column in picks.csv is in billions (float). Row is excluded if market_cap <= 5.",
+          "note": "'Market Cap' column in picks.csv stores raw Finviz strings (e.g. '345.79B', '456M', '1.2T') — parse with a _parse_cap_b equivalent (strip B/M/T/K suffix, multiply by 1000/1/0.001/0.000001) before comparing to this float threshold. Row is excluded if parsed billions <= 5.",
           "ma_positioning": {
             "logic": "any",
             "conditions": [
@@ -82,7 +82,7 @@ no picks before 2026-06-25.
               "SMA50 > SMA20"
             ],
             "columns": ["SMA50", "SMA200", "SMA20"],
-            "note": "SMA* columns are % distance from MA (e.g. 5.2 = price is 5.2% above that MA). SMA50 > SMA20 in % terms is equivalent to 20MA price > 50MA price (classic uptrend). A row passes if ANY condition holds. All three NaN = fails."
+            "note": "SMA* columns are % distance from MA (e.g. 5.2 = price is 5.2% above that MA), stored as strings that may or may not include a '%' suffix (e.g. '8.33%' or '8.33') — strip '%' before parsing. SMA50 > SMA20 in % terms is equivalent to 20MA price > 50MA price (classic uptrend). A row passes if ANY condition holds. All three NaN = fails."
           }
         },
         "all_view_sort": {
@@ -217,6 +217,40 @@ def replay(
 Returns a DataFrame in display order. Minimum columns: `ticker`, `group`,
 `list_category`, `atr_ext_50`; Focus view adds `focus_score`.
 
+<<<<<<< HEAD
+=======
+### Parsing helpers
+
+Define these once at module level and use them throughout Steps 2 and 3B. They mirror
+the JS parsers (`_pCapB`, `_pPct`) in `docs/index.html` so numeric comparisons match
+PWA behaviour exactly.
+
+```python
+def _parse_cap_b(series: pd.Series) -> pd.Series:
+    """Parse 'Market Cap' strings like '345.79B', '456M', '1.2T' → float billions.
+    Mirrors JS _pCapB(). Returns NaN for '-' or unparseable values."""
+    def _one(v):
+        if not v or str(v).strip() in ('', '-'):
+            return float('nan')
+        s = str(v).strip()
+        suffix_map = {'T': 1000, 'B': 1, 'M': 0.001, 'K': 0.000001}
+        last = s[-1].upper()
+        if last in suffix_map:
+            return float(s[:-1]) * suffix_map[last]
+        return float(s)
+    return series.apply(_one)
+
+
+def _parse_pct(series: pd.Series) -> pd.Series:
+    """Parse SMA* distance strings like '8.33%' or '8.33' → float.
+    Mirrors JS _pPct(): strips '%' suffix then parses. Returns NaN for '-'."""
+    return pd.to_numeric(
+        series.astype(str).str.replace('%', '', regex=False),
+        errors='coerce'
+    )
+```
+
+>>>>>>> eb2af85 (docs: apply staff-engineer fixes to picks methodology plan)
 ### Step-by-step replay algorithm
 
 **Step 1 — Load and filter to date**
@@ -225,9 +259,19 @@ Returns a DataFrame in display order. Minimum columns: `ticker`, `group`,
 df = pd.read_csv('data/picks/picks.csv')
 df = df[df['date'] == target_date]
 if len(df) == 0:
+<<<<<<< HEAD
     raise ValueError(
         f"No picks for {target_date}. "
         "Picks pipeline started 2026-06-25 — earlier dates have no data."
+=======
+    if target_date < '2026-06-25':
+        raise ValueError(
+            f"No picks for {target_date}: picks pipeline started 2026-06-25."
+        )
+    raise ValueError(
+        f"No picks found for {target_date}. The date is valid but no data was captured "
+        "(possible causes: weekend/holiday, Cloudflare block that aborted the run before writing)."
+>>>>>>> eb2af85 (docs: apply staff-engineer fixes to picks methodology plan)
     )
 ```
 
@@ -236,6 +280,7 @@ if len(df) == 0:
 > of the 84-col Finviz block) — do not use it for joining or keying; the lowercase one
 > is the stable dedup key.
 >
+<<<<<<< HEAD
 > **Multi-category rows:** the same ticker can appear multiple rows for the same date
 > when its industry group qualifies in more than one selector bucket (e.g. a group that
 > is both a leader and an rs_new_high). Each `(ticker, list_category)` pair is a
@@ -244,18 +289,31 @@ if len(df) == 0:
 > its group qualified. The Focus `focus_score` is computed independently for each
 > `(ticker, list_category)` row (same as JS, which keys the score map on
 > `ticker + '_' + list_category`).
+=======
+> **Multi-category rows:** the same ticker can appear in multiple rows for the same date
+> when its industry group qualifies in more than one selector bucket (e.g. a group that
+> is both a leader and an rs_new_high). Each `(ticker, list_category)` pair is a
+> separate row (the dedup key in `picks.csv` is `(date, list_category, ticker)`). Do NOT
+> deduplicate before applying the base filter — both the All and Focus views preserve
+> multi-category entries, showing a stock in every section where its group qualified.
+> The Focus `focus_score` is computed independently for each `(ticker, list_category)`
+> row (same as JS, which keys the score map on `ticker + '_' + list_category`).
+>>>>>>> eb2af85 (docs: apply staff-engineer fixes to picks methodology plan)
 
 **Step 2 — Apply base display filter**
 
 ```python
-# Market cap gate (market_cap is in billions as a float)
-df = df[df['market_cap'] > methodology['params']['base_filter']['min_market_cap_b']]
+# Market cap gate. 'Market Cap' stores Finviz raw strings ('345.79B', '456M', etc.).
+# Use _parse_cap_b() to convert to float billions before numeric comparison.
+cap_b = _parse_cap_b(df['Market Cap'])
+df = df[cap_b > methodology['params']['base_filter']['min_market_cap_b']].copy()
 
-# MA positioning gate: any of (SMA50>0) OR (SMA200>0) OR (SMA50>SMA20)
-# SMA* columns are % distance floats; NaN if MA was unavailable that day.
-sma50  = pd.to_numeric(df['SMA50'],  errors='coerce')
-sma200 = pd.to_numeric(df['SMA200'], errors='coerce')
-sma20  = pd.to_numeric(df['SMA20'],  errors='coerce')
+# MA positioning gate: any of (SMA50>0) OR (SMA200>0) OR (SMA50>SMA20).
+# SMA* columns may include a '%' suffix (e.g. '8.33%') — use _parse_pct() to strip it.
+# NaN > 0 and NaN > NaN are both False in pandas, matching JS !isNaN() guard semantics.
+sma50  = _parse_pct(df['SMA50'])
+sma200 = _parse_pct(df['SMA200'])
+sma20  = _parse_pct(df['SMA20'])
 
 ma_pass = (sma50 > 0) | (sma200 > 0) | (sma50 > sma20)
 df = df[ma_pass]
@@ -271,6 +329,27 @@ ascending (least-extended first within each group). Category display order:
 Within each category, `group` names appear in alphabetical order (matching the JS
 `Object.keys(groups).sort()` behaviour).
 
+<<<<<<< HEAD
+=======
+```python
+CAT_ORDER = p['all_view_sort']['category_order']
+
+atr_n = pd.to_numeric(df['atr_ext_50'], errors='coerce')
+cat_rank = df['list_category'].map({c: i for i, c in enumerate(CAT_ORDER)}).fillna(len(CAT_ORDER))
+
+all_view = (
+    df.assign(_cat_rank=cat_rank, _atr_n=atr_n)
+    .sort_values(
+        ['_cat_rank', 'group', '_atr_n'],
+        ascending=[True, True, True],
+        na_position='last',   # NaN atr_ext_50 sorts after valid values within a group
+    )
+    .drop(columns=['_cat_rank', '_atr_n'])
+    .reset_index(drop=True)
+)
+```
+
+>>>>>>> eb2af85 (docs: apply staff-engineer fixes to picks methodology plan)
 **Step 3B — Focus view output**
 
 ```python
@@ -354,6 +433,40 @@ focus_candidates['focus_score'] = base * (1 - penalty_frac)
 focus_candidates = focus_candidates.sort_values('focus_score', ascending=False)
 ```
 
+### View dispatch (outer structure)
+
+<<<<<<< HEAD
+To compare two methodology versions on the same date, call `replay()` with different
+`methodology_version` values. The same raw `picks.csv` data drives both runs; only the
+filter/ranking constants differ.
+
+```python
+output_a = replay(date='2026-06-25', view='focus', methodology_version='v1')
+output_b = replay(date='2026-06-25', view='focus', methodology_version='v2')
+# Compare top-N overlap, rank correlation, score distribution
+```
+
+=======
+The three steps above slot into the `replay()` function like this:
+
+```python
+def replay(date=None, view='all', methodology_version=None):
+    # Step 1: load and filter to date
+    df = ...
+    # Step 2: apply base filter
+    df = ...
+    # Load the methodology version in effect on this date
+    methodology = _load_methodology(date, override=methodology_version)
+    p = methodology['params']
+
+    if view == 'all':
+        return _replay_all(df, p)     # Step 3A
+    elif view == 'focus':
+        return _replay_focus(df, p)   # Step 3B
+    else:
+        raise ValueError(f"view must be 'all' or 'focus', got {view!r}")
+```
+
 ### A/B testing pattern
 
 To compare two methodology versions on the same date, call `replay()` with different
@@ -366,14 +479,20 @@ output_b = replay(date='2026-06-25', view='focus', methodology_version='v2')
 # Compare top-N overlap, rank correlation, score distribution
 ```
 
+>>>>>>> eb2af85 (docs: apply staff-engineer fixes to picks methodology plan)
 ### CLI design (sketch)
 
 ```
 python scripts/replay_picks.py [--date YYYY-MM-DD] [--view all|focus] [--methodology-version vN] [--pretty]
 ```
 
+<<<<<<< HEAD
 - `--date`: defaults to max date in `picks.csv`; raises a clear error for dates before
   2026-06-25 (pipeline start)
+=======
+- `--date`: defaults to max date in `picks.csv`; raises a clear error for pre-2026-06-25
+  dates or any date where no picks were captured (weekend, holiday, blocked run)
+>>>>>>> eb2af85 (docs: apply staff-engineer fixes to picks methodology plan)
 - `--view`: `all` (default) or `focus`
 - `--methodology-version`: defaults to the version effective on `--date`; override for
   A/B testing
