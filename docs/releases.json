@@ -1,6 +1,18 @@
 {
-  "current": "2026.07.01.4",
+  "current": "2026.07.01.5",
   "releases": [
+    {
+      "version": "2026.07.01.5",
+      "date": "2026-07-01",
+      "title": "New: Ariel swing-match badges (Picks tab)",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "Picks cards now show a badge when a stock matches swing trader Ariel Hernandez's screening criteria — a leading industry group, enough dollar volume to trade, a healthy (not too quiet, not too wild) daily move, and strong earnings and sales growth.",
+        "Green ✓ = full match on all four. Amber ~ = a near-miss on one or more — tap the card to see the exact numbers against each threshold.",
+        "New Ariel filter (Off / Full / Full+Soft) in the Picks tab, defaulting to Off — it's an optional lens on the existing list, not a change to what you see by default."
+      ]
+    },
     {
       "version": "2026.07.01.4",
       "date": "2026-07-01",

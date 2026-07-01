@@ -387,6 +387,32 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   independent of how clean the chart looks.
 - **User one-liner:** "The stock's next known earnings date, color-flagged when it falls within the next 10 days — a binary event that adds risk regardless of the technical setup."
 
+## ariel_match (Ariel Hernandez swing-match — PWA Picks tab, Phase 4)
+- **Source:** PWA-computed (`arielMatch()` in `docs/index.html`). Fully client-side — derived
+  from columns already in `picks_latest.csv` (`Price`, `Avg Volume`, `ATR`, `EPS YoY TTM`,
+  `Sales YoY TTM`) and `state.data.industries.delta` (`rank_month`, `rank_quarter` for all ~144
+  industries at the latest date). Not stored in any CSV; no new scraping.
+- **Four gates**, each independently full/soft/none except the dollar-volume gate (hard boolean):
+  1. **Group top N** — `rank_month + rank_quarter` ascending sum, full ≤ `ARIEL_GROUP_TOP_N_FULL`
+     (40), soft ≤ `ARIEL_GROUP_TOP_N_SOFT` (50).
+  2. **$ volume** — `Price × Avg Volume` ≥ `ARIEL_DOLLAR_VOL_MIN` ($100M), hard floor, no soft band
+     (a liquidity floor, not a strength signal).
+  3. **Daily move** — `ATR / Price` %, full in `[ARIEL_ATR_PCT_FULL_LOW, ARIEL_ATR_PCT_FULL_HIGH]`
+     (4–7%), soft in `(ARIEL_ATR_PCT_FLOOR_SOFT, FULL_LOW)` and `(FULL_HIGH, ARIEL_ATR_PCT_CEIL_SOFT]`
+     (3–4% and 7–9%), excluded entirely outside `[3%, 9%]` (too quiet or too volatile).
+  4. **Growth** — `EPS YoY TTM` AND `Sales YoY TTM` each ≥ `ARIEL_GROWTH_MIN_FULL` (25%) for full,
+     each ≥ `ARIEL_GROWTH_MIN_SOFT` (15%) for soft; either metric below the soft floor fails the
+     whole gate (AND, not OR).
+- **Overall tier:** `full` only if all four gates are full; `soft` if all four gates clear at
+  least soft; `null` (no badge) if any gate fails outright.
+- **Signals:** a second, independent screen from the same trader whose ATR-extension formula
+  (`atr_ext_50`) this codebase already uses — see that entry above. Named and screened for
+  swing-trade setups: a leading group, tradeable liquidity, a "healthy but not reckless" daily
+  volatility band, and confirmed fundamental growth.
+- **User one-liner:** "Whether this stock clears swing trader Ariel Hernandez's four screening
+  gates at once — leading group, liquid, healthy daily movement, and strong earnings and sales
+  growth."
+
 ## Rotation Phase (AI — sectors only)
 - **Definition:** an AI-generated read of where the broad market sits in its
   cycle, labeled Early Cycle, Mid Cycle, Late Cycle, or Defensive, with a short
