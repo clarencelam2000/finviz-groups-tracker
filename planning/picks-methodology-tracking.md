@@ -217,8 +217,6 @@ def replay(
 Returns a DataFrame in display order. Minimum columns: `ticker`, `group`,
 `list_category`, `atr_ext_50`; Focus view adds `focus_score`.
 
-<<<<<<< HEAD
-=======
 ### Parsing helpers
 
 Define these once at module level and use them throughout Steps 2 and 3B. They mirror
@@ -250,7 +248,6 @@ def _parse_pct(series: pd.Series) -> pd.Series:
     )
 ```
 
->>>>>>> eb2af85 (docs: apply staff-engineer fixes to picks methodology plan)
 ### Step-by-step replay algorithm
 
 **Step 1 — Load and filter to date**
@@ -259,11 +256,6 @@ def _parse_pct(series: pd.Series) -> pd.Series:
 df = pd.read_csv('data/picks/picks.csv')
 df = df[df['date'] == target_date]
 if len(df) == 0:
-<<<<<<< HEAD
-    raise ValueError(
-        f"No picks for {target_date}. "
-        "Picks pipeline started 2026-06-25 — earlier dates have no data."
-=======
     if target_date < '2026-06-25':
         raise ValueError(
             f"No picks for {target_date}: picks pipeline started 2026-06-25."
@@ -271,7 +263,6 @@ if len(df) == 0:
     raise ValueError(
         f"No picks found for {target_date}. The date is valid but no data was captured "
         "(possible causes: weekend/holiday, Cloudflare block that aborted the run before writing)."
->>>>>>> eb2af85 (docs: apply staff-engineer fixes to picks methodology plan)
     )
 ```
 
@@ -280,16 +271,6 @@ if len(df) == 0:
 > of the 84-col Finviz block) — do not use it for joining or keying; the lowercase one
 > is the stable dedup key.
 >
-<<<<<<< HEAD
-> **Multi-category rows:** the same ticker can appear multiple rows for the same date
-> when its industry group qualifies in more than one selector bucket (e.g. a group that
-> is both a leader and an rs_new_high). Each `(ticker, list_category)` pair is a
-> separate row. Do NOT deduplicate before applying the base filter — both the All and
-> Focus views preserve multi-category entries, showing a stock in every section where
-> its group qualified. The Focus `focus_score` is computed independently for each
-> `(ticker, list_category)` row (same as JS, which keys the score map on
-> `ticker + '_' + list_category`).
-=======
 > **Multi-category rows:** the same ticker can appear in multiple rows for the same date
 > when its industry group qualifies in more than one selector bucket (e.g. a group that
 > is both a leader and an rs_new_high). Each `(ticker, list_category)` pair is a
@@ -298,7 +279,6 @@ if len(df) == 0:
 > multi-category entries, showing a stock in every section where its group qualified.
 > The Focus `focus_score` is computed independently for each `(ticker, list_category)`
 > row (same as JS, which keys the score map on `ticker + '_' + list_category`).
->>>>>>> eb2af85 (docs: apply staff-engineer fixes to picks methodology plan)
 
 **Step 2 — Apply base display filter**
 
@@ -329,8 +309,6 @@ ascending (least-extended first within each group). Category display order:
 Within each category, `group` names appear in alphabetical order (matching the JS
 `Object.keys(groups).sort()` behaviour).
 
-<<<<<<< HEAD
-=======
 ```python
 CAT_ORDER = p['all_view_sort']['category_order']
 
@@ -349,7 +327,6 @@ all_view = (
 )
 ```
 
->>>>>>> eb2af85 (docs: apply staff-engineer fixes to picks methodology plan)
 **Step 3B — Focus view output**
 
 ```python
@@ -435,18 +412,6 @@ focus_candidates = focus_candidates.sort_values('focus_score', ascending=False)
 
 ### View dispatch (outer structure)
 
-<<<<<<< HEAD
-To compare two methodology versions on the same date, call `replay()` with different
-`methodology_version` values. The same raw `picks.csv` data drives both runs; only the
-filter/ranking constants differ.
-
-```python
-output_a = replay(date='2026-06-25', view='focus', methodology_version='v1')
-output_b = replay(date='2026-06-25', view='focus', methodology_version='v2')
-# Compare top-N overlap, rank correlation, score distribution
-```
-
-=======
 The three steps above slot into the `replay()` function like this:
 
 ```python
@@ -479,20 +444,14 @@ output_b = replay(date='2026-06-25', view='focus', methodology_version='v2')
 # Compare top-N overlap, rank correlation, score distribution
 ```
 
->>>>>>> eb2af85 (docs: apply staff-engineer fixes to picks methodology plan)
 ### CLI design (sketch)
 
 ```
 python scripts/replay_picks.py [--date YYYY-MM-DD] [--view all|focus] [--methodology-version vN] [--pretty]
 ```
 
-<<<<<<< HEAD
-- `--date`: defaults to max date in `picks.csv`; raises a clear error for dates before
-  2026-06-25 (pipeline start)
-=======
 - `--date`: defaults to max date in `picks.csv`; raises a clear error for pre-2026-06-25
   dates or any date where no picks were captured (weekend, holiday, blocked run)
->>>>>>> eb2af85 (docs: apply staff-engineer fixes to picks methodology plan)
 - `--view`: `all` (default) or `focus`
 - `--methodology-version`: defaults to the version effective on `--date`; override for
   A/B testing
