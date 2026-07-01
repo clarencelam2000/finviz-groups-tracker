@@ -1,6 +1,18 @@
 {
-  "current": "2026.07.01",
+  "current": "2026.07.01.1",
   "releases": [
+    {
+      "version": "2026.07.01.1",
+      "date": "2026-07-01",
+      "title": "Focus liquidity floor + earnings-risk scoring",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "Focus now requires at least $30M avg $ volume to qualify — too-thin names are excluded outright rather than just scored low.",
+        "Focus score now also applies a gradual discount for thin (but above-floor) liquidity and for earnings landing soon, on top of the existing extension discount.",
+        "Collapsed pick-card rows now show a small red \"E\" badge next to the ticker when earnings is imminent (within 3 days) — no need to expand the card to catch it."
+      ]
+    },
     {
       "version": "2026.07.01",
       "date": "2026-07-01",
