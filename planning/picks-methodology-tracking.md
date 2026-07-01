@@ -2,7 +2,10 @@
 
 **Goal:** Make any day's Picks (All) and Focus tab output replayable from historical data, and enable A/B testing of selectors and scoring logic by versioning the methodology that was active on each date.
 
-**Status:** Plan only. No implementation yet.
+**Status:** ✅ Implemented 2026-07-01. `data/picks/display_methodology.json` (v1),
+`tests/test_picks_methodology.py`, `scripts/replay_picks.py`, and
+`tests/test_replay_picks.py` are all in place. See "Implementation notes" at the end
+of this doc for what shipped and what was deliberately deferred to v2.
 
 ---
 
@@ -468,8 +471,8 @@ Output columns: `ticker`, `group`, `list_category`, `atr_ext_50`; Focus view add
 > `tests/test_picks_methodology.py` in the same commit. The JSON is untested until the
 > drift guard exists — don't let them land separately.
 
-- [ ] Create `data/picks/display_methodology.json` with v1 entry (values above)
-- [ ] Add anti-drift guard: `tests/test_picks_methodology.py` — reads every numeric
+- [x] Create `data/picks/display_methodology.json` with v1 entry (values above)
+- [x] Add anti-drift guard: `tests/test_picks_methodology.py` — reads every numeric
   and string param from `display_methodology.json` `versions[0]` and asserts each
   matches the corresponding JS constant in `docs/index.html` (same pattern as
   `tests/test_picks_button_config.py`). **Important:** numeric constants like
@@ -484,14 +487,39 @@ Output columns: `ticker`, `group`, `list_category`, `atr_ext_50`; Focus view add
   > `current == versions[0].version` here. For now, CI catches drift only via the
   > param-value assertions in this test.
 
-- [ ] Update `CLAUDE.md` — add `display_methodology.json` to the data directory structure
+- [x] Update `CLAUDE.md` — add `display_methodology.json` to the data directory structure
   table and add a note in the "Picks pipeline" section about when to bump the version
-- [ ] Update `README.md` § Configurable parameters — add a row for `display_methodology.json`
-- [ ] Write `scripts/replay_picks.py` per the algorithm above
-- [ ] Write `tests/test_replay_picks.py` — unit tests for `normalize_inv` (cover: the
+- [x] Update `README.md` § Configurable parameters — add a row for `display_methodology.json`
+- [x] Write `scripts/replay_picks.py` per the algorithm above
+- [x] Write `tests/test_replay_picks.py` — unit tests for `normalize_inv` (cover: the
   n=1 guard, NaN → 0.5 in both the min–max and rank-based paths, the small-pool
   rank-based path, all-equal → 0.5) and the full replay pipeline against a small fixture
   CSV with at least one multi-category ticker row
+
+---
+
+## Implementation notes (2026-07-01)
+
+- **v1 matches this plan's scope exactly** (base filter, All-view sort, Focus DQ, the
+  3-component Focus score, ATR display bands) — verified against the live
+  `docs/index.html` constants at implementation time (`ATR_EXT_ACTIONABLE=4.0`,
+  `ATR_EXT_PENALTY_START=2.5`, weights `0.4/0.4/0.2`, `FOCUS_MIN_POOL=5`, etc.).
+- **Known gap, deliberately deferred:** by the time this was implemented, `docs/index.html`
+  had already grown two more Focus-score haircuts beyond what this plan scoped (Phase
+  3d's liquidity penalty gated by `FOCUS_MIN_DOLLAR_VOL`/`LIQUIDITY_PENALTY_START/MAX`,
+  and an earnings-proximity penalty gated by `EARNINGS_IMMINENT_DAYS`/`EARNINGS_CAUTION_DAYS`/
+  `EARNINGS_PENALTY_MAX`/`POST_EARNINGS_PENALTY_FRAC`), plus the whole opt-in Phase 4
+  Ariel-match filter (`ARIEL_*`). None of these are captured in v1's `params`, so
+  `scripts/replay_picks.py` reproduces the v1 formula only and will **not** bit-for-bit
+  match today's live Focus scores/eligibility. This is recorded in the JSON's
+  `known_gaps` block and tracked as **`PICKS-METH-V2`** in `.session/SPRINT.md`. Do not
+  read replay output as "what the PWA showed on that date" until v2 closes this gap.
+- **Also noticed, out of scope for this PR:** `README.md`'s existing PWA display
+  thresholds table (pre-dating this change) has stale values for `ATR_EXT_ACTIONABLE`
+  (`5.0`, should be `4.0`) and `ATR_EXT_PENALTY_START` (`3.5`, should be `2.5`) — it
+  disagrees with both `CLAUDE.md` and the live code. Not touched here to keep this diff
+  scoped to the methodology-tracking feature; flagged to the team, tracked as
+  **`DOC-DRIFT-1`** in `.session/SPRINT.md`.
 
 ---
 

@@ -341,6 +341,21 @@ These constants control when visual indicators appear or change state. All are n
 
 > The Guide's **legend** renders these thresholds live (read from JS scope), so the in-app explanation can never drift from the numbers above.
 
+### Display methodology versioning (`data/picks/display_methodology.json`)
+
+Same versioning pattern as `selector_versions.json` (`current` pointer + newest-first
+`versions[]`, looked up by largest `effective_date ≤ date`), but for the *client-side*
+constants above that determine which Picks stocks are shown and how Focus scores are
+ranked — base filter, All-view sort, Focus DQ/scoring/weights, ATR display bands.
+Whenever any of those PWA constants changes, prepend a new version entry in the same
+PR. Anti-drift guard: `tests/test_picks_methodology.py`. Full design:
+`planning/picks-methodology-tracking.md`. Replay/A-B tool: `scripts/replay_picks.py`.
+
+> **Known gap (v1):** the recorded methodology does not yet model the
+> `FOCUS_MIN_DOLLAR_VOL`/liquidity-penalty, earnings-penalty, or Ariel-match constants
+> above — see the `known_gaps` note in `display_methodology.json` and `PICKS-METH-V2`
+> in `.session/SPRINT.md`.
+
 ### Scrape schedule (`worker-cron/wrangler.toml`)
 
 The daily scrape is scheduled by the Cloudflare Worker `finviz-cron-dispatcher` (`worker-cron/`),
