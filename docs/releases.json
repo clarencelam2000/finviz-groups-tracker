@@ -1,6 +1,15 @@
 {
-  "current": "2026.07.01.3",
+  "current": "2026.07.01.4",
   "releases": [
+    {
+      "version": "2026.07.01.4",
+      "date": "2026-07-01",
+      "title": "Fix: header shifted down on Home Screen launch",
+      "tag": "fix",
+      "notes": [
+        "Fixed the header appearing shifted down (with a blank gap above it) the first moment the app is opened from the iPhone Home Screen icon, which previously required a small scroll to correct itself."
+      ]
+    },
     {
       "version": "2026.07.01.3",
       "date": "2026-07-01",
