@@ -323,6 +323,8 @@ These constants control when visual indicators appear or change state. All are n
 | `BUTTON_BASE_FILTERS` | `['cap_midover','ta_sma20_sa50','ta_sma50_pa']` | Base Finviz screener filters prepended before the `ind_<slug>` / `sec_<slug>` token. Must stay in sync with `data/picks/screener_config.json` `button.base_filters`. |
 | `BUTTON_SORT` | `'sma50'` | Sort order for the Lookup deep-link screener (ascending distance from 50MA). Must stay in sync with `data/picks/screener_config.json` `button.sort`. |
 | `BUTTON_FT` | `'4'` | `ft` (filter type) parameter for the Lookup deep-link screener. Must stay in sync with `data/picks/screener_config.json` `button.ft`. Anti-drift guard: `tests/test_picks_button_config.py`. |
+| `EARNINGS_IMMINENT_DAYS` | `3` | Picks tab expanded card: earnings-date badge turns red when the next known earnings date is within this many days. |
+| `EARNINGS_CAUTION_DAYS` | `10` | Picks tab expanded card: earnings-date badge turns amber when within this many days (and beyond `EARNINGS_IMMINENT_DAYS`). Only upcoming (non-past) dates are colored. |
 
 > The Guide's **legend** renders these thresholds live (read from JS scope), so the in-app explanation can never drift from the numbers above.
 
