@@ -30,6 +30,10 @@
     details[open] .glossary-chevron { transform: rotate(90deg); }
     .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
     .scrollbar-none::-webkit-scrollbar { display: none; }
+    /* iOS Safari auto-zooms the page on focus of any text input/select with a
+       computed font-size under 16px (ticker/search/guide-search are text-sm,
+       i.e. 14px). Forcing 16px while focused avoids the zoom. */
+    input:focus, textarea:focus, select:focus { font-size: 16px; }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
@@ -4851,7 +4855,7 @@
 
     // ── Pull-to-refresh ────────────────────────────────────────────────────
 
-    const PULL_THRESHOLD  = 65;
+    const PULL_THRESHOLD  = 110; // raised from 65 — was firing too easily during text-selection drags
     const pullIndicator   = document.getElementById('pull-indicator');
     const pullLabelEl     = document.getElementById('pull-label');
     let pullStartY   = 0;
@@ -4869,6 +4873,15 @@
 
     document.addEventListener('touchmove', e => {
       if (!pullStartY) return;
+      // A non-collapsed selection means the user is dragging to select text,
+      // not to pull-to-refresh — bail out so it can't fire mid-selection.
+      if (window.getSelection && !window.getSelection().isCollapsed) {
+        pullStartY = 0;
+        pullDist = 0;
+        pullActive = false;
+        pullIndicator.style.height = '0px';
+        return;
+      }
       pullDist = e.touches[0].clientY - pullStartY;
       if (pullDist > 8) {
         pullActive = true;

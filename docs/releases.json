@@ -1,6 +1,16 @@
 {
-  "current": "2026.07.01.2",
+  "current": "2026.07.01.3",
   "releases": [
+    {
+      "version": "2026.07.01.3",
+      "date": "2026-07-01",
+      "title": "Fix: fewer accidental refreshes, no zoom on typing",
+      "tag": "fix",
+      "notes": [
+        "Pull-to-refresh now needs a longer pull and is canceled outright if you're mid text-selection, so selecting/copying text near the top of the screen no longer triggers a refresh.",
+        "Typing in the ticker lookup or search fields no longer makes the page auto-zoom in on iPhone."
+      ]
+    },
     {
       "version": "2026.07.01.2",
       "date": "2026-07-01",
