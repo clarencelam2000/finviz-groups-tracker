@@ -330,6 +330,14 @@ These constants control when visual indicators appear or change state. All are n
 | `LIQUIDITY_PENALTY_MAX` | `0.3` | Max multiplicative Focus-score haircut for thin (but above-floor) liquidity. |
 | `EARNINGS_PENALTY_MAX` | `0.7` | Max multiplicative Focus-score haircut for imminent earnings; ramps in from `EARNINGS_CAUTION_DAYS` to `EARNINGS_IMMINENT_DAYS`, holds through day 0. |
 | `POST_EARNINGS_PENALTY_FRAC` | `0.25` | One-day carry-over penalty (fraction of `EARNINGS_PENALTY_MAX`) for a stock that reported exactly 1 day ago. 2+ days past is fully decayed. |
+| `ARIEL_GROUP_TOP_N_FULL` | `40` | Ariel match (Phase 4): group must rank in the top N industries by `rank_month + rank_quarter` (ascending sum) to fully qualify. |
+| `ARIEL_GROUP_TOP_N_SOFT` | `50` | Ariel match: soft-qualify extension for ranks 41–50 (near-miss on the group gate). |
+| `ARIEL_DOLLAR_VOL_MIN` | `100_000_000` | Ariel match: hard floor on avg $ volume (Price × Avg Volume); no soft band. |
+| `ARIEL_ATR_PCT_FLOOR_SOFT` | `3.0` | Ariel match: below this ATR/Price % the daily-move gate is excluded entirely (too quiet). |
+| `ARIEL_ATR_PCT_FULL_LOW` / `ARIEL_ATR_PCT_FULL_HIGH` | `4.0` / `7.0` | Ariel match: full-qualify band for ATR/Price % (daily move). |
+| `ARIEL_ATR_PCT_CEIL_SOFT` | `9.0` | Ariel match: above this ATR/Price % the daily-move gate is excluded entirely (too volatile). |
+| `ARIEL_GROWTH_MIN_FULL` | `25` | Ariel match: EPS YoY TTM AND Sales YoY TTM must each be at or above this % for the growth gate to fully qualify. |
+| `ARIEL_GROWTH_MIN_SOFT` | `15` | Ariel match: soft-qualify floor for EPS YoY TTM AND Sales YoY TTM — either metric below this fails the growth gate outright. |
 
 > The Guide's **legend** renders these thresholds live (read from JS scope), so the in-app explanation can never drift from the numbers above.
 
