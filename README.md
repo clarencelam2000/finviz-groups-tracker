@@ -325,6 +325,11 @@ These constants control when visual indicators appear or change state. All are n
 | `BUTTON_FT` | `'4'` | `ft` (filter type) parameter for the Lookup deep-link screener. Must stay in sync with `data/picks/screener_config.json` `button.ft`. Anti-drift guard: `tests/test_picks_button_config.py`. |
 | `EARNINGS_IMMINENT_DAYS` | `3` | Picks tab expanded card: earnings-date badge turns red when the next known earnings date is within this many days. |
 | `EARNINGS_CAUTION_DAYS` | `10` | Picks tab expanded card: earnings-date badge turns amber when within this many days (and beyond `EARNINGS_IMMINENT_DAYS`). Only upcoming (non-past) dates are colored. |
+| `FOCUS_MIN_DOLLAR_VOL` | `30_000_000` | Focus scoring hard gate: avg $ volume (Price × Avg Volume) must be at or above this for a stock to be a Focus candidate. |
+| `LIQUIDITY_PENALTY_START` | `60_000_000` | Above this avg $ volume, zero Focus-score liquidity penalty; ramps to `LIQUIDITY_PENALTY_MAX` at the `FOCUS_MIN_DOLLAR_VOL` floor. |
+| `LIQUIDITY_PENALTY_MAX` | `0.3` | Max multiplicative Focus-score haircut for thin (but above-floor) liquidity. |
+| `EARNINGS_PENALTY_MAX` | `0.7` | Max multiplicative Focus-score haircut for imminent earnings; ramps in from `EARNINGS_CAUTION_DAYS` to `EARNINGS_IMMINENT_DAYS`, holds through day 0. |
+| `POST_EARNINGS_PENALTY_FRAC` | `0.25` | One-day carry-over penalty (fraction of `EARNINGS_PENALTY_MAX`) for a stock that reported exactly 1 day ago. 2+ days past is fully decayed. |
 
 > The Guide's **legend** renders these thresholds live (read from JS scope), so the in-app explanation can never drift from the numbers above.
 

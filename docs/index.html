@@ -450,6 +450,26 @@
     const EARNINGS_IMMINENT_DAYS = 3;   // red: earnings within this many days
     const EARNINGS_CAUTION_DAYS  = 10;  // amber: earnings within this many days (and > IMMINENT)
 
+    // Focus scoring: liquidity floor + gradual penalties (Phase 3d). Triple-documented:
+    // here, README § Configurable parameters, CLAUDE.md § PWA display thresholds.
+    // FOCUS_MIN_DOLLAR_VOL — hard gate (like ATR_EXT_ACTIONABLE): Focus membership requires
+    // avg $ volume (Price x Avg Volume) at or above this floor. Below it, a position is hard
+    // to build/exit without moving the tape regardless of how good the setup looks.
+    const FOCUS_MIN_DOLLAR_VOL   = 30_000_000;  // $30M/day floor
+    // LIQUIDITY_PENALTY_START — above this, zero liquidity penalty; ramps down to full
+    // LIQUIDITY_PENALTY_MAX right above the FOCUS_MIN_DOLLAR_VOL floor.
+    const LIQUIDITY_PENALTY_START = 60_000_000; // $60M/day — no penalty at/above this
+    const LIQUIDITY_PENALTY_MAX   = 0.3;        // max multiplicative haircut near the floor
+    // EARNINGS_PENALTY_MAX — max multiplicative haircut for earnings within EARNINGS_IMMINENT_DAYS
+    // (ramps in from 0 at EARNINGS_CAUTION_DAYS, same boundaries as the display badge above).
+    const EARNINGS_PENALTY_MAX        = 0.7;
+    // POST_EARNINGS_PENALTY_FRAC — a name that reported exactly 1 day ago still carries some
+    // post-print digestion/gap risk, so it gets a small carry-over penalty (this fraction of
+    // EARNINGS_PENALTY_MAX) rather than dropping straight to 0 the moment daysUntil goes
+    // negative. 2+ days past is fully decayed (0 penalty) — matches the display badge's
+    // "past dates shown neutrally" treatment beyond that one-day grace window.
+    const POST_EARNINGS_PENALTY_FRAC  = 0.25;
+
     // Deep-link button constants (Phase 3c, B1). Mirror screener_config.json "button" block.
     // Single source of truth stays screener_config.json; tests/test_picks_button_config.py
     // asserts these match so a future config change in the JSON reddens CI until index.html is updated.
@@ -563,8 +583,8 @@
           oneLiner: "Whether the stock is in Stage 2: price above the 50-day MA and the 50MA above the 200MA — the technical configuration where most big winning stocks reside.",
           detail: '1 when SMA50 > 0 (price above 50MA) AND SMA200 > SMA50 in % terms (equivalent to 50MA price > 200MA price). 0 otherwise. NaN when either MA is unavailable. Classic O\'Neil / IBD Stage-2 base condition (Phase 3a).' },
         { id: 'focus_score', label: 'Focus score', tabs: ['picks'],
-          oneLiner: 'A blended 0–100 quality score ranking Focus picks by group strength, how tight the nearest MA stop is, and how quiet today\'s bar was — then discounted for extension beyond 3.5×.',
-          detail: 'score = base × (1 − extension_penalty). base = 40% group strength (grp_sum_mid_rank, inverted) + 40% stop tightness (nearest positive MA below price, inverted) + 20% quiet bar (range/ATR, inverted). Extension penalty ramps from 0 at 2.5× to 50% at 4× (ATR_EXT_ACTIONABLE). All three components use the same min–max ruler across today\'s Focus pool so weights are literal. Score always ∈ [0, 1]. Shown as a debug breakdown inside the expandable risk panel while tuning (Phase 3b).' },
+          oneLiner: 'A blended 0–100 quality score ranking Focus picks by group strength, stop tightness, and quiet-bar tightness — discounted for extension, thin liquidity, and near-term earnings risk.',
+          detail: 'score = base × (1 − extension_penalty) × (1 − liquidity_penalty) × (1 − earnings_penalty). base = 40% group strength (grp_sum_mid_rank, inverted) + 40% stop tightness (nearest positive MA below price, inverted) + 20% quiet bar (range/ATR, inverted); all three use the same min–max ruler across today\'s Focus pool. Extension penalty ramps 0→50% from 2.5× to 4× (ATR_EXT_ACTIONABLE). Liquidity penalty ramps 0→30% from $60M avg $ volume down to the $30M Focus-membership floor (below the floor, a stock isn\'t a Focus candidate at all). Earnings penalty ramps 0→70% as the next known earnings date approaches from 10 days out to 3 days out, holds at 70% through day 0, then a small one-day carry-over (17.5%) the day after before decaying to 0. The three penalties are independent multiplicative haircuts, not weighted base components — they describe "can I trade this / is an event about to blow through my stop," not "how good is the setup." Score always ∈ [0, 1]. Shown as a debug breakdown inside the expandable risk panel while tuning (Phase 3b/3d).' },
         { id: 'price_basis', label: 'Price basis (Last / HoD)', tabs: ['picks'],
           oneLiner: 'Switches the risk panel between two measurement bases: Last (closing price, the default) and HoD (High of Day — the realistic breakout entry price for the next session).',
           detail: 'Last basis uses the closing price for all stop-distance metrics (atr_ext_50, atr_ext_20, risk_20ma_pct, risk_50ma_pct, $/sh risk). HoD basis substitutes the prior session\'s High as the entry price — the level a breakout buyer would actually fill. Only stop-distance metrics re-base; bar properties (range_atr, ATR%) and MA dollar levels stay on the close price regardless of basis. State is per-card and ephemeral: resets to Last when the panel collapses. In HoD mode the "trim" label becomes "extended" to signal stretch from the real entry, not a position-management instruction. Phase B (global tab-level toggle) is planned but not yet implemented.' },
@@ -3227,8 +3247,7 @@
         // to one group, so metrics are identical and double-counting skews normalization.
         const _gSeen = new Set();
         const globalFocusCandidates = (allPicks || []).filter(r => {
-          const ext = _pF(r.atr_ext_50);
-          if (isNaN(ext) || ext <= 0 || ext > ATR_EXT_ACTIONABLE) return false;
+          if (!isFocusEligible(r)) return false;
           const t = r.ticker || r.Ticker || '';
           if (_gSeen.has(t)) return false;
           _gSeen.add(t);
@@ -3269,7 +3288,8 @@
               rowIndex: i,
               expandable: true,
               ...(fs ? { showScore: true, score: fs.score, base: fs.base,
-                         penaltyFrac: fs.penaltyFrac, group_n: fs.group_n,
+                         penaltyFrac: fs.penaltyFrac, liqPenaltyFrac: fs.liqPenaltyFrac,
+                         earnPenaltyFrac: fs.earnPenaltyFrac, group_n: fs.group_n,
                          tight_n: fs.tight_n, quiet_n: fs.quiet_n } : {}),
             });
           });
@@ -3369,6 +3389,50 @@
       if (ext >= ATR_EXT_TRIM)       return 'text-red-400';
       if (ext >= ATR_EXT_ACTIONABLE) return 'text-amber-400';
       return 'text-emerald-400';
+    }
+
+    // Avg $ volume = Price x Avg Volume — shared by renderPickRow (display) and the Focus
+    // eligibility gate / liquidity penalty (Phase 3d), so there's one parsing path.
+    function focusDollarVol(r) {
+      const vol   = _pVolRaw(r['Avg Volume']);
+      const price = _pF(r['Price']);
+      return (!isNaN(vol) && !isNaN(price)) ? vol * price : NaN;
+    }
+
+    // Focus membership gate (Phase 3b/3d): must be actionable (price above 50MA, not
+    // over-extended) AND liquid enough to actually build/exit a position in. Shared by all
+    // three Focus-candidate filter sites so the two gates can't drift out of sync.
+    function isFocusEligible(r) {
+      const ext = _pF(r.atr_ext_50);
+      if (isNaN(ext) || ext <= 0 || ext > ATR_EXT_ACTIONABLE) return false;
+      const dolVol = focusDollarVol(r);
+      if (isNaN(dolVol) || dolVol < FOCUS_MIN_DOLLAR_VOL) return false;
+      return true;
+    }
+
+    // Liquidity penalty (Phase 3d): 0 at/above LIQUIDITY_PENALTY_START, ramping to
+    // LIQUIDITY_PENALTY_MAX right above the FOCUS_MIN_DOLLAR_VOL floor. NaN (no volume data)
+    // is treated as no penalty — isFocusEligible() already excludes it from Focus entirely.
+    function liquidityPenaltyFrac(dolVol) {
+      if (isNaN(dolVol) || dolVol >= LIQUIDITY_PENALTY_START) return 0;
+      const t = (LIQUIDITY_PENALTY_START - dolVol) / (LIQUIDITY_PENALTY_START - FOCUS_MIN_DOLLAR_VOL);
+      return LIQUIDITY_PENALTY_MAX * Math.max(0, Math.min(1, t));
+    }
+
+    // Earnings-proximity penalty (Phase 3d): ramps 0 -> EARNINGS_PENALTY_MAX as daysUntil goes
+    // EARNINGS_CAUTION_DAYS -> EARNINGS_IMMINENT_DAYS, holds at max through day 0 (today), then
+    // a small one-day carry-over (POST_EARNINGS_PENALTY_FRAC of max) for daysUntil == -1 — a
+    // name that reported yesterday still carries some post-print digestion/gap risk. 2+ days
+    // past is fully decayed (0), matching the display badge's "past shown neutrally" treatment.
+    function earningsPenaltyFrac(r) {
+      const einfo = parseEarningsInfo(r['Earnings']);
+      if (!einfo) return 0;
+      const d = einfo.daysUntil;
+      if (d === -1) return EARNINGS_PENALTY_MAX * POST_EARNINGS_PENALTY_FRAC;
+      if (d < -1 || d >= EARNINGS_CAUTION_DAYS) return 0;
+      if (d <= EARNINGS_IMMINENT_DAYS) return EARNINGS_PENALTY_MAX;  // flat max: 0..3 days out
+      const t = (EARNINGS_CAUTION_DAYS - d) / (EARNINGS_CAUTION_DAYS - EARNINGS_IMMINENT_DAYS);
+      return EARNINGS_PENALTY_MAX * t;
     }
 
     // Per-card HoD/Last basis state. Key = same key used for risk-panel-{key}.
@@ -3532,6 +3596,30 @@
       const perfWCls = isNaN(perfW) ? 'text-slate-400' : (perfW >= 0 ? 'text-emerald-400' : 'text-red-400');
       const perfMCls = isNaN(perfM) ? 'text-slate-400' : (perfM >= 0 ? 'text-emerald-400' : 'text-red-400');
 
+      // Avg $ volume + earnings proximity — computed unconditionally (not just when
+      // expandable) since the earnings badge below needs it in the always-visible
+      // collapsed row too, not only inside the expanded risk panel.
+      const avgDolVol = focusDollarVol(r);
+      const einfo = parseEarningsInfo(r['Earnings']);
+      let earningsStr = '—';
+      let earningsColorCls = 'text-slate-300';
+      if (einfo) {
+        const sessionLabel = einfo.session === 'b' ? ' BMO' : einfo.session === 'a' ? ' AMC' : '';
+        const dateStr = einfo.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const suffix = einfo.daysUntil < 0 ? ' (past)'
+          : einfo.daysUntil === 0 ? ' · today'
+          : ' · ' + einfo.daysUntil + 'd';
+        earningsStr = dateStr + sessionLabel + suffix;
+        earningsColorCls = earningsCls(einfo.daysUntil);
+      }
+      // Collapsed-row badge: special-case only — imminent earnings (0..EARNINGS_IMMINENT_DAYS
+      // out), glued to the ticker like the Focus score badge. Caution/past stay expanded-only
+      // so the always-visible row isn't cluttered with the common case.
+      const showEarningsRowBadge = einfo && einfo.daysUntil >= 0 && einfo.daysUntil <= EARNINGS_IMMINENT_DAYS;
+      const earningsRowBadge = showEarningsRowBadge
+        ? `<span class="text-[0.55rem] px-1 rounded bg-red-900/50 text-red-400 font-bold ml-1" title="Earnings ${einfo.daysUntil === 0 ? 'today' : 'in ' + einfo.daysUntil + 'd'}">E</span>`
+        : '';
+
       // Stable identity for this row, independent of render position — used to persist
       // expand state across re-renders (state.picksExpanded). Unique DOM key adds rowIndex
       // on top, since the same (ticker, category) pair can be rendered into different
@@ -3569,32 +3657,17 @@
         };
         const rowDataJson = JSON.stringify(rowData).replace(/'/g, '&#39;');
 
-        // Avg $ volume + earnings proximity — static context, not basis-dependent (doesn't
-        // change between Last/HoD), so computed here rather than in deriveRiskMetrics/
-        // __buildRiskBasisContent.
-        const avgVolRaw  = _pVolRaw(r['Avg Volume']);
-        const priceForVol = _pF(r['Price']);
-        const avgDolVol  = (!isNaN(avgVolRaw) && !isNaN(priceForVol)) ? avgVolRaw * priceForVol : NaN;
-
-        const einfo = parseEarningsInfo(r['Earnings']);
-        let earningsStr = '—';
-        let earningsColorCls = 'text-slate-300';
-        if (einfo) {
-          const sessionLabel = einfo.session === 'b' ? ' BMO' : einfo.session === 'a' ? ' AMC' : '';
-          const dateStr = einfo.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-          const suffix = einfo.daysUntil < 0 ? ' (past)'
-            : einfo.daysUntil === 0 ? ' · today'
-            : ' · ' + einfo.daysUntil + 'd';
-          earningsStr = dateStr + sessionLabel + suffix;
-          earningsColorCls = earningsCls(einfo.daysUntil);
-        }
+        // avgDolVol / einfo / earningsStr / earningsColorCls are hoisted above (needed by
+        // the collapsed-row badge too) — reused here as-is for the expanded panel.
 
         // Score debug (tuning aid — always uses CSV-basis metrics; scores don't re-base
         // in Phase A since gating/scoring stay on Last per §5.4).
         let scoreDebug = '';
         if (opts.showScore && !isNaN(opts.score)) {
           const fn = v => (isNaN(v) ? '—' : v.toFixed(2));
-          const pf  = isNaN(opts.penaltyFrac) ? 0 : opts.penaltyFrac;
+          const pf     = isNaN(opts.penaltyFrac)    ? 0 : opts.penaltyFrac;
+          const liqPf  = isNaN(opts.liqPenaltyFrac)  ? 0 : opts.liqPenaltyFrac;
+          const earnPf = isNaN(opts.earnPenaltyFrac) ? 0 : opts.earnPenaltyFrac;
           const g   = isNaN(opts.group_n) ? 0 : opts.group_n;
           const t   = isNaN(opts.tight_n) ? 0 : opts.tight_n;
           const q   = isNaN(opts.quiet_n) ? 0 : opts.quiet_n;
@@ -3604,7 +3677,9 @@
               <div>Group&nbsp;&nbsp;${fn(g)} × ${FOCUS_W_GROUP.toFixed(2)} = ${(g * FOCUS_W_GROUP).toFixed(2)}</div>
               <div>Tight&nbsp;&nbsp;${fn(t)} × ${FOCUS_W_TIGHT.toFixed(2)} = ${(t * FOCUS_W_TIGHT).toFixed(2)}</div>
               <div>Quiet&nbsp;&nbsp;${fn(q)} × ${FOCUS_W_QUIET.toFixed(2)} = ${(q * FOCUS_W_QUIET).toFixed(2)} → base ${fn(opts.base)}</div>
-              <div>Ext&nbsp;&nbsp;&nbsp;&nbsp;${isNaN(csvAtrExt) ? '—' : csvAtrExt.toFixed(1) + '×'} → ×${(1 - pf).toFixed(2)} → score ${fn(opts.score)}</div>
+              <div>Ext&nbsp;&nbsp;&nbsp;&nbsp;${isNaN(csvAtrExt) ? '—' : csvAtrExt.toFixed(1) + '×'} → ×${(1 - pf).toFixed(2)}</div>
+              <div>Liq&nbsp;&nbsp;&nbsp;&nbsp;×${(1 - liqPf).toFixed(2)}</div>
+              <div>Earn&nbsp;&nbsp;&nbsp;×${(1 - earnPf).toFixed(2)} → score ${fn(opts.score)}</div>
             </div>`;
         }
 
@@ -3643,7 +3718,7 @@
       return `<div>
         <div class="flex items-center gap-2 px-3 py-2 ${opts.showGroupSubtitle && r.group ? 'pb-0.5' : 'border-b border-slate-700/40 last:border-0'}" ${rowClick}>
           <div class="w-16 flex-shrink-0">
-            <div class="text-xs font-bold text-white leading-tight">${ticker}${scoreBadge}</div>
+            <div class="text-xs font-bold text-white leading-tight">${ticker}${scoreBadge}${earningsRowBadge}</div>
             <div class="text-xs text-slate-400 truncate leading-tight">${company}</div>
           </div>
           <div class="w-12 flex-shrink-0 text-right">
@@ -3675,13 +3750,22 @@
       </div>`;
     }
 
-    // computeFocusScores(candidates) — cross-sectional scoring for Focus view (3b.2).
-    // All three components use the same inverted min–max ruler; score = base × (1−penalty).
+    // computeFocusScores(candidates) — cross-sectional scoring for Focus view (3b.2, 3d).
+    // All three base components use the same inverted min–max ruler; score = base ×
+    // (1−ext_penalty) × (1−liquidity_penalty) × (1−earnings_penalty) — three independent
+    // multiplicative haircuts for three independent risk factors (price-location,
+    // execution/liquidity, event risk), not three more weighted "quality" components.
     function computeFocusScores(candidates) {
       const n = candidates.length;
       if (n === 0) return [];
-      if (n === 1) return [{ r: candidates[0], score: 1.0, base: 1.0, penaltyFrac: 0,
-                             group_n: 1.0, tight_n: 1.0, quiet_n: 1.0 }];
+      if (n === 1) {
+        const r = candidates[0];
+        const liqPenaltyFrac  = liquidityPenaltyFrac(focusDollarVol(r));
+        const earnPenaltyFrac = earningsPenaltyFrac(r);
+        const score = 1.0 * (1 - liqPenaltyFrac) * (1 - earnPenaltyFrac);
+        return [{ r, score, base: 1.0, penaltyFrac: 0, liqPenaltyFrac, earnPenaltyFrac,
+                  group_n: 1.0, tight_n: 1.0, quiet_n: 1.0 }];
+      }
 
       // Raw component values (lower = better for all three → use inverted normalization)
       const rawGroup = candidates.map(r => _pF(r.grp_sum_mid_rank));
@@ -3733,9 +3817,14 @@
         const penaltyT = isNaN(atrExt) ? 0
           : Math.max(0, Math.min(1, (atrExt - ATR_EXT_PENALTY_START) / (ATR_EXT_ACTIONABLE - ATR_EXT_PENALTY_START)));
         const penaltyFrac = PENALTY_MAX * penaltyT;
-        const score = base * (1 - penaltyFrac);  // always ∈ [0, 1]
 
-        return { r, score, base, penaltyFrac, group_n: normGroup[i], tight_n: normTight[i], quiet_n: normQuiet[i] };
+        const liqPenaltyFrac  = liquidityPenaltyFrac(focusDollarVol(r));
+        const earnPenaltyFrac = earningsPenaltyFrac(r);
+
+        const score = base * (1 - penaltyFrac) * (1 - liqPenaltyFrac) * (1 - earnPenaltyFrac);  // always ∈ [0, 1]
+
+        return { r, score, base, penaltyFrac, liqPenaltyFrac, earnPenaltyFrac,
+                 group_n: normGroup[i], tight_n: normTight[i], quiet_n: normQuiet[i] };
       });
     }
 
@@ -3825,14 +3914,12 @@
 
       // ── Focus view ─────────────────────────────────────────────────────────
       if (state.picksView === 'focus') {
-        // Hard gates: atr_ext_50 must be a real positive value ≤ ATR_EXT_ACTIONABLE (price > 50MA, not over-extended)
-        const candidates = filtered.filter(r => {
-          const ext = _pF(r.atr_ext_50);
-          return !isNaN(ext) && ext > 0 && ext <= ATR_EXT_ACTIONABLE;
-        });
+        // Hard gates (isFocusEligible): actionable (price > 50MA, not over-extended) AND
+        // liquid enough (avg $ volume >= FOCUS_MIN_DOLLAR_VOL) to actually trade.
+        const candidates = filtered.filter(isFocusEligible);
 
         if (candidates.length === 0) {
-          el.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">No Focus candidates — all actionable names are over-extended or below the 50MA.</p>';
+          el.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">No Focus candidates — all actionable names are over-extended, below the 50MA, or too thin (under $30M avg $ volume).</p>';
           return;
         }
 
@@ -3860,6 +3947,8 @@
             score: item.score,
             base: item.base,
             penaltyFrac: item.penaltyFrac,
+            liqPenaltyFrac: item.liqPenaltyFrac,
+            earnPenaltyFrac: item.earnPenaltyFrac,
             group_n: item.group_n,
             tight_n: item.tight_n,
             quiet_n: item.quiet_n,
@@ -3872,10 +3961,7 @@
 
       // ── All view ───────────────────────────────────────────────────────────
       // Pre-compute Focus scores for qualifying stocks so All view can show score badges.
-      const allFocusCandidates = filtered.filter(r => {
-        const ext = _pF(r.atr_ext_50);
-        return !isNaN(ext) && ext > 0 && ext <= ATR_EXT_ACTIONABLE;
-      });
+      const allFocusCandidates = filtered.filter(isFocusEligible);
       const allFocusScored = computeFocusScores(allFocusCandidates);
       const focusScoreMap = new Map(allFocusScored.map(s => [s.r.ticker + '_' + (s.r.list_category || ''), s]));
 
@@ -3961,7 +4047,8 @@
               rowIndex: globalRowIdx++,
               expandable: true,
               ...(fs ? { showScore: true, score: fs.score, base: fs.base,
-                         penaltyFrac: fs.penaltyFrac, group_n: fs.group_n,
+                         penaltyFrac: fs.penaltyFrac, liqPenaltyFrac: fs.liqPenaltyFrac,
+                         earnPenaltyFrac: fs.earnPenaltyFrac, group_n: fs.group_n,
                          tight_n: fs.tight_n, quiet_n: fs.quiet_n } : {}),
             });
           }

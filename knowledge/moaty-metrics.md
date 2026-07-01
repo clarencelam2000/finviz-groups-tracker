@@ -298,21 +298,38 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
 - **User one-liner:** "Whether the stock is in Stage 2: price above the 50-day MA and the 50MA
   above the 200MA — the technical configuration where most big winning stocks reside."
 
-## focus_score (Focus quality score — PWA Picks tab, Phase 3b)
+## focus_score (Focus quality score — PWA Picks tab, Phase 3b/3d)
 - **Source:** PWA-computed (`docs/index.html` `computeFocusScores()`). Not stored in any CSV — derived
   cross-sectionally from today's Focus pool at render time.
-- **Formula:** `score = base × (1 − extension_penalty_fraction)`.
+- **Formula:** `score = base × (1 − extension_penalty) × (1 − liquidity_penalty) × (1 − earnings_penalty)`.
   - `base = FOCUS_W_GROUP × group_n + FOCUS_W_TIGHT × tight_n + FOCUS_W_QUIET × quiet_n` (0.4/0.4/0.2 weights, sum to 1).
-  - Each component uses the same inverted min–max ruler: `(max − x) / (max − min)` across Focus candidates.
+  - Each base component uses the same inverted min–max ruler: `(max − x) / (max − min)` across Focus candidates.
   - Group strength = `grp_sum_mid_rank` (lower = stronger group). Stop tightness = nearest positive MA stop
     (`min(risk_20ma_pct, risk_50ma_pct)` keeping only positive values; 20MA dropped when price is below it).
     Quiet bar = `range_atr` (lower = tighter day).
-  - Extension penalty ramps 0 → 0.5 from 3.5× to 5× (`ATR_EXT_PENALTY_START` → `ATR_EXT_ACTIONABLE`).
+  - Extension penalty ramps 0 → `PENALTY_MAX` from `ATR_EXT_PENALTY_START` to `ATR_EXT_ACTIONABLE`.
+  - Liquidity penalty (Phase 3d) ramps 0 → `LIQUIDITY_PENALTY_MAX` (0.3) as avg $ volume (`Price × Avg
+    Volume`) falls from `LIQUIDITY_PENALTY_START` ($60M) down to the `FOCUS_MIN_DOLLAR_VOL` ($30M) gate
+    floor. Below the floor a stock isn't a Focus candidate at all (see gate below), so this penalty only
+    ever fires in the $30M–$60M band.
+  - Earnings penalty (Phase 3d) ramps 0 → `EARNINGS_PENALTY_MAX` (0.7) as the next known earnings date
+    goes from `EARNINGS_CAUTION_DAYS` (10) days out to `EARNINGS_IMMINENT_DAYS` (3) days out, holds flat
+    at the max through day 0 (today), then a one-day carry-over of `POST_EARNINGS_PENALTY_FRAC` (0.25) ×
+    max for daysUntil == −1 (reported yesterday — some post-print digestion/gap risk still applies). 2+
+    days past is fully decayed to 0, matching the display badge's "past shown neutrally" treatment beyond
+    that one-day grace window.
+  - The three penalties are independent multiplicative haircuts (price-location / execution / event
+    risk), not additional weighted base components — they answer "can I trade this safely right now,"
+    not "how good is the setup," which is what the three `FOCUS_W_*` components already answer.
 - **Range:** always [0, 1]; score × 100 displayed as integer in PWA.
-- **Normalization edge cases:** all-equal component → 0.5; pool < 5 → rank-based percentile; n == 1 → 1.0.
-- **Focus gate (hard gates before scoring):** `atr_ext_50 > 0` (price above 50MA) AND `atr_ext_50 ≤ 5.0`
-  (not over-extended). No RSI gate; no Stage-2 gate (3b decision — revisit via PICKS-3B-FOCUSGATE).
-- **User one-liner:** "A blended 0–100 quality score ranking Focus picks by group strength, how tight the nearest MA stop is, and how quiet today's bar was — then discounted for extension beyond 3.5×."
+- **Normalization edge cases:** all-equal component → 0.5; pool < 5 → rank-based percentile; n == 1 → base
+  1.0, still discounted by liquidity/earnings penalties (extension penalty is skipped for n==1, matching
+  the pre-3d behavior).
+- **Focus gate (hard gates before scoring):** `atr_ext_50 > 0` (price above 50MA) AND `atr_ext_50 ≤
+  ATR_EXT_ACTIONABLE` (not over-extended) AND avg $ volume ≥ `FOCUS_MIN_DOLLAR_VOL` ($30M — Phase 3d;
+  can't build/exit a position without moving the tape below this). No RSI gate; no Stage-2 gate (3b
+  decision — revisit via PICKS-3B-FOCUSGATE).
+- **User one-liner:** "A blended 0–100 quality score ranking Focus picks by group strength, stop tightness, and quiet-bar tightness — discounted for extension, thin liquidity, and near-term earnings risk."
 
 ## price_basis (Price basis toggle — PWA Picks tab, Phase A)
 - **Source:** PWA UI state only — not stored in any CSV. Per-card ephemeral state; resets to Last on collapse.
