@@ -1,6 +1,15 @@
 {
-  "current": "2026.07.01.1",
+  "current": "2026.07.01.2",
   "releases": [
+    {
+      "version": "2026.07.01.2",
+      "date": "2026-07-01",
+      "title": "Fix: text now copyable on iOS",
+      "tag": "fix",
+      "notes": [
+        "Removed a global no-select style that was blocking text selection and copy on iPhone (and other browsers) across the whole app."
+      ]
+    },
     {
       "version": "2026.07.01.1",
       "date": "2026-07-01",
