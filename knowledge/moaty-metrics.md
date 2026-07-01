@@ -321,8 +321,8 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   - **HoD** (High of Day): substitutes the prior session's High as the realistic breakout entry price.
     Breakout buyers don't fill at the close — they trigger above the prior day's high. HoD shows what
     the risk actually looks like from that realistic fill.
-- **Which metrics re-base (stop-distance family):** `atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`,
-  $/sh risk per stop, stop distance in ATR multiples.
+- **Which metrics re-base (stop-distance family):** `atr_ext_50`, `atr_ext_20`, `risk_20ma_pct`,
+  `risk_50ma_pct`, $/sh risk per stop.
 - **Which metrics stay fixed on close:** `range_atr`, ATR%, MA dollar levels (sma20_price, sma50_price).
   Bar properties describe the instrument, not the entry — they always come from the close-price session.
 - **Label swap in HoD mode:** "trim" (position-management instruction) becomes "extended" (stretch
@@ -330,6 +330,45 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
 - **Phase B (not yet built):** a global tab-level toggle that re-ranks the Focus list on HoD metrics.
   Phase A is display-only inside the expanded risk panel.
 - **User one-liner:** "Switches the risk panel between two measurement bases: Last (closing price, the default) and HoD (High of Day — the realistic breakout entry price for the next session)."
+
+## atr_ext_20 (ATR extension to 20MA — PWA Picks tab, Phase 3c)
+- **Source:** PWA-computed (`deriveRiskMetrics` in `docs/index.html`). Not stored in `picks.csv` —
+  the same client-side formula as `atr_ext_50`, just against the 20MA: `(Price − sma20_price) / ATR`
+  where `sma20_price = Price / (1 + SMA20/100)`. NaN when ATR or SMA20 is blank.
+- **Display:** a new row in the expanded risk panel — `ATR | 20MA stop (ATR) | 50MA stop (ATR)` —
+  mirroring the HoD/20MA-stop/50MA-stop row above it, in ATR multiples instead of dollars/percent.
+  Colored by sign (same sky/amber convention as the risk_20ma_pct / risk_50ma_pct cells above it),
+  not the 3-tier emerald/amber/red extension bands (those stay on the separate "Ext (×50MA)" cell).
+- **Signals:** replaces the old "Stop dist (ATR)" cell, which picked whichever of the 20MA/50MA
+  distance was nearer without labeling which one — this shows both explicitly, always in the same
+  position, so the reading never silently swaps meaning day to day.
+- **User one-liner:** "How many ATR multiples above (or below) its 20-day MA the stock is — the same rubber-band read as the 50MA extension, but against the tighter near-term stop."
+
+## avg_dollar_volume (Avg $ volume — PWA Picks tab, Phase 3c)
+- **Source:** PWA-computed (`renderPickRow` in `docs/index.html`). `Price × Avg Volume`, where
+  `Avg Volume` is Finviz's trailing average daily share volume (abbreviated string, e.g. `"9.24M"`,
+  parsed by `_pVolRaw`). Not stored in `picks.csv` — display-only for now.
+- **Signals:** a liquidity check independent of the raw share count. Two names can show the same
+  Avg Volume in shares but very different $ liquidity at different price points; this normalizes
+  for position-sizing purposes (can you actually fill the size you want without moving the tape).
+- **Display-only today.** A follow-up PR is planned to add a liquidity floor (~$30M avg $ volume)
+  and a gradual penalty into Focus scoring for thin names.
+- **User one-liner:** "The average dollar amount traded per day — Last Price × Avg Volume — a liquidity check independent of the raw share count."
+
+## earnings_proximity (Earnings proximity — PWA Picks tab, Phase 3c)
+- **Source:** PWA-computed (`parseEarningsInfo` in `docs/index.html`) from Finviz's `Earnings`
+  column: `"Mon DD"` optionally suffixed `/b` (before open) or `/a` (after close); `"-"` for none
+  known. No year is given — inferred as the nearest occurrence (current year, rolled forward one
+  year if that lands more than 180 days in the past, to handle Dec→Jan wraparound without
+  misflagging an already-stale same-year date as upcoming).
+- **PWA thresholds:** `EARNINGS_IMMINENT_DAYS = 3` (red) and `EARNINGS_CAUTION_DAYS = 10` (amber)
+  in `docs/index.html`. Only upcoming dates (daysUntil ≥ 0) are colored — a past date is shown
+  neutrally, since Finviz doesn't always refresh immediately after a name reports, so a stale date
+  reflects missing data, not risk.
+- **Signals:** earnings is a binary event — a good technical setup can gap through a stop on a bad
+  print. Flagging proximity lets a trader choose to size down, wait, or skip a name reporting soon,
+  independent of how clean the chart looks.
+- **User one-liner:** "The stock's next known earnings date, color-flagged when it falls within the next 10 days — a binary event that adds risk regardless of the technical setup."
 
 ## Rotation Phase (AI — sectors only)
 - **Definition:** an AI-generated read of where the broad market sits in its

@@ -1,6 +1,18 @@
 {
-  "current": "2026.06.30.7",
+  "current": "2026.07.01",
   "releases": [
+    {
+      "version": "2026.07.01",
+      "date": "2026-07-01",
+      "title": "Avg $ volume, earnings warning, clearer ATR stops",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "Expanded pick cards now show Avg $ Volume (Price × Avg Volume) and the next known earnings date, color-flagged amber within 10 days and red within 3 — earnings is a binary event that adds risk regardless of the setup.",
+        "New ATR row shows ATR, 20MA stop (in ATR), and 50MA stop (in ATR) side by side, replacing the old \"Stop dist (ATR)\" line that silently switched between the two without saying which.",
+        "Same additions show up in the Lookup tab's Stage-2 card, since it shares the same expanded-card component."
+      ]
+    },
     {
       "version": "2026.06.30.7",
       "date": "2026-06-30",
