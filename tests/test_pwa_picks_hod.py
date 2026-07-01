@@ -83,19 +83,38 @@ class TestPicksHodToggle:
         proc.wait()
 
     def _open_picks_tab(self, page, picks_body: str):
-        """Navigate to the PWA, intercept the picks_latest.csv fetch, open Picks tab."""
+        """Navigate to the PWA, intercept the picks_latest.csv fetch, open Picks tab.
+
+        Route globs use the "**/filename.ext" form (a literal "/" immediately before the
+        filename) — "**domain**filename" silently never matches and falls through to the
+        real network (see knowledge/investigations/playwright-cloud-session-testing.md,
+        Root cause 3). CDN scripts (Tailwind/PapaParse) must also be stubbed or the app
+        never boots in an environment where Chromium can't reach the real CDNs (Root
+        cause 2) — and "domcontentloaded" is used instead of "networkidle" since the app
+        has no further network activity worth waiting on once those are stubbed.
+        """
+        papaparse_js = (ROOT / "tests" / "fixtures" / "papaparse.min.js").read_text(encoding="utf-8")
+        page.route("**/cdn.tailwindcss.com/**",
+                   lambda r: r.fulfill(body="/* tailwind stub: styling not asserted in these tests */",
+                                        content_type="application/javascript"))
+        page.route("**/cdnjs.cloudflare.com/**",
+                   lambda r: r.fulfill(body=papaparse_js, content_type="application/javascript"))
+
         page.route(
-            "**/raw.githubusercontent.com/**picks_latest.csv",
+            "**/picks_latest.csv",
             lambda r: r.fulfill(body=picks_body, content_type="text/plain"),
         )
         # Also stub the other CSV routes so page doesn't hang on missing data
-        page.route("**/raw.githubusercontent.com/**snapshots.csv",
+        page.route("**/snapshots.csv",
                    lambda r: r.fulfill(body="date,collected_at,group_type,name,stocks,market_cap,pe,fwd_pe,perf_day,perf_week,perf_month,perf_quarter,perf_half,perf_year,perf_ytd,avg_volume,rel_volume,change\n", content_type="text/plain"))
-        page.route("**/raw.githubusercontent.com/**deltas.csv",
+        page.route("**/deltas.csv",
                    lambda r: r.fulfill(body="date,name\n", content_type="text/plain"))
-        page.route("**/raw.githubusercontent.com/**releases.json",
+        page.route("**/releases.json",
                    lambda r: r.fulfill(body='{"current":"","releases":[]}', content_type="application/json"))
-        page.goto(f"http://localhost:{self.PORT}/", wait_until="networkidle")
+
+        page.add_init_script("try { localStorage.setItem('fvt_intro_seen_v1','true'); } catch(e){}")
+        page.goto(f"http://localhost:{self.PORT}/", wait_until="domcontentloaded")
+        page.wait_for_timeout(1000)
         # Click the Picks tab
         page.click("[data-tab='picks']")
         page.wait_for_timeout(400)
