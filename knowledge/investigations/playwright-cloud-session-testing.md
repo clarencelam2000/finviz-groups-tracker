@@ -82,12 +82,20 @@ The rule that falls out of this: every `**` in a Playwright route pattern needs 
 by a literal `/` if you intend it to span path segments and then match a bare filename. `"**X"` (no slash)
 behaves like a single-segment glob, not "anything ending in X".
 
-**Action needed, not yet taken**: `tests/test_pwa_picks_hod.py` (and possibly `test_functional_playwright.py`)
-use the broken `"**/raw.githubusercontent.com/**picks_latest.csv"` form. Whether this actually breaks them
-in CI/local dev (where a real browser with real internet access might silently fall through to live
-network instead of the intended fixture) hasn't been verified — it's possible those environments behave
-differently, or the tests happen to pass for an unrelated reason. Worth a deliberate check next time
-someone is in those files; not chased further here to keep this session's actual task scoped.
+**Update 2026-07-01**: `tests/test_pwa_picks_hod.py` fixed — confirmed it hung in this sandboxed
+session with exactly `Page.goto: Timeout 30000ms exceeded ... waiting until "networkidle"`. Fixed
+by applying all three workarounds above: glob patterns changed from `"**/raw.githubusercontent.com/
+**picks_latest.csv"` to `"**/picks_latest.csv"`, CDN stubs added for `cdn.tailwindcss.com` /
+`cdnjs.cloudflare.com` (vendored `tests/fixtures/papaparse.min.js`), and `goto()` switched from
+`wait_until="networkidle"` to `"domcontentloaded"` + an explicit `wait_for_timeout`. All 5 tests
+pass now. `executable_path` was *not* added to the committed file (Root cause 1 fix) — CI/local dev
+already have the matching pinned browser revision; that mismatch is a per-session sandbox fact, not
+a repo fact (see Root cause 1 above).
+
+**Still open**: `tests/test_functional_playwright.py` has the identical broken-glob pattern
+(`"**/raw.githubusercontent.com/**snapshots.csv"` etc., ~10 occurrences) and multiple
+`wait_until="networkidle"` calls, with no CDN stubs — same three root causes, much larger surface
+area (10+ test methods across ~1100 lines). Not fixed yet; flagged for whoever picks it up next.
 
 ## A working minimal harness
 
