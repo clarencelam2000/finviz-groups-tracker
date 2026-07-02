@@ -290,9 +290,12 @@ a two-way-door superset migration (`ensure_deltas_csv()` pattern).
   workflows sharing the name, so **both files must have it.** Rebase-before-push.
 - **Stale-read guard:** `collect_picks.py` asserts `deltas['date'].max() == trading_date()` before
   scraping — a too-early run is a safe no-op, never a wrong-day scrape.
-- **Fetch caps:** per-group `PAGE_CAP` and **hard global `GLOBAL_FETCH_CAP = 50` pages/day** (VP-set
-  2026-06-25). Scrapes in priority order (leaders first) and stops at 50. A wrong slug returns HTTP
-  200 with an empty table (NOT a 404) — the scraper checks row count, not status.
+- **Fetch caps:** per-group `PAGE_CAP = 2` (40 names; lowered from 15 on 2026-07-02 — historical
+  data showed only Biotechnology, a structurally oversized industry at ~100 names/day, ever
+  exceeded 40; the screener sorts `-marketcap` desc so the cap keeps the biggest/most-liquid names)
+  and **hard global `GLOBAL_FETCH_CAP = 50` pages/day** (VP-set 2026-06-25). Scrapes in priority
+  order (leaders first) and stops at 50. A wrong slug returns HTTP 200 with an empty table (NOT a
+  404) — the scraper checks row count, not status.
 - **Empty-scrape guard (D14):** if **no** selected group returns a single row (the signature of a
   Cloudflare block — every page is HTTP 200 with an empty table, no exception), `collect_picks.py`
   **aborts with `exit(1)` BEFORE writing** instead of letting `write_picks` evict the date and

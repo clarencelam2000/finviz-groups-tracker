@@ -266,13 +266,15 @@ class TestPagination:
         assert len(rows) == 5
 
     def test_multi_page_until_short(self):
-        header, rows, pages = paginate_group(_page_fetcher(45), "x")
+        # page_cap/max_pages set well above PAGE_CAP (2) — this test exercises the
+        # walk's own short-page stopping logic, independent of the configured cap.
+        header, rows, pages = paginate_group(_page_fetcher(45), "x", page_cap=10, max_pages=10)
         assert len(rows) == 45
         assert pages == 3  # 20 + 20 + 5
 
     def test_exact_page_boundary_stops(self):
         # 40 rows = 2 full pages; 3rd page is empty → stop.
-        header, rows, pages = paginate_group(_page_fetcher(40), "x")
+        header, rows, pages = paginate_group(_page_fetcher(40), "x", page_cap=10, max_pages=10)
         assert len(rows) == 40
         assert pages == 3  # 2 data pages + 1 empty terminator
 

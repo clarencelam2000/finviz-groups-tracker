@@ -101,9 +101,14 @@ RS_NH_RS_FLOOR = 0.6      # rs_new_high: IBD "true leadership", not a low-base p
 # PAGE_SIZE — rows Finviz returns per screener page (v=151). Used to walk &r=.
 PAGE_SIZE = 20
 
-# PAGE_CAP — per-group hard page cap (defensive against a runaway single group).
-# At 20 rows/page, 15 pages = 300 names — far beyond any real industry.
-PAGE_CAP = 15
+# PAGE_CAP — per-group hard page cap. At 20 rows/page, 2 pages = 40 names.
+# Lowered from 15 -> 2 (2026-07-02): historical picks.csv data showed only
+# Biotechnology (a structurally oversized Finviz industry, ~100 names/day)
+# ever exceeded 40 names — every other group observed stays under 35. The
+# wide screener sorts -marketcap desc (screener_config.json), so capping at
+# 2 pages keeps the biggest/most-liquid names in an oversized group and drops
+# the long tail, trading a few small/mid-cap names for scrape-budget headroom.
+PAGE_CAP = 2
 
 # GLOBAL_FETCH_CAP — hard global daily page cap (VP-set 2026-06-25). The job
 # scrapes in priority order (leaders first) and STOPS at this many pages, so the
