@@ -337,16 +337,18 @@ check before investing in the larger surface.
 
 ### Phase 2 — Navigation layer (1–2 sessions)
 
-**A, B, and F shipped 2026-07-02** — PR #178 rebased and reconciled, see § Phase 2 landed above.
-C and R below are the only genuinely un-started items in this tier.
+**A, B, F, and C shipped 2026-07-02** — PR #178 rebased and reconciled, see § Phase 2 landed above.
+R below is the only genuinely un-started item in this tier — and its "68% top-half" framing
+is internally inconsistent (top-half is definitionally ~50% by construction, not a variable
+metric) and needs a VP-approved redefinition before it's buildable, not just implementation time.
 
 | Priority | ID | Feature | Effort | File(s) | Status |
 |----------|----|---------|--------|---------|--------|
 | 3 | A | PWA drill-down navigation | M | `docs/index.html` | ✅ Done 2026-07-02 |
 | 4 | F | Rank within sector | S | `docs/index.html` | ✅ Done 2026-07-02 (shown in drill-down only, per VP decision) |
 | — | B | Breadth bar on sector cards | S | `docs/index.html` | ✅ Done 2026-07-02. Note: a *different* breadth table shipped separately to the Strength tab (`122a4d1`, merged) — not the same UX, both are wanted; they now share one `BREADTH_TOP_HALF_FRACTION` threshold. |
-| 5 | C | Leaders & Laggards mini-list | S | `docs/index.html` | Not started |
-| 6 | R | Market-wide breadth gauge | S | `docs/index.html` | Not started |
+| 5 | C | Leaders & Laggards mini-list | S | `docs/index.html` | ✅ Done 2026-07-02. Leader (🏆) + laggard (🔻) callout row on the sector drill-down (Today tab) and ported to the Lookup tab's sector card alongside the breadth bar (Today-only in the original spec — extended since both surfaces render the same sector card component). |
+| 6 | R | Market-wide breadth gauge | S | `docs/index.html` | **Not started — spec needs rework, not VP-approved.** See note above. |
 
 ### Phase 3 — Signal layer (1–2 sessions)
 The features that make things actionable. D is the headline.

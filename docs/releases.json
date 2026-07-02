@@ -1,6 +1,17 @@
 {
-  "current": "2026.07.02.2",
+  "current": "2026.07.02.3",
   "releases": [
+    {
+      "version": "2026.07.02.3",
+      "date": "2026-07-02",
+      "title": "New: sector leaders & laggards + Lookup breadth",
+      "tag": "feature",
+      "tab": "lookup",
+      "notes": [
+        "Today-tab sector drill-down now calls out the sector's leader (🏆) and laggard (🔻) industry by YTD rank at a glance, instead of scanning the full list.",
+        "Sector cards in the Lookup tab now show the same breadth bar and industry breakdown (with leader/laggard) that the Today tab has — sector context is no longer Today-tab only."
+      ]
+    },
     {
       "version": "2026.07.02.2",
       "date": "2026-07-02",
