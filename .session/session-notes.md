@@ -6,6 +6,72 @@
 
 ---
 
+## 2026-07-02 — PR #178 rebased, reconciled, and landed (sector breadth bar + drill-down)
+
+**Status: LANDED on this session's branch, PR open for review. SAFE TO CLOSE once PR merges.**
+
+Follow-up to the same-day "found an abandoned draft PR" session below. VP approved proceeding
+with the rebase-and-reconcile plan; this session executed it.
+
+**What landed (branch `claude/pr178-rebase-reconcile-ziu90h`):**
+- Cherry-picked PR #178's single commit (`ea0a6c2`) onto current default (166 commits ahead of
+  where #178 branched). Resolved all 6 conflicting files.
+- `.session/WORK_LOG.md` and `.session/session-notes.md`: took default's side, not PR #178's.
+  WORK_LOG is now an archived stub (process changed since 2026-06-24 — do not resurrect the old
+  entry). session-notes.md's stale "Current Status" line from 2026-06-24 was superseded by ~10
+  sessions of real history since; re-inserting it would have been out of chronological order.
+- `docs/releases.json` / `docs/sw.js`: kept default's history, prepended a fresh
+  `2026.07.02.1` entry (today's date, current constants), bumped CACHE `v48` → `v49`.
+- `docs/index.html` (the real conflict): default already had `computeSectorBreadth(delta,
+  taxonomy, rankCol)` powering the Strength-tab table (shipped independently as `122a4d1` while
+  #178 sat unmerged). #178 had its own same-named-but-different-signature `computeSectorBreadth
+  (industryDelta, taxonomy)`. Renamed #178's version to `computeSectorTopHalfCounts()`, made it
+  a thin wrapper around the existing 3-arg function (rankCol='rank_ytd'), and pointed
+  `loadTaxonomyAndBreadth()` at the existing `loadTaxonomy()` instead of duplicating the fetch.
+  Promoted the inlined `n/2` "top half" threshold to a named constant,
+  `BREADTH_TOP_HALF_FRACTION` — documented in README.md and CLAUDE.md per the
+  configurable-constants rule.
+
+**Bug caught during reconciliation (not present in either original branch alone):** the merge
+produced two `taxonomy:` keys in the PWA `state` object literal. JS silently keeps the last
+duplicate key, so `taxonomy: null` was shadowed by `taxonomy: {}` — which made
+`loadTaxonomy()`'s already-loaded guard true from page load, so the taxonomy JSON would never
+have been fetched and the new breadth bar/drill-down would have silently stayed empty forever,
+with zero console errors. Only caught because the merged build was smoke-tested end-to-end with
+Playwright (fixture CSVs served locally, `docs/index.html` driven headlessly) before landing —
+unit tests alone (566 non-Playwright tests, all green both before and after the fix) would not
+have caught this, since nothing in `tests/` drives the PWA's actual data-load sequence for this
+feature.
+
+**Playwright environment note:** the pre-installed Chromium in this sandbox lives at
+`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`, not the `chromium-1117` path the pinned
+`playwright==1.44.0` expects — matches the known gotcha in
+`knowledge/investigations/playwright-cloud-session-testing.md`. Worked around locally with a
+symlink for manual verification; did not touch the pinned version or `tests/` fixtures.
+
+**Verification:**
+- `python3 -m pytest tests/ --ignore=tests/test_functional_playwright.py -q` → 566 passed, 15
+  failed (all pre-existing browser-launch failures unrelated to this change — same 15 fail on
+  default before this branch).
+- Manual Playwright smoke test (fixture CSVs, CDN scripts route-stubbed per the known
+  `raw.githubusercontent.com`/CDN sandbox gotcha): Today-tab sector card shows `N/M ↑` breadth
+  bar; tapping expands the industry drill-down with YTD perf + universe rank; Strength tab's
+  independent breadth table (week/month/3mo/6mo toggle) still renders correctly, confirming no
+  regression to the already-merged feature.
+
+**Docs updated:** `README.md` § Configurable parameters, `CLAUDE.md` § PWA display thresholds
+(both get the new `BREADTH_TOP_HALF_FRACTION` row), and
+`planning/PLAN_sector_industry_hierarchy.md` (Phase 2 table + Files Changed table marked done,
+new "Phase 2 landed" section added above the historical "Current State" note).
+
+**Next steps:** open PR against default; VP smoke-test on a phone/mobile viewport recommended
+before merge (this session verified via headless Playwright + fixture data, not a live device).
+Un-started Phase 2 items C (Leaders & Laggards mini-list) and R (market-wide breadth gauge)
+remain backlog. Phase 3 gate (feature D tab placement) still needs a VP decision — unrelated to
+this PR, no action taken this session.
+
+---
+
 ## 2026-07-02 — Resuming sector→industry hierarchy: found an abandoned draft PR with real work
 
 **Status: PLAN DOC UPDATED. NO CODE CHANGES. SAFE TO CLOSE.**
