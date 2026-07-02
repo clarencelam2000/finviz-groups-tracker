@@ -427,3 +427,14 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   strength, notable movers, momentum leaders and laggards, and divergences.
 - **User one-liner:** "A plain-English summary the AI writes each day for sectors
   and industries, highlighting strength, movers, and divergences."
+
+## sector_breadth
+- **Source:** `loadTaxonomyAndBreadth()` (`docs/index.html` PWA). Loads the
+  sector→industry taxonomy map (`data/finviz_sector_industry_map.json`) and
+  counts how many of each sector’s constituent industries rank in the top half
+  of all industries by `rank_ytd` (rank ≤ 72 of 144). Loaded as a fire-and-forget
+  async task after the sectors data loads.
+- **Signals:** breadth signal for sector cards. A sector with 12/13 industries in
+  the top half is broadly participating; 2/13 means one or two names are carrying
+  the sector while the rest lag. High breadth = durable move; low breadth = narrow.
+- **User one-liner:** "How many of a sector’s industries are in the top half of all industries by YTD rank — high breadth means the whole sector is participating, not just one or two names."

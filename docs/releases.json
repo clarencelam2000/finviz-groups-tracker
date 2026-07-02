@@ -1,6 +1,19 @@
 {
-  "current": "2026.07.01.5",
+  "current": "2026.07.02.1",
   "releases": [
+    {
+      "version": "2026.07.02.1",
+      "date": "2026-07-02",
+      "title": "New: sector breadth bars + industry drill-down (Today tab)",
+      "tag": "feature",
+      "tab": "today",
+      "notes": [
+        "Sector cards in the Today tab now show a breadth bar: a fill indicator plus a count like '9/13 industries top-half' telling you how many of the sector's industries rank in the top half of the full industry universe by YTD.",
+        "Tap any sector card to expand an inline drill-down: all constituent industries listed and ranked by YTD performance, each showing its universe rank. Tap again to collapse.",
+        "Industry cards continue to expand their existing quarter / 6-month / 1-year and valuation detail as before.",
+        "This is a different view from the existing sector breadth table in the Strength tab (which lets you toggle week/month/quarter/half timeframes) — the Today-tab bar is fixed to YTD and lives right on the card for a quicker glance."
+      ]
+    },
     {
       "version": "2026.07.01.5",
       "date": "2026-07-01",
