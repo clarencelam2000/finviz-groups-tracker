@@ -6,6 +6,46 @@
 
 ---
 
+## 2026-07-02 — RCA: GH Pages deployment failure after PR #232 merge
+
+**Status: SAFE TO CLOSE. No code change made — investigation confirmed the failure was a
+transient GitHub-side issue, not caused by PR #232.**
+
+**Trigger:** user reported the "pages build and deployment" run
+(https://github.com/clarencelam2000/finviz-groups-tracker/actions/runs/28608863943) failed
+right after PR #232 (`a00336e1` — lazy-loaded TradingView charts on Lookup/Picks tabs) merged.
+
+**Findings:**
+- This is GitHub's own auto-generated Pages workflow (`dynamic/pages/pages-build-deployment`,
+  workflow id 292428859) — it is **not** one of our `.github/workflows/*.yml` files, so nothing
+  in our repo config drives it directly.
+- The job logs show the build/artifact step succeeded instantly; the failure was entirely in
+  the `actions/deploy-pages@v5` step, which polled `Current status: deployment_queued` for the
+  full 10-minute timeout and then errored `Timeout reached, aborting!` — the deployment never
+  left GitHub's internal queue.
+- No error, warning, or anomaly in our own build output — the artifact was created and uploaded
+  fine (`Found 1 artifact(s)`, `Creating Pages deployment with payload`). This rules out
+  anything in PR #232's diff (new TradingView `<script>` embeds in `docs/index.html`) as the
+  cause — the deploy pipeline never got far enough to process page content.
+- **Confirmed one-off**: checked the prior ~20 runs of this workflow — all succeeded (with the
+  normal "cancelled" conclusion on a couple of rapid back-to-back pushes, which is expected
+  last-write-wins queuing behavior, not a failure). This `a00336e1` run was the only `failure`
+  conclusion in recent history.
+- **Confirmed self-resolved**: the very next push (PR #233 merge, `addeff9c`, run 28609657639)
+  triggered a fresh Pages deployment which completed successfully (~7 min, well under the
+  10-min timeout) with no code or config changes in between.
+
+**Conclusion:** GitHub's Pages deployment queue hiccuped for this one run (a known,
+occasionally-reported GitHub Actions/Pages infra issue — deployments sometimes sit in
+`deployment_queued` past the client-side timeout). It was not caused by PR #232's content and
+required no fix; a retry (which happened automatically via the next commit) cleared it. If this
+recurs frequently, the mitigation would be re-running the failed job from the Actions UI
+(`Re-run failed jobs`) rather than any code change.
+
+**Next steps:** none — no follow-up action needed unless the pattern repeats.
+
+---
+
 ## 2026-07-02 — PR #178 rebased, reconciled, and landed (sector breadth bar + drill-down)
 
 **Status: LANDED on this session's branch, PR open for review. SAFE TO CLOSE once PR merges.**
