@@ -413,6 +413,7 @@
       // what anyone sees by default. Session-only, not persisted to localStorage.
       picksArielFilter: 'off',
       picksExpanded: new Set(), // stable "ticker_category" keys of currently-expanded Picks rows; survives re-renders within a session, cleared on full page reload
+      picksChartOpen: new Set(), // stable "ticker_category" keys with the TradingView chart panel open; survives re-renders, same lifecycle as picksExpanded
       provenanceData: null,
       latestAiDate: null,
       latestSnapshotDate: null,
@@ -3151,6 +3152,35 @@
         </details>`;
     }
 
+    // Lazy-loaded TradingView "Advanced Chart" embed (free public widget, no API key/subscription —
+    // see knowledge/ for eval notes). Only built when the user opens the panel (state.lookup.chartOpen)
+    // so the iframe never loads on every lookup. StockCharts.com has no equivalent free embed, so it
+    // stays an outbound link only (see the "TradingView ↗" / "Finviz ↗" links above).
+    function tradingViewChartHtml(symbol, height) {
+      height = height || 360;
+      const config = {
+        symbol,
+        interval: 'D',
+        theme: 'dark',
+        style: '1',
+        locale: 'en',
+        timezone: 'America/New_York',
+        toolbar_bg: '#0f172a',
+        enable_publishing: false,
+        hide_top_toolbar: false,
+        hide_legend: true,
+        save_image: false,
+        hide_side_toolbar: true,
+        allow_symbol_change: false,
+        support_host: 'https://www.tradingview.com',
+      };
+      const src = `https://s.tradingview.com/embed-widget/advanced-chart/?locale=en#${encodeURIComponent(JSON.stringify(config))}`;
+      return `
+        <div class="rounded-xl overflow-hidden border border-slate-700 bg-slate-900" style="height:${height}px;">
+          <iframe src="${src}" title="${escapeHtml(symbol)} chart" class="w-full h-full" style="border:0;" loading="lazy"></iframe>
+        </div>`;
+    }
+
     function renderLookup() {
       const el = document.getElementById('lookup-result');
       if (!el) return;
@@ -3234,12 +3264,15 @@
 
       const symEnc = encodeURIComponent(data.symbol);
       const links = `
-        <div class="flex gap-2 mt-1.5">
+        <div class="flex gap-2 mt-1.5 items-center flex-wrap">
           <a href="https://finviz.com/quote.ashx?t=${symEnc}" target="_blank" rel="noopener noreferrer"
             class="text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">Finviz ↗</a>
           <a href="https://www.tradingview.com/symbols/${symEnc}/" target="_blank" rel="noopener noreferrer"
             class="text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">TradingView ↗</a>
+          <button class="lookup-chart-toggle text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600"
+            data-symbol="${escapeHtml(data.symbol)}">${state.lookup.chartOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
         </div>`;
+      const chartPanel = state.lookup.chartOpen ? `<div class="mt-2">${tradingViewChartHtml(data.symbol)}</div>` : '';
 
       let html = `
         <div class="flex gap-3 items-start">
@@ -3253,6 +3286,7 @@
             ${meta ? `<div class="text-xs text-slate-400 mt-0.5">${meta}</div>` : ''}
             ${classificationLine}
             ${links}
+            ${chartPanel}
           </div>
         </div>`;
 
@@ -3975,7 +4009,9 @@
               <a href="https://finviz.com/quote.ashx?t=${encodeURIComponent(ticker)}" target="_blank" rel="noopener noreferrer" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation()">Finviz ↗</a>
               <a href="https://www.tradingview.com/symbols/${encodeURIComponent(ticker)}/" target="_blank" rel="noopener noreferrer" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation()">TradingView ↗</a>
               ${r.group ? `<a href="${escapeHtml(buildScreenerUrl('ind', slugifyGroup(r.group)))}" target="_blank" rel="noopener noreferrer" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation()">Peers in group ↗</a>` : ''}
+              <button id="pick-chart-toggle-${key}" class="pick-chart-toggle text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" data-key="${key}" data-expand-key="${escapeHtml(expandKey)}" data-ticker="${escapeHtml(ticker)}" onclick="event.stopPropagation();__togglePickChart('${key}','${expandKey.replace(/'/g, "\\'")}','${ticker.replace(/'/g, "\\'")}')">${state.picksChartOpen.has(expandKey) ? 'Hide chart ▲' : 'Show chart ▼'}</button>
             </div>
+            <div id="pick-chart-panel-${key}" class="mt-2">${state.picksChartOpen.has(expandKey) ? tradingViewChartHtml(ticker, 280) : ''}</div>
           </div>`;
       }
 
@@ -4119,6 +4155,26 @@
         }
       }
       if (chev) chev.classList.toggle('rotate-180');
+    };
+
+    // Lazy-load the TradingView chart into a Picks row's expanded panel without a full
+    // re-render — mirrors __togglePickRow's DOM-patch pattern. picksChartOpen persists the
+    // open/closed state across renderPicks() re-renders (tab switches, view/filter changes),
+    // same lifecycle as picksExpanded.
+    window.__togglePickChart = function(key, expandKey, ticker) {
+      const panel = document.getElementById('pick-chart-panel-' + key);
+      const btn = document.getElementById('pick-chart-toggle-' + key);
+      if (!panel) return;
+      const isOpen = state.picksChartOpen.has(expandKey);
+      if (isOpen) {
+        state.picksChartOpen.delete(expandKey);
+        panel.innerHTML = '';
+        if (btn) btn.textContent = 'Show chart ▼';
+      } else {
+        state.picksChartOpen.add(expandKey);
+        panel.innerHTML = tradingViewChartHtml(ticker, 280);
+        if (btn) btn.textContent = 'Hide chart ▲';
+      }
     };
 
     window.__setPickBasis = function(key, basis) {
@@ -5028,6 +5084,14 @@
     document.getElementById('update-banner-see').addEventListener('click', () => openHub('whatsnew'));
     document.getElementById('update-banner-x').addEventListener('click', clearUnseen);
     document.getElementById('ai-share-btn').addEventListener('click', shareAI);
+    // Lazy-load the TradingView chart panel only when the user explicitly opens it.
+    document.getElementById('lookup-result').addEventListener('click', e => {
+      const btn = e.target.closest('.lookup-chart-toggle');
+      if (!btn) return;
+      state.lookup.chartOpen = !state.lookup.chartOpen;
+      renderLookup();
+    });
+
     document.getElementById('ticker-submit').addEventListener('click', doLookup);
     document.getElementById('ticker-input').addEventListener('keydown', function(e) {
       const suggs = document.getElementById('lookup-suggestions');
