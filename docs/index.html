@@ -1268,19 +1268,43 @@
       </div>`;
     }
 
-    // Expand-in-place drill-down for sector cards (Feature A + F, VP decision 2026-06-24).
-    // Shows constituent industries sorted by YTD rank with sector-relative rank (#k in sector).
-    function renderSectorDrillDown(sectorName) {
-      if (!Object.keys(state.taxonomy).length || !state.data.industries.delta?.length) {
-        return '<div class="border-t border-slate-700 px-3 py-3 text-xs text-slate-500 italic">Loading industries…</div>';
-      }
+    // Shared row-building for the sector→industry drill-down (Feature A/F, Today
+    // tab) and the Lookup-tab sector card's subsector breakdown — one source of
+    // truth for "which industries belong to this sector, ranked by YTD" so the
+    // two render targets can't drift. Returns null while data isn't loaded yet
+    // (caller shows a loading state); [] when the sector has no mapped industries.
+    function sectorIndustryRows(sectorName) {
+      if (!Object.keys(state.taxonomy).length || !state.data.industries.delta?.length) return null;
       const industries = state.taxonomy[sectorName] || [];
       const dMap = Object.fromEntries((state.data.industries.delta || []).map(r => [r.name, r]));
       const sMap = Object.fromEntries((state.data.industries.snap  || []).map(r => [r.name, r]));
-      const rows = industries
+      return industries
         .map(name => ({ name, d: dMap[name] || {}, s: sMap[name] || {} }))
         .sort((a, b) => (pf(a.d.rank_ytd) ?? 9999) - (pf(b.d.rank_ytd) ?? 9999));
-      const rowsHtml = rows.map((r, i) => {
+    }
+
+    // Feature C: leader/laggard mini-callout — the #1 and last-place industry in
+    // the sector by YTD rank, so a user scanning a sector with 20+ industries gets
+    // "here's where to look" instead of a full ranked scroll. Skipped when fewer
+    // than 2 industries have rank data (no meaningful poles to show).
+    function leaderLaggardHtml(rows) {
+      const withRank = rows.filter(r => pf(r.d.rank_ytd) !== null);
+      if (withRank.length < 2) return '';
+      const leader = withRank[0];
+      const laggard = withRank[withRank.length - 1];
+      const fmt = r => {
+        const perf = pf(r.s.perf_ytd);
+        const perfStr = perf !== null ? `${perf > 0 ? '+' : ''}${perf.toFixed(1)}%` : '—';
+        return `<span class="text-slate-300 truncate">${escapeHtml(r.name)}</span> <span class="${perf !== null ? perfColor(perf) : 'text-slate-500'} tabular-nums flex-shrink-0">${perfStr}</span>`;
+      };
+      return `<div class="flex justify-between gap-3 text-xs mb-1.5 pb-1.5 border-b border-slate-700/40">
+        <div class="flex items-center gap-1 min-w-0" title="Leader (best YTD rank)"><span class="flex-shrink-0">🏆</span>${fmt(leader)}</div>
+        <div class="flex items-center gap-1 min-w-0" title="Laggard (worst YTD rank)"><span class="flex-shrink-0">🔻</span>${fmt(laggard)}</div>
+      </div>`;
+    }
+
+    function industryRowsHtml(rows) {
+      return rows.map((r, i) => {
         const perf = pf(r.s.perf_ytd);
         const univ = pf(r.d.rank_ytd);
         const perfStr = perf !== null ? `${perf > 0 ? '+' : ''}${perf.toFixed(1)}%` : '—';
@@ -1292,12 +1316,57 @@
           <span class="text-slate-600 flex-shrink-0 tabular-nums w-7 text-right">${univ !== null ? '#' + univ : '—'}</span>
         </div>`;
       }).join('');
+    }
+
+    // Expand-in-place drill-down for sector cards (Feature A + F, VP decision 2026-06-24).
+    // Shows constituent industries sorted by YTD rank with sector-relative rank (#k in sector).
+    function renderSectorDrillDown(sectorName) {
+      const rows = sectorIndustryRows(sectorName);
+      if (rows === null) {
+        return '<div class="border-t border-slate-700 px-3 py-3 text-xs text-slate-500 italic">Loading industries…</div>';
+      }
       return `<div class="border-t border-slate-700 px-3 pt-2 pb-3">
         <div class="text-xs text-slate-500 mb-1 flex justify-between">
           <span>${escapeHtml(sectorName)} industries</span>
           <span class="text-slate-600">YTD · univ</span>
         </div>
-        ${rowsHtml || '<div class="text-xs text-slate-500 italic">No data</div>'}
+        ${rows.length ? leaderLaggardHtml(rows) : ''}
+        ${rows.length ? industryRowsHtml(rows) : '<div class="text-xs text-slate-500 italic">No data</div>'}
+      </div>`;
+    }
+
+    // Lookup-tab sector card: breadth bar row + subsector (industry) breakdown,
+    // porting Today-tab Features B/A/C to the one other place a sector card
+    // renders. Unlike renderSectorDrillDown() this has no outer px-3 — the
+    // groupPerfCard() wrapper already supplies p-3, so an extra px-3 here would
+    // double-indent this section relative to the card's other rows.
+    function breadthRow(top, total) {
+      if (!total) return '';
+      const pct = top / total;
+      const majority = pct >= 0.5;
+      return `<div class="flex justify-between items-center text-xs">
+        <span class="text-slate-400">Breadth</span>
+        <span class="flex items-center gap-2">
+          <span class="inline-block w-16 h-1 bg-slate-700 rounded-full overflow-hidden align-middle">
+            <span class="block h-full rounded-full ${majority ? 'bg-emerald-600' : 'bg-red-800'}" style="width:${(pct * 100).toFixed(0)}%"></span>
+          </span>
+          <span class="${majority ? 'text-emerald-400' : 'text-slate-500'} tabular-nums">${top}/${total} ↑</span>
+        </span>
+      </div>`;
+    }
+
+    function sectorSubsectorHtml(sectorName) {
+      const rows = sectorIndustryRows(sectorName);
+      if (rows === null) {
+        return '<div class="border-t border-slate-700 pt-2 mt-0.5 text-xs text-slate-500 italic">Loading industries…</div>';
+      }
+      return `<div class="border-t border-slate-700 pt-2 mt-0.5">
+        <div class="text-xs text-slate-500 mb-1 flex justify-between">
+          <span>Industries</span>
+          <span class="text-slate-600">YTD · univ</span>
+        </div>
+        ${rows.length ? leaderLaggardHtml(rows) : ''}
+        ${rows.length ? industryRowsHtml(rows) : '<div class="text-xs text-slate-500 italic">No data</div>'}
       </div>`;
     }
 
@@ -3051,9 +3120,11 @@
           ${floorHtml}
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Momentum</span><span>${momHtml}</span></div>
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Perf</span><span class="text-slate-300">Wk ${fmtPct(perfWeek)} · Mo ${fmtPct(perfMonth)} · YTD ${fmtPct(perfYtd)}</span></div>
+          ${groupKey === 'sectors' ? breadthRow(state.sectorBreadth[name]?.top, state.sectorBreadth[name]?.total) : ''}
           ${breadthStrip(snap)}
           ${spark}
           ${expandedHtml}
+          ${groupKey === 'sectors' && expanded ? sectorSubsectorHtml(name) : ''}
         </div>`;
     }
 
