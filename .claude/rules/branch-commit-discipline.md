@@ -209,6 +209,38 @@ Every code change to `scripts/` must include a corresponding test change in `tes
 | `compute_deltas.compute_momentum` | Score 0.0–1.0; single-row → NaN; all-NaN column excluded |
 | `compute_deltas._fmt` | NaN → `""`, None → `""`, valid float passes through |
 
+### New Playwright test files must be added to the CI ignore list
+
+The `test` job in `.github/workflows/tests.yml` runs `pytest tests/ -v` with an explicit
+`--ignore=` list — it does **not** run `playwright install chromium`, so any test file that
+does `from playwright.sync_api import sync_playwright` will fail there with "Executable
+doesn't exist" (no browser binary), not with an assertion failure. As of this writing the
+ignored files are `test_functional_playwright.py`, `test_pwa_picks_hod.py`,
+`test_pwa_picks_atr_earnings.py`, and `test_pwa_focus_scoring.py`.
+
+**Rule:** any *new* `tests/test_*.py` file that imports Playwright must be added to that
+same `--ignore=` list in the same PR that adds the file. This was missed once (PR #232 —
+`tests/test_pwa_picks_chart.py` shipped without the ignore line, CI job `test` went red,
+fixed in a same-day follow-up commit) — treat a red `test` job with a Playwright
+"executable doesn't exist" error as this exact failure mode, not a real regression.
+
+Locally this is invisible if you happen to have Chromium already installed (`pip install
+playwright && python3 -m playwright install chromium`), since the test then just runs and
+passes — the gap only shows up in CI. Verify before pushing:
+```bash
+grep -l "sync_playwright" tests/test_*.py
+grep "ignore=" .github/workflows/tests.yml
+# every file in the first list must appear in the second
+```
+
+> **Known gap (separate issue, don't confuse the two):** verifying a *new* Playwright test
+> inside a Claude Code cloud session hits a different problem — the pinned `playwright==1.44.0`
+> expects a Chromium revision the cloud sandbox doesn't have pre-installed under that name.
+> This is a sandbox-only fact, not a CI fact (CI's `playwright install chromium --with-deps`
+> step handles it fine there). See `knowledge/investigations/playwright-cloud-session-testing.md`
+> for the full root-cause writeup and working-harness pattern, including a symlink trick to
+> verify without touching any committed file.
+
 ---
 
 ## Session handoff — end of every working block
