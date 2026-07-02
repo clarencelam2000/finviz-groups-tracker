@@ -273,8 +273,8 @@ prepending an entry to `data/picks/selector_versions.json` (enforced by tests â€
 
 | Parameter | Default | What it controls |
 |-----------|---------|-----------------|
-| `SELECTOR_VERSION` | `"v1"` | Monotonic, immutable-once-published selector policy id stamped on every `picks.csv` row. Bump on any selection-logic/constant change. |
-| `DAILY_GROUP_CAP` | `20` | Max **unique** groups scraped per day. A group qualifying in multiple buckets counts once but is tagged per bucket. |
+| `SELECTOR_VERSION` | `"v2"` | Monotonic, immutable-once-published selector policy id stamped on every `picks.csv` row. Bump on any selection-logic/constant change. |
+| `DAILY_GROUP_CAP` | `20` | Max **unique** groups scraped per day. A group qualifying in multiple buckets counts once toward this cap but is tagged once per bucket it naturally ranks in (attribution) â€” a lower-priority bucket backfills past its natural top-N with the next new candidate so dedup doesn't shrink its effective slot yield (v2). |
 | `LEADER_SS_SLOTS` | `8` | Leaders "core" slots ranked by sustained strength (lowest `rank_month+rank_quarter+rank_half`). |
 | `LEADER_MC_SLOTS` | `2` | Leaders "freshness" slots ranked by `momentum_confirmed` desc among groups not in the core. |
 | `EMERGING_SLOTS` | `4` | Max emerging-bucket groups. |

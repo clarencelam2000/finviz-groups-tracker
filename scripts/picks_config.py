@@ -37,7 +37,14 @@ GOLDEN_HEADER_PATH = BASE_DIR / "tests" / "fixtures" / "probe_header_84col.txt"
 # CAVEAT (ADR-007): the registry captures *constants*, not arbitrary code. If the
 # ranking math in select_groups() changes without a version bump, the stamp lies.
 # Mitigation is this bump rule + code review, not a technical lock.
-SELECTOR_VERSION = "v1"
+#
+# v1 -> v2 (2026-07-02, ADR-007 amendment): a group already selected by a
+# higher-priority bucket no longer consumes one of a lower-priority bucket's N
+# slots just by ranking in that bucket's natural top-N — it is still tagged
+# there (attribution preserved), but the bucket backfills past rank N with the
+# next NEW candidate so its N slots still yield N distinct groups when the
+# qualifying pool is deep enough. See select_groups()'s add_bucket_with_backfill.
+SELECTOR_VERSION = "v2"
 
 # ---------------------------------------------------------------------------
 # Daily cap + per-bucket slot split (ADR-007, VP-locked 2026-06-24/25)

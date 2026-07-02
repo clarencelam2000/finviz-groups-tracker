@@ -256,10 +256,16 @@ screener and logs them to an append-only event log. **Phase 2 of
 | `data/picks/display_methodology.json` | Append-only registry of the client-side (PWA) display/scoring constants active on any date — base filter, All-view sort, Focus DQ/scoring/weights, ATR display bands. Same versioning pattern as `selector_versions.json` (`current` + newest-first `versions[]`, lookup by largest `effective_date ≤ date`). Anti-drift guard: `tests/test_picks_methodology.py` (checks `versions[0].params` against the live `docs/index.html` constants). **Bump whenever any of those constants changes** (see `planning/picks-methodology-tracking.md`). v1's `known_gaps` block documents that it does not yet model the Phase 3d liquidity/earnings penalties or the Phase 4 Ariel-match filter — tracked as `PICKS-METH-V2` in `.session/SPRINT.md`. |
 | `scripts/replay_picks.py` | Deterministically reconstructs a historical Picks All/Focus view from `picks.csv` + `display_methodology.json`, for replay and A/B testing across methodology versions (`python scripts/replay_picks.py --date YYYY-MM-DD --view all\|focus [--methodology-version vN] [--pretty]`). Tested in `tests/test_replay_picks.py`. |
 
-**Selector (ADR-007, VP-locked):** four buckets filled in priority order to ≤ `DAILY_GROUP_CAP`
-(20) unique groups; a group qualifying in multiple buckets is **scraped once but tagged per
-bucket**. A 0-group bucket is normal (e.g. `momentum_accel` is NaN until 11 sessions) — fill from
-the next priority, never error.
+**Selector (ADR-007, VP-locked; dedup policy amended v2 2026-07-02):** four buckets filled in
+priority order to ≤ `DAILY_GROUP_CAP` (20) unique groups; a group qualifying in multiple buckets
+is **scraped once but tagged per bucket** it naturally ranks in (attribution preserved). Since v2,
+a group already selected by a higher-priority bucket no longer eats one of a lower-priority
+bucket's N slots just by landing in that bucket's natural top-N — emerging/accel/rs_new_high
+backfill past rank N with the next NEW candidate so each bucket's N slots still yield N distinct
+groups when the qualifying pool is deep enough (`add_bucket_with_backfill` in `collect_picks.py`).
+Leaders' own freshness-fill sub-bucket already excluded the core 8 by construction (unchanged). A
+0-group bucket is normal (e.g. `momentum_accel` is NaN until 11 sessions) — fill from the next
+priority, never error.
 1. **leaders** ≤10 — 8 by sustained strength (`rank_month+rank_quarter+rank_half` asc) + 2 freshness fills (`momentum_confirmed` desc).
 2. **emerging** ≤4 — `regime_short_long > 0.15` AND `rs_score > 0.5`.
 3. **accel** ≤3 — `momentum_accel > 0.08` AND top-40% by `momentum_score` AND `rs_score > 0.5`.
