@@ -1,0 +1,100 @@
+{
+  "current": "v1",
+  "versions": [
+    {
+      "version": "v1",
+      "effective_date": "2026-06-25",
+      "description": "Initial display methodology (Phase 3b). Base display filter gates both All and Focus views. All view groups by selector category then industry, sorts least-extended first. Focus view adds hard ATR-extension DQ, cross-sectional 3-component scoring (group strength + stop tightness + quiet bar), and extension penalty ramp. VP-locked alongside selector v1.",
+      "params": {
+        "base_filter": {
+          "min_market_cap_b": 5,
+          "note": "'Market Cap' column in picks.csv stores raw Finviz strings (e.g. '345.79B', '456M', '1.2T') — parse with a _parse_cap_b equivalent (strip B/M/T/K suffix, multiply by 1000/1/0.001/0.000001) before comparing to this float threshold. Row is excluded if parsed billions <= 5.",
+          "ma_positioning": {
+            "logic": "any",
+            "conditions": [
+              "SMA50 > 0",
+              "SMA200 > 0",
+              "SMA50 > SMA20"
+            ],
+            "columns": ["SMA50", "SMA200", "SMA20"],
+            "note": "SMA* columns are % distance from MA (e.g. 5.2 = price is 5.2% above that MA), stored as strings that may or may not include a '%' suffix (e.g. '8.33%' or '8.33') — strip '%' before parsing. SMA50 > SMA20 in % terms is equivalent to 20MA price > 50MA price (classic uptrend). A row passes if ANY condition holds. All three NaN = fails."
+          }
+        },
+        "all_view_sort": {
+          "primary": "list_category",
+          "category_order": ["leaders", "emerging", "accel", "rs_new_high"],
+          "secondary": "group",
+          "secondary_note": "Column name in picks.csv is 'group' (part of PICKS_LEAD_COLS). Within each category, groups appear alphabetically.",
+          "tertiary": {
+            "col": "atr_ext_50",
+            "direction": "asc",
+            "note": "Least-extended first within each group."
+          }
+        },
+        "focus_dq": {
+          "col": "atr_ext_50",
+          "min_exclusive": 0,
+          "max_inclusive": 4.0,
+          "note": "atr_ext_50 <= 0 means price is at or below the 50MA (not actionable). > ATR_EXT_ACTIONABLE means over-extended. Both are hard disqualifications."
+        },
+        "focus_score": {
+          "formula": "focus_score = base * (1 - penaltyFrac)",
+          "base_formula": "FOCUS_W_GROUP * normGroup + FOCUS_W_TIGHT * normTight + FOCUS_W_QUIET * normQuiet",
+          "weights": {
+            "group": 0.4,
+            "tight": 0.4,
+            "quiet": 0.2
+          },
+          "components": {
+            "group": {
+              "col": "grp_sum_mid_rank",
+              "direction": "lower_is_better",
+              "note": "Sum of rank_month + rank_quarter + rank_half for the selecting group. Lower = stronger group."
+            },
+            "tight": {
+              "cols": ["risk_20ma_pct", "risk_50ma_pct"],
+              "selection": "min of positive values only",
+              "direction": "lower_is_better",
+              "note": "Nearest MA stop below the price. risk_50ma_pct is always positive for Focus members (price > 50MA is the DQ gate). risk_20ma_pct only qualifies if > 0 (20MA is below price). Takes the smaller of the two qualifying values. If both are NaN or non-positive → NaN (treated as 0.5 by normalization)."
+            },
+            "quiet": {
+              "col": "range_atr",
+              "direction": "lower_is_better",
+              "note": "Today's high-low range divided by ATR. Narrower = more orderly day."
+            }
+          },
+          "normalization": {
+            "method": "inverted_minmax",
+            "fallback_method": "rank_percentile",
+            "fallback_threshold_col": "FOCUS_MIN_POOL",
+            "fallback_threshold": 5,
+            "all_equal_default": 0.5,
+            "nan_default": 0.5,
+            "n1_default": 1.0,
+            "note": "Inverted: lower raw value → higher normalized score (1.0 = best). When pool < 5, rank-based percentile replaces min–max to avoid jumpy scores. All-equal in a component → everyone gets 0.5. NaN → 0.5 (neutral contribution). n=1 candidate → JS short-circuits and assigns score 1.0 before normalization runs (no extension penalty applied)."
+          },
+          "extension_penalty": {
+            "col": "atr_ext_50",
+            "ramp_start": 2.5,
+            "ramp_end": 4.0,
+            "max_fraction": 0.5,
+            "formula": "penaltyT = clamp((atr_ext - 2.5) / (4.0 - 2.5), 0, 1); penaltyFrac = 0.5 * penaltyT",
+            "note": "0 penalty below 2.5×. Ramps linearly to 50% haircut at 4.0× (ATR_EXT_ACTIONABLE). focus_score is always in [0, 1]."
+          }
+        },
+        "focus_sort": {
+          "col": "focus_score",
+          "direction": "desc"
+        },
+        "atr_bands": {
+          "emerald_max": 4.0,
+          "amber_max": 8.0,
+          "note": "Display-only color bands on atr_ext_50. Emerald = actionable zone (< 4.0×); amber = caution (4.0–8.0×); red = trim candidate (≥ 8.0×). NOTE: the Guide tooltip in docs/index.html (near line 526) incorrectly says 'emerald ≤5×' — the actual code cutoff is 4.0× (ATR_EXT_ACTIONABLE). Do not 'fix' this JSON to say 5.0; the code is the source of truth. Fix the guide text separately."
+        }
+      },
+      "known_gaps": {
+        "note": "This v1 entry captures only the original Phase 3b formula (base filter, all-view sort, focus DQ, 3-component focus score, atr bands) per the plan's locked scope. The LIVE Focus score in docs/index.html as of 2026-07-01 also multiplies by two additional independent haircuts NOT modeled here: a liquidity penalty (FOCUS_MIN_DOLLAR_VOL hard gate + LIQUIDITY_PENALTY_START/MAX ramp) and an earnings-proximity penalty (EARNINGS_IMMINENT_DAYS/CAUTION_DAYS + EARNINGS_PENALTY_MAX/POST_EARNINGS_PENALTY_FRAC ramp), both added in Phase 3d. The opt-in Ariel-match filter (Phase 4, ARIEL_* constants) is also not modeled — it is a separate optional display layer, not part of the base/Focus methodology. scripts/replay_picks.py therefore reproduces the v1 formula only and will NOT bit-for-bit match current live Focus scores/eligibility. Tracked as PICKS-METH-V2 in .session/SPRINT.md — add a v2 entry (and extend replay_picks.py) once the liquidity/earnings/Ariel layers are considered stable enough to lock."
+      }
+    }
+  ]
+}
