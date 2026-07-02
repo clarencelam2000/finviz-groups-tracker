@@ -1,14 +1,36 @@
 # Plan: Sector → Industry Hierarchy Feature Roadmap
 
-**Status:** Paused 2026-06-25 in favor of the Stock Picks workstream; resuming 2026-07-02.
-Phase 1 shipped and live. Phase 2 was built in full but never merged — see below.
+**Status:** Paused 2026-06-25 in favor of the Stock Picks workstream; resumed 2026-07-02.
+Phase 1 and Phase 2 (Features A, B, F) are both shipped and live.
 **Owner:** VP sign-off required before each tier  
 **Last updated:** 2026-07-02  
 **Prerequisite:** `data/finviz_sector_industry_map.json` ✅ Merged (PR #171)
 
 ---
 
-## ⚠️ Current State (read this first — 2026-07-02)
+## ✅ Phase 2 landed (2026-07-02)
+
+PR #178 (`claude/fervent-thompson-rlvfs1`) was rebased onto current default and reconciled —
+see `.session/session-notes.md` for the full session entry. Summary:
+
+- Today-tab sector cards now show a breadth bar ("N/M industries top-half ↑") and expand
+  in place to a per-industry YTD drill-down with universe rank (Features A, B, F).
+- The taxonomy-loading and breadth-threshold collision described in the "Current State" note
+  below (kept for historical record) was resolved: `loadTaxonomyAndBreadth()` now calls the
+  existing `loadTaxonomy()` instead of duplicating the fetch, and a new `BREADTH_TOP_HALF_FRACTION`
+  constant (`docs/index.html`, `README.md`, `CLAUDE.md`) is the single source of truth for the
+  "top half" cutoff shared by both the Strength-tab table and the Today-tab bar.
+- **A real bug was caught during reconciliation, not present in either original branch on its
+  own:** the merge produced two `taxonomy:` keys in the PWA's `state` object literal (JS silently
+  keeps the last one). This overwrote the intended `taxonomy: null` with `taxonomy: {}`, which
+  made `loadTaxonomy()`'s already-loaded guard (`state.taxonomy !== null`) true from the start —
+  the taxonomy JSON would never have been fetched and the breadth bar would have silently stayed
+  empty forever, with no console error. Caught only because the merged build was functionally
+  smoke-tested end-to-end with Playwright before landing (not just unit tests + eyeballing the
+  diff). Fixed by removing the duplicate key.
+- Release triplet: `2026.07.02.1`, `sw.js` CACHE → `finviz-v49`.
+
+## ⚠️ Current State pre-reconciliation (historical — kept for context)
 
 This workstream was paused after Phase 1 shipped so the team could build the Stock Picks
 feature (Focus scores, Ariel Hernandez criteria, HoD toggle, charts deep-links — see
@@ -315,15 +337,14 @@ check before investing in the larger surface.
 
 ### Phase 2 — Navigation layer (1–2 sessions)
 
-**A, B, and F are already built** — see PR #178 (`claude/fervent-thompson-rlvfs1`), open as a
-draft, unmerged, 177 commits stale as of 2026-07-02. Do not re-implement; rebase and reconcile
-per the § Current State note above. C and R below are the only genuinely un-started items.
+**A, B, and F shipped 2026-07-02** — PR #178 rebased and reconciled, see § Phase 2 landed above.
+C and R below are the only genuinely un-started items in this tier.
 
 | Priority | ID | Feature | Effort | File(s) | Status |
 |----------|----|---------|--------|---------|--------|
-| 3 | A | PWA drill-down navigation | M | `docs/index.html` | ✅ Built, unmerged — PR #178 |
-| 4 | F | Rank within sector | S | `docs/index.html` | ✅ Built, unmerged — PR #178 (shown in drill-down only, per VP decision) |
-| — | B | Breadth bar on sector cards | S | `docs/index.html` | ✅ Built, unmerged — PR #178. Note: a *different* breadth table shipped separately to the Strength tab (`122a4d1`, merged) — not the same UX, both are wanted. |
+| 3 | A | PWA drill-down navigation | M | `docs/index.html` | ✅ Done 2026-07-02 |
+| 4 | F | Rank within sector | S | `docs/index.html` | ✅ Done 2026-07-02 (shown in drill-down only, per VP decision) |
+| — | B | Breadth bar on sector cards | S | `docs/index.html` | ✅ Done 2026-07-02. Note: a *different* breadth table shipped separately to the Strength tab (`122a4d1`, merged) — not the same UX, both are wanted; they now share one `BREADTH_TOP_HALF_FRACTION` threshold. |
 | 5 | C | Leaders & Laggards mini-list | S | `docs/index.html` | Not started |
 | 6 | R | Market-wide breadth gauge | S | `docs/index.html` | Not started |
 
@@ -475,7 +496,7 @@ The following sprint entries need updating based on this plan:
 | `scripts/seed_taxonomy.py` | ✅ Exists | Foundation |
 | `tests/test_seed_taxonomy.py` | ✅ Exists | Foundation |
 | `dashboard/app.py` | Sector filter sidebar, breadth metric, divergence tab | Phase 1–3 |
-| `docs/index.html` | ✅ Strength-tab breadth table live (`122a4d1`). Drill-down + Today-tab breadth bar built, unmerged (PR #178). Radar, digest, flow map still to build. | Phase 2–4 |
+| `docs/index.html` | ✅ Strength-tab breadth table live (`122a4d1`). Drill-down + Today-tab breadth bar live (PR #178, landed 2026-07-02). Radar, digest, flow map still to build. | Phase 2–4 |
 | `scripts/compute_deltas.py` | `momentum_breadth_confirmed` column (feature E) | Phase 5 |
 | `scripts/generate_ai.py` | Sector context in briefing prompt (feature K) | Phase 4 |
 | `scripts/collect.py` | Staleness tripwire (future) | Phase 5 |
