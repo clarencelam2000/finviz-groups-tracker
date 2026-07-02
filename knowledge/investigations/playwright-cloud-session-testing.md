@@ -142,3 +142,37 @@ Once all three root causes are worked around, the project's existing fixture-int
 exactly as designed — confirmed end-to-end against real changes during this session (Picks tab Charts
 links, dedup, scroll retention). The workarounds are environment-specific (this cloud session), not repo
 bugs, except possibly Root cause 3's existing test files, which is flagged above for someone to verify.
+
+## Update 2026-07-02: verifying without touching any committed file, and Root cause 2 generalizes
+
+Built two new committed Playwright test files this session (`TestPWALookupChart` in
+`test_functional_playwright.py`, `tests/test_pwa_picks_chart.py`) for a TradingView chart-embed
+feature. Root cause 1's documented fix (pass `executable_path=` explicitly) means editing the test
+file itself — fine for the ad hoc verification scripts this doc already sanctions hardcoding revision
+numbers into, but for a *quick sanity check of a file you're about to commit*, there's a zero-diff
+alternative: symlink the revision Playwright expects to the one actually installed, so the default
+(no-`executable_path`) `p.chromium.launch()` call the committed test already uses just works.
+
+```bash
+ls /opt/pw-browsers/          # confirm the installed revision, e.g. chromium-1194
+ln -s /opt/pw-browsers/chromium-1194 /opt/pw-browsers/chromium-1117   # 1117 = what playwright==1.44.0 expects
+python3 -m pytest tests/test_pwa_picks_chart.py -v   # now passes with zero code changes
+rm /opt/pw-browsers/chromium-1117   # clean up — this is a session-local /opt edit, never commit it
+```
+
+This confirms both new test files pass the actual committed assertions (lazy iframe load, correct
+symbol embedded in the TradingView URL, toggle state) without any temporary code changes to revert
+before committing — strictly better than the `executable_path=` edit-and-revert dance for a one-off
+check, though `executable_path=` is still the right call for anything meant to run repeatedly (a
+project skill, a CI debug step) since a symlink under `/opt/` doesn't survive a fresh container.
+
+**Root cause 2 generalizes beyond `raw.githubusercontent.com` and CDN scripts**: this sandbox's
+Chromium also cannot reach `s.tradingview.com` (the TradingView chart-embed iframe target), even
+though `curl https://s.tradingview.com/...` from the same shell returns `200`. So Root cause 2 isn't
+specific to those two domains — assume **no external domain is reachable from Chromium in this
+sandbox**, full stop, and route-stub (or accept-as-unverifiable) anything that loads a third-party
+iframe/script/fetch. For a feature like an embedded chart widget, this means the *rendering* of the
+third-party content can't be visually confirmed in this sandbox — only the surrounding app mechanics
+(does the iframe get inserted with the right `src`, does it lazy-load, does the toggle work) — actual
+visual rendering needs a check in a real browser outside the sandbox (e.g. after deploying to GitHub
+Pages).
