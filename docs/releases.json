@@ -1,6 +1,18 @@
 {
-  "current": "2026.07.02.1",
+  "current": "2026.07.02.2",
   "releases": [
+    {
+      "version": "2026.07.02.2",
+      "date": "2026-07-02",
+      "title": "New: live TradingView charts (Lookup + Picks tabs)",
+      "tag": "feature",
+      "tab": "lookup",
+      "notes": [
+        "Ticker lookups now have a 'Show chart' button that opens a live TradingView price chart for that stock, right next to the existing Finviz / TradingView links.",
+        "Picks tab rows get the same toggle inside their expanded panel — see the chart for any pick without leaving the app.",
+        "Charts load only when you tap the button, so browsing the list stays fast."
+      ]
+    },
     {
       "version": "2026.07.02.1",
       "date": "2026-07-02",

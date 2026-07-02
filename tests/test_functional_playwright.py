@@ -1125,3 +1125,87 @@ class TestPWACardDeeplink:
             assert "&amp;" not in result, \
                 f"HTML entity should not appear in inner_text: {result[:200]}"
         self._run(check)
+
+
+@pytest.mark.functional
+class TestPWALookupChart:
+    """Ticker lookup's lazy-loaded TradingView chart toggle.
+
+    Covers part of Gap 6 (see TODO block at top of file): intercepts the
+    Worker /lookup endpoint and drives a ticker search, then verifies the
+    chart panel is absent until the user opens it (no iframe on every
+    lookup) and correctly targets the looked-up symbol once opened.
+    """
+
+    PORT = 8187
+
+    def _run(self, fn):
+        from playwright.sync_api import sync_playwright
+
+        docs_dir = Path(__file__).parent.parent / "docs"
+        server = subprocess.Popen(
+            ["python3", "-m", "http.server", str(self.PORT), "--directory", str(docs_dir)],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        time.sleep(1)
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch(headless=True)
+                ctx = browser.new_context(ignore_https_errors=True)
+                ctx.add_init_script("localStorage.setItem('fvt_intro_seen_v1','true');")
+                page = ctx.new_page()
+                page.route("**/raw.githubusercontent.com/**", lambda r: r.fulfill(status=404))
+                page.route("**/finviz-ticker-lookup.salmonbaby8.workers.dev/lookup*",
+                            lambda r: r.fulfill(
+                                body='{"symbol":"AAPL","company_name":"Apple Inc.",'
+                                     '"exchange":"NASDAQ","market_cap_b":3000,'
+                                     '"finviz_industry":"Consumer Electronics",'
+                                     '"finviz_sector":"Technology","industry_confidence":0.9,'
+                                     '"image":null,"etf_kind":null}',
+                                content_type="application/json"))
+                page.goto(f"http://localhost:{self.PORT}/", wait_until="domcontentloaded",
+                          timeout=15000)
+                page.wait_for_timeout(500)
+                fn(page)
+                ctx.close()
+                browser.close()
+        finally:
+            server.terminate()
+            server.wait()
+
+    def test_chart_hidden_until_toggled_open(self):
+        """No iframe renders on a fresh ticker lookup; the toggle button is present."""
+        def check(page):
+            page.locator("[data-tab='lookup']").click()
+            page.fill("#ticker-input", "AAPL")
+            page.locator("#ticker-submit").click()
+            page.wait_for_timeout(800)
+            assert page.locator("#lookup-result iframe").count() == 0, \
+                "Chart iframe must not load until the user opens the panel"
+            toggle = page.locator(".lookup-chart-toggle")
+            assert toggle.count() == 1
+            assert "Show chart" in toggle.inner_text()
+        self._run(check)
+
+    def test_toggle_opens_chart_with_symbol_and_closes(self):
+        """Clicking the toggle lazily inserts an iframe scoped to the looked-up symbol."""
+        def check(page):
+            page.locator("[data-tab='lookup']").click()
+            page.fill("#ticker-input", "AAPL")
+            page.locator("#ticker-submit").click()
+            page.wait_for_timeout(800)
+
+            page.locator(".lookup-chart-toggle").click()
+            page.wait_for_timeout(200)
+            iframe = page.locator("#lookup-result iframe")
+            assert iframe.count() == 1
+            src = iframe.get_attribute("src")
+            assert src.startswith("https://s.tradingview.com/embed-widget/advanced-chart/")
+            assert "AAPL" in src
+            assert "Hide chart" in page.locator(".lookup-chart-toggle").inner_text()
+
+            page.locator(".lookup-chart-toggle").click()
+            page.wait_for_timeout(200)
+            assert page.locator("#lookup-result iframe").count() == 0
+            assert "Show chart" in page.locator(".lookup-chart-toggle").inner_text()
+        self._run(check)
