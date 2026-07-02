@@ -273,8 +273,8 @@ prepending an entry to `data/picks/selector_versions.json` (enforced by tests â€
 
 | Parameter | Default | What it controls |
 |-----------|---------|-----------------|
-| `SELECTOR_VERSION` | `"v1"` | Monotonic, immutable-once-published selector policy id stamped on every `picks.csv` row. Bump on any selection-logic/constant change. |
-| `DAILY_GROUP_CAP` | `20` | Max **unique** groups scraped per day. A group qualifying in multiple buckets counts once but is tagged per bucket. |
+| `SELECTOR_VERSION` | `"v2"` | Monotonic, immutable-once-published selector policy id stamped on every `picks.csv` row. Bump on any selection-logic/constant change. |
+| `DAILY_GROUP_CAP` | `20` | Max **unique** groups scraped per day. A group qualifying in multiple buckets counts once toward this cap but is tagged once per bucket it naturally ranks in (attribution) â€” a lower-priority bucket backfills past its natural top-N with the next new candidate so dedup doesn't shrink its effective slot yield (v2). |
 | `LEADER_SS_SLOTS` | `8` | Leaders "core" slots ranked by sustained strength (lowest `rank_month+rank_quarter+rank_half`). |
 | `LEADER_MC_SLOTS` | `2` | Leaders "freshness" slots ranked by `momentum_confirmed` desc among groups not in the core. |
 | `EMERGING_SLOTS` | `4` | Max emerging-bucket groups. |
@@ -286,7 +286,7 @@ prepending an entry to `data/picks/selector_versions.json` (enforced by tests â€
 | `EMERGING_RS_FLOOR` / `ACCEL_RS_FLOOR` | `0.5` | `rs_score` floors on emerging / accel buckets (must be net-positive vs SPY). |
 | `RS_NH_RS_FLOOR` | `0.6` | `rs_score` floor on rs_new_high (IBD "true leadership"). |
 | `PAGE_SIZE` | `20` | Rows per Finviz screener page (`v=151`); used to walk `&r=`. |
-| `PAGE_CAP` | `15` | Per-group hard page cap (defensive against a runaway single group). |
+| `PAGE_CAP` | `2` | Per-group hard page cap (40 names). Lowered from 15 after historical data showed only Biotechnology (a structurally oversized Finviz industry, ~100 names/day) ever exceeded 40 names. Screener sorts `-marketcap` desc, so the cap keeps the biggest/most-liquid names in an oversized group. |
 | `GLOBAL_FETCH_CAP` | `50` | **Hard global daily page cap (VP-set).** Job scrapes in priority order (leaders first) and stops at 50 pages. Revisit after live data. |
 | `PAGE_DELAY_S` | `3` | Polite inter-fetch delay (s). `PICKS_PAGE_DELAY=0` to skip during debugging. |
 

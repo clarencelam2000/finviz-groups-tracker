@@ -145,3 +145,50 @@ tab navigation.
 **Next steps**: none outstanding from this session. `PICKS-STATE-PERSIST-LOOKUP` SPRINT entry
 from the prior session was folded into the main PICKS-STATE-PERSIST entry once it became clear
 the Lookup Stage-2 coverage was automatic, not a separate task.
+
+---
+
+## 2026-07-02 — Picks selector dedup fix + per-group page cap (SELECTOR_VERSION v2)
+
+**Status: safe to close.** Two related, user-requested changes to the picks selector, spiked
+against real `data/picks/picks.csv` + `deltas.csv` history before implementing.
+
+**1. Selector dedup fix (`scripts/collect_picks.py`, ADR-007 amendment).** Confirmed via the
+5 days of picks.csv on hand that dedup was costing 1–4 unique-group slots *every single day*
+(e.g. REIT - Healthcare Facilities was tagged leaders+accel+rs_new_high on both 6/29 and 7/1) —
+`select_groups()` filled emerging/accel/rs_new_high with `head(N)` from each bucket's own ranked
+list without excluding groups a higher-priority bucket had already claimed, so a group's repeat
+appearance silently starved a bucket of a genuinely-new candidate. User confirmed the multi-
+category attribution (a group visibly tagged as *both* leader and accelerating) has been useful,
+so the fix is additive rather than a straight skip: `add_bucket_with_backfill()` still tags a
+group within a bucket's natural top-N regardless of dedup (attribution unchanged), but now
+backfills past rank N — skipping already-selected groups without tagging them there — until N
+*new* groups are added or the qualifying pool runs out. Leaders' own freshness-fill sub-bucket
+already excluded the core 8 by construction, so it didn't need this. Bumped `SELECTOR_VERSION`
+v1→v2 per ADR-007, prepended the v2 entry to `selector_versions.json`, froze v1's hash in
+`test_published_entries_immutable`. Replayed against real 6/29 and 7/1 `deltas.csv` rows:
+`unique_groups` went from 16→20 on both dates with attribution preserved (`total_rows` rose to
+25/24 since backfilled groups still carry their natural-rank tag in whichever bucket they also
+qualify for). New test: `test_backfill_past_natural_top_n_when_leader_dups_in`.
+
+**2. Per-group page cap (`scripts/picks_config.py`).** `PAGE_CAP` 15→2 (40 names). This was a
+1-line config change — `paginate_group()` already took `page_cap` as a parameter, nothing new to
+build. Data check: across all 5 days of picks.csv, **only Biotechnology** ever exceeded 40 names
+(consistently ~100/day); every other group observed stayed ≤34. The `wide` screener sorts
+`-marketcap` desc, so the cap keeps the biggest/most-liquid names in an oversized group. Existing
+`PAGE_CAP` was never actually binding before (max observed was ~6 pages for Biotech, well under
+the old 15) — this is the first time it does anything. No `SELECTOR_VERSION` bump needed (doesn't
+change *which* groups are selected, only scrape depth per group). Had to update 2 pagination unit
+tests (`test_multi_page_until_short`, `test_exact_page_boundary_stops`) that relied on the old
+`PAGE_CAP=15` default to pass an explicit higher `page_cap`/`max_pages` — they test the pagination
+walk's own short-page-stop logic, not the configured cap value.
+
+**Docs:** triple-documented per house rules — in-code comments (`picks_config.py`), README
+§ Configurable parameters, CLAUDE.md § Picks pipeline (selector description + fetch-caps bullet).
+
+**Verification:** `python3 -m pytest tests/test_collect_picks.py -q` → 34 passed. Full non-
+Playwright suite (566 tests) passes; the ~40 Playwright-dependent failures in this environment
+are pre-existing (missing Chromium executable, confirmed by stashing this diff and re-running on
+base — same failures) and unrelated to this change.
+
+**Next steps**: none outstanding. PR open for this branch, ready for review.

@@ -213,6 +213,36 @@ class TestDedupAndCap:
         sels = select_groups(_make_df(rows))
         assert len({s["group"] for s in sels}) <= DAILY_GROUP_CAP
 
+    def test_backfill_past_natural_top_n_when_leader_dups_in(self):
+        # 8 leaders (sum_mid 3..24) fill the core. The #1-ranked accel candidate
+        # is one of those leaders (rank_month=1 -> sum_mid=3 -> core leader), so
+        # it still gets tagged "accel" (top-3 zone attribution preserved) but must
+        # NOT eat one of the 3 accel slots — 3 additional, genuinely new, accel
+        # candidates should still be admitted via backfill past rank 3.
+        rows = [_delta_row(f"L{i:02d}", rank_month=i + 2, rank_quarter=i + 2,
+                           rank_half=i + 2, momentum_score=0.9, momentum_confirmed=0.5)
+                for i in range(7)]
+        # This group is both a core leader (sum_mid=3, lowest) AND accel rank 1.
+        rows.append(_delta_row("DUAL", rank_month=1, rank_quarter=1, rank_half=1,
+                               momentum_score=0.99, momentum_accel=0.5, rs_score=0.8,
+                               momentum_confirmed=0.6))
+        # 3 more accel-qualifying groups, ranked below DUAL, none of them leaders.
+        for i, accel_val in enumerate([0.4, 0.3, 0.2]):
+            rows.append(_delta_row(f"ACC{i}", rank_month=90 + i, rank_quarter=90 + i,
+                                   rank_half=90 + i, momentum_accel=accel_val,
+                                   momentum_score=0.95, rs_score=0.8))
+        sels = select_groups(_make_df(rows))
+        accel = [s for s in sels if s["list_category"] == "accel"]
+        accel_groups = [s["group"] for s in accel]
+        # DUAL is tagged accel (attribution) at its natural rank (1)...
+        assert "DUAL" in accel_groups
+        # ...but ACCEL_SLOTS (3) NEW groups still got in via backfill past rank 3.
+        assert {"ACC0", "ACC1", "ACC2"} <= set(accel_groups)
+        assert len(accel) == 4  # DUAL + 3 backfilled new
+        # DUAL still counts once toward unique groups (already a leader).
+        summ = selection_summary(sels)
+        assert summ["unique_groups"] == len({s["group"] for s in sels})
+
 
 # ---------------------------------------------------------------------------
 # pagination
@@ -236,13 +266,15 @@ class TestPagination:
         assert len(rows) == 5
 
     def test_multi_page_until_short(self):
-        header, rows, pages = paginate_group(_page_fetcher(45), "x")
+        # page_cap/max_pages set well above PAGE_CAP (2) — this test exercises the
+        # walk's own short-page stopping logic, independent of the configured cap.
+        header, rows, pages = paginate_group(_page_fetcher(45), "x", page_cap=10, max_pages=10)
         assert len(rows) == 45
         assert pages == 3  # 20 + 20 + 5
 
     def test_exact_page_boundary_stops(self):
         # 40 rows = 2 full pages; 3rd page is empty → stop.
-        header, rows, pages = paginate_group(_page_fetcher(40), "x")
+        header, rows, pages = paginate_group(_page_fetcher(40), "x", page_cap=10, max_pages=10)
         assert len(rows) == 40
         assert pages == 3  # 2 data pages + 1 empty terminator
 
@@ -467,7 +499,8 @@ class TestSelectorRegistry:
         # active version is published, the previously-active entry becomes frozen
         # and its hash is added here.
         FROZEN_HASHES = {
-            # no frozen (non-active) entries yet — v1 is the active version.
+            # v1 frozen when v2 (dedup backfill fix) became active 2026-07-02.
+            "v1": "0550518c11ffd07da2cd5b103886745b3cd8e592d83b77e7f121b1e3860ef644",
         }
         for v in self._load()["versions"]:
             if v["version"] == SELECTOR_VERSION:

@@ -1,6 +1,31 @@
 {
-  "current": "v1",
+  "current": "v2",
   "versions": [
+    {
+      "version": "v2",
+      "effective_date": "2026-07-02",
+      "description": "Backfill fix for bucket dedup (ADR-007 amendment). A group already selected by a higher-priority bucket is still tagged when it ranks in a lower-priority bucket's natural top-N (attribution preserved, unchanged from v1), but no longer consumes one of that bucket's N slots just by appearing there: emerging/accel/rs_new_high now backfill past rank N with the next NEW (not-yet-selected) candidate, so each bucket's N slots still yield N distinct groups whenever the qualifying pool is deep enough. Leaders' freshness-fill sub-bucket already excluded the core 8 by construction (unchanged). All slot counts, gate thresholds, and rank metrics are unchanged from v1 — this is a fill-order change, not a threshold change.",
+      "params": {
+        "daily_group_cap": 20,
+        "leader_ss_slots": 8,
+        "leader_mc_slots": 2,
+        "emerging_slots": 4,
+        "accel_slots": 3,
+        "rs_nh_slots": 3,
+        "antiflash_pctile": 0.40,
+        "emerging_regime_floor": 0.15,
+        "accel_threshold": 0.08,
+        "emerging_rs_floor": 0.5,
+        "accel_rs_floor": 0.5,
+        "rs_nh_rs_floor": 0.6,
+        "leaders_ss_metric": "sum(rank_month+rank_quarter+rank_half) asc",
+        "leaders_mc_metric": "momentum_confirmed desc",
+        "emerging_rank_metric": "regime_short_long desc",
+        "accel_rank_metric": "momentum_accel desc",
+        "rs_nh_rank_metric": "rs_slope desc",
+        "dedup_policy": "tag-in-place + backfill-past-N for emerging/accel/rs_new_high"
+      }
+    },
     {
       "version": "v1",
       "effective_date": "2026-06-25",

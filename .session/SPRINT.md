@@ -311,6 +311,7 @@ Full plan: `planning/PLAN_sector_industry_hierarchy.md` — 22 features across 5
 
 | # | Task | Date |
 |---|------|------|
+| PICKS-SELECTOR-V2 | Selector dedup backfill (ADR-007 amendment, `SELECTOR_VERSION` v1→v2): a group already selected by a higher-priority bucket still gets tagged when it naturally ranks in a lower-priority bucket's top-N (attribution preserved) but no longer consumes one of that bucket's N slots — emerging/accel/rs_new_high backfill past rank N with the next new candidate (`add_bucket_with_backfill`). Verified on real `deltas.csv`: 6/29 and 7/1 both went from 16 to 20 unique groups scraped. Paired with `PAGE_CAP` 15→2 (40-name cap) — historical data showed only Biotechnology (~100 names/day) ever exceeded 40. | 2026-07-02 |
 | CF-DEPLOY | Auto-deploy Cloudflare Workers on push: `.github/workflows/deploy-workers.yml` — two independent jobs (ticker-lookup + cron-dispatcher), test-gated, path-filtered, `workflow_dispatch` available | 2026-06-21 |
 | ONBOARD | Start Here onboarding: WELCOME constant, 5-slide first-run carousel, hub "Start Here" section, fvt_intro_seen_v1, anti-drift tests, canonical copy in product-intro-copy.md, release cut | 2026-06-21 |
 | ETF-1 | Curated ETF→Finviz override layer: 31 overrides (thematic/sector/diversified), build validation, runtime wiring, PWA ETF badges | 2026-06-20 |

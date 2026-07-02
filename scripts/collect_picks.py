@@ -111,11 +111,21 @@ def select_groups(deltas_df: pd.DataFrame) -> list:
     Returns a list of selection dicts, one per (group × list_category), each with:
       group, list_category, selector_version, priority, + 19 grp_* fields.
 
-    A group qualifying in multiple buckets appears once per bucket (tagged rows)
-    but counts ONCE toward DAILY_GROUP_CAP unique groups (it is scraped once).
+    A group qualifying in multiple buckets is tagged once per bucket it qualifies
+    for within that bucket's natural top-N (attribution is preserved — you can see
+    a group is e.g. both a leader and accelerating), but only the FIRST time a
+    group is added does it consume one of the bucket's N slots. If a bucket's
+    natural top-N contains fewer than N groups that are new-to-today's-selection,
+    the bucket keeps walking its ranked candidate list past rank N — skipping
+    already-selected groups without tagging them there — until it has added N new
+    groups or exhausted its qualifying pool. This is what backfill means below:
+    duplicate groups no longer shrink a bucket's effective new-group yield (v2,
+    see ADR-007 amendment). Applies to emerging/accel/rs_new_high; leaders' own
+    freshness-fill sub-bucket already excludes the core 8 by construction.
+
     Buckets are filled in priority order; a 0-group bucket is normal (e.g.
     momentum_accel is NaN until 11 sessions exist) — fill from the next priority,
-    total stays ≤ DAILY_GROUP_CAP, never error.
+    total unique groups stays ≤ DAILY_GROUP_CAP, never error.
 
     Pure: no Finviz access. Replayable over any historical date in deltas.csv.
     """
@@ -155,6 +165,27 @@ def select_groups(deltas_df: pd.DataFrame) -> list:
         })
         return True
 
+    def add_bucket_with_backfill(sorted_names, category, slots):
+        """Tag a bucket's natural top-`slots` (attribution, dup or not), then
+        backfill past rank `slots` — skipping already-selected groups — until
+        `slots` NEW groups have been added or the candidate pool runs out."""
+        new_count = 0
+        for rank, name in enumerate(sorted_names, start=1):
+            is_new = name not in unique_groups
+            if rank <= slots:
+                added = add(name, category, category, rank)
+                if is_new and added:
+                    new_count += 1
+            else:
+                if new_count >= slots:
+                    break
+                if not is_new:
+                    continue
+                if add(name, category, category, rank):
+                    new_count += 1
+                else:
+                    break  # DAILY_GROUP_CAP hit — no point scanning for more new
+
     # ---- Priority 1: leaders (8 sustained_strength + 2 momentum_confirmed) ----
     latest["_sum_mid"] = (
         latest["rank_month"] + latest["rank_quarter"] + latest["rank_half"]
@@ -176,8 +207,7 @@ def select_groups(deltas_df: pd.DataFrame) -> list:
         (latest["regime_short_long"] > EMERGING_REGIME_FLOOR)
         & (latest["rs_score"] > EMERGING_RS_FLOOR)
     ].sort_values("regime_short_long", ascending=False)
-    for i, name in enumerate(list(emerging["name"].head(EMERGING_SLOTS)), start=1):
-        add(name, "emerging", "emerging", i)
+    add_bucket_with_backfill(list(emerging["name"]), "emerging", EMERGING_SLOTS)
 
     # ---- Priority 3: accel ----
     accel = latest[
@@ -185,8 +215,7 @@ def select_groups(deltas_df: pd.DataFrame) -> list:
         & (latest["_mpctile"] >= _PCTILE_CUTOFF)
         & (latest["rs_score"] > ACCEL_RS_FLOOR)
     ].sort_values("momentum_accel", ascending=False)
-    for i, name in enumerate(list(accel["name"].head(ACCEL_SLOTS)), start=1):
-        add(name, "accel", "accel", i)
+    add_bucket_with_backfill(list(accel["name"]), "accel", ACCEL_SLOTS)
 
     # ---- Priority 4: rs_new_high ----
     rs_nh = latest[
@@ -194,8 +223,7 @@ def select_groups(deltas_df: pd.DataFrame) -> list:
         & (latest["rs_score"] >= RS_NH_RS_FLOOR)
         & (latest["_mpctile"] >= _PCTILE_CUTOFF)
     ].sort_values("rs_slope", ascending=False)
-    for i, name in enumerate(list(rs_nh["name"].head(RS_NH_SLOTS)), start=1):
-        add(name, "rs_new_high", "rs_new_high", i)
+    add_bucket_with_backfill(list(rs_nh["name"]), "rs_new_high", RS_NH_SLOTS)
 
     return selections
 
