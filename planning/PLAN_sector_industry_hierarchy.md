@@ -1,9 +1,63 @@
 # Plan: Sector → Industry Hierarchy Feature Roadmap
 
-**Status:** Foundation complete — ready to build  
+**Status:** Paused 2026-06-25 in favor of the Stock Picks workstream; resuming 2026-07-02.
+Phase 1 shipped and live. Phase 2 was built in full but never merged — see below.
 **Owner:** VP sign-off required before each tier  
-**Last updated:** 2026-06-24  
+**Last updated:** 2026-07-02  
 **Prerequisite:** `data/finviz_sector_industry_map.json` ✅ Merged (PR #171)
+
+---
+
+## ⚠️ Current State (read this first — 2026-07-02)
+
+This workstream was paused after Phase 1 shipped so the team could build the Stock Picks
+feature (Focus scores, Ariel Hernandez criteria, HoD toggle, charts deep-links — see
+`planning/stock-picks-from-leading-groups.md` and the Picks section of `.session/SPRINT.md`).
+Picks absorbed ~150 commits on default in the meantime. Two things changed that this plan
+needs to account for before anyone resumes building:
+
+**1. Phase 1 is done and live.** TASK-6B + INS-7 (Streamlit sidebar filter + breadth metric)
+shipped in PR #177, as this doc already recorded.
+
+**2. A *different, lighter* version of Feature B shipped independently — not from this plan's
+Phase 2 sequence.** Commit `122a4d1` ("fix: add sector breadth table to PWA Strength tab",
+merged, live) added a sector breadth **table** to the PWA Strength tab (Industries view) —
+timeframe-togglable (week/month/quarter/half), reusing the `rank_ytd ≤ n/2` threshold. This
+was scoped as a fast-follow to PR #177 to bring Streamlit's breadth metric to the PWA, not as
+an implementation of this plan's Feature B (which specifies a breadth *bar on sector cards in
+the Today tab*). It covers similar ground but in a different tab with a different UX.
+
+**3. Features A + B + F were actually built in full — but the PR was never merged and is now
+stale.** Draft **PR #178** (`claude/fervent-thompson-rlvfs1`, branched right after PR #177)
+implements exactly what Phase 2 of this plan specifies: expand-in-place drill-down (Feature A),
+a fill-bar + count on sector cards in the Today tab (Feature B), and sector-relative rank shown
+in the drill-down (Feature F) — with the VP UX decisions from 2026-06-24 baked into the PR body
+(expand-in-place chosen over a new tab; count+mini-bar chosen for the breadth detail; sector
+rank shown in drill-down only). It sat untouched when the team pivoted to Picks and is now
+**177 commits behind default** with GitHub reporting `mergeable_state: dirty`.
+
+I dry-ran the merge in a scratchwork worktree to find out how bad this actually is (verified,
+not just GitHub's cached mergeability flag): **6 files conflict** — `.session/WORK_LOG.md`,
+`.session/session-notes.md`, `docs/index.html`, `docs/releases.json`, `docs/sw.js`, and this
+plan file (add/add). Five of the six are mechanical (session-notes appends, a releases.json
+prepend, and a `sw.js` CACHE version bump — PR #178 targets `finviz-v30`, default is now at
+`finviz-v48`). **`docs/index.html` has a real semantic conflict, not just a textual one:**
+PR #178 introduces its own taxonomy-loading path (`loadTaxonomyAndBreadth()`,
+`computeSectorBreadth(industryDelta, taxonomy)`) that duplicates — under similar names but a
+different signature — the taxonomy-loading and breadth-computation logic the Strength-tab
+table (`122a4d1`, already merged) added independently (`loadTaxonomy()`,
+`computeSectorBreadth(delta, taxonomy, rankCol)`). Landing PR #178 requires reconciling these
+two code paths (one shared taxonomy loader, keep both render targets since they serve
+different tabs) — not a blind conflict-resolution pass.
+
+**Recommendation: don't discard PR #178 and don't rebuild it from scratch.** The code is real,
+tested against the VP's actual UX decisions, and Feature A (drill-down) isn't replicated
+anywhere else on default. The fix is a rebase-and-reconcile session: rebase
+`claude/fervent-thompson-rlvfs1` onto current default, merge the two taxonomy loaders into one,
+keep the Strength-tab table and add the Today-tab bar/drill-down alongside it, bump the release
+triplet to today's date and current cache version, then land it. Estimate: ~1 session. Until
+that happens, do **not** start a fresh implementation of Feature A/B/F — the work already
+exists.
 
 ---
 
@@ -260,14 +314,18 @@ check before investing in the larger surface.
 | 2 | INS-7 / B | Sector Breadth (Streamlit + PWA bar) | M | `dashboard/app.py`, `docs/index.html` |
 
 ### Phase 2 — Navigation layer (1–2 sessions)
-The UX foundation. Build A and F together (they're in the same component).
 
-| Priority | ID | Feature | Effort | File(s) |
-|----------|----|---------|--------|---------|
-| 3 | A | PWA drill-down navigation | M | `docs/index.html` |
-| 4 | F | Rank within sector | S | `docs/index.html` |
-| 5 | C | Leaders & Laggards mini-list | S | `docs/index.html` |
-| 6 | R | Market-wide breadth gauge | S | `docs/index.html` |
+**A, B, and F are already built** — see PR #178 (`claude/fervent-thompson-rlvfs1`), open as a
+draft, unmerged, 177 commits stale as of 2026-07-02. Do not re-implement; rebase and reconcile
+per the § Current State note above. C and R below are the only genuinely un-started items.
+
+| Priority | ID | Feature | Effort | File(s) | Status |
+|----------|----|---------|--------|---------|--------|
+| 3 | A | PWA drill-down navigation | M | `docs/index.html` | ✅ Built, unmerged — PR #178 |
+| 4 | F | Rank within sector | S | `docs/index.html` | ✅ Built, unmerged — PR #178 (shown in drill-down only, per VP decision) |
+| — | B | Breadth bar on sector cards | S | `docs/index.html` | ✅ Built, unmerged — PR #178. Note: a *different* breadth table shipped separately to the Strength tab (`122a4d1`, merged) — not the same UX, both are wanted. |
+| 5 | C | Leaders & Laggards mini-list | S | `docs/index.html` | Not started |
+| 6 | R | Market-wide breadth gauge | S | `docs/index.html` | Not started |
 
 ### Phase 3 — Signal layer (1–2 sessions)
 The features that make things actionable. D is the headline.
@@ -308,24 +366,54 @@ The features that earn daily opens. I before K; H is the showpiece.
 
 Before starting each phase, confirm:
 
-**Phase 1 gate:** Is the map validated against today's live data? Run `python scripts/seed_taxonomy.py`
-and confirm 0 mismatches before building INS-7. (Current state: 100% match as of 2026-06-24.)
+**Phase 1 gate: ✅ PASSED 2026-06-24.** Map validated (100% match), TASK-6B + INS-7 shipped
+(PR #177).
 
-**Phase 2 gate (feature A):** Confirm UX direction for drill-down. Options:
-- Expand-in-place on the existing Today tab sector cards
-- New "Sectors" tab that is hierarchy-native
-Recommend expand-in-place (lower effort, no new tab to maintain). Decide before coding.
+**Phase 2 gate (feature A): ✅ DECIDED 2026-06-24, captured in PR #178's body.** Expand-in-place
+on the existing Today tab sector cards was chosen over a new "Sectors" tab (lower effort, no new
+tab to maintain). Breadth detail: count + mini-bar. Sector rank: shown in drill-down only. No
+new decision needed — just land the PR (see § Current State).
 
 **Phase 3 gate (feature D):** Decide whether Rotation Radar is a new tab or a section within
 Today tab. A new tab signals product-level importance; a section is faster to ship. Recommend
-new tab — it's the headline feature and deserves the real estate.
+new tab — it's the headline feature and deserves the real estate. **Linked decision:** Feature A
+was built as expand-in-place on the Today tab (not a new tab), which makes the Today tab the de
+facto sector-navigation home. Feature D's new-tab-vs-section call should be made with that in
+mind, not in isolation — a second nav pattern for essentially the same underlying data (sector
+cards + industry breadth) risks an incoherent nav model. Decide A's and D's tab placement in the
+same conversation.
 
 **Phase 4 gate (feature H):** Flow map requires a charting library decision.
 Options: D3.js Sankey (full control, ~300 lines), Observable Plot (simpler), or a static
-SVG approximation (fastest). Decide before starting H.
+SVG approximation (fastest). **Constraint to weigh before picking:** the PWA (`docs/index.html`)
+is a single static file with no bundler and no npm — D3 is an npm-distributed library, and
+d3-sankey is a separate package from D3 core, so "D3.js Sankey" here means either a CDN import
+of the full bundle (~500KB+) or introducing a build step neither of which exist today. Observable
+Plot has a CDN ESM build that works in plain `<script type="module">` with no build step — the
+lower-friction option for this codebase's actual constraints. Decide before starting H.
+
+**Phase 4 gate (feature I):** Before coding, pick the implementation approach — this determines
+whether I is really M effort or closer to L:
+- **Snapshot-on-visit:** store computed breadth values (not just a timestamp) in localStorage
+  each time the user visits, diff against the previous snapshot on next open.
+- **Replay-from-CSV:** store only a timestamp; on open, find the nearest historical row in the
+  already-fetched delta CSVs and recompute breadth retroactively.
+Replay-from-CSV avoids stale-localStorage-value risk but requires more non-trivial JS logic over
+the full CSV history already in memory. Pick one and scope Feature I's effort against it before
+starting.
 
 **Phase 4 gate (feature K):** AI brief with sector context requires prompt engineering
 iteration. Budget 1 session for prompt iteration before treating K as "done."
+
+**Feature E note:** `momentum_breadth_confirmed` requires more than a schema/header change —
+same as PIPE-1's `momentum_score` discontinuity fix, adding a new column to `deltas.csv` means
+a full historical recompute (`compute_deltas.py --date <d>` per existing date) or the column is
+NaN for all existing history. Budget for the recompute pass, not just the column addition.
+
+**Feature B PWA constant:** When Feature B's Today-tab breadth bar lands (via PR #178), the
+"top-half" threshold (`n/2`, currently inlined in both the Strength-tab table and PR #178's
+drill-down) should become a named constant documented in CLAUDE.md's PWA display-thresholds
+table, matching `REGIME_THRESHOLD` / `ACCEL_STRONG` / etc. It isn't currently.
 
 **Staleness tripwire (anytime):** Add a check in `collect.py` or a nightly test that warns
 when a live industry name is missing from `finviz_sector_industry_map.json`. Without this,
@@ -355,7 +443,9 @@ Once the map is validated in production (Phase 1), consider adding a `finviz_sec
 to `data/industries/snapshots.csv` at collect time. This enables `groupby("finviz_sector")`
 directly on the deltas DataFrame — useful for `compute_deltas.py` breadth columns. Deferred
 until the map is proven stable to avoid a schema migration on bad data. Track as a separate
-planning item if/when we need server-side breadth aggregation.
+planning item if/when we need server-side breadth aggregation. Tag any future touchpoint with
+`# TODO(HIR-SCHEMA): see PLAN_sector_industry_hierarchy.md § finviz_sector column` so it
+surfaces to whoever is next in `compute_deltas.py` or `collect.py`.
 
 ---
 
@@ -385,7 +475,7 @@ The following sprint entries need updating based on this plan:
 | `scripts/seed_taxonomy.py` | ✅ Exists | Foundation |
 | `tests/test_seed_taxonomy.py` | ✅ Exists | Foundation |
 | `dashboard/app.py` | Sector filter sidebar, breadth metric, divergence tab | Phase 1–3 |
-| `docs/index.html` | Drill-down, breadth bar, radar, digest, flow map | Phase 2–4 |
+| `docs/index.html` | ✅ Strength-tab breadth table live (`122a4d1`). Drill-down + Today-tab breadth bar built, unmerged (PR #178). Radar, digest, flow map still to build. | Phase 2–4 |
 | `scripts/compute_deltas.py` | `momentum_breadth_confirmed` column (feature E) | Phase 5 |
 | `scripts/generate_ai.py` | Sector context in briefing prompt (feature K) | Phase 4 |
 | `scripts/collect.py` | Staleness tripwire (future) | Phase 5 |

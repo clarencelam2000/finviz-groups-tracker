@@ -6,6 +6,72 @@
 
 ---
 
+## 2026-07-02 — Resuming sector→industry hierarchy: found an abandoned draft PR with real work
+
+**Status: PLAN DOC UPDATED. NO CODE CHANGES. SAFE TO CLOSE.**
+
+VP asked to resume the sector→industry hierarchy workstream (paused 2026-06-25 for Picks).
+This session was research + plan-doc maintenance only, no feature code touched.
+
+**Branch hygiene note:** `claude/practical-mccarthy-i6ubme` (this session's designated branch)
+had zero unique commits — everything on it was already merged into default via other PRs. Reset
+it to `origin/claude/elegant-babbage-hlxnfy` (151 commits had landed since this branch was last
+current, all Picks-workstream work) rather than trying to rebase nothing onto something.
+
+**Key finding — draft PR #178 is a real, unmerged implementation of Phase 2:**
+`claude/fervent-thompson-rlvfs1` (commit `ea0a6c2`, PR #178, still open/draft) implements
+Features A (expand-in-place drill-down), B (Today-tab breadth bar), and F (rank within sector)
+exactly per the VP's 2026-06-24 UX decisions recorded in the PR body. It was never merged before
+the team pivoted to Picks and is now 177 commits behind default.
+
+Dry-ran the merge in a scratch worktree (`git merge --no-commit --no-ff`, then cleaned up) to
+check real severity, since GitHub's `mergeable_state: dirty` flag doesn't say how bad. Result:
+6 files conflict — `.session/WORK_LOG.md`, `.session/session-notes.md`, `docs/index.html`,
+`docs/releases.json`, `docs/sw.js`, and `planning/PLAN_sector_industry_hierarchy.md` (add/add,
+because this session's edits and the abandoned branch both touched it). Five are mechanical.
+`docs/index.html` has a genuine semantic conflict: a *different* sector-breadth feature
+(`122a4d1`, "add sector breadth table to PWA Strength tab") shipped independently while PR #178
+sat unmerged — both add their own taxonomy-loading + breadth-computation code under similar
+names (`loadTaxonomy()` + 3-arg `computeSectorBreadth()` on default vs. PR #178's
+`loadTaxonomyAndBreadth()` + 2-arg `computeSectorBreadth()`). They're complementary features
+(Strength-tab table vs. Today-tab card bar+drilldown), not duplicates, but landing PR #178 means
+reconciling into one taxonomy loader, not a blind textual merge.
+
+**What I did to the plan doc (`planning/PLAN_sector_industry_hierarchy.md`):**
+- Added a "⚠️ Current State" section up top documenting all of the above and recommending
+  rebase-and-reconcile PR #178 (~1 session) rather than discarding or re-implementing.
+- Updated the Phase 2 table to mark A/B/F as built-but-unmerged with pointers to PR #178.
+- Marked the Phase 1 VP gate as passed and the Phase 2 gate as already decided.
+- Folded in a separate plan-review pass (from an earlier conversation in this session) not yet
+  applied to the doc: flagged the D3.js-in-vanilla-JS-PWA constraint on the Phase 4 (Feature H)
+  gate, flagged Feature I's snapshot-vs-replay implementation ambiguity as a pre-code decision,
+  noted Features A/D's tab-placement decisions are linked and should be made together, noted
+  Feature E's schema change actually requires a full historical recompute (like PIPE-1), and
+  added a TODO tag pointer for the deferred `finviz_sector` column idea.
+- `.session/SPRINT.md` HIR section: added HIR-B (was missing entirely), updated HIR-A/HIR-F to
+  point at PR #178 instead of reading as not-started, struck through the stale duplicate
+  TASK-6B/INS-7 entries in the Data/Insight Features table that hadn't been marked done.
+
+**Not done this session:** did not rebase or land PR #178, did not touch any code. That's the
+recommended next step but is real engineering work (reconcile two taxonomy-loading paths in
+`docs/index.html`, re-run Playwright verification, bump release triplet to current cache version
+`finviz-v48` from the PR's stale `finviz-v30`) — a deliberate call to leave for a dedicated
+session rather than rush inside a "get resituated" pass.
+
+**Next session, in order:**
+1. Decide whether to actually land PR #178 now (my recommendation) or keep prioritizing Picks —
+   VP call.
+2. If landing: `git checkout -B <new-branch> origin/claude/elegant-babbage-hlxnfy`, cherry-pick
+   or manually reapply `ea0a6c2`'s `docs/index.html` changes, reconciling with the merged
+   Strength-tab breadth code; regenerate the release triplet against current versions; verify
+   live in a Playwright session before merging; close PR #178 once superseded.
+3. Then continue Phase 2 with C (Leaders & Laggards) and R (market-wide breadth gauge), the two
+   Phase 2 items that are genuinely un-started.
+
+**Safe to close.**
+
+---
+
 ## 2026-06-25 — Picks cron dispatcher plan (PICKS-2-CRON)
 
 **Status: PLAN COMPLETE. IMPLEMENTATION READY FOR NEXT SESSION.**
