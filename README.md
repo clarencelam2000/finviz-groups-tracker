@@ -310,6 +310,7 @@ These constants control when visual indicators appear or change state. All are n
 | `SLOPE_SLIGHT` | `0.01` | `rank_trend_slope` threshold for the single-arrow glyph (↑ / ↓). Values within ±0.01 show `~`. |
 | `RS_STRONG` | `2.0` | RS spread (pp vs S&P) threshold for the strong badge (deep green / deep red) in the vs Market tab and Today cards. |
 | `RS_SLIGHT` | `0.5` | RS spread threshold for the mild badge (green / orange). Within ±0.5pp → neutral chip. |
+| `BREADTH_TOP_HALF_FRACTION` | `0.5` | "Top half" cutoff shared by `computeSectorBreadth()` — powers both the Strength-tab sector breadth table and the Today-tab sector card breadth bar / drill-down (via the `computeSectorTopHalfCounts()` wrapper). A single threshold, two render targets. |
 | `MIN_MARKET_CAP_B` | `5` | Picks tab C6 base display filter: hides rows whose Market Cap is ≤ 5B. Cuts noise from micro/nano-caps. |
 | `ATR_EXT_ACTIONABLE` | `5.0` | ATR-extension emerald band cap (≤5× = actionable / entry-zone). Also the Focus hard-DQ line (Phase 3b). |
 | `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start (≥8× = trim-10% candidate for held positions). Amber band is 5–8×. |
