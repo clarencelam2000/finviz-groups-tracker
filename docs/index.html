@@ -698,17 +698,24 @@
         body: "Finviz shows today's snapshot — who's winning right now. We keep the history and track how the rankings change over time, so you can spot capital rotating into a group before the headline numbers move. That derived layer — momentum, rotation, and relative strength vs the S&P 500 — is what you won't find on Finviz.",
       },
       {
+        id: 'focus-picks',
+        title: 'Your shortlist: Focus picks',
+        body: "Every screener hands you a wall of tickers. Focus takes the strongest names inside the strongest groups and scores them on group strength, stop tightness, and setup quality — so you open the app to a short, ranked list, not a research project. High signal, low noise, ready to act on.",
+        icon: '🎯',
+      },
+      {
         id: 'tabs-tour',
-        title: 'Your 7 tabs',
+        title: 'Your 8 tabs',
         body: '',
         items: [
-          { label: 'Today',    tab: 'today',    desc: 'Every group ranked by current strength.' },
-          { label: 'Movers',   tab: 'movers',   desc: 'Biggest rank climbers and fallers.' },
-          { label: 'Momentum', tab: 'momentum', desc: 'Broad strength scores and the Rotation view.' },
-          { label: 'Strength', tab: 'strength', desc: 'Proven, sustained leaders.' },
-          { label: 'AI',       tab: 'ai',       desc: 'A plain-English daily rotation briefing.' },
-          { label: 'Lookup',   tab: 'lookup',   desc: 'Type any ticker — see if its group is a tailwind or headwind.' },
-          { label: 'Picks',    tab: 'picks',    desc: 'Daily stock picks inside leading groups — the strongest names in the strongest groups.' },
+          { label: 'Today',    tab: 'today',    icon: '📊', desc: 'Every group ranked by current strength.' },
+          { label: 'Movers',   tab: 'movers',   icon: '↕️', desc: 'Biggest rank climbers and fallers.' },
+          { label: 'Momentum', tab: 'momentum', icon: '⚡', desc: 'Broad strength scores and the Rotation view.' },
+          { label: 'Strength', tab: 'strength', icon: '💪', desc: 'Proven, sustained leaders.' },
+          { label: 'vs Mkt',   tab: 'vsmarket', icon: '⚖️', desc: 'Which groups are actually beating the S&P 500 — not just their peers.' },
+          { label: 'AI',       tab: 'ai',       icon: '🤖', desc: 'A plain-English daily rotation briefing.' },
+          { label: 'Lookup',   tab: 'lookup',   icon: '🔍', desc: 'Type any ticker — see if its group is a tailwind or headwind.' },
+          { label: 'Picks',    tab: 'picks',    icon: '🎯', desc: 'Daily stock picks inside leading groups, scored and ranked so the strongest setups surface first.' },
         ],
       },
       {
@@ -4771,7 +4778,8 @@
           if (slide.items) {
             const rows = slide.items.map(item =>
               `<div class="flex items-start gap-3 py-2 border-b border-slate-800 last:border-0">
-                <span class="text-sky-400 text-xs font-semibold mt-0.5 w-16 flex-shrink-0">${escapeHtml(item.label)}</span>
+                <span class="text-base leading-none mt-0.5 w-5 flex-shrink-0" aria-hidden="true">${item.icon || ''}</span>
+                <span class="text-sky-400 text-xs font-semibold mt-0.5 w-20 flex-shrink-0">${escapeHtml(item.label)}</span>
                 <span class="text-sm text-slate-300 flex-1">${escapeHtml(item.desc)}
                   <button class="ml-1 text-xs text-sky-400 active:text-sky-300 whitespace-nowrap"
                           onclick="__hubJump('${escapeHtml(item.tab)}')">Open →</button>
@@ -4781,7 +4789,7 @@
             content += `<div class="rounded-xl bg-slate-800/50 border border-slate-700/50 px-3 py-1">${rows}</div>`;
           }
           return `<div class="mb-6 pb-6 border-b border-slate-800 last:border-0 last:mb-0 last:pb-0">
-            <h3 class="text-white font-semibold text-base mb-2">${escapeHtml(slide.title)}</h3>
+            <h3 class="text-white font-semibold text-base mb-2">${slide.icon ? `<span class="mr-1.5" aria-hidden="true">${slide.icon}</span>` : ''}${escapeHtml(slide.title)}</h3>
             ${content}
           </div>`;
         }).join('');
@@ -4793,17 +4801,22 @@
       // carousel mode: returns array of slide HTML strings (built by buildCarouselSlides)
       return WELCOME.map(slide => {
         const isLast = slide.id === 'get-started';
-        let inner = `<h2 class="text-xl font-bold text-white mb-3">${escapeHtml(slide.title)}</h2>`;
+        const titleIcon = slide.icon ? `<span class="mr-2" aria-hidden="true">${slide.icon}</span>` : '';
+        let inner = `<h2 class="text-xl font-bold text-white mb-3">${titleIcon}${escapeHtml(slide.title)}</h2>`;
         if (slide.body) {
           inner += `<p class="text-sm text-slate-300 leading-relaxed">${escapeHtml(slide.body)}</p>`;
         }
         if (slide.items) {
-          inner += '<div class="space-y-2 mt-1">' + slide.items.map(item =>
-            `<div class="flex items-start gap-3">
-              <span class="text-sky-400 text-xs font-semibold mt-0.5 w-16 flex-shrink-0">${escapeHtml(item.label)}</span>
-              <span class="text-sm text-slate-300">${escapeHtml(item.desc)}</span>
+          // Bordered card (matches the hub's tabs-tour treatment) so this slide reads as
+          // a reference list, visually distinct from the narrative slides around it.
+          const rows = slide.items.map(item =>
+            `<div class="flex items-start gap-3 py-2.5 border-b border-slate-800 last:border-0">
+              <span class="text-base leading-none mt-0.5 w-5 flex-shrink-0" aria-hidden="true">${item.icon || ''}</span>
+              <span class="text-sky-400 text-xs font-semibold mt-1 w-20 flex-shrink-0">${escapeHtml(item.label)}</span>
+              <span class="text-sm text-slate-300 flex-1">${escapeHtml(item.desc)}</span>
             </div>`
-          ).join('') + '</div>';
+          ).join('');
+          inner += `<div class="mt-3 rounded-xl bg-slate-800/50 border border-slate-700/50 px-3 py-1">${rows}</div>`;
         }
         if (isLast) {
           inner += `<button class="mt-4 w-full py-3 rounded-xl bg-sky-600 text-white font-semibold text-sm active:bg-sky-500"
@@ -4815,7 +4828,7 @@
 
     // ── First-run intro carousel ───────────────────────────────────────────────
 
-    const INTRO_KEY = 'fvt_intro_seen_v2';  // bumped Phase 3a: Picks tab added to intro tour
+    const INTRO_KEY = 'fvt_intro_seen_v3';  // bumped 2026-07-03: vs Mkt tab added to tour + new Focus picks slide
     function getIntroSeen() { try { return localStorage.getItem(INTRO_KEY) === 'true'; } catch(e) { return false; } }
     function setIntroSeen() { try { localStorage.setItem(INTRO_KEY, 'true'); } catch(e) {} }
 

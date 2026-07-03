@@ -363,7 +363,7 @@ class TestPWAIntro:
         # Pre-set or clear the intro localStorage key before the page loads.
         # We intercept the first about:blank load to inject storage state.
         if not clear_intro:
-            ctx.add_init_script("localStorage.setItem('fvt_intro_seen_v1','true');")
+            ctx.add_init_script("localStorage.setItem('fvt_intro_seen_v3','true');")
 
         for pattern in [
             "**/raw.githubusercontent.com/**snapshots.csv",
@@ -384,7 +384,7 @@ class TestPWAIntro:
         return server, browser, ctx, page
 
     def test_carousel_auto_opens_on_first_visit(self):
-        """fvt_intro_seen_v1 unset → carousel auto-opens on load."""
+        """fvt_intro_seen_v3 unset → carousel auto-opens on load."""
         from playwright.sync_api import sync_playwright
         snap_body = _snapshot_csv()
         delta_body = _delta_csv()
@@ -461,7 +461,7 @@ class TestPWAIntro:
                 server.wait()
 
     def test_carousel_not_shown_when_already_seen(self):
-        """fvt_intro_seen_v1 already set → no carousel on load."""
+        """fvt_intro_seen_v3 already set → no carousel on load."""
         from playwright.sync_api import sync_playwright
         snap_body = _snapshot_csv()
         delta_body = _delta_csv()
@@ -476,7 +476,7 @@ class TestPWAIntro:
                 page.wait_for_timeout(300)
                 overlay = page.locator("#intro-overlay")
                 assert not overlay.is_visible(), (
-                    "carousel must not auto-open when fvt_intro_seen_v1 is already set"
+                    "carousel must not auto-open when fvt_intro_seen_v3 is already set"
                 )
                 ctx.close()
                 browser.close()
@@ -859,7 +859,7 @@ class TestPWAMomentum:
                 # CDN <script> certs otherwise (see CLAUDE.md Playwright notes).
                 context = browser.new_context(ignore_https_errors=True)
                 # Skip the first-run intro carousel so it doesn't intercept tab clicks.
-                context.add_init_script("localStorage.setItem('fvt_intro_seen_v1','true');")
+                context.add_init_script("localStorage.setItem('fvt_intro_seen_v3','true');")
                 page = context.new_page()
                 page.route("**/raw.githubusercontent.com/**snapshots.csv",
                            lambda r: r.fulfill(body=snap_body, content_type="text/plain"))
@@ -987,7 +987,7 @@ class TestPWACardDeeplink:
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
                 ctx = browser.new_context(ignore_https_errors=True)
-                ctx.add_init_script("localStorage.setItem('fvt_intro_seen_v1','true');")
+                ctx.add_init_script("localStorage.setItem('fvt_intro_seen_v3','true');")
                 page = ctx.new_page()
                 page.route("**/raw.githubusercontent.com/**snapshots.csv",
                            lambda r: r.fulfill(body=snap_body, content_type="text/plain"))
@@ -1152,7 +1152,7 @@ class TestPWALookupChart:
             with sync_playwright() as p:
                 browser = p.chromium.launch(headless=True)
                 ctx = browser.new_context(ignore_https_errors=True)
-                ctx.add_init_script("localStorage.setItem('fvt_intro_seen_v1','true');")
+                ctx.add_init_script("localStorage.setItem('fvt_intro_seen_v3','true');")
                 page = ctx.new_page()
                 page.route("**/raw.githubusercontent.com/**", lambda r: r.fulfill(status=404))
                 page.route("**/finviz-ticker-lookup.salmonbaby8.workers.dev/lookup*",

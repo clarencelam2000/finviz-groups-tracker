@@ -1,6 +1,18 @@
 {
-  "current": "2026.07.03",
+  "current": "2026.07.03.1",
   "releases": [
+    {
+      "version": "2026.07.03.1",
+      "date": "2026-07-03",
+      "title": "Start Here tour: vs Mkt tab + Focus picks slide",
+      "tag": "improvement",
+      "notes": [
+        "The intro tour was missing the vs Mkt tab entirely (it shipped after the tour was written) — it's now the 5th stop, right after Strength.",
+        "New 'Your shortlist: Focus picks' slide highlights the Focus scoring system — the strongest names in the strongest groups, ranked and ready to act on — instead of burying it in a one-line tabs-list bullet.",
+        "Tabs-tour slide now shows a small icon per tab and sits inside a bordered card, matching the same treatment already used in the Guide hub's Start Here section — easier to scan at a glance than a plain text list.",
+        "Existing users will see the tour once more to catch the new tab and slide."
+      ]
+    },
     {
       "version": "2026.07.03",
       "date": "2026-07-03",

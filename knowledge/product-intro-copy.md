@@ -42,7 +42,15 @@ Finviz shows today's snapshot — who's winning right now. We keep the history a
 
 ---
 
-## Slide 4 — Your 7 tabs
+## Slide 4 — Your shortlist: Focus picks
+
+Every screener hands you a wall of tickers. Focus takes the strongest names inside the strongest groups and scores them on group strength, stop tightness, and setup quality — so you open the app to a short, ranked list, not a research project. High signal, low noise, ready to act on.
+
+Added 2026-07-03: Picks/Focus has become the product's flagship surface (group selection → screener scrape → ATR/risk metrics → Focus scoring → Ariel-match badges), and deserves its own beat in the tour rather than one bullet buried in the tabs list below. Placed right before the tabs tour so the "why this matters" narrative (Slides 1–3) lands on a concrete payoff before the reference list.
+
+---
+
+## Slide 5 — Your 8 tabs
 
 | Tab | Description |
 |-----|-------------|
@@ -50,12 +58,15 @@ Finviz shows today's snapshot — who's winning right now. We keep the history a
 | Movers | Biggest rank climbers and fallers. |
 | Momentum | Broad strength scores and the Rotation view. |
 | Strength | Proven, sustained leaders. |
+| vs Mkt | Which groups are actually beating the S&P 500 — not just their peers. |
 | AI | A plain-English daily rotation briefing. |
 | Lookup | Type any ticker — see if its group is a tailwind or headwind. |
-| Picks | Daily stock picks inside leading groups — the strongest names in the strongest groups. |
+| Picks | Daily stock picks inside leading groups, scored and ranked so the strongest setups surface first. |
+
+vs Mkt added 2026-07-03: the tab shipped 2026-06-21 but was never added to the tour, so new users had no way to discover RS scoring, NH badges, or the ↑ cross rotation trigger short of stumbling onto the tab themselves.
 
 ---
 
-## Slide 5 — You're set
+## Slide 6 — You're set
 
 Tap the ⓘ icon anytime to open the Guide (what every number means) or replay this intro.

@@ -484,21 +484,23 @@ and carousel ('carousel') modes.
 strings in `WELCOME` must appear verbatim there. `tests/test_pwa_intro.py` enforces the
 sync (same discipline as `moaty-metrics.md` ↔ `GUIDE`).
 
-**First-run behavior:** on page boot, if `localStorage.getItem('fvt_intro_seen_v1')` is
+**First-run behavior:** on page boot, if `localStorage.getItem(INTRO_KEY)` is
 not `'true'`, the carousel auto-opens. Dismissing (Skip / Get started) calls
 `setIntroSeen()` which sets the key. Re-openable anytime: hub ⓘ → Start Here → Replay
 intro.
 
-**`fvt_intro_seen_v1` key versioning:** bump the suffix to `v2` only when the intro
-content changes substantially enough that existing users should see it again (e.g. a new
-tab added, a major rewrite). Minor copy edits do **not** warrant a bump — they don't
-justify re-nagging users who already dismissed it. Record any bump as a `feat:` commit
-with an explicit rationale; do not bump silently.
+**`INTRO_KEY` versioning (currently `fvt_intro_seen_v3`, `docs/index.html`):** bump the
+suffix only when the intro content changes substantially enough that existing users
+should see it again (e.g. a new tab added, a new slide, a major rewrite — v2 added the
+Picks tab, v3 added the vs Mkt tab + the Focus-picks slide). Minor copy edits do **not**
+warrant a bump — they don't justify re-nagging users who already dismissed it. Record
+any bump as a `feat:` commit with an explicit rationale; do not bump silently. Keep this
+note's version number current — it drifted out of sync with the code once already.
 
 **Tab deep-links:** each item in the tabs-tour slide carries a `tab` field (one of the
-6 real tab ids). Adding a 7th tab requires updating `WELCOME` + `product-intro-copy.md`
-+ `VALID_TAB_IDS` in `tests/test_pwa_intro.py` — the anti-drift test will catch the
-mismatch.
+real tab ids in `VALID_TAB_IDS`, `tests/test_pwa_intro.py`). Adding a new tab requires
+updating `WELCOME` + `product-intro-copy.md` + `VALID_TAB_IDS` — the anti-drift test
+will catch a mismatch.
 
 ## AI capture constants (`scripts/generate_ai.py`)
 
