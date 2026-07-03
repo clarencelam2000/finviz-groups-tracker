@@ -312,9 +312,9 @@ These constants control when visual indicators appear or change state. All are n
 | `RS_SLIGHT` | `0.5` | RS spread threshold for the mild badge (green / orange). Within ±0.5pp → neutral chip. |
 | `BREADTH_TOP_HALF_FRACTION` | `0.5` | "Top half" cutoff shared by `computeSectorBreadth()` — powers both the Strength-tab sector breadth table and the Today-tab sector card breadth bar / drill-down (via the `computeSectorTopHalfCounts()` wrapper). A single threshold, two render targets. |
 | `MIN_MARKET_CAP_B` | `5` | Picks tab C6 base display filter: hides rows whose Market Cap is ≤ 5B. Cuts noise from micro/nano-caps. |
-| `ATR_EXT_ACTIONABLE` | `5.0` | ATR-extension emerald band cap (≤5× = actionable / entry-zone). Also the Focus hard-DQ line (Phase 3b). |
-| `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start (≥8× = trim-10% candidate for held positions). Amber band is 5–8×. |
-| `ATR_EXT_PENALTY_START` | `3.5` | ATR-extension at which the Focus-score extension penalty begins ramping. Zero penalty below this; full `PENALTY_MAX` at `ATR_EXT_ACTIONABLE` (5×). |
+| `ATR_EXT_ACTIONABLE` | `4.0` | ATR-extension emerald band cap (<4× = actionable / entry-zone). Also the Focus hard-DQ line (Phase 3b). |
+| `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start (≥8× = trim-10% candidate for held positions). Amber band is 4–8×. |
+| `ATR_EXT_PENALTY_START` | `2.5` | ATR-extension at which the Focus-score extension penalty begins ramping. Zero penalty below this; full `PENALTY_MAX` at `ATR_EXT_ACTIONABLE` (4×). |
 | `PENALTY_MAX` | `0.5` | Maximum Focus-score extension discount fraction (50% haircut at 5×). `score = base × (1 − penalty_fraction)`, always ∈ [0, 1]. |
 | `FOCUS_W_GROUP` | `0.4` | Focus score weight for the sustained group-strength component (`grp_sum_mid_rank` inverted min-max). |
 | `FOCUS_W_TIGHT` | `0.4` | Focus score weight for the nearest-MA stop tightness component (`min(risk_20ma_pct, risk_50ma_pct)` where both > 0, inverted min-max). |
@@ -348,14 +348,32 @@ Same versioning pattern as `selector_versions.json` (`current` pointer + newest-
 `versions[]`, looked up by largest `effective_date ≤ date`), but for the *client-side*
 constants above that determine which Picks stocks are shown and how Focus scores are
 ranked — base filter, All-view sort, Focus DQ/scoring/weights, ATR display bands.
-Whenever any of those PWA constants changes, prepend a new version entry in the same
-PR. Anti-drift guard: `tests/test_picks_methodology.py`. Full design:
+Whenever any of those PWA constants changes, prepend a new version entry **in the same
+PR** — there's no "wait until it's stable" grace period; the file's whole job is to
+never lag live reality. Anti-drift guard (`tests/test_picks_methodology.py`) only
+checks `current` (the newest entry) against live `docs/index.html`; older entries are
+frozen historical snapshots and are expected to diverge once superseded. Full design:
 `planning/picks-methodology-tracking.md`. Replay/A-B tool: `scripts/replay_picks.py`.
 
-> **Known gap (v1):** the recorded methodology does not yet model the
-> `FOCUS_MIN_DOLLAR_VOL`/liquidity-penalty, earnings-penalty, or Ariel-match constants
-> above — see the `known_gaps` note in `display_methodology.json` and `PICKS-METH-V2`
-> in `.session/SPRINT.md`.
+`v1` (effective 2026-06-25) covered the original Phase 3b base filter/sort/Focus-score
+formula. `v2` (current, effective 2026-07-01) added the Phase 3d Focus liquidity
+gate/penalty (`FOCUS_MIN_DOLLAR_VOL`/`LIQUIDITY_PENALTY_START`/`LIQUIDITY_PENALTY_MAX`)
+and earnings-proximity penalty (`EARNINGS_IMMINENT_DAYS`/`EARNINGS_CAUTION_DAYS`/
+`EARNINGS_PENALTY_MAX`/`POST_EARNINGS_PENALTY_FRAC`).
+
+> **Known gap:** the Phase 4 Ariel-match filter (`ARIEL_*` constants) is not modeled in
+> `display_methodology.json` at all, by design — it's an optional additive display
+> layer independent of the core All/Focus ranking. It's versioned separately in
+> `data/picks/ariel_match_config.json`, which has **no anti-drift guard/test** —
+> enforcement there is manual code review only.
+>
+> **Known limitation (permanent, not a bug):** the earnings penalty depends on "days
+> until next earnings," which `docs/index.html` always computes relative to the
+> viewer's wall-clock date at render time. `scripts/replay_picks.py` instead uses the
+> replay `--date` as that reference, reproducing what a viewer would have seen live on
+> that date — re-running the replay for the same past date on a later day will not
+> reproduce a value the live PWA never actually showed (there's no live value to match,
+> since the PWA doesn't retroactively recompute this for past dates either).
 
 ### Scrape schedule (`worker-cron/wrangler.toml`)
 

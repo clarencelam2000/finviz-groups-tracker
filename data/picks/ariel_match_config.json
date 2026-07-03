@@ -1,0 +1,46 @@
+{
+  "_readme": "Documentation-only config for the opt-in Ariel Hernandez swing-trader match filter (Phase 4, docs/index.html, PR #226 merged 2026-07-01). Unlike selector_versions.json and display_methodology.json, this file is NOT anti-drift-guarded by any test -- there is no test_ariel_match_config.py, and no CI check compares these values to the live ARIEL_* JS constants. This is a deliberate scope decision: Ariel-match is an optional, additive display layer independent of the core All/Focus methodology (it filters displayRows further, in both views, but does not change base_filter/focus_dq/focus_score), so it does not need the same guarantee of replay determinism. Enforcement is manual code review only -- if you change an ARIEL_* constant in docs/index.html, update this file's 'current' entry in the same PR as a courtesy, but nothing will fail CI if you forget. If replay/A-B testing of Ariel-match ever becomes a real requirement, promote this to a guarded file (data/picks/display_methodology.json pattern) at that time.",
+  "current": "v1",
+  "versions": [
+    {
+      "version": "v1",
+      "effective_date": "2026-07-01",
+      "description": "Initial Ariel Hernandez swing-trader match filter (Phase 4). Four independent gates -- group leadership, liquidity, daily-move band, growth -- combined into an overall 'full' | 'soft' | null tier. Dollar volume is a hard boolean (no soft band); the other three gates each have a soft-qualify band. Overall tier is the weakest of the three soft-able gates.",
+      "params": {
+        "group_gate": {
+          "cols": ["rank_month", "rank_quarter"],
+          "formula": "sum = rank_month + rank_quarter (ascending, computed across all ~144 industries in state.data.industries.delta, not limited to groups picks.csv has stock rows for); pos = 1-indexed rank by sum, lower sum = stronger group",
+          "full_max_rank": 40,
+          "soft_max_rank": 50,
+          "note": "pos <= 40 -> full; 41-50 -> soft; else null (fails)."
+        },
+        "liquidity_gate": {
+          "col": "avg_dollar_volume",
+          "formula": "Price * Avg Volume (same parsing as the Focus liquidity gate in display_methodology.json v2)",
+          "min_inclusive": 100000000,
+          "note": "Hard floor, no soft band -- this is a liquidity floor (can you actually trade it), not a strength signal. NaN -> fails."
+        },
+        "daily_move_gate": {
+          "col": "atr_pct",
+          "formula": "atr_pct = ATR / Price * 100",
+          "floor_soft": 3.0,
+          "full_low": 4.0,
+          "full_high": 7.0,
+          "ceil_soft": 9.0,
+          "note": "Outside [floor_soft, ceil_soft] -> excluded entirely (too quiet or too volatile). Inside [full_low, full_high] -> full. Otherwise (in a soft band on either side) -> soft."
+        },
+        "growth_gate": {
+          "cols": ["EPS YoY TTM", "Sales YoY TTM"],
+          "logic": "AND -- both metrics must independently clear the same threshold",
+          "full_min_pct": 25,
+          "soft_min_pct": 15,
+          "note": "Both metrics >= 25% -> full. Both >= 15% (and not both >= 25%) -> soft. Either metric < 15% -> fails the growth gate outright."
+        },
+        "overall_tier": {
+          "formula": "weakest of {group_gate, daily_move_gate, growth_gate} tiers, AND liquidity_gate must pass (hard boolean)",
+          "note": "'full' only if all three soft-able gates are full AND liquidity passes. 'soft' if all three are at least soft (some may be full) AND liquidity passes. Otherwise null (no match)."
+        }
+      }
+    }
+  ]
+}

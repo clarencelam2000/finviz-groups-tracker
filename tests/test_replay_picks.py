@@ -2,6 +2,7 @@
 Tests for scripts/replay_picks.py — see planning/picks-methodology-tracking.md
 for the design spec these tests validate against.
 """
+import datetime as dt
 import math
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from scripts import replay_picks as rp
 
 ROOT = Path(__file__).parent.parent
 FIXTURE_CSV = ROOT / "tests" / "fixtures" / "replay_picks_fixture.csv"
+FIXTURE_V2_CSV = ROOT / "tests" / "fixtures" / "replay_picks_v2_fixture.csv"
 
 
 # ---------------------------------------------------------------------------
@@ -68,8 +70,16 @@ class TestLoadMethodology:
         m = rp.load_methodology("2026-06-25")
         assert m["version"] == "v1"
 
-    def test_loads_v1_for_later_date(self):
+    def test_loads_v2_for_pipeline_start_of_liquidity_earnings(self):
         m = rp.load_methodology("2026-07-01")
+        assert m["version"] == "v2"
+
+    def test_loads_v2_for_later_date(self):
+        m = rp.load_methodology("2026-09-01")
+        assert m["version"] == "v2"
+
+    def test_loads_v1_for_date_before_v2_effective(self):
+        m = rp.load_methodology("2026-06-30")
         assert m["version"] == "v1"
 
     def test_override_selects_specific_version(self):
@@ -143,6 +153,124 @@ class TestReplayFixture:
     def test_invalid_view_raises(self):
         with pytest.raises(ValueError, match="view must be"):
             rp.replay(date="2026-06-25", view="bogus")
+
+    def teardown_method(self):
+        rp.PICKS_CSV = ROOT / "data" / "picks" / "picks.csv"
+
+
+# ---------------------------------------------------------------------------
+# Pure-function tests: liquidity/earnings penalties (v2, Phase 3d)
+# ---------------------------------------------------------------------------
+
+V2_LIQ_PARAMS = {"ramp_start": 60_000_000, "floor": 30_000_000, "max_fraction": 0.3}
+V2_EARN_PARAMS = {
+    "caution_days": 10,
+    "imminent_days": 3,
+    "max_fraction": 0.7,
+    "post_earnings_carryover_days": 1,
+    "post_earnings_carryover_fraction": 0.25,
+}
+
+
+class TestLiquidityPenaltyFrac:
+    def test_no_penalty_at_or_above_ramp_start(self):
+        assert rp.liquidity_penalty_frac(60_000_000, V2_LIQ_PARAMS) == 0.0
+        assert rp.liquidity_penalty_frac(100_000_000, V2_LIQ_PARAMS) == 0.0
+
+    def test_max_penalty_at_floor(self):
+        assert math.isclose(rp.liquidity_penalty_frac(30_000_000, V2_LIQ_PARAMS), 0.3)
+
+    def test_midpoint_penalty(self):
+        # $45M is exactly halfway between the $30M floor and $60M ramp start.
+        assert math.isclose(rp.liquidity_penalty_frac(45_000_000, V2_LIQ_PARAMS), 0.15)
+
+    def test_nan_dollar_volume_is_zero_penalty(self):
+        assert rp.liquidity_penalty_frac(float("nan"), V2_LIQ_PARAMS) == 0.0
+
+
+class TestParseEarningsDaysUntil:
+    def test_future_date_same_year(self):
+        d = rp.parse_earnings_days_until("Jul 03", dt.date(2026, 7, 1))
+        assert d == 2
+
+    def test_past_date_negative(self):
+        d = rp.parse_earnings_days_until("Jun 30", dt.date(2026, 7, 1))
+        assert d == -1
+
+    def test_dash_returns_none(self):
+        assert rp.parse_earnings_days_until("-", dt.date(2026, 7, 1)) is None
+
+    def test_after_close_suffix_parses(self):
+        d = rp.parse_earnings_days_until("Jul 03/a", dt.date(2026, 7, 1))
+        assert d == 2
+
+    def test_wraps_to_next_year_when_far_in_past(self):
+        # "Jan 05" viewed from "Dec 20" of the same year is >180 days in the past
+        # under the same-year assumption, so it should roll to next Jan 05.
+        d = rp.parse_earnings_days_until("Jan 05", dt.date(2026, 12, 20))
+        assert d == 16
+
+
+class TestEarningsPenaltyFrac:
+    def test_no_earnings_data_is_zero_penalty(self):
+        assert rp.earnings_penalty_frac("-", dt.date(2026, 7, 1), V2_EARN_PARAMS) == 0.0
+
+    def test_imminent_is_max_penalty(self):
+        frac = rp.earnings_penalty_frac("Jul 03", dt.date(2026, 7, 1), V2_EARN_PARAMS)
+        assert frac == 0.7
+
+    def test_carryover_one_day_after(self):
+        frac = rp.earnings_penalty_frac("Jun 30", dt.date(2026, 7, 1), V2_EARN_PARAMS)
+        assert math.isclose(frac, 0.7 * 0.25)
+
+    def test_two_days_past_is_fully_decayed(self):
+        frac = rp.earnings_penalty_frac("Jun 29", dt.date(2026, 7, 1), V2_EARN_PARAMS)
+        assert frac == 0.0
+
+    def test_far_future_is_zero_penalty(self):
+        frac = rp.earnings_penalty_frac("Aug 01", dt.date(2026, 7, 1), V2_EARN_PARAMS)
+        assert frac == 0.0
+
+    def test_ramp_midpoint(self):
+        # 6 days out is halfway between imminent_days=3 and caution_days=10... check exact ramp math.
+        frac = rp.earnings_penalty_frac("Jul 07", dt.date(2026, 7, 1), V2_EARN_PARAMS)
+        expected = 0.7 * (10 - 6) / (10 - 3)
+        assert math.isclose(frac, expected)
+
+
+# ---------------------------------------------------------------------------
+# Full v2 replay pipeline: liquidity gate/penalty + earnings penalty
+# ---------------------------------------------------------------------------
+
+class TestReplayV2Fixture:
+    def setup_method(self):
+        rp.PICKS_CSV = FIXTURE_V2_CSV
+
+    def test_v2_methodology_selected_for_date(self):
+        out = rp.replay(date="2026-07-01", view="focus")
+        assert "focus_score" in out.columns
+
+    def test_thin_liquidity_excluded_by_dq_gate(self):
+        # TOOTHIN: Price 10 * Avg Volume 2.00M = $20M avg $ volume, below the $30M floor.
+        out = rp.replay(date="2026-07-01", view="focus")
+        assert "TOOTHIN" not in out["ticker"].values
+
+    def test_thin_but_eligible_liquidity_gets_penalized_not_excluded(self):
+        # THINBUT: Price 50 * Avg Volume 900K = $45M, inside [$30M, $60M) -> penalized, not excluded.
+        out = rp.replay(date="2026-07-01", view="focus")
+        assert "THINBUT" in out["ticker"].values
+
+    def test_imminent_earnings_scores_lower_than_just_reported(self):
+        # IMMINENT and JUSTREPORTED are identical on every field except 'Earnings':
+        # IMMINENT is 2 days out (max 0.7 penalty), JUSTREPORTED reported yesterday
+        # (0.7*0.25 carryover penalty) -- JUSTREPORTED's multiplier is larger, so its
+        # focus_score should be proportionally higher, all else being equal.
+        out = rp.replay(date="2026-07-01", view="focus")
+        imminent = out[out["ticker"] == "IMMINENT"]["focus_score"].iloc[0]
+        just_reported = out[out["ticker"] == "JUSTREPORTED"]["focus_score"].iloc[0]
+        ratio = just_reported / imminent
+        expected_ratio = (1 - 0.7 * 0.25) / (1 - 0.7)
+        assert math.isclose(ratio, expected_ratio, rel_tol=1e-6)
 
     def teardown_method(self):
         rp.PICKS_CSV = ROOT / "data" / "picks" / "picks.csv"

@@ -2,10 +2,11 @@
 
 **Goal:** Make any day's Picks (All) and Focus tab output replayable from historical data, and enable A/B testing of selectors and scoring logic by versioning the methodology that was active on each date.
 
-**Status:** ✅ Implemented 2026-07-01. `data/picks/display_methodology.json` (v1),
+**Status:** ✅ Implemented 2026-07-01, including `v2` (same day). `data/picks/display_methodology.json`
+(v1 + v2), `data/picks/ariel_match_config.json` (un-guarded, separate),
 `tests/test_picks_methodology.py`, `scripts/replay_picks.py`, and
 `tests/test_replay_picks.py` are all in place. See "Implementation notes" at the end
-of this doc for what shipped and what was deliberately deferred to v2.
+of this doc for what shipped and the one permanent (not closeable) limitation.
 
 ---
 
@@ -504,22 +505,43 @@ Output columns: `ticker`, `group`, `list_category`, `atr_ext_50`; Focus view add
   3-component Focus score, ATR display bands) — verified against the live
   `docs/index.html` constants at implementation time (`ATR_EXT_ACTIONABLE=4.0`,
   `ATR_EXT_PENALTY_START=2.5`, weights `0.4/0.4/0.2`, `FOCUS_MIN_POOL=5`, etc.).
-- **Known gap, deliberately deferred:** by the time this was implemented, `docs/index.html`
-  had already grown two more Focus-score haircuts beyond what this plan scoped (Phase
-  3d's liquidity penalty gated by `FOCUS_MIN_DOLLAR_VOL`/`LIQUIDITY_PENALTY_START/MAX`,
-  and an earnings-proximity penalty gated by `EARNINGS_IMMINENT_DAYS`/`EARNINGS_CAUTION_DAYS`/
-  `EARNINGS_PENALTY_MAX`/`POST_EARNINGS_PENALTY_FRAC`), plus the whole opt-in Phase 4
-  Ariel-match filter (`ARIEL_*`). None of these are captured in v1's `params`, so
-  `scripts/replay_picks.py` reproduces the v1 formula only and will **not** bit-for-bit
-  match today's live Focus scores/eligibility. This is recorded in the JSON's
-  `known_gaps` block and tracked as **`PICKS-METH-V2`** in `.session/SPRINT.md`. Do not
-  read replay output as "what the PWA showed on that date" until v2 closes this gap.
-- **Also noticed, out of scope for this PR:** `README.md`'s existing PWA display
-  thresholds table (pre-dating this change) has stale values for `ATR_EXT_ACTIONABLE`
-  (`5.0`, should be `4.0`) and `ATR_EXT_PENALTY_START` (`3.5`, should be `2.5`) — it
-  disagrees with both `CLAUDE.md` and the live code. Not touched here to keep this diff
-  scoped to the methodology-tracking feature; flagged to the team, tracked as
-  **`DOC-DRIFT-1`** in `.session/SPRINT.md`.
+- **Gap immediately closed via v2 (2026-07-01, same session):** by the time v1 was
+  implemented, `docs/index.html` had already grown two more Focus-score haircuts beyond
+  this plan's original scope — both merged the same day (2026-07-01): Phase 3d's
+  liquidity gate/penalty (PR #224, commit `dc64b90`, merged 2026-07-01 11:49 -07:00 —
+  confirmed same calendar day in US/Eastern too) and earnings-proximity penalty, plus
+  the whole opt-in Phase 4 Ariel-match filter (PR #226, commit `4c03174`, merged
+  2026-07-01 15:58 -07:00). Rather than defer this, `v2` was authored immediately
+  (effective `2026-07-01`) to close the liquidity/earnings gap:
+  - `focus_dq` split into `atr` + `liquidity` sub-gates (`FOCUS_MIN_DOLLAR_VOL` floor).
+  - `focus_score` gained `liquidity_penalty` (ramps `LIQUIDITY_PENALTY_START` →
+    `FOCUS_MIN_DOLLAR_VOL`, max `LIQUIDITY_PENALTY_MAX`) and `earnings_penalty` (ramps
+    `EARNINGS_CAUTION_DAYS` → `EARNINGS_IMMINENT_DAYS`, max `EARNINGS_PENALTY_MAX`, plus
+    a `POST_EARNINGS_PENALTY_FRAC` one-day carryover).
+  - `scripts/replay_picks.py` extended to apply both haircuts (`_replay_focus` now
+    version-shape-aware: v1's flat `focus_dq` vs v2's nested `{atr, liquidity}`; the
+    n=1 short-circuit now applies liquidity/earnings penalties too, matching the JS
+    `computeFocusScores` n===1 branch exactly).
+  - **Permanent, structural limitation (not closeable by a future version):** the
+    earnings penalty depends on "days until next earnings," which `docs/index.html`
+    always computes relative to the *viewer's wall-clock `now` at render time*, not the
+    picks date. `replay_picks.py` uses the replay `--date` as that reference instead —
+    this reproduces "what a viewer would have seen live on that date," not a value the
+    live PWA ever recomputes retroactively. Documented in `earnings_penalty.note` in the
+    JSON and in the module docstring.
+  - Anti-drift test (`tests/test_picks_methodology.py`) now only checks `current`
+    (`v2`) against live `docs/index.html` — `v1` is a frozen historical snapshot and is
+    expected to diverge from current code, same philosophy as `selector_versions.json`.
+- **Ariel-match given its own file, deliberately un-guarded:** `data/picks/ariel_match_config.json`
+  documents the `ARIEL_*` constants (group/liquidity/daily-move/growth gates) in the
+  same `current`/`versions[]` shape, but **has no anti-drift test** — CEO/CTO call: it's
+  an optional additive display layer independent of the core All/Focus ranking, so it
+  doesn't need the same replay-determinism guarantee. Enforcement is manual review only.
+- **`DOC-DRIFT-1` fixed in this same PR:** `README.md`'s PWA display-thresholds table had
+  stale values for `ATR_EXT_ACTIONABLE` (`5.0` → corrected to `4.0`) and
+  `ATR_EXT_PENALTY_START` (`3.5` → corrected to `2.5`), which disagreed with both
+  `CLAUDE.md` (already correct) and the live code. Full table re-diffed against
+  `docs/index.html` line by line to confirm no other constant had drifted — none had.
 
 ---
 
@@ -539,9 +561,10 @@ Output columns: `ticker`, `group`, `list_category`, `atr_ext_50`; Focus view add
 
 | File | Purpose |
 |------|---------|
-| `data/picks/display_methodology.json` | NEW — versioned display constants |
+| `data/picks/display_methodology.json` | ✅ DONE — versioned display constants (v1 + v2), anti-drift guarded |
+| `data/picks/ariel_match_config.json` | ✅ DONE — versioned Ariel-match constants, deliberately NOT anti-drift guarded |
 | `data/picks/selector_versions.json` | EXISTS — versioned group selector constants |
 | `data/picks/picks.csv` | EXISTS — raw data; all columns needed for replay already present |
-| `scripts/replay_picks.py` | TO WRITE — replay + A/B test CLI |
-| `tests/test_replay_picks.py` | TO WRITE — unit tests for replay logic |
-| `tests/test_picks_methodology.py` | TO WRITE — anti-drift guard (JSON ↔ index.html) |
+| `scripts/replay_picks.py` | ✅ DONE — replay + A/B test CLI |
+| `tests/test_replay_picks.py` | ✅ DONE — unit tests for replay logic |
+| `tests/test_picks_methodology.py` | ✅ DONE — anti-drift guard (JSON ↔ index.html) |
