@@ -234,9 +234,12 @@ def test_stage2_nan_when_sma200_blank():
 # ---------------------------------------------------------------------------
 
 def _make_old_csv(tmp_path, rows_data):
-    """Write a picks.csv with only the original 108 cols (no METRICS_COLS)."""
+    """Write a picks.csv with only the original 108 cols (no METRICS_COLS, no
+    collected_at — predates both; hardcoded rather than derived from
+    pc.PICKS_LEAD_COLS since that now includes collected_at)."""
     config = pc.load_config()
-    old_cols = pc.PICKS_LEAD_COLS + pc.finviz_cols(config) + pc.PICKS_GRP_COLS
+    old_lead_cols = ["date", "list_category", "selector_version", "group", "ticker"]
+    old_cols = old_lead_cols + pc.finviz_cols(config) + pc.PICKS_GRP_COLS
     csv_path = tmp_path / "picks.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=old_cols, extrasaction="ignore")

@@ -121,6 +121,15 @@ GLOBAL_FETCH_CAP = 50
 import os as _os
 PAGE_DELAY_S = float(_os.environ.get("PICKS_PAGE_DELAY", "3"))
 
+# COLLECTED_AT_CRON_UTC — the collect_picks.yml Cloudflare cron fire time
+# (`31 22 * * 1-5` in worker-cron/wrangler.toml), UTC HH:MM:SS. Used only by
+# ensure_picks_csv()'s one-time collected_at backfill migration to approximate
+# a historical run timestamp for rows scraped before the column existed — the
+# real per-run collected_at (main()) always overrides this for new rows.
+# Keep in sync with worker-cron/wrangler.toml if that cron ever changes; a
+# stale value here only affects the cosmetic backfilled timestamp on old rows.
+COLLECTED_AT_CRON_UTC = "22:31:00"
+
 # ---------------------------------------------------------------------------
 # picks.csv schema
 # ---------------------------------------------------------------------------
@@ -128,7 +137,15 @@ PAGE_DELAY_S = float(_os.environ.get("PICKS_PAGE_DELAY", "3"))
 # Leading identity columns (lowercase `ticker` is the dedup-key copy of the
 # Finviz "Ticker" column; both are kept intentionally — the leading column is the
 # stable join key, the 84-col block is the verbatim scrape).
-PICKS_LEAD_COLS = ["date", "list_category", "selector_version", "group", "ticker"]
+#
+# collected_at — ISO 8601 UTC run timestamp, same value for every row in a run
+# (mirrors snapshots.csv's collected_at). NOT part of the uniqueness key
+# (date, list_category, ticker) — a same-day re-run just carries the newer
+# timestamp forward via write_picks()'s last-write-wins batch dedup. Added
+# Phase 3e; pre-existing rows are backfilled by ensure_picks_csv() with an
+# approximation of the collect_picks.yml cron fire time (see that function's
+# docstring), not left blank, since the cron schedule is a known constant.
+PICKS_LEAD_COLS = ["date", "collected_at", "list_category", "selector_version", "group", "ticker"]
 
 # grp_* group-metric snapshot columns (19) — frozen at selection time so Phase-4
 # attribution never re-derives from deltas.csv (ADR-007/008 § grp_* spec).
@@ -181,5 +198,5 @@ def finviz_cols(config: dict = None) -> list:
 
 
 def picks_columns(config: dict = None) -> list:
-    """Full ordered picks.csv header: lead (5) + Finviz (84) + grp_* (19) + metrics (5) = 113."""
+    """Full ordered picks.csv header: lead (6) + Finviz (84) + grp_* (19) + metrics (5) = 114."""
     return PICKS_LEAD_COLS + finviz_cols(config) + PICKS_GRP_COLS + METRICS_COLS

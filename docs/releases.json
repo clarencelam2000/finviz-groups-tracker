@@ -1,6 +1,17 @@
 {
-  "current": "2026.07.02.3",
+  "current": "2026.07.03",
   "releases": [
+    {
+      "version": "2026.07.03",
+      "date": "2026-07-03",
+      "title": "New: data freshness badge on Picks tab",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "The Picks tab now shows the same freshness badge as Sectors/Industries — a quick green/amber/red signal for whether today's picks came from the latest scrape or a stale/older run.",
+        "Under the hood, each daily picks run is now stamped with a generation timestamp, closing the gap where you couldn't tell how fresh the picks list actually was."
+      ]
+    },
     {
       "version": "2026.07.02.3",
       "date": "2026-07-02",
