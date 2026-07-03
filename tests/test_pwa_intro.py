@@ -22,8 +22,6 @@ RELEASES = ROOT / "docs" / "releases.json"
 PRODUCT_INTRO_COPY = ROOT / "knowledge" / "product-intro-copy.md"
 
 # Must match the data-tab values on the PWA tab bar (#tab-bar in index.html).
-# vsmarket is intentionally absent from the WELCOME tour (added after the carousel;
-# test only verifies tour entries are real IDs, not that every ID has a tour entry).
 VALID_TAB_IDS = {"today", "movers", "momentum", "strength", "vsmarket", "ai", "lookup", "picks"}
 
 
@@ -56,11 +54,10 @@ def _welcome_text_strings(field):
 
 def test_welcome_tab_ids_are_valid():
     """Every tab field in WELCOME items must be one of the real tab ids.
-    A renamed or removed tab would otherwise silently break the tour deep-links.
-    Note: not every VALID_TAB_ID needs a tour entry (vsmarket is intentionally absent)."""
+    A renamed or removed tab would otherwise silently break the tour deep-links."""
     ids = _welcome_tab_ids()
     assert ids, "expected at least one tab id in WELCOME items"
-    assert len(ids) == 7, f"expected exactly 7 tab ids in the tour, got {ids}"
+    assert len(ids) == 8, f"expected exactly 8 tab ids in the tour, got {ids}"
     bad = set(ids) - VALID_TAB_IDS
     assert not bad, f"WELCOME items contain unknown tab ids: {bad}"
 
