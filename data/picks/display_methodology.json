@@ -1,6 +1,126 @@
 {
-  "current": "v1",
+  "current": "v2",
   "versions": [
+    {
+      "version": "v2",
+      "effective_date": "2026-07-01",
+      "description": "Adds Phase 3d Focus liquidity gate/penalty and earnings-proximity penalty on top of v1 (docs/index.html PR #224, merged 2026-07-01 11:49 -07:00 / commit dc64b90). Base filter, All-view sort, focus_sort, and atr_bands are unchanged from v1 (repeated here for a self-contained entry). The Phase 4 Ariel-match filter (PR #226, same day) is intentionally NOT modeled here — it's a separate, optional display layer versioned in data/picks/ariel_match_config.json (no anti-drift guard by design; see that file's header).",
+      "params": {
+        "base_filter": {
+          "min_market_cap_b": 5,
+          "note": "'Market Cap' column in picks.csv stores raw Finviz strings (e.g. '345.79B', '456M', '1.2T') — parse with a _parse_cap_b equivalent (strip B/M/T/K suffix, multiply by 1000/1/0.001/0.000001) before comparing to this float threshold. Row is excluded if parsed billions <= 5.",
+          "ma_positioning": {
+            "logic": "any",
+            "conditions": [
+              "SMA50 > 0",
+              "SMA200 > 0",
+              "SMA50 > SMA20"
+            ],
+            "columns": ["SMA50", "SMA200", "SMA20"],
+            "note": "SMA* columns are % distance from MA (e.g. 5.2 = price is 5.2% above that MA), stored as strings that may or may not include a '%' suffix (e.g. '8.33%' or '8.33') — strip '%' before parsing. SMA50 > SMA20 in % terms is equivalent to 20MA price > 50MA price (classic uptrend). A row passes if ANY condition holds. All three NaN = fails."
+          }
+        },
+        "all_view_sort": {
+          "primary": "list_category",
+          "category_order": ["leaders", "emerging", "accel", "rs_new_high"],
+          "secondary": "group",
+          "secondary_note": "Column name in picks.csv is 'group' (part of PICKS_LEAD_COLS). Within each category, groups appear alphabetically.",
+          "tertiary": {
+            "col": "atr_ext_50",
+            "direction": "asc",
+            "note": "Least-extended first within each group."
+          }
+        },
+        "focus_dq": {
+          "atr": {
+            "col": "atr_ext_50",
+            "min_exclusive": 0,
+            "max_inclusive": 4.0,
+            "note": "atr_ext_50 <= 0 means price is at or below the 50MA (not actionable). > ATR_EXT_ACTIONABLE means over-extended. Both are hard disqualifications."
+          },
+          "liquidity": {
+            "col": "avg_dollar_volume",
+            "formula": "Price * Avg Volume (both parsed from picks.csv Finviz-format strings; 'Avg Volume' uses K/M/B/T suffixes, not the market-cap suffix scale)",
+            "min_inclusive": 30000000,
+            "note": "Added in Phase 3d (FOCUS_MIN_DOLLAR_VOL). NaN in either input -> excluded. isFocusEligible() in docs/index.html requires BOTH this gate AND the atr gate above; a row failing either is not a Focus candidate."
+          }
+        },
+        "focus_score": {
+          "formula": "focus_score = base * (1 - extPenaltyFrac) * (1 - liqPenaltyFrac) * (1 - earnPenaltyFrac)",
+          "base_formula": "FOCUS_W_GROUP * normGroup + FOCUS_W_TIGHT * normTight + FOCUS_W_QUIET * normQuiet",
+          "weights": {
+            "group": 0.4,
+            "tight": 0.4,
+            "quiet": 0.2
+          },
+          "components": {
+            "group": {
+              "col": "grp_sum_mid_rank",
+              "direction": "lower_is_better",
+              "note": "Sum of rank_month + rank_quarter + rank_half for the selecting group. Lower = stronger group."
+            },
+            "tight": {
+              "cols": ["risk_20ma_pct", "risk_50ma_pct"],
+              "selection": "min of positive values only",
+              "direction": "lower_is_better",
+              "note": "Nearest MA stop below the price. risk_50ma_pct is always positive for Focus members (price > 50MA is the DQ gate). risk_20ma_pct only qualifies if > 0 (20MA is below price). Takes the smaller of the two qualifying values. If both are NaN or non-positive → NaN (treated as 0.5 by normalization)."
+            },
+            "quiet": {
+              "col": "range_atr",
+              "direction": "lower_is_better",
+              "note": "Today's high-low range divided by ATR. Narrower = more orderly day."
+            }
+          },
+          "normalization": {
+            "method": "inverted_minmax",
+            "fallback_method": "rank_percentile",
+            "fallback_threshold_col": "FOCUS_MIN_POOL",
+            "fallback_threshold": 5,
+            "all_equal_default": 0.5,
+            "nan_default": 0.5,
+            "n1_default": 1.0,
+            "note": "Inverted: lower raw value → higher normalized score (1.0 = best). When pool < 5, rank-based percentile replaces min–max to avoid jumpy scores. All-equal in a component → everyone gets 0.5. NaN → 0.5 (neutral contribution). n=1 candidate → JS short-circuits and assigns score 1.0 before normalization runs (no penalties applied)."
+          },
+          "extension_penalty": {
+            "col": "atr_ext_50",
+            "ramp_start": 2.5,
+            "ramp_end": 4.0,
+            "max_fraction": 0.5,
+            "formula": "extPenaltyT = clamp((atr_ext - 2.5) / (4.0 - 2.5), 0, 1); extPenaltyFrac = 0.5 * extPenaltyT",
+            "note": "0 penalty below 2.5×. Ramps linearly to 50% haircut at 4.0× (ATR_EXT_ACTIONABLE)."
+          },
+          "liquidity_penalty": {
+            "col": "avg_dollar_volume",
+            "ramp_start": 60000000,
+            "floor": 30000000,
+            "max_fraction": 0.3,
+            "formula": "liqPenaltyT = clamp((60_000_000 - dolVol) / (60_000_000 - 30_000_000), 0, 1); liqPenaltyFrac = 0.3 * liqPenaltyT",
+            "note": "Added in Phase 3d (LIQUIDITY_PENALTY_START / LIQUIDITY_PENALTY_MAX). 0 penalty at/above $60M avg $ volume; ramps to 30% haircut right above the $30M floor (below which the row is excluded entirely by focus_dq.liquidity, not penalized). NaN dollar volume -> 0 penalty in the raw formula, but is unreachable for actual Focus candidates since focus_dq.liquidity already excludes NaN."
+          },
+          "earnings_penalty": {
+            "caution_days": 10,
+            "imminent_days": 3,
+            "max_fraction": 0.7,
+            "post_earnings_carryover_days": 1,
+            "post_earnings_carryover_fraction": 0.25,
+            "formula": "d = daysUntil(Earnings column, as_of); if d == -1: 0.7 * 0.25; elif d < -1 or d >= 10: 0; elif d <= 3: 0.7 (flat max); else: 0.7 * (10 - d) / (10 - 3)",
+            "note": "Added in Phase 3d (EARNINGS_IMMINENT_DAYS / EARNINGS_CAUTION_DAYS / EARNINGS_PENALTY_MAX / POST_EARNINGS_PENALTY_FRAC). Parses the Finviz 'Earnings' column ('Mon DD' + optional /a after-close or /b before-open suffix; no year given, inferred from the reference date, rolling forward a year if >180 days in the past). CRITICAL for replay: docs/index.html always computes daysUntil relative to the VIEWER'S WALL-CLOCK 'now' at render time -- it is NOT a pure function of the stored row. scripts/replay_picks.py instead uses the replay --date as the 'as_of' reference, which reproduces what a viewer would have seen live on that date, not what re-running the parser today would produce for a past date. This is a deliberate, documented divergence, not a bug."
+          }
+        },
+        "focus_sort": {
+          "col": "focus_score",
+          "direction": "desc"
+        },
+        "atr_bands": {
+          "emerald_max": 4.0,
+          "amber_max": 8.0,
+          "note": "Display-only color bands on atr_ext_50. Emerald = actionable zone (< 4.0×); amber = caution (4.0–8.0×); red = trim candidate (≥ 8.0×). NOTE: the Guide tooltip in docs/index.html (near line 526) incorrectly says 'emerald ≤5×' — the actual code cutoff is 4.0× (ATR_EXT_ACTIONABLE). Do not 'fix' this JSON to say 5.0; the code is the source of truth. Fix the guide text separately."
+        }
+      },
+      "known_gaps": {
+        "note": "Closes v1's liquidity/earnings gap. Still NOT modeled here: the opt-in Phase 4 Ariel-match filter (versioned separately in data/picks/ariel_match_config.json, no anti-drift guard by design). Also see the earnings_penalty note above re: the wall-clock-vs-replay-date divergence -- that is a permanent, structural limitation of replaying a 'now'-relative formula, not something a future version can fully close without changing the live formula itself to be date-relative."
+      }
+    },
     {
       "version": "v1",
       "effective_date": "2026-06-25",
@@ -93,7 +213,7 @@
         }
       },
       "known_gaps": {
-        "note": "This v1 entry captures only the original Phase 3b formula (base filter, all-view sort, focus DQ, 3-component focus score, atr bands) per the plan's locked scope. The LIVE Focus score in docs/index.html as of 2026-07-01 also multiplies by two additional independent haircuts NOT modeled here: a liquidity penalty (FOCUS_MIN_DOLLAR_VOL hard gate + LIQUIDITY_PENALTY_START/MAX ramp) and an earnings-proximity penalty (EARNINGS_IMMINENT_DAYS/CAUTION_DAYS + EARNINGS_PENALTY_MAX/POST_EARNINGS_PENALTY_FRAC ramp), both added in Phase 3d. The opt-in Ariel-match filter (Phase 4, ARIEL_* constants) is also not modeled — it is a separate optional display layer, not part of the base/Focus methodology. scripts/replay_picks.py therefore reproduces the v1 formula only and will NOT bit-for-bit match current live Focus scores/eligibility. Tracked as PICKS-METH-V2 in .session/SPRINT.md — add a v2 entry (and extend replay_picks.py) once the liquidity/earnings/Ariel layers are considered stable enough to lock."
+        "note": "This v1 entry captures only the original Phase 3b formula (base filter, all-view sort, focus DQ, 3-component focus score, atr bands). It predates Phase 3d's liquidity + earnings-proximity Focus-score haircuts and the Phase 4 Ariel-match filter, both merged 2026-07-01 (same day this JSON was first authored). RESOLVED for liquidity/earnings by v2 (effective 2026-07-01) -- use v2 for any date on/after 2026-07-01. This v1 entry remains correct and unchanged for dates in [2026-06-25, 2026-06-30]. Ariel-match is out of scope for both v1 and v2 -- see data/picks/ariel_match_config.json."
       }
     }
   ]

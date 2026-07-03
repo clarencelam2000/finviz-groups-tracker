@@ -6,16 +6,26 @@ present) and `data/picks/display_methodology.json` (versioned filter/ranking con
 reproduces exactly what the PWA would have shown for any past date under any
 methodology version — enabling A/B testing across methodology changes.
 
-Mirrors the JS logic in docs/index.html (renderPicks / computeFocusScores) closely
-enough for the v1 methodology (see display_methodology.json's `known_gaps` block for
-what v1 intentionally does not model: Phase 3d liquidity/earnings penalties and the
-Phase 4 Ariel-match filter — tracked as PICKS-METH-V2 in .session/SPRINT.md).
+Mirrors the JS logic in docs/index.html (renderPicks / computeFocusScores). v1 covers
+the original Phase 3b formula; v2 (effective 2026-07-01) adds the Phase 3d Focus
+liquidity gate/penalty and earnings-proximity penalty. Still NOT modeled by any
+version: the opt-in Phase 4 Ariel-match filter (see data/picks/ariel_match_config.json
+— documentation-only, no anti-drift guard, by design).
+
+IMPORTANT caveat for the earnings penalty: docs/index.html always computes
+"days until earnings" relative to the viewer's wall-clock `now` at render time, not
+the picks date. This script instead uses the replay `--date` as that reference, which
+reproduces what a viewer would have seen live on that date — not what re-running the
+JS parser today would produce for a past date. See display_methodology.json v2's
+`focus_score.earnings_penalty.note` for the full explanation.
 
 See planning/picks-methodology-tracking.md for the full design spec this implements.
 """
 
 import argparse
+import datetime as dt
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -26,6 +36,12 @@ PICKS_CSV = BASE_DIR / "data" / "picks" / "picks.csv"
 METHODOLOGY_PATH = BASE_DIR / "data" / "picks" / "display_methodology.json"
 
 PICKS_PIPELINE_START_DATE = "2026-06-25"
+
+# Mirrors EARNINGS_MONTH_ABBR in docs/index.html.
+_EARNINGS_MONTH_ABBR = {
+    "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6,
+    "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12,
+}
 
 
 def _parse_cap_b(series: pd.Series) -> pd.Series:
@@ -58,6 +74,92 @@ def _parse_pct(series: pd.Series) -> pd.Series:
         series.astype(str).str.replace("%", "", regex=False),
         errors="coerce",
     )
+
+
+def _parse_vol_raw(series: pd.Series) -> pd.Series:
+    """Parse 'Avg Volume' strings like '9.24M', '850K' -> float raw units.
+    Mirrors JS _pVolRaw(). NOT the same scale as _parse_cap_b (that's $B; this is shares)."""
+
+    def _one(v):
+        if not v or str(v).strip() in ("", "-"):
+            return float("nan")
+        s = str(v).strip()
+        suffix_map = {"T": 1e12, "B": 1e9, "M": 1e6, "K": 1e3}
+        last = s[-1].upper()
+        if last in suffix_map:
+            try:
+                return float(s[:-1]) * suffix_map[last]
+            except (ValueError, TypeError):
+                return float("nan")
+        try:
+            return float(s.replace(",", ""))
+        except (ValueError, TypeError):
+            return float("nan")
+
+    return series.apply(_one)
+
+
+def avg_dollar_volume(df: pd.DataFrame) -> pd.Series:
+    """Price * Avg Volume. Mirrors JS focusDollarVol()."""
+    vol = _parse_vol_raw(df["Avg Volume"])
+    price = pd.to_numeric(df["Price"], errors="coerce")
+    return vol * price
+
+
+def parse_earnings_days_until(value, as_of: dt.date):
+    """Days from `as_of` to the next occurrence of a Finviz 'Earnings' column value
+    ('Mon DD', optionally suffixed '/a' or '/b'). Mirrors JS parseEarningsInfo(), but
+    takes an explicit `as_of` reference date instead of wall-clock 'now' -- see the
+    earnings_penalty note in display_methodology.json v2 for why this matters for replay.
+    Returns None if unparseable or blank ('-')."""
+    if value is None or str(value).strip() in ("", "-"):
+        return None
+    m = re.match(r"^([A-Za-z]{3})\s+(\d{1,2})(?:/([ab]))?$", str(value).strip())
+    if not m or m.group(1) not in _EARNINGS_MONTH_ABBR:
+        return None
+    month = _EARNINGS_MONTH_ABBR[m.group(1)]
+    day = int(m.group(2))
+    try:
+        date = dt.date(as_of.year, month, day)
+    except ValueError:
+        return None
+    if (as_of - date).days > 180:
+        try:
+            date = dt.date(as_of.year + 1, month, day)
+        except ValueError:
+            return None
+    return (date - as_of).days
+
+
+def liquidity_penalty_frac(dol_vol: float, params: dict) -> float:
+    """Mirrors JS liquidityPenaltyFrac(). 0 at/above ramp_start; ramps to max_fraction
+    at `floor` (the focus_dq.liquidity min_inclusive -- unreachable below it since
+    those rows are excluded from Focus entirely)."""
+    ramp_start = params["ramp_start"]
+    floor = params["floor"]
+    if pd.isna(dol_vol) or dol_vol >= ramp_start:
+        return 0.0
+    t = (ramp_start - dol_vol) / (ramp_start - floor)
+    return params["max_fraction"] * max(0.0, min(1.0, t))
+
+
+def earnings_penalty_frac(earnings_value, as_of: dt.date, params: dict) -> float:
+    """Mirrors JS earningsPenaltyFrac(), with `as_of` as the replay-date reference
+    instead of wall-clock 'now' (see display_methodology.json v2 note)."""
+    d = parse_earnings_days_until(earnings_value, as_of)
+    if d is None:
+        return 0.0
+    carryover_days = params["post_earnings_carryover_days"]
+    if d == -carryover_days:
+        return params["max_fraction"] * params["post_earnings_carryover_fraction"]
+    caution_days = params["caution_days"]
+    imminent_days = params["imminent_days"]
+    if d < -carryover_days or d >= caution_days:
+        return 0.0
+    if d <= imminent_days:
+        return params["max_fraction"]
+    t = (caution_days - d) / (caution_days - imminent_days)
+    return params["max_fraction"] * t
 
 
 def load_methodology(date: str, override: str = None) -> dict:
@@ -159,18 +261,46 @@ def _replay_all(df: pd.DataFrame, p: dict) -> pd.DataFrame:
     )
 
 
-def _replay_focus(df: pd.DataFrame, p: dict) -> pd.DataFrame:
+def _replay_focus(df: pd.DataFrame, p: dict, as_of: dt.date) -> pd.DataFrame:
+    # focus_dq is a flat {col, min_exclusive, max_inclusive} in v1, and a
+    # {"atr": {...}, "liquidity": {...}} nested dict from v2 onward.
+    focus_dq = p["focus_dq"]
+    atr_dq = focus_dq.get("atr", focus_dq)
+
     atr = pd.to_numeric(df["atr_ext_50"], errors="coerce")
-    focus_candidates = df[
-        (atr > p["focus_dq"]["min_exclusive"]) & (atr <= p["focus_dq"]["max_inclusive"])
-    ].copy()
+    dq_mask = (atr > atr_dq["min_exclusive"]) & (atr <= atr_dq["max_inclusive"])
+
+    liquidity_dq = focus_dq.get("liquidity")
+    if liquidity_dq is not None:
+        dol_vol_dq = avg_dollar_volume(df)
+        dq_mask = dq_mask & (dol_vol_dq >= liquidity_dq["min_inclusive"])
+
+    focus_candidates = df[dq_mask].copy()
 
     if len(focus_candidates) == 0:
         focus_candidates["focus_score"] = pd.Series(dtype=float)
         return focus_candidates
 
+    liq_penalty_params = p["focus_score"].get("liquidity_penalty")
+    earn_penalty_params = p["focus_score"].get("earnings_penalty")
+
+    def _liq_earn_multiplier(rows: pd.DataFrame) -> pd.Series:
+        """(1 - liqPenaltyFrac) * (1 - earnPenaltyFrac), or 1.0 where the methodology
+        version doesn't model that haircut (v1)."""
+        mult = pd.Series(1.0, index=rows.index)
+        if liq_penalty_params is not None:
+            dol_vol = avg_dollar_volume(rows)
+            mult *= 1 - dol_vol.map(lambda v: liquidity_penalty_frac(v, liq_penalty_params))
+        if earn_penalty_params is not None and "Earnings" in rows.columns:
+            mult *= 1 - rows["Earnings"].map(
+                lambda v: earnings_penalty_frac(v, as_of, earn_penalty_params)
+            )
+        return mult
+
     if len(focus_candidates) == 1:
-        focus_candidates["focus_score"] = 1.0
+        # JS short-circuits the group/tight/quiet normalization and extension penalty
+        # at n=1, but liquidity/earnings penalties still apply (computeFocusScores n===1 branch).
+        focus_candidates["focus_score"] = 1.0 * _liq_earn_multiplier(focus_candidates)
         return focus_candidates
 
     raw_group = pd.to_numeric(focus_candidates["grp_sum_mid_rank"], errors="coerce")
@@ -205,7 +335,9 @@ def _replay_focus(df: pd.DataFrame, p: dict) -> pd.DataFrame:
     )
     penalty_frac = ep["max_fraction"] * penalty_t
 
-    focus_candidates["focus_score"] = base * (1 - penalty_frac)
+    focus_candidates["focus_score"] = (
+        base * (1 - penalty_frac) * _liq_earn_multiplier(focus_candidates)
+    )
     return focus_candidates.sort_values("focus_score", ascending=False).reset_index(drop=True)
 
 
@@ -232,7 +364,8 @@ def replay(date: str = None, view: str = "all", methodology_version: str = None)
         out = _replay_all(df, p)
         cols = ["ticker", "group", "list_category", "atr_ext_50"]
     elif view == "focus":
-        out = _replay_focus(df, p)
+        as_of = dt.datetime.strptime(date, "%Y-%m-%d").date()
+        out = _replay_focus(df, p, as_of)
         cols = ["ticker", "group", "list_category", "atr_ext_50", "focus_score"]
     else:
         raise ValueError(f"view must be 'all' or 'focus', got {view!r}")

@@ -6,10 +6,15 @@ that drives the Picks/Focus display logic in docs/index.html at the time it was
 authored. This test asserts each recorded numeric/string param still matches the
 live JS constant, so a future constant change reddens CI until the JSON is updated.
 
-Known gap (documented in the JSON's `known_gaps` block, tracked as PICKS-METH-V2 in
-.session/SPRINT.md): v1 only covers the original Phase 3b formula. It intentionally
-does not model the Phase 3d liquidity/earnings penalties or the Phase 4 Ariel-match
-filter — those are out of scope until a v2 entry is authored.
+Only `current` (versions[0]) is checked against live docs/index.html — older entries
+are immutable historical snapshots (same philosophy as selector_versions.json) and are
+expected to diverge from current code once superseded.
+
+Known gap (documented in the current version's `known_gaps` block, tracked as
+PICKS-METH-V2 resolution notes / a permanent structural note in .session/SPRINT.md):
+the opt-in Phase 4 Ariel-match filter is intentionally NOT modeled here at all — it's
+versioned separately in data/picks/ariel_match_config.json with no anti-drift guard
+by design (see that file's `_readme`).
 """
 import json
 import re
@@ -35,8 +40,8 @@ def _extract_constant(name: str, html: str) -> str:
 
 
 def _parse_js_float(raw: str) -> float:
-    """Parse a JS numeric literal like '4.0' or '0.4' -> float."""
-    return float(raw.strip())
+    """Parse a JS numeric literal like '4.0' or '0.4' or '30_000_000' -> float."""
+    return float(raw.strip().replace("_", ""))
 
 
 class TestDisplayMethodologyStructure:
@@ -50,12 +55,18 @@ class TestDisplayMethodologyStructure:
         dates = [v["effective_date"] for v in self.meth["versions"]]
         assert dates == sorted(dates, reverse=True)
 
-    def test_v1_effective_date(self):
-        assert self.meth["versions"][0]["effective_date"] == "2026-06-25"
+    def test_current_is_v2_effective_2026_07_01(self):
+        assert self.meth["versions"][0]["version"] == "v2"
+        assert self.meth["versions"][0]["effective_date"] == "2026-07-01"
+
+    def test_v1_still_present_with_original_effective_date(self):
+        v1 = next(v for v in self.meth["versions"] if v["version"] == "v1")
+        assert v1["effective_date"] == "2026-06-25"
 
 
 class TestDisplayMethodologySyncWithHtml:
-    """Every v1 param must mirror the live constant in docs/index.html."""
+    """Every `current` (versions[0], i.e. v2) param must mirror the live constant
+    in docs/index.html. Older entries (v1) are frozen snapshots, not checked here."""
 
     def setup_method(self):
         self.html = _load_html()
@@ -65,9 +76,13 @@ class TestDisplayMethodologySyncWithHtml:
         raw = _extract_constant("MIN_MARKET_CAP_B", self.html)
         assert _parse_js_float(raw) == self.p["base_filter"]["min_market_cap_b"]
 
-    def test_focus_dq_max_matches_atr_ext_actionable(self):
+    def test_focus_dq_atr_max_matches_atr_ext_actionable(self):
         raw = _extract_constant("ATR_EXT_ACTIONABLE", self.html)
-        assert _parse_js_float(raw) == self.p["focus_dq"]["max_inclusive"]
+        assert _parse_js_float(raw) == self.p["focus_dq"]["atr"]["max_inclusive"]
+
+    def test_focus_dq_liquidity_min_matches_focus_min_dollar_vol(self):
+        raw = _extract_constant("FOCUS_MIN_DOLLAR_VOL", self.html)
+        assert _parse_js_float(raw) == self.p["focus_dq"]["liquidity"]["min_inclusive"]
 
     def test_atr_bands_emerald_max_matches_atr_ext_actionable(self):
         raw = _extract_constant("ATR_EXT_ACTIONABLE", self.html)
@@ -106,6 +121,30 @@ class TestDisplayMethodologySyncWithHtml:
         raw = _extract_constant("PENALTY_MAX", self.html)
         ep = self.p["focus_score"]["extension_penalty"]
         assert _parse_js_float(raw) == ep["max_fraction"]
+
+    def test_liquidity_penalty_ramp_start_and_floor(self):
+        lp = self.p["focus_score"]["liquidity_penalty"]
+        assert _parse_js_float(_extract_constant("LIQUIDITY_PENALTY_START", self.html)) == lp["ramp_start"]
+        assert _parse_js_float(_extract_constant("FOCUS_MIN_DOLLAR_VOL", self.html)) == lp["floor"]
+
+    def test_liquidity_penalty_max_fraction(self):
+        raw = _extract_constant("LIQUIDITY_PENALTY_MAX", self.html)
+        lp = self.p["focus_score"]["liquidity_penalty"]
+        assert _parse_js_float(raw) == lp["max_fraction"]
+
+    def test_earnings_penalty_day_thresholds(self):
+        ep = self.p["focus_score"]["earnings_penalty"]
+        assert _parse_js_float(_extract_constant("EARNINGS_CAUTION_DAYS", self.html)) == ep["caution_days"]
+        assert _parse_js_float(_extract_constant("EARNINGS_IMMINENT_DAYS", self.html)) == ep["imminent_days"]
+
+    def test_earnings_penalty_max_fraction_and_carryover(self):
+        ep = self.p["focus_score"]["earnings_penalty"]
+        assert _parse_js_float(_extract_constant("EARNINGS_PENALTY_MAX", self.html)) == ep["max_fraction"]
+        assert (
+            _parse_js_float(_extract_constant("POST_EARNINGS_PENALTY_FRAC", self.html))
+            == ep["post_earnings_carryover_fraction"]
+        )
+        assert ep["post_earnings_carryover_days"] == 1  # the JS hardcodes daysUntil === -1
 
     def test_all_view_category_order(self):
         m = re.search(
