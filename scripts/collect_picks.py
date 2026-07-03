@@ -300,12 +300,15 @@ def scrape_selected_groups(fetch_fn, groups, global_cap=GLOBAL_FETCH_CAP,
 # Row building + CSV append (pure)
 # ---------------------------------------------------------------------------
 
-def build_pick_rows(date_str, selections_for_group, scraped_rows, finviz_cols):
+def build_pick_rows(date_str, collected_at, selections_for_group, scraped_rows, finviz_cols):
     """Expand one group's scraped stock rows × its category tags → picks rows.
 
     selections_for_group: the selection dicts whose group == this group (1 per
     category the group qualified in). Each scraped stock row produces one picks
     row per category tag, carrying that category's grp_* snapshot + computed metrics.
+
+    collected_at: single run-wide UTC timestamp (see main()), stamped identically
+    on every row this run produces.
     """
     out = []
     for stock in scraped_rows:
@@ -318,6 +321,7 @@ def build_pick_rows(date_str, selections_for_group, scraped_rows, finviz_cols):
         for sel in selections_for_group:
             row = {
                 "date": date_str,
+                "collected_at": collected_at,
                 "list_category": sel["list_category"],
                 "selector_version": sel["selector_version"],
                 "group": sel["group"],
@@ -332,7 +336,7 @@ def build_pick_rows(date_str, selections_for_group, scraped_rows, finviz_cols):
     return out
 
 
-def build_run_rows(date_str, ordered_groups, results, selections, finviz_cols):
+def build_run_rows(date_str, collected_at, ordered_groups, results, selections, finviz_cols):
     """Expand one run's scrape results into picks rows + validation bookkeeping.
 
     Pure (no Finviz, no I/O). Returns (all_new_rows, validated_groups,
@@ -358,7 +362,7 @@ def build_run_rows(date_str, ordered_groups, results, selections, finviz_cols):
             continue
         validated_groups.add(g)
         group_sels = [s for s in selections if s["group"] == g]
-        all_new_rows.extend(build_pick_rows(date_str, group_sels, rows, finviz_cols))
+        all_new_rows.extend(build_pick_rows(date_str, collected_at, group_sels, rows, finviz_cols))
     return all_new_rows, validated_groups, suspect_slugs
 
 
@@ -422,16 +426,23 @@ def flip_validated(slugs_path, validated_groups):
 # ---------------------------------------------------------------------------
 
 def ensure_picks_csv(picks_csv, latest_csv=None):
-    """Backfill METRICS_COLS into picks.csv if they are absent from its header.
+    """Backfill any missing superset columns (METRICS_COLS, collected_at) into
+    picks.csv's header.
 
-    Pattern: analogue of ensure_deltas_csv() in compute_deltas.py.
-    (a) Read current header. If METRICS_COLS are already present → no-op.
-    (b) Otherwise: read all rows, compute the 5 derived values for every row from its
-        already-stored Finviz columns, and atomically rewrite picks_csv with the new
-        113-col header. Then rewrite latest_csv (max-date slice) from the updated rows.
+    Pattern: analogue of ensure_deltas_csv() in compute_deltas.py. Each gap is
+    checked independently so this stays a no-op-per-gap as each one is closed,
+    but only ever rewrites the file once per call if ANY gap is found:
+    (a) METRICS_COLS missing → recompute the 5 derived columns for every row
+        from its already-stored Finviz columns (Phase 3a).
+    (b) collected_at missing → backfill with date + COLLECTED_AT_CRON_UTC, an
+        approximation of the collect_picks.yml cron fire time (worker-cron
+        `31 22 * * 1-5` UTC) rather than a blank — the daily cron time is a
+        known constant, so this is a reasonable estimate for historical rows;
+        it is never used for new rows, which get the real per-run timestamp
+        from main().
 
-    This is a one-time auto-migration on the first run after Phase 3a is deployed —
-    after that it is a pure no-op (header check is O(1)).
+    This is a one-time auto-migration on the first run after each gap is
+    deployed — after that it is a pure no-op (header check is O(1)).
     """
     if not picks_csv.exists():
         return
@@ -439,21 +450,29 @@ def ensure_picks_csv(picks_csv, latest_csv=None):
     if not existing:
         return
     first_keys = set(existing[0].keys())
-    if all(c in first_keys for c in METRICS_COLS):
+    needs_metrics = not all(c in first_keys for c in METRICS_COLS)
+    needs_collected_at = "collected_at" not in first_keys
+    if not needs_metrics and not needs_collected_at:
         return  # already migrated
 
-    print(f"ensure_picks_csv: backfilling {METRICS_COLS} into {picks_csv} "
-          f"({len(existing)} rows)…")
+    if needs_metrics:
+        print(f"ensure_picks_csv: backfilling {METRICS_COLS} into {picks_csv} "
+              f"({len(existing)} rows)…")
+    if needs_collected_at:
+        print(f"ensure_picks_csv: backfilling collected_at (approximated from "
+              f"cron time {pc.COLLECTED_AT_CRON_UTC}) into {picks_csv} "
+              f"({len(existing)} rows)…")
 
     config = pc.load_config()
     columns = pc.picks_columns(config)
 
-    # Recompute metrics for every existing row.
     for r in existing:
-        m = compute_metrics_row(r)
-        for col in METRICS_COLS:
-            v = m[col]
-            r[col] = _f(v)
+        if needs_metrics:
+            m = compute_metrics_row(r)
+            for col in METRICS_COLS:
+                r[col] = _f(m[col])
+        if needs_collected_at:
+            r["collected_at"] = f"{r.get('date', '')}T{pc.COLLECTED_AT_CRON_UTC}Z"
 
     picks_csv.parent.mkdir(parents=True, exist_ok=True)
     _write_csv(picks_csv, existing, columns)
@@ -501,6 +520,11 @@ def main():
     from collect import trading_date
     eastern = pytz.timezone("US/Eastern")
     date_str = args.date or trading_date(datetime.now(eastern))
+
+    # Single run-wide UTC timestamp, captured once and stamped on every row this
+    # run produces (mirrors collect.py's collected_at pattern) — not per-page,
+    # so a run's rows all agree even though the scrape itself takes minutes.
+    collected_at = datetime.now(pytz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # Stale-read guard (D7/ADR-008): never select picks against yesterday's
     # rankings. If today's deltas aren't present, abort — cron drift, not a pick.
@@ -572,7 +596,7 @@ def main():
 
     # Build rows + validation bookkeeping.
     all_new_rows, validated_groups, suspect_slugs = build_run_rows(
-        date_str, ordered_groups, results, selections, finviz_cols
+        date_str, collected_at, ordered_groups, results, selections, finviz_cols
     )
 
     # Empty-scrape guard (D14 / PICKS-2): if NOT ONE selected group returned a

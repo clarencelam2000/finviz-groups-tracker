@@ -248,9 +248,9 @@ screener and logs them to an append-only event log. **Phase 2 of
 | File | Role |
 |------|------|
 | `scripts/collect_picks.py` | `select_groups()` (pure selector) + paginated scrape + append. Inherits `slugify_industry`/`_build_url`/`_parse_table` from `probe_picks.py`. |
-| `scripts/picks_config.py` | Single source of truth: schema (`picks_columns()`, 113 cols = 5 lead + 84 Finviz + 19 `grp_*` + 5 metrics) + all tunable constants. |
+| `scripts/picks_config.py` | Single source of truth: schema (`picks_columns()`, 114 cols = 6 lead + 84 Finviz + 19 `grp_*` + 5 metrics) + all tunable constants. |
 | `scripts/picks_metrics.py` | Pure helper module: parsers + `compute_metrics_row()` → 5 `METRICS_COLS` (`atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`, `range_atr`, `stage2`). Fully unit-tested. |
-| `data/picks/picks.csv` | Append-only log; 113 cols per row. Lead + 84 Finviz + 19 `grp_*` + 5 metrics. **Offline attribution only — never fetched by the PWA.** |
+| `data/picks/picks.csv` | Append-only log; 114 cols per row. Lead (incl. `collected_at`, the per-run UTC scrape timestamp) + 84 Finviz + 19 `grp_*` + 5 metrics. **Offline attribution only — never fetched by the PWA.** |
 | `data/picks/picks_latest.csv` | Max-date slice of `picks.csv` — **this is what the PWA fetches.** |
 | `data/picks/screener_config.json` | Modular URL config (`wide` net + `button`); 84-col `c=` list. Labels stay verbatim-synced to `tests/fixtures/probe_header_84col.txt`. |
 | `data/picks/finviz_industry_slugs.csv` | 144 industry→slug rows. `validated` flips to `true` the first time a group scrapes >0 rows (G4). |
@@ -258,6 +258,16 @@ screener and logs them to an append-only event log. **Phase 2 of
 | `data/picks/display_methodology.json` | Append-only registry of the client-side (PWA) display/scoring constants active on any date — base filter, All-view sort, Focus DQ/scoring/weights, ATR display bands. Same versioning pattern as `selector_versions.json` (`current` + newest-first `versions[]`, lookup by largest `effective_date ≤ date`). Anti-drift guard: `tests/test_picks_methodology.py` (checks `versions[0].params` — the "current" entry only — against the live `docs/index.html` constants; older entries are frozen historical snapshots, not re-checked). **Bump whenever any of those constants changes, in the same PR** (see `planning/picks-methodology-tracking.md`) — no need to wait for a feature to be "locked" first; this file's job is to track live reality continuously. `v2` (current, effective 2026-07-01) added the Phase 3d Focus liquidity gate/penalty and earnings-proximity penalty on top of `v1`. The opt-in Phase 4 Ariel-match filter is intentionally **not** modeled in this file at all — it's versioned separately (see `ariel_match_config.json` below) since it's an optional additive layer, not part of the core All/Focus ranking. |
 | `data/picks/ariel_match_config.json` | Documentation-only record of the Ariel Hernandez swing-trader match filter's `ARIEL_*` constants (group/liquidity/daily-move/growth gates). Same `current`/`versions[]` shape as the two files above, but **no anti-drift guard/test exists for it, by design** — it's an optional display layer with looser consistency requirements than the core methodology. Keep it updated as a courtesy when `ARIEL_*` constants change; nothing enforces it. |
 | `scripts/replay_picks.py` | Deterministically reconstructs a historical Picks All/Focus view from `picks.csv` + `display_methodology.json`, for replay and A/B testing across methodology versions (`python scripts/replay_picks.py --date YYYY-MM-DD --view all\|focus [--methodology-version vN] [--pretty]`). Tested in `tests/test_replay_picks.py`. |
+
+**`collected_at` (Phase 3e, 2026-07-03):** ISO 8601 UTC run timestamp, one value per run, stamped
+identically on every row `main()` produces that day — mirrors `snapshots.csv`'s `collected_at` and
+is **not** part of the picks uniqueness key (`date, list_category, ticker`); a same-day re-run just
+carries the newer timestamp forward via `write_picks()`'s last-write-wins batch dedup. Rows scraped
+before this column existed are backfilled once by `ensure_picks_csv()` with `date +
+COLLECTED_AT_CRON_UTC` (`22:31:00` UTC, the `collect_picks.yml` cron fire time) — an approximation,
+not a fabricated exact time, since the daily cron time is a known constant. The PWA's Picks tab
+(`renderPicks()` in `docs/index.html`) surfaces this via the same `freshnessLabel()` helper already
+used by Sectors/Industries, so a stale/blocked picks run shows the same red/amber/green badge.
 
 **Selector (ADR-007, VP-locked; dedup policy amended v2 2026-07-02):** four buckets filled in
 priority order to ≤ `DAILY_GROUP_CAP` (20) unique groups; a group qualifying in multiple buckets

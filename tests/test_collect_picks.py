@@ -34,6 +34,7 @@ from collect_picks import (
     build_run_rows,
     write_picks,
     flip_validated,
+    ensure_picks_csv,
     _PCTILE_CUTOFF,
 )
 from picks_config import (
@@ -323,17 +324,18 @@ class TestBuildPickRows:
              **{c: "" for c in pc.PICKS_GRP_COLS}},
         ]
         scraped = [{"Ticker": "NVDA", "Price": "100"}, {"Ticker": "AMD", "Price": "50"}]
-        rows = build_pick_rows("2026-06-24", sels, scraped, ["Ticker", "Price"])
+        rows = build_pick_rows("2026-06-24", "2026-06-24T22:31:05Z", sels, scraped, ["Ticker", "Price"])
         assert len(rows) == 4  # 2 stocks × 2 categories
         cats = {r["list_category"] for r in rows}
         assert cats == {"leaders", "accel"}
         assert rows[0]["Price"] == "100"
+        assert all(r["collected_at"] == "2026-06-24T22:31:05Z" for r in rows)
 
     def test_skips_rows_without_ticker(self):
         sels = [{"group": "G", "list_category": "leaders", "selector_version": "v1",
                  **{c: "" for c in pc.PICKS_GRP_COLS}}]
-        rows = build_pick_rows("2026-06-24", sels, [{"Ticker": "", "Price": "1"}],
-                               ["Ticker", "Price"])
+        rows = build_pick_rows("2026-06-24", "2026-06-24T22:31:05Z", sels,
+                               [{"Ticker": "", "Price": "1"}], ["Ticker", "Price"])
         assert rows == []
 
 
@@ -355,17 +357,18 @@ class TestBuildRunRows:
             "G2": (["Ticker"], []),  # scraped but 0 rows → suspect
         }
         rows, validated, suspect = build_run_rows(
-            "2026-06-24", ["G1", "G2"], results, self._sels(), ["Ticker"]
+            "2026-06-24", "2026-06-24T22:31:05Z", ["G1", "G2"], results, self._sels(), ["Ticker"]
         )
         assert validated == {"G1"}
         assert suspect == ["G2"]
         assert {r["ticker"] for r in rows} == {"AAA", "BBB"}
+        assert all(r["collected_at"] == "2026-06-24T22:31:05Z" for r in rows)
 
     def test_all_empty_yields_no_validated_groups(self):
         # Cloudflare-block signature: every group HTTP 200 with an empty table.
         results = {"G1": ([], []), "G2": ([], [])}
         rows, validated, suspect = build_run_rows(
-            "2026-06-24", ["G1", "G2"], results, self._sels(), ["Ticker"]
+            "2026-06-24", "2026-06-24T22:31:05Z", ["G1", "G2"], results, self._sels(), ["Ticker"]
         )
         assert rows == []
         assert validated == set()          # guard in main() trips on this
@@ -527,12 +530,12 @@ class TestSchema:
 
     def test_picks_columns_layout(self):
         cols = pc.picks_columns()
-        assert cols[:5] == pc.PICKS_LEAD_COLS
+        assert cols[:6] == pc.PICKS_LEAD_COLS
         # grp_* block is followed by METRICS_COLS (Phase 3a superset append)
-        grp_start = 5 + 84
+        grp_start = 6 + 84
         assert cols[grp_start:grp_start + len(pc.PICKS_GRP_COLS)] == pc.PICKS_GRP_COLS
         assert cols[-len(pc.METRICS_COLS):] == pc.METRICS_COLS
-        assert len(cols) == 5 + 84 + len(pc.PICKS_GRP_COLS) + len(pc.METRICS_COLS)
+        assert len(cols) == 6 + 84 + len(pc.PICKS_GRP_COLS) + len(pc.METRICS_COLS)
 
     def test_grp_cols_count_is_19(self):
         assert len(pc.PICKS_GRP_COLS) == 19
@@ -542,4 +545,50 @@ class TestSchema:
         # contiguous block → removing or reordering a column would break this.
         cols = pc.picks_columns()
         golden = [l for l in GOLDEN_HEADER_PATH.read_text().splitlines() if l]
-        assert cols[5:5 + len(golden)] == golden
+        assert cols[6:6 + len(golden)] == golden
+
+
+# ---------------------------------------------------------------------------
+# ensure_picks_csv — collected_at backfill migration
+# ---------------------------------------------------------------------------
+
+class TestEnsurePicksCsvCollectedAt:
+    def _old_cols_no_collected_at(self):
+        config = pc.load_config()
+        old_lead = ["date", "list_category", "selector_version", "group", "ticker"]
+        return old_lead + pc.finviz_cols(config) + pc.PICKS_GRP_COLS + pc.METRICS_COLS
+
+    def test_backfills_collected_at_from_cron_time(self, tmp_path):
+        old_cols = self._old_cols_no_collected_at()
+        csv_path = tmp_path / "picks.csv"
+        latest_path = tmp_path / "picks_latest.csv"
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=old_cols, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerow({c: "" for c in old_cols} | {
+                "date": "2026-06-25", "list_category": "leaders",
+                "selector_version": "v1", "group": "G", "ticker": "AAA",
+            })
+
+        ensure_picks_csv(csv_path, latest_path)
+
+        with open(csv_path) as f:
+            reader = csv.DictReader(f)
+            assert "collected_at" in reader.fieldnames
+            rows = list(reader)
+        assert rows[0]["collected_at"] == f"2026-06-25T{pc.COLLECTED_AT_CRON_UTC}Z"
+
+        with open(latest_path) as f:
+            latest_rows = list(csv.DictReader(f))
+        assert latest_rows[0]["collected_at"] == f"2026-06-25T{pc.COLLECTED_AT_CRON_UTC}Z"
+
+    def test_noop_when_collected_at_present(self, tmp_path):
+        all_cols = pc.picks_columns()
+        csv_path = tmp_path / "picks.csv"
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=all_cols)
+            writer.writeheader()
+            writer.writerow({c: "" for c in all_cols})
+        mtime_before = csv_path.stat().st_mtime
+        ensure_picks_csv(csv_path)
+        assert csv_path.stat().st_mtime == mtime_before

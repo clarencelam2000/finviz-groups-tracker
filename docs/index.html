@@ -4338,6 +4338,15 @@
         return;
       }
 
+      // Freshness badge — reuses the same helper as Sectors/Industries (Snapshot
+      // tab etc.) rather than duplicating the AI tab's bespoke caption. rows[0]
+      // carries date/collected_at shared by every row in the run. collected_at
+      // is blank/absent only for rows scraped before this column existed AND
+      // before ensure_picks_csv's backfill migration ran — freshnessLabel already
+      // degrades to a date-only badge in that case.
+      const picksFresh = freshnessLabel(rows[0].date, rows[0].collected_at);
+      const picksFreshHtml = `<p class="${picksFresh.cls} mb-3">${picksFresh.text}</p>`;
+
       // ── Focus view ─────────────────────────────────────────────────────────
       if (state.picksView === 'focus') {
         // Hard gates (isFocusEligible): actionable (price > 50MA, not over-extended) AND
@@ -4363,7 +4372,7 @@
           <a href="${escapeHtml(buildChartsUrl(focusTickers))}" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">View all ${focusTickers.length} charts in Finviz ↗</a>
         </div>`;
 
-        let html = focusNote + focusChartsLink + '<div class="space-y-0 bg-slate-800/60 rounded-lg overflow-hidden border border-slate-700/50">';
+        let html = picksFreshHtml + focusNote + focusChartsLink + '<div class="space-y-0 bg-slate-800/60 rounded-lg overflow-hidden border border-slate-700/50">';
         scored.forEach((item, i) => {
           html += renderPickRow(item.r, {
             rowIndex: i,
@@ -4444,7 +4453,7 @@
         <a href="${escapeHtml(buildChartsUrl(allTickers))}" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 hover:text-slate-300 transition-colors">View all ${allTickers.length} charts in Finviz ↗</a>
       </div>`;
 
-      let html = allNote + allChartsLink;
+      let html = picksFreshHtml + allNote + allChartsLink;
       let globalRowIdx = 0;
 
       for (const cat of catsPresent) {

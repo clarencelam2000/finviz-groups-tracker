@@ -3,6 +3,8 @@
 ## CSV deduplication
 All append operations check for existing `(date, name)` before writing. The `date` column uses `YYYY-MM-DD` in US/Eastern timezone. `collected_at` is ISO 8601 UTC and is NOT part of the uniqueness key — re-running the scraper on the same day updates the timestamp but is treated as the same row.
 
+`data/picks/picks.csv` follows the same convention: its uniqueness key is `(date, list_category, ticker)`, and `collected_at` (added Phase 3e) is a single run-wide UTC timestamp stamped on every row, not part of that key — a same-day re-run of `collect_picks.py` just carries the newer timestamp forward.
+
 ## Value conventions
 - `perf_*` columns: raw percentage floats (e.g., `2.34` means +2.34%). NOT stored as decimals.
 - `market_cap`: billions as float (e.g., `1.23` = $1.23B, `0.456` = $456M).
