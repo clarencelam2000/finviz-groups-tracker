@@ -349,6 +349,22 @@
     </div>
   </div>
 
+  <!-- Group peek sheet: opened by tapping an inline group name (e.g. in the AI
+       tab's daily note). Same slide-up mechanic as hub-sheet, kept as a
+       separate element since it hosts live group data, not reference copy. -->
+  <div id="peek-overlay" class="fixed inset-0 z-40 hidden">
+    <div id="peek-backdrop" class="absolute inset-0 bg-black/60"></div>
+    <div id="peek-sheet"
+         class="absolute left-0 right-0 bottom-0 max-h-[85vh] bg-slate-900 rounded-t-2xl border-t border-slate-700 flex flex-col translate-y-full transition-transform duration-300"
+         style="padding-bottom: env(safe-area-inset-bottom)">
+      <div class="flex items-center justify-between px-4 pt-3 pb-2 border-b border-slate-700">
+        <div id="peek-title" class="text-sm font-semibold text-slate-200"></div>
+        <button id="peek-close" class="w-9 h-9 flex items-center justify-center rounded-full text-slate-400 active:bg-slate-700 text-xl leading-none" aria-label="Close">×</button>
+      </div>
+      <div id="peek-body" class="overflow-y-auto px-4 py-3 scrollbar-none"></div>
+    </div>
+  </div>
+
   <script>
   (() => {
     const REPO   = 'clarencelam2000/finviz-groups-tracker';
@@ -1065,16 +1081,80 @@
         .replace(/'/g, '&#39;');
     }
 
+    function escapeRegex(str) {
+      return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    // Index of every tracked group name → groupKey, used to make group names in
+    // the AI note tappable (inline group peek, planning/ai-tab inline groups).
+    // Sourced from live snapshot data (not the static taxonomy JSON) so it never
+    // lists a name we don't actually have data for. Sorted longest-first so the
+    // alternation regex prefers "Financial Conglomerates" over the shorter
+    // "Financial" at the same starting position — avoids truncated/dangling chips.
+    //
+    // Rebuilt on every call rather than memoized: sectors.snap (11 rows) typically
+    // resolves well before industries.snap (144 rows, much larger CSV), and a
+    // memoized-on-first-call index would permanently lock in a sectors-only index
+    // built during that race, silently losing every industry chip for the rest of
+    // the session. The rebuild itself is cheap (~155 rows, once per note render).
+    let _groupChipIndex = null;
+    let _groupChipRegex = null;
+    function buildGroupChipIndex() {
+      const index = new Map();
+      // industries first: on an exact-name collision (none known today) the more
+      // specific group wins, matching findGroupByName's convention.
+      for (const groupKey of ['industries', 'sectors']) {
+        const snaps = (state.data[groupKey] && state.data[groupKey].snap) || [];
+        for (const row of snaps) {
+          if (row.name && !index.has(row.name)) index.set(row.name, groupKey);
+        }
+      }
+      _groupChipIndex = index;
+      const names = [...index.keys()].sort((a, b) => b.length - a.length);
+      _groupChipRegex = names.length
+        ? new RegExp(names.map(escapeRegex).join('|'), 'g')
+        : null;
+    }
+
+    // Wraps every recognized group name in `s` with a control-character placeholder
+    // (immune to escapeHtml/markdown parsing) so the real <button> markup can be
+    // spliced back in after escaping + bold/italic/code parsing runs. Doing the
+    // match on raw text — not the escaped/HTML string — means names containing
+    // "&" (e.g. "Semiconductor Equipment & Materials") still match correctly.
+    function tagGroupChips(s) {
+      buildGroupChipIndex();
+      if (!_groupChipRegex) return { tagged: s, chips: [] };
+      const chips = [];
+      const tagged = s.replace(_groupChipRegex, (m) => {
+        chips.push(m);
+        return ` ${chips.length - 1} `;
+      });
+      return { tagged, chips };
+    }
+
+    function groupChipHtml(name) {
+      const groupKey = _groupChipIndex.get(name) || 'industries';
+      return `<button type="button" class="group-chip text-sky-400/90 font-medium border-b border-dotted border-sky-400/50 hover:bg-sky-400/10 hover:text-sky-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 rounded" data-name="${escapeHtml(name)}" data-group="${groupKey}">${escapeHtml(name)}<span aria-hidden="true" class="opacity-60">&nbsp;›</span></button>`;
+    }
+
     // Lightweight Markdown → HTML for the AI note. Escapes first, then applies a
     // small safe subset: ## headers, **bold**, *italic*, `code`, and - / * bullet
     // lists. Parsed line-by-line so a header directly above bullets (no blank
-    // line) still renders correctly. No raw HTML is ever emitted.
+    // line) still renders correctly. No raw HTML is ever emitted (group-name chips
+    // are the one exception, built from an escaped, attribute-safe name).
     function renderMarkdown(md) {
       if (!md || typeof md !== 'string') return '';
-      const inline = (s) => escapeHtml(s)
-        .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
-        .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
-        .replace(/`([^`]+)`/g, '<code class="px-1 rounded bg-slate-700/70 text-slate-200 text-[0.8em]">$1</code>');
+      const inline = (s) => {
+        const { tagged, chips } = tagGroupChips(s);
+        let html = escapeHtml(tagged)
+          .replace(/\*\*([^*]+)\*\*/g, '<strong class="text-white font-semibold">$1</strong>')
+          .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+          .replace(/`([^`]+)`/g, '<code class="px-1 rounded bg-slate-700/70 text-slate-200 text-[0.8em]">$1</code>');
+        if (chips.length) {
+          html = html.replace(/ (\d+) /g, (_, i) => groupChipHtml(chips[Number(i)]));
+        }
+        return html;
+      };
 
       const lines = md.replace(/\r\n/g, '\n').split('\n');
       const html = [];
@@ -4866,6 +4946,79 @@
       setTimeout(() => overlay.classList.add('hidden'), 300);
     }
 
+    // Group peek sheet: opened by tapping an inline group-name chip (currently
+    // only in the AI tab's daily note, via groupChipHtml()). Reuses groupPerfCard()
+    // — the same renderer Lookup uses — so the peek and the full Lookup view can
+    // never drift apart. Defaults to the compact card; "Show full breakdown"
+    // re-renders in place with expanded=true instead of cramming everything in
+    // by default, matching the "doesn't break reading flow" goal for a peek.
+    let _peekExpanded = false;
+    function openGroupPeek(name, groupKey) {
+      const overlay = document.getElementById('peek-overlay');
+      const sheet = document.getElementById('peek-sheet');
+      if (!overlay || !name || !groupKey) return;
+      _peekExpanded = false;
+      document.getElementById('peek-title').textContent = groupKey === 'sectors' ? 'Sector' : 'Industry';
+      renderGroupPeekBody(name, groupKey);
+      overlay.classList.remove('hidden');
+      requestAnimationFrame(() => sheet.classList.remove('translate-y-full'));
+    }
+
+    function closeGroupPeek() {
+      const overlay = document.getElementById('peek-overlay');
+      const sheet = document.getElementById('peek-sheet');
+      if (!overlay) return;
+      sheet.classList.add('translate-y-full');
+      setTimeout(() => overlay.classList.add('hidden'), 300);
+    }
+
+    // Picks tie-in: surfaces today's Picks-selected stocks from this group, if any.
+    // state.picksData is already the max-date slice (picks_latest.csv) — no date
+    // filter needed — and `group` is the plain lead column holding the selecting
+    // group's name (not one of the frozen grp_* attribution columns).
+    function picksFromGroupToday(name) {
+      const rows = state.picksData || [];
+      return rows.filter(r => r.group === name).length;
+    }
+
+    function renderGroupPeekBody(name, groupKey) {
+      const body = document.getElementById('peek-body');
+      if (!body) return;
+      const label = groupKey === 'sectors' ? 'Sector' : 'Industry';
+      const picksCount = picksFromGroupToday(name);
+      const picksHtml = picksCount > 0
+        ? `<div class="flex items-center justify-between gap-2 rounded-lg px-3 py-2 mb-2 bg-sky-400/10 border border-sky-400/25 text-sm">
+             <span class="text-sky-100">${picksCount} stock pick${picksCount === 1 ? '' : 's'} from this group today</span>
+             <button id="peek-picks-link" class="text-sky-400 font-semibold flex-shrink-0">View →</button>
+           </div>`
+        : '';
+      const toggleHtml = `<button id="peek-more-toggle" class="text-xs font-semibold text-slate-400 active:text-slate-200 mt-1 mb-1">
+        ${_peekExpanded ? 'Hide full breakdown' : 'Show full breakdown ▸'}</button>`;
+      body.innerHTML = `
+        ${picksHtml}
+        ${groupPerfCard(name, groupKey, label, _peekExpanded)}
+        ${toggleHtml}
+        <div class="flex gap-2 mt-1">
+          <button id="peek-full-lookup" class="flex-1 text-center text-sm font-semibold py-2 rounded-lg bg-sky-600 text-white active:bg-sky-500">Full lookup ↗</button>
+        </div>`;
+      const toggleBtn = document.getElementById('peek-more-toggle');
+      if (toggleBtn) toggleBtn.addEventListener('click', () => {
+        _peekExpanded = !_peekExpanded;
+        renderGroupPeekBody(name, groupKey);
+      });
+      const fullBtn = document.getElementById('peek-full-lookup');
+      if (fullBtn) fullBtn.addEventListener('click', () => {
+        closeGroupPeek();
+        doGroupLookup(name, groupKey);
+        switchTab('lookup');
+      });
+      const picksLink = document.getElementById('peek-picks-link');
+      if (picksLink) picksLink.addEventListener('click', () => {
+        closeGroupPeek();
+        switchTab('picks');
+      });
+    }
+
     function setHubSection(section, anchorId) {
       document.querySelectorAll('.hub-section-btn').forEach(b => {
         const active = b.dataset.section === section;
@@ -5340,6 +5493,15 @@
     document.getElementById('update-banner-see').addEventListener('click', () => openHub('whatsnew'));
     document.getElementById('update-banner-x').addEventListener('click', clearUnseen);
     document.getElementById('ai-share-btn').addEventListener('click', shareAI);
+    document.getElementById('peek-close').addEventListener('click', closeGroupPeek);
+    document.getElementById('peek-backdrop').addEventListener('click', closeGroupPeek);
+    // Delegated: chips are re-rendered on every renderAI() call, so bind once on
+    // the stable container rather than per-chip (same pattern as lookup-result).
+    document.getElementById('ai-content').addEventListener('click', e => {
+      const chip = e.target.closest('.group-chip');
+      if (!chip) return;
+      openGroupPeek(chip.dataset.name, chip.dataset.group);
+    });
     // Lazy-load the TradingView chart panel only when the user explicitly opens it.
     document.getElementById('lookup-result').addEventListener('click', e => {
       const btn = e.target.closest('.lookup-chart-toggle');
