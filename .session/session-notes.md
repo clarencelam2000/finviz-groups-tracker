@@ -380,3 +380,54 @@ same render pass; (6) zero test coverage existed for any of this.
 passes standalone with `playwright install chromium`.
 
 **Next steps**: none outstanding. Push branch and open PR.
+
+---
+
+## 2026-07-04 — Picks Phase B: global HoD toggle re-ranks the Focus list
+
+**Status: LANDED on branch `claude/hod-price-basis-toggle-94xhj6`. SAFE TO CLOSE once PR is reviewed/merged.**
+
+Implemented PICKS-3E-HOD-PHASE-B per `planning/picks-hod-price-basis-toggle.md` §6 — the tab-level
+`[ Last | HoD ]` toggle that was the committed end goal of the HoD price-basis work (Phase A, the
+per-card ephemeral toggle, shipped 2026-06-30). Phase B changes *which stocks appear at the top*,
+not just what one expanded card displays.
+
+**What landed** (all in `docs/index.html` — client-side only, no pipeline change, no new
+constants — reuses `ATR_EXT_*`/`FOCUS_W_*` per plan §10):
+- `state.picksBasis` (`'last'`|`'hod'`, default `'last'`) + a `[ Last | HoD ]` segmented control
+  in the Picks tab header, next to the existing All/Focus toggle.
+- `renderPicks()` now derives every displayed row via the zero-mutation spread overlay mandated
+  by the plan — `{...r, ...deriveRiskMetrics(r, state.picksBasis)}` — **before** the Focus hard
+  gate (`isFocusEligible`), `computeFocusScores`, the All-view ascending-atr_ext sort, and the
+  pre-scored All-view badge map. This is the same `deriveRiskMetrics` pure function Phase A built
+  (per the plan's explicit mandate that both phases share one engine) — no new formula code.
+- Collapsed-row badges (`atrExt`/`isTrim`/`atrCls` in `renderPickRow`) update automatically with
+  no extra code, since they read off whichever row object they're passed and now receive the
+  derived row — confirmed with a dedicated test rather than just trusting the plan's note.
+- Per-card toggle (Phase A) interaction per §6.3: a freshly-opened card now defaults to the
+  *global* basis (`state.picksBasis`) instead of hardcoded `'last'`; collapsing a card with a
+  local override now reverts to the global basis, not hardcoded `'last'`. The per-card toggle
+  still works as a one-off peek independent of the global switch.
+- `price_basis` GUIDE entry and its `knowledge/moaty-metrics.md` counterpart rewritten to
+  describe both phases (Phase A section was previously the only content).
+- 6 new Playwright tests appended to `tests/test_pwa_picks_hod.py` (new `TestPicksBasisToggleGlobal`
+  class, own port 8184 to avoid colliding with the existing Phase A test class): header toggle
+  renders/defaults to Last, a wide-bar name drops out of Focus once flipped to HoD (built the
+  fixture math out by hand — Last atr_ext_50 ≈0.2 vs HoD ≈20.2, comfortably past
+  `ATR_EXT_ACTIONABLE`=4.0), collapsed-badge text changes without expanding, a freshly-opened
+  card defaults to the global basis, a per-card override reverts to the global basis (not Last)
+  on collapse, and an All-view two-row sort-order flip under HoD. All 11 tests in the file pass
+  (5 original Phase A + 6 new), confirming no Phase A regression.
+- Release triplet: `docs/releases.json` `2026.07.04.1` (today already had a `2026.07.04` entry
+  from the same-day Lookup Signal card PR, so this uses the `.1` same-day suffix), `sw.js`
+  `finviz-v54` → `finviz-v55`.
+- Docs: `planning/picks-hod-price-basis-toggle.md` status header marked Phase B shipped;
+  `.session/SPRINT.md` PICKS-3E-HOD-PHASE-B moved to Done with full implementation notes.
+
+**Verification:** full non-Playwright suite (545 tests) passes unchanged. New/updated Playwright
+suite in `tests/test_pwa_picks_hod.py` (11 tests) passes standalone with
+`playwright install chromium`. `tests/test_guide_releases.py` (GUIDE oneLiner/moaty-metrics.md
+verbatim-sync anti-drift) and `tests/test_picks_methodology.py` (no drift — Phase B added no new
+tunable constants) both pass.
+
+**Next steps**: none outstanding. Push branch and open PR.

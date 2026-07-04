@@ -338,8 +338,10 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   decision — revisit via PICKS-3B-FOCUSGATE).
 - **User one-liner:** "A blended 0–100 quality score ranking Focus picks by group strength, stop tightness, and quiet-bar tightness — discounted for extension, thin liquidity, and near-term earnings risk."
 
-## price_basis (Price basis toggle — PWA Picks tab, Phase A)
-- **Source:** PWA UI state only — not stored in any CSV. Per-card ephemeral state; resets to Last on collapse.
+## price_basis (Price basis toggle — PWA Picks tab, Phase A + Phase B)
+- **Source:** PWA UI state only — not stored in any CSV.
+  - Phase A (per-card): ephemeral state; resets to the current global basis on collapse.
+  - Phase B (global, `state.picksBasis`): session-only, defaults to `'last'`, not persisted to localStorage.
 - **Two modes:**
   - **Last** (default): all stop-distance metrics use the closing price as the entry price.
   - **HoD** (High of Day): substitutes the prior session's High as the realistic breakout entry price.
@@ -347,13 +349,22 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
     the risk actually looks like from that realistic fill.
 - **Which metrics re-base (stop-distance family):** `atr_ext_50`, `atr_ext_20`, `risk_20ma_pct`,
   `risk_50ma_pct`, $/sh risk per stop.
-- **Which metrics stay fixed on close:** `range_atr`, ATR%, MA dollar levels (sma20_price, sma50_price).
-  Bar properties describe the instrument, not the entry — they always come from the close-price session.
+- **Which metrics stay fixed on close:** `range_atr`, ATR%, MA dollar levels (sma20_price, sma50_price),
+  `grp_*` group metrics, `stage2`, RSI, perf columns. Bar/group/instrument properties describe something
+  other than the entry — they always come from the close-price session regardless of basis.
 - **Label swap in HoD mode:** "trim" (position-management instruction) becomes "extended" (stretch
   description) when atrExt ≥ ATR_EXT_TRIM. Same red color ramp still applies.
-- **Phase B (not yet built):** a global tab-level toggle that re-ranks the Focus list on HoD metrics.
-  Phase A is display-only inside the expanded risk panel.
-- **User one-liner:** "Switches the risk panel between two measurement bases: Last (closing price, the default) and HoD (High of Day — the realistic breakout entry price for the next session)."
+- **Phase B (global re-rank, shipped):** a `[ Last | HoD ]` segmented control at the top of the Picks
+  tab (next to the All/Focus toggle) sets `state.picksBasis`. `renderPicks()` derives every displayed
+  row via `{...r, ...deriveRiskMetrics(r, state.picksBasis)}` (zero-mutation spread overlay) before the
+  Focus hard gate, `computeFocusScores`, the All-view sort, and the pre-scored All-view badge map — so
+  the whole Focus list re-ranks off HoD, not just one card's display. Collapsed-row badges (`atrExt`,
+  `isTrim`, `atrCls` in `renderPickRow`) fall out of the same threading with no extra code, since they
+  read off the row argument they're passed. Per-card override (Phase A) still works as a local peek:
+  it opens defaulted to the global basis and reverts to it on collapse, rather than hardcoding `'last'`.
+  HoD mode is accepted to run systematically stricter than Last (High ≥ Price always → more extension
+  and more hard-DQs) — a CEO-approved tradeoff, not a bug; no separate HoD threshold set in v1.
+- **User one-liner:** "Switches the whole Picks tab between two measurement bases: Last (closing price, the default) and HoD (High of Day — the realistic breakout entry price for the next session)."
 
 ## atr_ext_20 (ATR extension to 20MA — PWA Picks tab, Phase 3c)
 - **Source:** PWA-computed (`deriveRiskMetrics` in `docs/index.html`). Not stored in `picks.csv` —

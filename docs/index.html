@@ -279,6 +279,15 @@
         <button id="picks-toggle-focus"
                 class="px-3 py-1 text-xs rounded-full font-medium bg-slate-700 text-slate-400"
                 onclick="__setPicksView('focus')">Focus <span class="text-indigo-400">★</span></button>
+        <span class="mx-1 text-slate-600">|</span>
+        <span class="text-xs text-slate-500 self-center mr-0.5">Basis:</span>
+        <button id="picks-toggle-basis-last"
+                class="px-3 py-1 text-xs rounded-full font-medium bg-slate-600 text-white"
+                onclick="__setPicksBasis('last')">Last</button>
+        <button id="picks-toggle-basis-hod"
+                class="px-3 py-1 text-xs rounded-full font-medium bg-slate-700 text-slate-400"
+                onclick="__setPicksBasis('hod')">HoD</button>
+        <button class="text-xs text-slate-500 hover:text-slate-300 underline ml-1 self-center" onclick="__openHub('guide','price_basis')">?</button>
       </div>
       <!-- Ariel match filter (Phase 4). Opt-in, defaults to Off — a new lens on the existing
            list, not a change to what's shown by default. Applies inside both All and Focus. -->
@@ -412,6 +421,12 @@
       // both All and Focus). Defaults to 'off': a new lens on the existing list, never changes
       // what anyone sees by default. Session-only, not persisted to localStorage.
       picksArielFilter: 'off',
+      // 'last' | 'hod' — Phase B global price-basis toggle (planning/picks-hod-price-basis-toggle.md
+      // §6). Re-derives atr_ext_50/risk_20ma_pct/risk_50ma_pct for every row via deriveRiskMetrics
+      // before gating/scoring/sorting, so the entire Focus list re-ranks off HoD. Session-only,
+      // not persisted to localStorage (§8 deferred). Also sets the default a freshly-opened card's
+      // per-card toggle (§6.3) opens in.
+      picksBasis: 'last',
       picksExpanded: new Set(), // stable "ticker_category" keys of currently-expanded Picks rows; survives re-renders within a session, cleared on full page reload
       picksChartOpen: new Set(), // stable "ticker_category" keys with the TradingView chart panel open; survives re-renders, same lifecycle as picksExpanded
       provenanceData: null,
@@ -658,8 +673,8 @@
           oneLiner: 'A blended 0–100 quality score ranking Focus picks by group strength, stop tightness, and quiet-bar tightness — discounted for extension, thin liquidity, and near-term earnings risk.',
           detail: 'score = base × (1 − extension_penalty) × (1 − liquidity_penalty) × (1 − earnings_penalty). base = 40% group strength (grp_sum_mid_rank, inverted) + 40% stop tightness (nearest positive MA below price, inverted) + 20% quiet bar (range/ATR, inverted); all three use the same min–max ruler across today\'s Focus pool. Extension penalty ramps 0→50% from 2.5× to 4× (ATR_EXT_ACTIONABLE). Liquidity penalty ramps 0→30% from $60M avg $ volume down to the $30M Focus-membership floor (below the floor, a stock isn\'t a Focus candidate at all). Earnings penalty ramps 0→70% as the next known earnings date approaches from 10 days out to 3 days out, holds at 70% through day 0, then a small one-day carry-over (17.5%) the day after before decaying to 0. The three penalties are independent multiplicative haircuts, not weighted base components — they describe "can I trade this / is an event about to blow through my stop," not "how good is the setup." Score always ∈ [0, 1]. Shown as a debug breakdown inside the expandable risk panel while tuning (Phase 3b/3d).' },
         { id: 'price_basis', label: 'Price basis (Last / HoD)', tabs: ['picks'],
-          oneLiner: 'Switches the risk panel between two measurement bases: Last (closing price, the default) and HoD (High of Day — the realistic breakout entry price for the next session).',
-          detail: 'Last basis uses the closing price for all stop-distance metrics (atr_ext_50, atr_ext_20, risk_20ma_pct, risk_50ma_pct, $/sh risk). HoD basis substitutes the prior session\'s High as the entry price — the level a breakout buyer would actually fill. Only stop-distance metrics re-base; bar properties (range_atr, ATR%) and MA dollar levels stay on the close price regardless of basis. State is per-card and ephemeral: resets to Last when the panel collapses. In HoD mode the "trim" label becomes "extended" to signal stretch from the real entry, not a position-management instruction. Phase B (global tab-level toggle) is planned but not yet implemented.' },
+          oneLiner: 'Switches the whole Picks tab between two measurement bases: Last (closing price, the default) and HoD (High of Day — the realistic breakout entry price for the next session).',
+          detail: 'Last basis uses the closing price for all stop-distance metrics (atr_ext_50, atr_ext_20, risk_20ma_pct, risk_50ma_pct, $/sh risk). HoD basis substitutes the prior session\'s High as the entry price — the level a breakout buyer would actually fill. Only stop-distance metrics re-base; bar properties (range_atr, ATR%) and MA dollar levels stay on the close price regardless of basis. A global [ Last | HoD ] toggle at the top of the Picks tab re-derives every row before the Focus hard gate, Focus score, extension penalty, and sort — so the whole Focus list re-ranks off HoD, not just one card\'s display. HoD mode is systematically stricter (High ≥ Price always), so more names hit the extension penalty and hard-DQ under HoD — this is intended, not a bug. A per-card override inside an expanded panel still exists for peeking at one name on the other basis; it reverts to the global basis when the card collapses. In HoD mode the "trim" label becomes "extended" to signal stretch from the real entry, not a position-management instruction.' },
         { id: 'atr_ext_20', label: '20MA stop (ATR)', tabs: ['picks'],
           oneLiner: "How many ATR multiples above (or below) its 20-day MA the stock is — the same rubber-band read as the 50MA extension, but against the tighter near-term stop.",
           detail: '(Price − 20MA_price) / ATR. Finviz SMA20 = % above 20MA; reconstruct 20MA_price = Price / (1 + SMA20/100). Shown alongside 50MA stop (ATR) in a row that mirrors the HoD/20MA-stop/50MA-stop row above it, just in ATR multiples instead of dollars and percent. Negative = price already below that MA. Replaces the old ambiguous "Stop dist (ATR)" cell, which silently switched between the 20MA and 50MA distance depending on which was nearer without labeling which one (Phase 3c).' },
@@ -4112,7 +4127,10 @@
       // Risk panel (always built when expandable; hidden by default unless persisted as expanded)
       let riskHtml = '';
       if (opts.expandable) {
-        const cardBasis = (window._pickCardBasis && window._pickCardBasis[key]) || 'last';
+        // Phase B (§6.3): a freshly-opened card defaults to the global basis, not hardcoded
+        // 'last' — a per-card override (via __setPickBasis) still takes precedence until the
+        // card collapses, at which point it reverts to whatever the global basis is then.
+        const cardBasis = (window._pickCardBasis && window._pickCardBasis[key]) || state.picksBasis;
 
         // Minimal row data serialised into a data attribute so __setPickBasis can
         // re-derive metrics without a full list re-render.
@@ -4333,7 +4351,8 @@
     }
 
     // Expand/collapse a risk panel row without re-rendering the list.
-    // On collapse: resets the per-card basis to 'last' (§5.2 — ephemeral state rule).
+    // On collapse: resets the per-card basis to the global basis (§5.2 ephemeral-state rule,
+    // amended by §6.3 for Phase B — a per-card override is local to one open card only).
     // expandKey (stable ticker_category identity, distinct from the DOM `key`) is recorded
     // in state.picksExpanded so the row re-opens automatically on the next renderPicks() —
     // e.g. after switching tabs away and back (PICKS-STATE-PERSIST).
@@ -4343,8 +4362,8 @@
       if (panel) {
         const wasHidden = panel.classList.contains('hidden');
         panel.classList.toggle('hidden');
-        if (!wasHidden && window._pickCardBasis && window._pickCardBasis[key] !== 'last') {
-          window.__setPickBasis(key, 'last');
+        if (!wasHidden && window._pickCardBasis && window._pickCardBasis[key] !== state.picksBasis) {
+          window.__setPickBasis(key, state.picksBasis);
         }
         if (expandKey) {
           if (wasHidden) state.picksExpanded.add(expandKey);
@@ -4403,6 +4422,14 @@
       renderPicks();
     };
 
+    // Phase B global price-basis toggle (planning/picks-hod-price-basis-toggle.md §6.1).
+    // Re-renders the whole list — renderPicks() re-derives every row's risk metrics via
+    // deriveRiskMetrics(r, state.picksBasis) before gating/scoring/sorting.
+    window.__setPicksBasis = function(v) {
+      state.picksBasis = v;
+      renderPicks();
+    };
+
     function renderPicks() {
       const el = document.getElementById('picks-list');
       if (!el) return;
@@ -4436,10 +4463,18 @@
       // filter and applies in both All and Focus views. groupTierMap is built once per render
       // pass (cheap — state.data.industries.delta is already-fetched, all ~144 industries).
       const groupTierMap = arielGroupTierMap();
-      const displayRows = state.picksArielFilter === 'off' ? filtered : filtered.filter(r => {
+      const displayRowsRaw = state.picksArielFilter === 'off' ? filtered : filtered.filter(r => {
         const tier = arielMatch(r, groupTierMap).tier;
         return state.picksArielFilter === 'full' ? tier === 'full' : (tier === 'full' || tier === 'soft');
       });
+
+      // Phase B: re-derive the price-relative risk metrics for every row off the global
+      // basis BEFORE gating/scoring/sorting (planning/picks-hod-price-basis-toggle.md §6.2).
+      // Zero-mutation spread overlay — the original CSV row (r) is untouched, so switching
+      // back to Last just re-derives fresh spreads on the next renderPicks() call. Only
+      // atr_ext_50/atr_ext_20/risk_20ma_pct/risk_50ma_pct/sma20Price/sma50Price/risk*DolPerSh/P
+      // are overridden; range_atr, grp_*, stage2, RSI, perf columns etc. pass through as-is (§3).
+      const displayRows = displayRowsRaw.map(r => ({ ...r, ...deriveRiskMetrics(r, state.picksBasis) }));
 
       // Sync toggle button appearance
       const isAll = state.picksView !== 'focus';
@@ -4450,6 +4485,15 @@
       }
       if (btnFocus) {
         btnFocus.className = 'px-3 py-1 text-xs rounded-full font-medium ' + (!isAll ? 'bg-slate-600 text-white' : 'bg-slate-700 text-slate-400');
+      }
+      const btnBasisLast = document.getElementById('picks-toggle-basis-last');
+      const btnBasisHod  = document.getElementById('picks-toggle-basis-hod');
+      const isLastBasis  = state.picksBasis !== 'hod';
+      if (btnBasisLast) {
+        btnBasisLast.className = 'px-3 py-1 text-xs rounded-full font-medium ' + (isLastBasis ? 'bg-slate-600 text-white' : 'bg-slate-700 text-slate-400');
+      }
+      if (btnBasisHod) {
+        btnBasisHod.className = 'px-3 py-1 text-xs rounded-full font-medium ' + (!isLastBasis ? 'bg-slate-600 text-white' : 'bg-slate-700 text-slate-400');
       }
       ['off', 'full', 'both'].forEach(v => {
         const btn = document.getElementById('picks-toggle-ariel-' + v);

@@ -1,6 +1,18 @@
 {
-  "current": "2026.07.04",
+  "current": "2026.07.04.1",
   "releases": [
+    {
+      "version": "2026.07.04.1",
+      "date": "2026-07-04",
+      "title": "Picks: global Last/HoD toggle re-ranks Focus list",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "New [ Last | HoD ] toggle at the top of the Picks tab re-derives every stock's risk metrics off either the closing price or the prior session's high — and now re-ranks the whole Focus list, not just one expanded card.",
+        "HoD mode runs stricter on purpose: since the high is always at or above the close, more names hit the extension penalty and drop out of Focus when you flip to it.",
+        "The per-card Last/HoD toggle inside an expanded row still works as a quick peek at one name on the other basis, independent of the global switch."
+      ]
+    },
     {
       "version": "2026.07.04",
       "date": "2026-07-04",

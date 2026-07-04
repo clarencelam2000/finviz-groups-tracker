@@ -64,6 +64,25 @@ def _single_row_csv(overrides: dict) -> str:
     return buf.getvalue()
 
 
+def _multi_row_csv(overrides_list) -> str:
+    """Build a picks_latest.csv with one row per dict in overrides_list, each based on ANET."""
+    with FIXTURE.open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        cols = reader.fieldnames
+        rows = list(reader)
+
+    base = next(r for r in rows if r["ticker"] == "ANET")
+
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=cols)
+    writer.writeheader()
+    for overrides in overrides_list:
+        row = dict(base)
+        row.update(overrides)
+        writer.writerow(row)
+    return buf.getvalue()
+
+
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -299,5 +318,240 @@ class TestPicksHodToggle:
             # Must NOT say "trim" in HoD mode (§5.3 label swap)
             assert "trim" not in hod_text.lower(), \
                 f"HoD mode: must not say 'trim', only 'extended'; got:\n{hod_text}"
+
+            browser.close()
+
+
+@pytest.mark.functional
+class TestPicksBasisToggleGlobal:
+    """Phase B: tab-level [ Last | HoD ] toggle that re-ranks the whole Focus list.
+
+    Spec: planning/picks-hod-price-basis-toggle.md §6.
+    """
+
+    PORT = 8184
+
+    @pytest.fixture(autouse=True, scope="class")
+    def server(self):
+        proc = _launch_server(self.PORT)
+        time.sleep(1)
+        yield proc
+        proc.terminate()
+        proc.wait()
+
+    def _open_picks_tab(self, page, picks_body: str):
+        papaparse_js = (ROOT / "tests" / "fixtures" / "papaparse.min.js").read_text(encoding="utf-8")
+        page.route("**/cdn.tailwindcss.com/**",
+                   lambda r: r.fulfill(body="/* tailwind stub: styling not asserted in these tests */",
+                                        content_type="application/javascript"))
+        page.route("**/cdnjs.cloudflare.com/**",
+                   lambda r: r.fulfill(body=papaparse_js, content_type="application/javascript"))
+        page.route(
+            "**/picks_latest.csv",
+            lambda r: r.fulfill(body=picks_body, content_type="text/plain"),
+        )
+        page.route("**/snapshots.csv",
+                   lambda r: r.fulfill(body="date,collected_at,group_type,name,stocks,market_cap,pe,fwd_pe,perf_day,perf_week,perf_month,perf_quarter,perf_half,perf_year,perf_ytd,avg_volume,rel_volume,change\n", content_type="text/plain"))
+        page.route("**/deltas.csv",
+                   lambda r: r.fulfill(body="date,name\n", content_type="text/plain"))
+        page.route("**/releases.json",
+                   lambda r: r.fulfill(body='{"current":"","releases":[]}', content_type="application/json"))
+
+        page.add_init_script("try { localStorage.setItem('fvt_intro_seen_v1','true'); } catch(e){}")
+        page.goto(f"http://localhost:{self.PORT}/", wait_until="domcontentloaded")
+        page.wait_for_timeout(1000)
+        page.click("[data-tab='picks']")
+        page.wait_for_timeout(400)
+
+    def test_global_toggle_buttons_render_last_active_by_default(self):
+        """The [ Last | HoD ] header toggle renders and defaults to Last active."""
+        from playwright.sync_api import sync_playwright
+
+        body = _single_row_csv({})
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            self._open_picks_tab(page, body)
+
+            last_btn = page.locator("#picks-toggle-basis-last")
+            hod_btn = page.locator("#picks-toggle-basis-hod")
+            assert "bg-slate-600" in (last_btn.get_attribute("class") or ""), \
+                "Last basis button should be active by default"
+            assert "bg-slate-700" in (hod_btn.get_attribute("class") or ""), \
+                "HoD basis button should be inactive by default"
+
+            browser.close()
+
+    def test_global_hod_removes_wide_bar_name_from_focus(self):
+        """A wide-bar name that qualifies for Focus under Last drops out under global HoD
+        (§6.4 — HoD is systematically stricter; High >> Price pushes atr_ext_50 past
+        ATR_EXT_ACTIONABLE, so isFocusEligible() excludes it once the global basis flips)."""
+        from playwright.sync_api import sync_playwright
+
+        # Wide-bar override on the ANET base: Last atr_ext_50 stays tight (~0.05), but
+        # HoD atr_ext_50 = (200 - 100/1.01)/5 ≈ 20.2 >> ATR_EXT_ACTIONABLE (4.0).
+        wide_bar_body = _single_row_csv({
+            "Price": "100.0", "High": "200.0", "ATR": "5.0",
+            "SMA20": "2.0%", "SMA50": "1.0%", "SMA200": "10.0%",
+        })
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            self._open_picks_tab(page, wide_bar_body)
+
+            # Last mode: switch to Focus view, the name should be present (single-candidate pool).
+            page.click("#picks-toggle-focus")
+            page.wait_for_timeout(300)
+            focus_text_last = page.locator("#picks-list").inner_text()
+            assert "ANET" in focus_text_last, \
+                f"Expected ANET in Focus under Last (tight atr_ext_50); got:\n{focus_text_last}"
+
+            # Flip global basis to HoD — the same name must now fail the Focus hard gate.
+            page.click("#picks-toggle-basis-hod")
+            page.wait_for_timeout(300)
+            focus_text_hod = page.locator("#picks-list").inner_text()
+            assert "No Focus candidates" in focus_text_hod, \
+                f"Expected empty Focus state under global HoD (over-extended); got:\n{focus_text_hod}"
+
+            browser.close()
+
+    def test_global_hod_updates_collapsed_row_badge(self):
+        """The collapsed-row ATR badge reflects the global basis without expanding the card
+        (§6.2 note — atrExt/isTrim/atrCls are computed off the row argument passed to
+        renderPickRow, which is the derived row under Phase B threading)."""
+        from playwright.sync_api import sync_playwright
+
+        wide_bar_body = _single_row_csv({
+            "Price": "100.0", "High": "200.0", "ATR": "5.0",
+            "SMA20": "2.0%", "SMA50": "1.0%", "SMA200": "10.0%",
+        })
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            self._open_picks_tab(page, wide_bar_body)
+
+            row_text_last = page.locator("#picks-list").inner_text()
+            assert "0.2×" in row_text_last, \
+                f"Expected Last-basis collapsed badge ~0.2×; got:\n{row_text_last}"
+
+            page.click("#picks-toggle-basis-hod")
+            page.wait_for_timeout(300)
+
+            row_text_hod = page.locator("#picks-list").inner_text()
+            assert "20.2×" in row_text_hod, \
+                f"Expected HoD-basis collapsed badge ~20.2×; got:\n{row_text_hod}"
+
+            browser.close()
+
+    def test_freshly_opened_card_defaults_to_global_basis(self):
+        """§6.3 — a freshly-opened card's per-card toggle defaults to the global basis, not
+        hardcoded Last."""
+        from playwright.sync_api import sync_playwright
+
+        body = _single_row_csv({})
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            self._open_picks_tab(page, body)
+
+            # Flip global basis to HoD before ever expanding a card.
+            page.click("#picks-toggle-basis-hod")
+            page.wait_for_timeout(300)
+
+            card = page.locator("[onclick*='__togglePickRow']").first
+            card.click()
+            page.wait_for_timeout(300)
+
+            hod_btn = page.locator("[id^='basis-btn-hod-']").first
+            assert "bg-slate-600" in (hod_btn.get_attribute("class") or ""), \
+                "Card should open defaulted to HoD when the global basis is HoD"
+
+            browser.close()
+
+    def test_collapse_reverts_per_card_override_to_global_basis(self):
+        """§6.3 — a per-card override reverts to the *global* basis on collapse, not
+        hardcoded Last, when the global basis is HoD."""
+        from playwright.sync_api import sync_playwright
+
+        body = _single_row_csv({})
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            self._open_picks_tab(page, body)
+
+            # Global basis = HoD; card opens in HoD by default (per prior test).
+            page.click("#picks-toggle-basis-hod")
+            page.wait_for_timeout(300)
+
+            card = page.locator("[onclick*='__togglePickRow']").first
+            card.click()
+            page.wait_for_timeout(300)
+
+            # Local override to Last (peeking at the close-basis numbers for this one card).
+            last_btn = page.locator("[id^='basis-btn-last-']").first
+            last_btn.click()
+            page.wait_for_timeout(200)
+
+            # Collapse then re-expand.
+            card.click()
+            page.wait_for_timeout(300)
+            card.click()
+            page.wait_for_timeout(300)
+
+            # Should have reverted to the global basis (HoD), not hardcoded Last.
+            hod_btn = page.locator("[id^='basis-btn-hod-']").first
+            assert "bg-slate-600" in (hod_btn.get_attribute("class") or ""), \
+                "After collapse+re-expand, card should revert to the global basis (HoD)"
+
+            browser.close()
+
+    def test_all_view_sort_reorders_under_global_hod(self):
+        """§6.2.3 — the All-view sort (ascending atr_ext_50 within a group) re-derives off
+        the global basis, so a wide-bar name that sorts first under Last can sort last
+        under HoD once its extension blows past a tighter peer's."""
+        from playwright.sync_api import sync_playwright
+
+        rows_body = _multi_row_csv([
+            {
+                # Last atr_ext_50 = (100 - 100/1.05)/5 ≈ 0.95; High close to Price so HoD
+                # barely moves it: (101 - 95.24)/5 ≈ 1.15.
+                "ticker": "TESTTIGHT", "Ticker": "TESTTIGHT",
+                "Price": "100.0", "High": "101.0", "ATR": "5.0",
+                "SMA20": "2.0%", "SMA50": "5.0%", "SMA200": "10.0%",
+                "list_category": "leaders", "group": "Computer Hardware",
+            },
+            {
+                # Last atr_ext_50 = (100 - 100/1.01)/5 ≈ 0.20 (tighter than TESTTIGHT), but
+                # the wide High blows HoD out to (200 - 99.01)/5 ≈ 20.2.
+                "ticker": "TESTWIDE", "Ticker": "TESTWIDE",
+                "Price": "100.0", "High": "200.0", "ATR": "5.0",
+                "SMA20": "2.0%", "SMA50": "1.0%", "SMA200": "10.0%",
+                "list_category": "leaders", "group": "Computer Hardware",
+            },
+        ])
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            self._open_picks_tab(page, rows_body)
+
+            # Last mode: TESTWIDE (atr_ext_50 ≈ 0.2) sorts before TESTTIGHT (≈ 0.95).
+            list_text_last = page.locator("#picks-list").inner_text()
+            assert list_text_last.index("TESTWIDE") < list_text_last.index("TESTTIGHT"), \
+                f"Expected TESTWIDE before TESTTIGHT under Last basis; got:\n{list_text_last}"
+
+            page.click("#picks-toggle-basis-hod")
+            page.wait_for_timeout(300)
+
+            # HoD mode: TESTWIDE's atr_ext_50 blows out (~20.2) past TESTTIGHT's (~1.15),
+            # so the ascending sort now puts TESTTIGHT first.
+            list_text_hod = page.locator("#picks-list").inner_text()
+            assert list_text_hod.index("TESTTIGHT") < list_text_hod.index("TESTWIDE"), \
+                f"Expected TESTTIGHT before TESTWIDE under HoD basis; got:\n{list_text_hod}"
 
             browser.close()
