@@ -273,6 +273,10 @@ Note: there's no send_later tool in this session, so you can't auto-schedule the
 
 > `docs/` is named per GitHub Pages convention: "Deploy from branch → /docs" only supports `/` or `/docs` as source. Do not rename it without switching to GitHub Actions deployment first.
 
+> **Subdirectory `CLAUDE.md` files load only when Claude touches files in that directory.**
+> If a task turns out to be cross-cutting (e.g. a scripts change that also affects PWA display),
+> proactively `Read` the other directory's `CLAUDE.md` too — it won't auto-load otherwise.
+
 ---
 
 ## Code quality and documentation standards
