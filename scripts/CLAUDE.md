@@ -1,0 +1,127 @@
+# scripts/ — data collection and processing
+
+> Loads only when working in `scripts/`. Root `CLAUDE.md` covers the core collect →
+> compute_deltas pipeline every session needs; this file holds detail specific to the
+> Picks pipeline, AI capture, and Playwright dev workflows that don't need to load every time.
+
+## Picks pipeline (`scripts/collect_picks.py`)
+
+Daily Stage-2 stock-picks scraper: selects leading industry groups from
+`data/industries/deltas.csv`, then scrapes the individual stocks inside them from the Finviz
+screener and logs them to an append-only event log. **Phase 2 of
+`planning/stock-picks-from-leading-groups.md`.** Required reading before editing:
+**ADR-007** (selector policy) + **ADR-008** (collection architecture) in `knowledge/decisions/`.
+
+> Like `collect.py`, the scrape MUST run on GitHub Actions (Azure IPs) — Cloudflare blocks the
+> headless screener scrape from Google Cloud IPs. `select_groups` and all row-building/pagination
+> helpers are **pure and fully unit-tested in cloud** (no Finviz access).
+
+**Key scripts/config:**
+| File | Role |
+|------|------|
+| `scripts/collect_picks.py` | `select_groups()` (pure selector) + paginated scrape + append. Inherits `slugify_industry`/`_build_url`/`_parse_table` from `probe_picks.py`. |
+| `scripts/picks_config.py` | Single source of truth: schema (`picks_columns()`, 114 cols = 6 lead + 84 Finviz + 19 `grp_*` + 5 metrics) + all tunable constants. |
+| `scripts/picks_metrics.py` | Pure helper module: parsers + `compute_metrics_row()` → 5 `METRICS_COLS` (`atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`, `range_atr`, `stage2`). Fully unit-tested. |
+| `data/picks/picks.csv` | Append-only log; 114 cols per row. Lead (incl. `collected_at`, the per-run UTC scrape timestamp) + 84 Finviz + 19 `grp_*` + 5 metrics. **Offline attribution only — never fetched by the PWA.** |
+| `data/picks/picks_latest.csv` | Max-date slice of `picks.csv` — **this is what the PWA fetches.** |
+| `data/picks/screener_config.json` | Modular URL config (`wide` net + `button`); 84-col `c=` list. Labels stay verbatim-synced to `tests/fixtures/probe_header_84col.txt`. |
+| `data/picks/finviz_industry_slugs.csv` | 144 industry→slug rows. `validated` flips to `true` the first time a group scrapes >0 rows (G4). |
+| `data/picks/selector_versions.json` | Append-only registry of every selector policy; newest-first. `current` must equal `SELECTOR_VERSION` and `versions[0].version` (test-enforced; published entries immutable). |
+| `data/picks/display_methodology.json` | Append-only registry of the client-side (PWA) display/scoring constants active on any date — base filter, All-view sort, Focus DQ/scoring/weights, ATR display bands. Same versioning pattern as `selector_versions.json` (`current` + newest-first `versions[]`, lookup by largest `effective_date ≤ date`). Anti-drift guard: `tests/test_picks_methodology.py` (checks `versions[0].params` — the "current" entry only — against the live `docs/index.html` constants; older entries are frozen historical snapshots, not re-checked). **Bump whenever any of those constants changes, in the same PR** (see `planning/picks-methodology-tracking.md`) — no need to wait for a feature to be "locked" first; this file's job is to track live reality continuously. `v2` (current, effective 2026-07-01) added the Phase 3d Focus liquidity gate/penalty and earnings-proximity penalty on top of `v1`. The opt-in Phase 4 Ariel-match filter is intentionally **not** modeled in this file at all — it's versioned separately (see `ariel_match_config.json` below) since it's an optional additive layer, not part of the core All/Focus ranking. |
+| `data/picks/ariel_match_config.json` | Documentation-only record of the Ariel Hernandez swing-trader match filter's `ARIEL_*` constants (group/liquidity/daily-move/growth gates). Same `current`/`versions[]` shape as the two files above, but **no anti-drift guard/test exists for it, by design** — it's an optional display layer with looser consistency requirements than the core methodology. Keep it updated as a courtesy when `ARIEL_*` constants change; nothing enforces it. |
+| `scripts/replay_picks.py` | Deterministically reconstructs a historical Picks All/Focus view from `picks.csv` + `display_methodology.json`, for replay and A/B testing across methodology versions (`python scripts/replay_picks.py --date YYYY-MM-DD --view all\|focus [--methodology-version vN] [--pretty]`). Tested in `tests/test_replay_picks.py`. |
+
+**`collected_at` (Phase 3e, 2026-07-03):** ISO 8601 UTC run timestamp, one value per run, stamped
+identically on every row `main()` produces that day — mirrors `snapshots.csv`'s `collected_at` and
+is **not** part of the picks uniqueness key (`date, list_category, ticker`); a same-day re-run just
+carries the newer timestamp forward via `write_picks()`'s last-write-wins batch dedup. Rows scraped
+before this column existed are backfilled once by `ensure_picks_csv()` with `date +
+COLLECTED_AT_CRON_UTC` (`22:31:00` UTC, the `collect_picks.yml` cron fire time) — an approximation,
+not a fabricated exact time, since the daily cron time is a known constant. The PWA's Picks tab
+(`renderPicks()` in `docs/index.html`) surfaces this via the same `freshnessLabel()` helper already
+used by Sectors/Industries, so a stale/blocked picks run shows the same red/amber/green badge.
+
+**Selector (ADR-007, VP-locked; dedup policy amended v2 2026-07-02):** four buckets filled in
+priority order to ≤ `DAILY_GROUP_CAP` (20) unique groups; a group qualifying in multiple buckets
+is **scraped once but tagged per bucket** it naturally ranks in (attribution preserved). Since v2,
+a group already selected by a higher-priority bucket no longer eats one of a lower-priority
+bucket's N slots just by landing in that bucket's natural top-N — emerging/accel/rs_new_high
+backfill past rank N with the next NEW candidate so each bucket's N slots still yield N distinct
+groups when the qualifying pool is deep enough (`add_bucket_with_backfill` in `collect_picks.py`).
+Leaders' own freshness-fill sub-bucket already excluded the core 8 by construction (unchanged). A
+0-group bucket is normal (e.g. `momentum_accel` is NaN until 11 sessions) — fill from the next
+priority, never error.
+1. **leaders** ≤10 — 8 by sustained strength (`rank_month+rank_quarter+rank_half` asc) + 2 freshness fills (`momentum_confirmed` desc).
+2. **emerging** ≤4 — `regime_short_long > 0.15` AND `rs_score > 0.5`.
+3. **accel** ≤3 — `momentum_accel > 0.08` AND top-40% by `momentum_score` AND `rs_score > 0.5`.
+4. **rs_new_high** ≤3 — `rs_new_high == 1` AND `rs_score ≥ 0.6` AND top-40% by `momentum_score`.
+
+The anti-flash floor is a **cross-sectional `momentum_score` percentile** (`ANTIFLASH_PCTILE = 0.40`),
+not an absolute cutoff — invariant to `PERF_RANK_METRICS` rescaling.
+
+**`grp_*` columns (19):** each pick row snapshots the selecting group's `deltas.csv` metrics at
+selection time (so Phase-4 attribution never re-derives them). Includes `grp_rank_basis`,
+`grp_category_rank` (within-bucket rank among qualifying candidates, independent per category for
+dedup groups), `grp_momentum_score_pctile` (the floor value actually used), and stored
+rejected-alternatives (`grp_rs_confirmed`, `grp_momentum_weighted_mid`, `grp_rank_agreement`) for
+head-to-head Phase-4 comparison. Renaming/removing one is one-way once data flows; **adding** one is
+a two-way-door superset migration (`ensure_deltas_csv()` pattern).
+
+**Workflow & guards:**
+- `.github/workflows/collect_picks.yml` — separate workflow, own EOD cron (`8 20 * * 1-5`, ~20 min
+  after `collect.yml`). `workflow_dispatch` for manual runs.
+- **Shared concurrency guard (G1):** both `collect_picks.yml` AND `collect.yml` declare
+  `concurrency: { group: finviz-data-commit, cancel-in-progress: false }` — a group only serializes
+  workflows sharing the name, so **both files must have it.** Rebase-before-push.
+- **Stale-read guard:** `collect_picks.py` asserts `deltas['date'].max() == trading_date()` before
+  scraping — a too-early run is a safe no-op, never a wrong-day scrape.
+- **Fetch caps:** per-group `PAGE_CAP = 2` (40 names; lowered from 15 on 2026-07-02 — historical
+  data showed only Biotechnology, a structurally oversized industry at ~100 names/day, ever
+  exceeded 40; the screener sorts `-marketcap` desc so the cap keeps the biggest/most-liquid names)
+  and **hard global `GLOBAL_FETCH_CAP = 50` pages/day** (VP-set 2026-06-25). Scrapes in priority
+  order (leaders first) and stops at 50. A wrong slug returns HTTP 200 with an empty table (NOT a
+  404) — the scraper checks row count, not status.
+- **Empty-scrape guard (D14):** if **no** selected group returns a single row (the signature of a
+  Cloudflare block — every page is HTTP 200 with an empty table, no exception), `collect_picks.py`
+  **aborts with `exit(1)` BEFORE writing** instead of letting `write_picks` evict the date and
+  silently wipe an earlier same-day capture. The daily list is irreplaceable (no backfill), so a
+  blocked run must be a loud no-op: CI goes red and `collect_picks.yml`'s `if:failure()` step
+  uploads the debug HTML. Last-write-wins per date still applies to *non-empty* re-runs (the EOD
+  run's picks win over an earlier intraday run's).
+
+## AI capture constants (`scripts/generate_ai.py`)
+
+> Added in Phase 1 of the AI capture plan (ADR-006). Document changes to these in all three
+> places per the configurable-constants rule in root `CLAUDE.md` § Code quality standards.
+
+| Constant | Default | Controls |
+|----------|---------|---------|
+| `CAPTURE_DIR` | `data/ai/debug/` | Where Tier-2 debug captures are written (one file per date, committed, rolling window) |
+| `PROVENANCE_DIR` | `data/ai/provenance/` | Where Tier-1 provenance files are written (one per date, committed permanently, user-facing) |
+| `CAPTURE_RETENTION_DAYS` | `30` | Number of Tier-2 debug files kept in HEAD; older files are pruned from HEAD on each run but stay recoverable in git history. ~1 MB total at 30 days. |
+| `AI_CAPTURE` env / `--capture` flag | off (on in CI) | Controls whether Tier-2 debug file is written. Set `AI_CAPTURE=1` or pass `--capture` to enable locally. Always enabled in `generate_ai.yml`. |
+| `GOOGLE_API_KEY` | (set in env) | Vertex express key — sidesteps ADC and AI Studio 429s. Takes priority over Vertex ADC (`GOOGLE_CLOUD_PROJECT`) when `GOOGLE_GENAI_USE_VERTEXAI=true`. Sets `_backend="vertex_express"`. |
+
+**Auth priority:** `GOOGLE_API_KEY` (Vertex express) > `GOOGLE_CLOUD_PROJECT` (Vertex ADC) > `GEMINI_API_KEY` (AI Studio).
+
+**Preview mode (no creds needed):**
+```bash
+python scripts/generate_ai.py --preview [--task pulse] [--group sector] [--json]
+```
+Builds prompts from existing CSVs and writes Tier-1 provenance — no API call, no credentials required. Add `--date YYYY-MM-DD` to use a specific date (defaults to latest snapshot date).
+
+## Playwright scraping dev workflow
+
+We can write, iterate, and debug `collect.py` scraping logic (selectors, parsing, retry
+behavior) against non-Cloudflare URLs without needing a local machine or burning GitHub
+Actions runs. Only the final Finviz target requires GitHub Actions due to Cloudflare. Before
+running Playwright in a Claude Code cloud session, read
+`knowledge/investigations/playwright-cloud-session-testing.md` for cloud-specific gotchas.
+
+Do **not** add `playwright install chromium` to the default setup (`requirements.txt`). It's
+175MB and only needed for testing/dev tasks. Install it in-session when the task calls for it:
+```bash
+pip install playwright
+python3 -m playwright install chromium --with-deps
+```
+There is no need for a conditional or auto-detection — just run it when you need it.
