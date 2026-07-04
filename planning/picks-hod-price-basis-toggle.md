@@ -1,7 +1,8 @@
 # Plan: HoD ↔ Last price-basis toggle for Picks risk metrics
 
 > **Status:** ✅ **Phase A shipped** (2026-06-30, branch `claude/hod-price-basis-toggle-phase-a-8o28by`).
-> Phase B (global Focus re-rank) is the committed end goal — not yet implemented.
+> ✅ **Phase B shipped** (2026-07-04, branch `claude/hod-price-basis-toggle-94xhj6`) — the global
+> tab-level toggle now re-ranks the entire Focus list. See `.session/SPRINT.md` PICKS-3E-HOD-PHASE-B.
 > This doc is written so any contributor can pick it up cold.
 
 ---
