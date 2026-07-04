@@ -30,7 +30,8 @@ jobs:
             --ignore=tests/test_pwa_picks_hod.py \
             --ignore=tests/test_pwa_picks_atr_earnings.py \
             --ignore=tests/test_pwa_focus_scoring.py \
-            --ignore=tests/test_pwa_picks_chart.py
+            --ignore=tests/test_pwa_picks_chart.py \
+            --ignore=tests/test_pwa_lookup_signal.py
       - name: Run eval_ai guards on captured outputs (if any)
         run: python scripts/eval_ai.py --all
 

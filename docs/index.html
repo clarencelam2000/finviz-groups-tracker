@@ -451,6 +451,21 @@
     const RS_STRONG = 2.0;   // ≥ 2pp vs SPY → deep green / deep red badge
     const RS_SLIGHT = 0.5;   // ≥ 0.5pp → mild badge; within ±0.5pp → neutral
 
+    // Lookup tab SIGNAL card composite (groupSignal()). Each factor contributes up to its
+    // weight to a 0-1 score; a factor is skipped (and the remaining weights renormalized,
+    // same convention as momentum_score's NaN handling) when its source column is null, so
+    // partial data never fabricates a fake neutral reading. Weights sum to 1.0.
+    const SIGNAL_WEIGHTS = {
+      momentumConfirmed: 0.30, // momentum_confirmed: broad strength gated by consistency
+      rsConfirmed:       0.30, // rs_confirmed: beats S&P broadly, gated by consistency
+      rankDeltaShort:    0.15, // rank_week_delta_<shortest window>: recent rank move
+      regime:            0.15, // regime_short_long: emerging (+) vs fading (-) vs own trend
+      breadth:           0.10, // fraction of gated timeframes (month/qtr/half/ytd) positive
+    };
+    // Verdict thresholds on the groupSignal() composite score (0-1).
+    const SIGNAL_FAVORABLE = 0.65; // score >= this → FAVORABLE
+    const SIGNAL_CAUTION   = 0.35; // score <= this → CAUTION; between = MIXED
+
     // Picks tab constants (Phase 3a, ADR-008). Triple-documented: here, README § Configurable
     // parameters, CLAUDE.md § PWA display thresholds.
     // MIN_MARKET_CAP_B — C6 base display filter; exclude micro/nano-cap noise.
@@ -582,7 +597,7 @@
         { id: 'perf_delta', label: 'Performance change (Nd)', tabs: ['today'],
           oneLiner: "How much this group's own return has changed versus N trading sessions ago — positive means it's performing better than it was.",
           detail: 'Shown on an expanded Today card as the "vs 20d ago" row: week and YTD % change over ~1 month. Unlike rank change, this is the group vs. itself, not vs. other groups.' },
-        { id: 'sustained_strength', label: 'Sustained strength', tabs: ['strength'],
+        { id: 'sustained_strength', label: 'Sustained strength', tabs: ['strength', 'lookup'],
           oneLiner: 'Strong across 1, 3, and 6 months at the same time — not just a recent flash.',
           detail: 'Top-N in rank_month AND rank_quarter AND rank_half simultaneously.' },
         { id: 'breadth', label: 'All green / breadth', tabs: ['strength', 'lookup'],
@@ -2852,13 +2867,53 @@
       renderLookupChips();
     }
 
-    function groupScore(delta, snap, hasRow) {
-      if (!hasRow) return 0.5; // no data → neutral
-      let s = 0;
-      if ((delta ? (pf(delta[`rank_week_delta_${state.windows[0] || '5d'}`]) ?? 0) : 0) > 0)   s += 0.3;
-      if ((delta ? (pf(delta.momentum_score) ?? 0) : 0) > 0.6)     s += 0.5;
-      if ((snap  ? (pf(snap.perf_week) ?? 0) : 0) > 0)             s += 0.2;
-      return s;
+    // Factor-based composite for the Lookup SIGNAL card (replaces the old day-1 groupScore()).
+    // Returns { score, quality, factors }. `factors` is the SAME list used to render the
+    // evidence lines in contextSignalCard() — score and "why" can never disagree, unlike the
+    // old groupScore()/groupReasons() pair which used different thresholds on different inputs.
+    // A factor is omitted (weight excluded from the renormalized total) when its source column
+    // is null, so missing data shrinks the weighted average instead of injecting a fake 0.5.
+    function groupSignal(delta, snap, allSnaps, n) {
+      if (!delta && !snap) return { score: null, quality: 'none', factors: [] };
+      const factors = [];
+
+      const mc = delta ? pf(delta.momentum_confirmed) : null;
+      if (mc !== null) {
+        factors.push({ id: 'momentumConfirmed', weight: SIGNAL_WEIGHTS.momentumConfirmed, val: mc,
+          label: mc >= 0.6 ? `confirmed momentum ${(mc * 100).toFixed(0)}%` : (mc <= 0.3 ? `weak confirmed momentum ${(mc * 100).toFixed(0)}%` : null) });
+      }
+
+      const rc = delta ? pf(delta.rs_confirmed) : null;
+      if (rc !== null) {
+        factors.push({ id: 'rsConfirmed', weight: SIGNAL_WEIGHTS.rsConfirmed, val: rc,
+          label: rc >= 0.6 ? `beating S&P, confirmed (${(rc * 100).toFixed(0)}%)` : (rc <= 0.3 ? `lagging S&P, confirmed (${(rc * 100).toFixed(0)}%)` : null) });
+      }
+
+      const rd = delta ? pf(delta[`rank_week_delta_${state.windows[0] || '5d'}`]) : null;
+      if (rd !== null) {
+        factors.push({ id: 'rankDeltaShort', weight: SIGNAL_WEIGHTS.rankDeltaShort, val: rd > 0 ? 1 : rd < 0 ? 0 : 0.5,
+          label: Math.abs(rd) >= 3 ? `${rd > 0 ? '▲' : '▼'}${Math.abs(rd)} rank this wk` : null });
+      }
+
+      const rg = delta ? pf(delta.regime_short_long) : null;
+      if (rg !== null) {
+        factors.push({ id: 'regime', weight: SIGNAL_WEIGHTS.regime, val: Math.max(0, Math.min(1, rg / 2 + 0.5)),
+          label: rg >= REGIME_THRESHOLD ? 'emerging vs its own trend' : (rg <= -REGIME_THRESHOLD ? 'fading vs its own trend' : null) });
+      }
+
+      if (snap) {
+        let g = 0, t = 0;
+        for (const tf of BREADTH_TFS) { if (!tf.gate) continue; t++; const v = pf(snap[tf.k]); if (v !== null && v > 0) g++; }
+        if (t > 0) {
+          factors.push({ id: 'breadth', weight: SIGNAL_WEIGHTS.breadth, val: g / t,
+            label: g === t ? 'all timeframes positive' : (g === 0 ? 'no timeframes positive' : null) });
+        }
+      }
+
+      const totalW = factors.reduce((a, f) => a + f.weight, 0);
+      const score = totalW > 0 ? factors.reduce((a, f) => a + f.weight * f.val, 0) / totalW : null;
+      const quality = factors.length >= 4 ? 'full' : factors.length >= 2 ? 'partial' : (factors.length >= 1 ? 'thin' : 'none');
+      return { score, quality, factors };
     }
 
     // Weekly-rank history for one group, oldest→newest, capped at the last
@@ -3026,6 +3081,15 @@
              <span class="block h-full rounded-full ${momStyle.bar}" style="width:${momPct}%"></span></span>`
         : '<span class="text-slate-600">—</span>';
 
+      // RS vs S&P 500 (rs_month spread + "beats N/6" chip) — previously computed for Today/
+      // vs-Market cards only; Lookup never showed it despite GUIDE tagging rs_score/rs_confirmed
+      // for the 'lookup' tab (see lookupGlossary()).
+      const rsMonthChip = delta ? rsChip(pf(delta.rs_month)) : '';
+      const rsBeats      = delta ? rsBeatsChip(delta) : '';
+      const rsHtml = (rsMonthChip || rsBeats)
+        ? `<div class="flex justify-between items-center text-xs"><span class="text-slate-400">vs S&P</span><span class="flex items-center gap-1.5">${rsMonthChip}${rsBeats}</span></div>`
+        : '';
+
       const spark = rankSparkline(groupRankHistory(name, groupKey), n);
       const { floor, best, chip } = convictionInfo(delta, n, snap, allSnaps);
       const chipHtml = chip
@@ -3127,6 +3191,7 @@
           ${floorHtml}
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Momentum</span><span>${momHtml}</span></div>
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Perf</span><span class="text-slate-300">Wk ${fmtPct(perfWeek)} · Mo ${fmtPct(perfMonth)} · YTD ${fmtPct(perfYtd)}</span></div>
+          ${rsHtml}
           ${groupKey === 'sectors' ? breadthRow(state.sectorBreadth[name]?.top, state.sectorBreadth[name]?.total) : ''}
           ${breadthStrip(snap)}
           ${spark}
@@ -3135,91 +3200,145 @@
         </div>`;
     }
 
-    // Concrete evidence behind a group's standing: rank trajectory, conviction/
-    // Rank Floor, momentum, and breadth. Returns short phrases (strongest first).
-    // Returns short evidence phrases for a group (name prefix omitted — the
-    // caller supplies a per-group label). Breadth "all green" is skipped since
-    // the breadth-strip badge already shows it; only "no timeframes positive"
-    // is worth calling out as a notable negative signal.
-    function groupReasons(name, gd, n) {
-      const { delta, snap, allSnaps } = gd;
-      const out = [];
-      if (delta) {
-        const sw = state.windows[0] || '5d';
-        const lw = state.windows[state.windows.length - 1] || '50d';
-        const d50 = pf(delta[`rank_week_delta_${lw}`]);
-        const d5  = pf(delta[`rank_week_delta_${sw}`]);
-        if (d50 !== null && Math.abs(d50) >= 3)      out.push(`${d50 > 0 ? '▲' : '▼'}${Math.abs(d50)} rank over ${lw}`);
-        else if (d5 !== null && Math.abs(d5) >= 3)   out.push(`${d5 > 0 ? '▲' : '▼'}${Math.abs(d5)} rank this wk`);
-        const { floor, chip } = convictionInfo(delta, n, snap, allSnaps);
-        if (chip) out.push(`${chip.text.toLowerCase()} across 1/3/6mo (floor #${floor})`);
-        const mom = pf(delta.momentum_score);
-        if (mom !== null && (mom >= 0.7 || mom <= 0.3)) out.push(`momentum ${(mom * 100).toFixed(0)}%`);
-      }
-      if (snap) {
-        let g = 0, t = 0;
-        for (const tf of BREADTH_TFS) { if (!tf.gate) continue; t++; const v = pf(snap[tf.k]); if (v !== null && v > 0) g++; }
-        // Skip "all green" — the breadth-strip badge already shows it. Only flag all-red.
-        if (t > 0 && g === 0) out.push('no timeframes positive');
-      }
-      return out;
+    // Top 2 evidence labels for a group, strongest first (by weight × distance from neutral).
+    // Reads directly off groupSignal()'s factors — the exact inputs that produced the score —
+    // so evidence text can never disagree with the verdict (the old groupScore()/groupReasons()
+    // pair used different thresholds on different inputs and could silently drift apart).
+    function topSignalReasons(factors) {
+      return factors
+        .filter(f => f.label)
+        .sort((a, b) => (b.weight * Math.abs(b.val - 0.5)) - (a.weight * Math.abs(a.val - 0.5)))
+        .slice(0, 2)
+        .map(f => f.label);
     }
 
-    function contextSignalCard(indName, secName) {
+    // Ticker's own Stage-2/Focus context for the Signal card's "This stock" block. Scans
+    // today's picks for this exact ticker with NO market-cap filter — this is the specific
+    // stock being researched, not the discovery list renderLookupStage2 shows further down.
+    // Runs the same global Focus pool (isFocusEligible + computeFocusScores) renderLookupStage2
+    // uses so the score is directly comparable to the Picks tab Focus view. Returns null when
+    // the ticker isn't in today's picks at all (silence = no signal, same convention used
+    // elsewhere for row badges — no manufactured "not found" message here).
+    function findTickerPickInfo(symbol) {
+      const allPicks = state.picksData;
+      if (!allPicks || allPicks.length === 0 || !symbol) return null;
+      const rows = allPicks.filter(r => (r.ticker || r.Ticker || '') === symbol);
+      if (rows.length === 0) return null;
+      const categories = [...new Set(rows.map(r => r.list_category).filter(Boolean))];
+      const row = rows[0];
+
+      const seen = new Set();
+      const candidates = allPicks.filter(r => {
+        if (!isFocusEligible(r)) return false;
+        const t = r.ticker || r.Ticker || '';
+        if (seen.has(t)) return false;
+        seen.add(t);
+        return true;
+      });
+      const scored = computeFocusScores(candidates);
+      const focus = scored.find(s => (s.r.ticker || s.r.Ticker || '') === symbol) || null;
+
+      return {
+        categories,
+        ext: _pF(row.atr_ext_50),
+        earnings: parseEarningsInfo(row['Earnings']),
+        focusScore: focus ? focus.score : null,
+      };
+    }
+
+    function tickerContextHtml(symbol) {
+      const info = findTickerPickInfo(symbol);
+      if (!info) return '';
+      const chips = info.categories
+        .map(c => `<span class="text-[0.6rem] px-1.5 py-0.5 rounded-full ${CATEGORY_CHIP_CLS[c] || 'bg-slate-700/60 text-slate-300'}">${CATEGORY_LABEL[c] || c}</span>`)
+        .join('');
+      const extHtml = !isNaN(info.ext)
+        ? `<span class="${atrTextColor(info.ext)}">${info.ext.toFixed(1)}× ATR ext</span>` : '';
+      const earnHtml = info.earnings && info.earnings.daysUntil !== null && info.earnings.daysUntil <= EARNINGS_CAUTION_DAYS
+        ? `<span class="${earningsCls(info.earnings.daysUntil)}">earnings in ${info.earnings.daysUntil}d</span>` : '';
+      const focusHtml = info.focusScore !== null
+        ? `<span class="text-slate-300">Focus ${(info.focusScore * 100).toFixed(0)}%</span>` : '';
+      const parts = [extHtml, earnHtml, focusHtml].filter(Boolean).join(' · ');
+      return `
+        <div class="lookup-ticker-context rounded-xl p-3 bg-slate-800/60 border border-slate-700 text-xs space-y-1">
+          <div class="flex items-center justify-between">
+            <span class="text-[0.65rem] uppercase tracking-wider text-slate-500">This stock — in today's Stage-2 picks</span>
+            ${chips ? `<span class="flex gap-1">${chips}</span>` : ''}
+          </div>
+          ${parts ? `<div class="text-slate-300">${parts}</div>` : ''}
+        </div>`;
+    }
+
+    function contextSignalCard(indName, secName, symbol) {
       const ind = findGroupData(indName, 'industries');
       const sec = findGroupData(secName, 'sectors');
-      const i = groupScore(ind.delta, ind.snap, Boolean(ind.delta || ind.snap));
-      const s = groupScore(sec.delta, sec.snap, Boolean(sec.delta || sec.snap));
-      const avg = (i + s) / 2;
+      const iSig = groupSignal(ind.delta, ind.snap, ind.allSnaps, ind.n);
+      const sSig = groupSignal(sec.delta, sec.snap, sec.allSnaps, sec.n);
+
+      const tickerHtml = symbol ? tickerContextHtml(symbol) : '';
+
+      let score, caveat = '';
+      if (iSig.score !== null && sSig.score !== null) {
+        score = (iSig.score + sSig.score) / 2;
+      } else if (iSig.score !== null) {
+        score = iSig.score;
+        caveat = secName ? `Based on ${escapeHtml(indName)} only — no tracked data for ${escapeHtml(secName)} yet.` : '';
+      } else if (sSig.score !== null) {
+        score = sSig.score;
+        caveat = indName ? `Based on ${escapeHtml(secName)} only — no tracked data for ${escapeHtml(indName)} yet.` : '';
+      } else {
+        score = null;
+      }
+
       let label, cls, desc;
-      if (avg >= 0.6) {
+      if (score === null) {
+        label = 'NO SIGNAL'; cls = 'bg-slate-800/60 border-slate-600 text-slate-400';
+        desc = `Not enough tracked history for ${escapeHtml(indName || 'this industry')}/${escapeHtml(secName || 'this sector')} yet.`;
+      } else if (score >= SIGNAL_FAVORABLE) {
         label = 'FAVORABLE'; cls = 'bg-emerald-900/40 border-emerald-500 text-emerald-300';
-        desc = `${escapeHtml(indName || 'Industry')} and ${escapeHtml(secName || 'sector')} are tracking strong — favorable context for a long entry.`;
-      } else if (avg <= 0.3) {
+        desc = `${escapeHtml(indName || 'Industry')} and ${escapeHtml(secName || 'sector')} are both showing confirmed strength — a supportive backdrop for this stock.`;
+      } else if (score <= SIGNAL_CAUTION) {
         label = 'CAUTION'; cls = 'bg-red-900/40 border-red-500 text-red-300';
-        desc = `${escapeHtml(indName || 'Industry')} and/or ${escapeHtml(secName || 'sector')} show weakness — review before entering a long.`;
+        desc = `${escapeHtml(indName || 'Industry')} and/or ${escapeHtml(secName || 'sector')} show confirmed weakness — a headwind worth weighing.`;
       } else {
         label = 'MIXED'; cls = 'bg-amber-900/40 border-amber-500 text-amber-300';
-        desc = 'Sector and industry are diverging or neutral — check the individual group trends above.';
+        desc = `${escapeHtml(indName || 'Industry')} and ${escapeHtml(secName || 'sector')} are diverging or offer no strong edge either way — lean on the stock's own setup.`;
       }
+
       // Per-group evidence lines (industry first, sector second), each labeled.
-      const buildLine = (groupName, gd) => {
+      const buildLine = (groupName, sig) => {
         if (!groupName) return '';
-        const reasons = groupReasons(groupName, gd, gd.n).slice(0, 2);
+        const reasons = topSignalReasons(sig.factors);
         if (!reasons.length) return '';
         return `<div class="text-[0.7rem] mt-0.5"><span class="text-slate-500">${escapeHtml(groupName)}:</span> <span class="text-slate-400">${escapeHtml(reasons.join(' · '))}</span></div>`;
       };
-      const indLine = buildLine(indName, ind);
-      const secLine = buildLine(secName, sec);
+      const indLine = buildLine(indName, iSig);
+      const secLine = buildLine(secName, sSig);
       const evidence = (indLine || secLine)
         ? `<div class="mt-1.5 space-y-0.5">${indLine}${secLine}</div>`
         : '';
+      const caveatHtml = caveat ? `<div class="text-[0.65rem] text-slate-500 mt-1">${caveat}</div>` : '';
+
       return `
+        ${tickerHtml}
         <div class="rounded-xl p-3 border ${cls}">
           <div class="text-sm font-bold">● SIGNAL: ${label}</div>
           <div class="text-xs text-slate-300 mt-1">${desc}</div>
           ${evidence}
+          ${caveatHtml}
         </div>`;
     }
 
-    // "Why this matters" — collapsed glossary of the derived metrics shown above.
-    // Copy mirrors knowledge/moaty-metrics.md. Native <details> = no JS needed.
+    // "Why this matters" — collapsed glossary of the derived metrics shown above. Generated
+    // straight from GUIDE.metrics (filtered to tabs.includes('lookup')) instead of a separate
+    // hand-maintained copy — the old hand-maintained array had drifted from GUIDE (e.g. rs_score/
+    // rs_confirmed were tagged 'lookup' in GUIDE, driving the in-app Guide hub's Lookup filter
+    // chip, but never actually appeared here). One source of truth now; can't drift again.
     function lookupGlossary() {
-      const rows = [
-        ["rank (wk)", "Where this group places among all groups on weekly performance — #1 is the best performer. The sparkline tracks it over time (a rising line = improving)."],
-        ["rank floor", "The range of rankings across 1, 3, and 6 months — best to worst. A tight, low range means it held its standing consistently."],
-        ["sustained / consistent", "Sustained = top-quartile across 1/3/6mo at once (not a recent flash). Consistent = the three timeframes agree and it’s at least top-half."],
-        ["momentum", "Strength across every timeframe at once, 0–100% (a percentile across the seven perf windows)."],
-        ["breadth", "Whether the group is positive across the major timeframes. “All green” gates on month/quarter/half/YTD; the day & week dots show context but don’t gate."],
-        ["confirmed momentum", "Momentum × rank_agreement — high only when the group is broadly strong AND its timeframes agree (not a one-timeframe pop)."],
-        ["acceleration", "Whether momentum is building (▲) or fading (▼) over the last 10 sessions. Flat = momentum isn’t accelerating in either direction."],
-        ["regime", "Positive = recently accelerating vs. longer-term trend (emerging leader). Negative = fading. Uses short-horizon minus long-horizon percentile."],
-        ["rank trend", "↑↑/↑ = consistent improvement in YTD rank over the last 10 sessions. ↓↓/↓ = steady slide. ~ = flat."],
-        ["YTD rank delta", "How many spots this group’s YTD rank moved over the last N trading sessions. Positive = improved (lower rank number = better)."],
-      ];
-      const items = rows.map(([t, d]) =>
-        `<div><span class="text-slate-200 font-medium">${t}</span> — <span class="text-slate-400">${d}</span></div>`
-      ).join("");
+      const items = GUIDE.metrics
+        .filter(m => (m.tabs || []).includes('lookup'))
+        .map(m => `<div><span class="text-slate-200 font-medium">${escapeHtml(m.label)}</span> — <span class="text-slate-400">${escapeHtml(m.oneLiner)}</span></div>`)
+        .join("");
       return `
         <details class="rounded-xl bg-slate-800/60 border border-slate-700 mt-1">
           <summary class="text-xs text-slate-400 px-3 py-2 cursor-pointer select-none flex items-center justify-between">
@@ -3377,7 +3496,7 @@
       } else {
         if (data.finviz_industry) html += groupPerfCard(data.finviz_industry, 'industries', 'Industry', true);
         if (data.finviz_sector)   html += groupPerfCard(data.finviz_sector, 'sectors', 'Sector', true);
-        html += contextSignalCard(data.finviz_industry, data.finviz_sector);
+        html += contextSignalCard(data.finviz_industry, data.finviz_sector, data.symbol);
         // 3c: Stage-2 section — industry names list + ind_<slug> button; sec_<slug> button for the sector.
         html += renderLookupStage2(data.finviz_industry || null, data.finviz_sector || null);
       }

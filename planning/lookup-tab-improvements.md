@@ -78,6 +78,45 @@ Each slice = code + docs + tracking.
       company header. Deepvue dropped — no public per-ticker URL (login-gated);
       owner chose TradingView instead.
 
+## Phase 2 — Signal card v2 (2026-07-04)
+
+Slice 4 above deliberately left the SIGNAL card's scoring spine (`groupScore()`)
+untouched. By 2026-07-04 that day-1 3-factor heuristic predated most of what the
+product now computes (RS vs S&P, `momentum_confirmed`, `regime_short_long`,
+Focus/Picks per-stock context) and had drifted from its own evidence text and
+from the in-app Guide hub's `tabs: [..., 'lookup']` metadata (which promised
+`rs_score`/`rs_confirmed` on this tab — they never rendered anywhere on it).
+See `.session/session-notes.md` for the full issue writeup. Fixed in one pass:
+
+- [x] `groupScore()` replaced by `groupSignal()` — a factor-based composite
+      (`momentum_confirmed` 0.30, `rs_confirmed` 0.30, short-window rank delta
+      0.15, `regime_short_long` 0.15, breadth 0.10; missing factors excluded and
+      weights renormalized, never faked as neutral). Evidence text is generated
+      from the *same* factor list that produced the score, so it can no longer
+      disagree with the verdict (the old `groupReasons()` used different
+      thresholds on different inputs).
+- [x] Missing-data caveat: when only one of industry/sector has any tracked
+      data, the verdict uses that side alone with an explicit caveat line
+      instead of silently averaging in a fake neutral 0.5. Both sides missing →
+      a distinct "NO SIGNAL" state instead of forcing MIXED.
+- [x] RS vs S&P surfaced on the group cards (`rsChip`/`rsBeatsChip`, previously
+      Today/vs-Market only) and folded into the score.
+- [x] `lookupGlossary()` rebuilt to generate from `GUIDE.metrics.filter(m =>
+      m.tabs.includes('lookup'))` instead of a hand-maintained duplicate copy —
+      closes the drift permanently (added `lookup` to `sustained_strength`'s
+      tabs too, since its one-liner explains the Rank Floor chip).
+- [x] "This stock" block: when the searched ticker is itself in today's
+      Stage-2 picks, its own category tags, ATR extension, earnings proximity,
+      and Focus score now surface directly on the signal card
+      (`findTickerPickInfo()`/`tickerContextHtml()`), reusing the existing
+      Focus/Picks helpers. Silently absent otherwise (no manufactured
+      "not found" message — matches the existing silence-is-no-signal
+      convention for row badges elsewhere in the app).
+- [x] Copy moved off long-only, uniform-severity phrasing to context-only
+      framing that scales with data quality.
+- [x] `tests/test_pwa_lookup_signal.py` (new) — first test coverage for the
+      Signal card at all.
+
 ## Deferred — backlog (seed into SPRINT)
 
 - Sparkline rank-timeframe toggle (wk/mo/3mo/6mo).

@@ -128,6 +128,8 @@ These constants gate visual indicators in the PWA. Edit them directly in `index.
 | `SLOPE_SLIGHT` | `0.01` | `rank_trend_slope` threshold for single-arrow (↑/↓) glyph. Within ±`SLOPE_SLIGHT` = `~`. |
 | `RS_STRONG` | `2.0` | RS spread (pp vs S&P) threshold for deep-color badge in vs Market tab and Today cards. |
 | `RS_SLIGHT` | `0.5` | RS spread threshold for mild-color badge. Within ±`RS_SLIGHT` = neutral chip. |
+| `SIGNAL_WEIGHTS` | `{momentumConfirmed:0.30, rsConfirmed:0.30, rankDeltaShort:0.15, regime:0.15, breadth:0.10}` | Lookup tab SIGNAL card (`groupSignal()`): per-factor weight in the 0–1 composite. A factor with no source data is excluded and the remaining weights renormalized (same convention as `momentum_score`'s NaN handling), so missing data shrinks the average instead of injecting a fake neutral value. |
+| `SIGNAL_FAVORABLE` / `SIGNAL_CAUTION` | `0.65` / `0.35` | Lookup tab SIGNAL card verdict thresholds on the `groupSignal()` composite score. `>= SIGNAL_FAVORABLE` → FAVORABLE, `<= SIGNAL_CAUTION` → CAUTION, between → MIXED, no data on either side → NO SIGNAL. |
 | `BREADTH_TOP_HALF_FRACTION` | `0.5` | Sector-breadth "top half" cutoff, shared by `computeSectorBreadth()` (Strength-tab breadth table, week/month/quarter/half toggle) and `computeSectorTopHalfCounts()` (Today-tab sector card breadth bar + expand-in-place drill-down, YTD only). One threshold, two render targets — added when PR #178 (Today-tab breadth bar) was reconciled with the independently-shipped Strength-tab table (`122a4d1`). |
 | `MIN_MARKET_CAP_B` | `5` | Picks tab base display filter (C6); rows below this market cap ($B) are hidden. |
 | `ATR_EXT_ACTIONABLE` | `4.0` | ATR-extension emerald band cap; also the Focus hard-DQ line (Phase 3b). |
