@@ -80,6 +80,8 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   average) will produce a low confirmed score.
 - **User one-liner:** "Momentum filtered by consistency — high only when the group is
   strong across timeframes AND those timeframes agree."
+- **Lookup tab:** the largest single weight (0.30) in the Lookup SIGNAL card composite
+  (`groupSignal()` in `docs/index.html`) — see `rs_confirmed` below for the pairing.
 
 ## regime_short_long
 - **Source:** `compute_regime()` (`scripts/compute_deltas.py` L249). Short-horizon
@@ -191,6 +193,11 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
   signals is discounted.
 - **User one-liner:** "Market-beating strength filtered by consistency — high only
   when the group beats SPY across timeframes AND those timeframes agree."
+- **Lookup tab:** tied with `momentum_confirmed` for the largest weight (0.30) in the
+  Lookup SIGNAL card composite (`groupSignal()` in `docs/index.html`, `SIGNAL_WEIGHTS`
+  in CLAUDE.md/README) — the first time RS reaches the Lookup tab; previously the
+  SIGNAL card only used `momentum_score`/`perf_week`/rank delta and never referenced
+  relative strength vs the market at all.
 
 ## rs_slope
 - **Source:** `compute_rs_slope` (`scripts/compute_deltas.py`). Least-squares slope

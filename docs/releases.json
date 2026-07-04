@@ -1,6 +1,19 @@
 {
-  "current": "2026.07.03.1",
+  "current": "2026.07.04",
   "releases": [
+    {
+      "version": "2026.07.04",
+      "date": "2026-07-04",
+      "title": "Improved: Lookup Signal card now uses RS + your stock's own setup",
+      "tag": "improvement",
+      "tab": "lookup",
+      "notes": [
+        "The FAVORABLE/CAUTION/MIXED signal now factors in relative strength vs the S&P 500, not just momentum and rank — and the industry/sector cards now show that RS read directly.",
+        "When one side (industry or sector) has no tracked history, the signal is now based on the other side alone with a clear note, instead of silently blending in a fake neutral reading.",
+        "If your searched stock is itself in today's Stage-2 picks, its own category, ATR extension, earnings proximity, and Focus score now show right on the signal card.",
+        "The evidence line under the verdict now always explains the actual factors behind it."
+      ]
+    },
     {
       "version": "2026.07.03.1",
       "date": "2026-07-03",

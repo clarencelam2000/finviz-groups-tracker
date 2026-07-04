@@ -324,3 +324,59 @@ are pre-existing (missing Chromium executable, confirmed by stashing this diff a
 base — same failures) and unrelated to this change.
 
 **Next steps**: none outstanding. PR open for this branch, ready for review.
+
+---
+
+## 2026-07-04 — Lookup tab Signal card rework (v2)
+
+**Status: LANDED on branch `claude/signal-card-lookup-improvements-7fxy3z`. SAFE TO CLOSE once PR is reviewed/merged.**
+
+User asked to improve the Lookup tab's SIGNAL card — hadn't been touched since first-week
+launch and had gotten "iffy"/misleading as the rest of the product grew. Did read-only
+exploration first (per user's explicit request to plan before implementing), found the
+scoring spine (`groupScore()`) was literally unchanged from `planning/PLAN_ticker_lookup.md`
+(2026-06-14) — a 3-factor day-1 heuristic that predated `momentum_confirmed`, RS-vs-SPY
+(`rs_score`/`rs_confirmed`, added 2026-06-21), `regime_short_long`, and the whole Picks/Focus
+pipeline. Concrete bugs found: (1) score never used RS at all; (2) `GUIDE.metrics` tagged
+`rs_score`/`rs_confirmed` for the `'lookup'` tab (driving the in-app Guide hub's filter chip)
+but neither ever rendered anywhere on the actual tab; (3) the evidence text (`groupReasons()`)
+used different thresholds than the score (`groupScore()`), so the "why" could silently disagree
+with the verdict; (4) missing group data was scored as a fake neutral 0.5 and blended into the
+average with no indication; (5) the card only ever judged group context, never the searched
+stock's own Stage-2/Focus setup even though that's computed a few hundred lines later in the
+same render pass; (6) zero test coverage existed for any of this.
+
+**What landed** (all in `docs/index.html` — client-side only, no pipeline change):
+- `groupScore()` → `groupSignal()`: factor-based composite (`momentum_confirmed` 0.30,
+  `rs_confirmed` 0.30, short-window rank delta 0.15, `regime_short_long` 0.15, breadth 0.10).
+  Missing factors are excluded and the remaining weights renormalized (same convention as
+  `momentum_score`'s NaN handling) instead of injecting a fake neutral value. New
+  `SIGNAL_WEIGHTS`/`SIGNAL_FAVORABLE`/`SIGNAL_CAUTION` constants, triple-documented (in-code +
+  README + CLAUDE.md).
+- Evidence lines (`topSignalReasons()`) now read directly off the same factor list that
+  produced the score — can't disagree with the verdict anymore.
+- Missing-data handling: one side missing → score from the other side alone + an explicit
+  caveat line; both sides missing → new "NO SIGNAL" state instead of forcing MIXED.
+- RS vs S&P (`rsChip`/`rsBeatsChip`, previously Today/vs-Market only) now renders on the
+  Lookup group cards too.
+- `lookupGlossary()` rewritten to generate from `GUIDE.metrics.filter(tabs.includes('lookup'))`
+  instead of a separate hand-maintained array — permanently closes the drift class of bug (also
+  added `'lookup'` to `sustained_strength`'s tabs since its one-liner explains the Rank Floor
+  chip).
+- New "This stock" block (`findTickerPickInfo()`/`tickerContextHtml()`): when the searched
+  ticker is itself in today's Stage-2 picks, its category tags, ATR extension, earnings
+  proximity, and Focus score now surface directly on the card. Silently absent when the ticker
+  isn't in today's picks (matches the existing silence-is-no-signal convention).
+- Copy moved off long-only, uniform-severity phrasing ("favorable context for a long entry")
+  to context-only framing that scales with data quality.
+- New `tests/test_pwa_lookup_signal.py` (8 Playwright tests, added to the `tests.yml` ignore
+  list) — first coverage this card has ever had. All pass, including two that regression-guard
+  the exact bugs fixed (evidence-matches-score, missing-data caveat vs fake-neutral).
+- Docs: `CLAUDE.md`, `README.md`, `knowledge/moaty-metrics.md`,
+  `planning/lookup-tab-improvements.md` (Phase 2 section), `.session/SPRINT.md` (`LOOK-SIG2`),
+  release triplet (`releases.json` 2026.07.04 + `sw.js` CACHE v52→v53).
+
+**Verification:** full non-Playwright suite (545 tests) passes; new Playwright suite (8 tests)
+passes standalone with `playwright install chromium`.
+
+**Next steps**: none outstanding. Push branch and open PR.
