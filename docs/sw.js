@@ -1,7 +1,7 @@
 // Bump CACHE on every release (see CLAUDE.md § Automation release-bump checklist):
 // prepend a releases.json entry + update its `current` + bump CACHE here — all three
 // together, so the new shell + releases.json aren't served from a stale cache.
-const CACHE = 'finviz-v55';
+const CACHE = 'finviz-v56';
 
 self.addEventListener('install', e => {
   e.waitUntil(
