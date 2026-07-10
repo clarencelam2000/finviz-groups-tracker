@@ -261,3 +261,31 @@ verbatim-sync anti-drift) and `tests/test_picks_methodology.py` (no drift — Ph
 tunable constants) both pass.
 
 **Next steps**: none outstanding. Push branch and open PR.
+
+---
+
+## 2026-07-10 — Dev-process audit (staff-engineer review)
+
+**Status: COMPLETE. PR open. SAFE TO CLOSE.**
+
+Full audit of dev process/standards vs. reality (CI workflows, tests, rules docs, git history),
+exploration fanned out to 3 Sonnet subagents, findings verified before acting. Deliverable:
+**`knowledge/dev-process-audit-2026-07-10.md`** — read it; it's the canonical record.
+
+Landed on `claude/dreamy-lamport-awqdai`:
+- Audit report + 6 new SPRINT backlog items (AUD-1…AUD-5, LB-FF1-RESIDUAL).
+- Doc-rot fixes: ADR-005 duplicate renumbered → ADR-009 (ETF classification; refs updated in
+  CLAUDE.md + worker/CLAUDE.md, renumber note in the ADR), stale 4-file Playwright ignore list
+  in branch-commit-discipline.md updated to the real 8, data-pipeline.md's "LB-FF1 pending"
+  claim corrected (shipped PR #110), CLAUDE.md "Retry 3x" ambiguity clarified (script-level only).
+
+Headline open findings: (1) **branch hygiene failed** — 142 unmerged remote branches, ≥3 with
+stranded session-notes commits; enable auto-delete-on-merge + one-time sweep (AUD-1). (2) **no
+lint gate anywhere** — add ruff to tests.yml (AUD-3). (3) generate_ai.yml is a third data/
+writer outside the `finviz-data-commit` concurrency group; collect.yml push lacks rebase (AUD-4).
+(4) backfill.py + export_db.py are the only untested scripts (AUD-2). What's working well:
+release-triplet 100% conformance, TODO discipline perfect, ADR/session-notes practices alive.
+
+**Verification:** CI-equivalent non-Playwright suite passes (545 tests). Docs-only change.
+
+**Next steps:** merge PR, then pick up AUD-1 (branch sweep) and AUD-3 (ruff) — both small.

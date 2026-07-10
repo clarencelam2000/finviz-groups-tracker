@@ -294,6 +294,13 @@ Full plan: `planning/PLAN_sector_industry_hierarchy.md` — 22 features across 5
 | HIR-O | **[FUTURE] Sector→Industry→Stocks bridge** | `worker/src/index.js`, `docs/index.html` | M | Entry point for TICKER-5. Do NOT start until TICKER-4 validated + HIR-A built. |
 | HIR-N | **[DEFERRED Q4+] Historical analog** | TBD | L | Match breadth fingerprint to past setups. Needs 6+ months data. Revisit ~Q4 2026. |
 
+| AUD-1 | **Stale-branch sweep + delete-on-merge setting** | GitHub repo settings | S | 2026-07-10 audit: 142 unmerged remote branches; ≥3 carry stranded session-notes commits (`chore/session-handoff-2026-06-10`, `chore/session-notes-pr50-merged`, more). Recover stranded notes into archive, bulk-delete, enable "Automatically delete head branches". See `knowledge/dev-process-audit-2026-07-10.md`. |
+| AUD-2 | **Tests for `backfill.py` + `export_db.py`** | `tests/` | S | Only two scripts/ files with zero test coverage. Minimum: smoke test that export_db output columns == `delta_columns()`. |
+| AUD-3 | **Add ruff lint gate** | `pyproject.toml`, `.github/workflows/tests.yml` | S | Repo has zero automated lint/format enforcement; all style discipline is manual. Add ruff config + CI step (start permissive, tighten later). |
+| AUD-4 | **generate_ai.yml concurrency + collect.yml push rebase** | `.github/workflows/` | S | generate_ai.yml writes `data/` but uses its own concurrency group (`generate-ai`), not `finviz-data-commit` — third writer can race the other two. Also collect.yml's commit step lacks the `git pull --rebase` that collect_picks.yml has. |
+| AUD-5 | **Document `COLLECTED_AT_CRON_UTC` in README + root CLAUDE.md** | `README.md`, `CLAUDE.md` | S | Violates the 3-place rule; also decide whether `scripts/CLAUDE.md` counts as "CLAUDE.md" for the rule and write that down. |
+| LB-FF1-RESIDUAL | **Remove last hardcoded `_20d` literals** | `docs/index.html` (~1741) | S | LB-FF1 marked done but `perf_week_delta_20d`/`perf_ytd_delta_20d` literals remain; either derive or amend the Done note's "zero literals" claim. |
+
 > **D1 note — the elegant-babbage debt**: `claude/elegant-babbage-hlxnfy` is currently the default branch (no `main` exists). GitHub Actions cron only fires on the default branch, and the PWA hardcodes this branch name. D1 is the root fix; PWA-1 is the code follow-up. Until D1 is done, the cron data will keep landing on `elegant-babbage` — so don't change the `BRANCH` constant before D1 is complete.
 
 ---
