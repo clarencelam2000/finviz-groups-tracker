@@ -215,8 +215,11 @@ The `test` job in `.github/workflows/tests.yml` runs `pytest tests/ -v` with an 
 `--ignore=` list — it does **not** run `playwright install chromium`, so any test file that
 does `from playwright.sync_api import sync_playwright` will fail there with "Executable
 doesn't exist" (no browser binary), not with an assertion failure. As of this writing the
-ignored files are `test_functional_playwright.py`, `test_pwa_picks_hod.py`,
-`test_pwa_picks_atr_earnings.py`, and `test_pwa_focus_scoring.py`.
+ignored files are `test_collect_parsing.py`, `test_functional_playwright.py`,
+`test_pwa_picks_hod.py`, `test_pwa_picks_atr_earnings.py`, `test_pwa_focus_scoring.py`,
+`test_pwa_picks_chart.py`, `test_pwa_lookup_signal.py`, and `test_pwa_ai_group_chips.py`.
+The workflow file is the source of truth — this list is a snapshot and has drifted before
+(it was 4 entries stale as of the 2026-07-10 process audit).
 
 **Rule:** any *new* `tests/test_*.py` file that imports Playwright must be added to that
 same `--ignore=` list in the same PR that adds the file. This was missed once (PR #232 —

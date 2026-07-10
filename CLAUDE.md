@@ -213,7 +213,7 @@ All Playwright-in-cloud work should first read
   future years; a year not in the table falls back to weekend-only handling.
 - Workflow: `.github/workflows/collect.yml`
 - Trigger: `workflow_dispatch` also available for manual runs.
-- On failure: GitHub emails automatically. Retry 3x before failing.
+- On failure: GitHub emails automatically. `collect.py` itself retries each fetch 3x with backoff (30s/60s/120s); there is **no workflow-level job retry** — a job that fails after script retries stays failed until the next scheduled trigger.
 - **Worker auto-deploy: `.github/workflows/deploy-workers.yml`** — triggers on push to the
   default branch when `worker/**` or `worker-cron/**` change. Runs `build:taxonomy` + tests
   before deploying; two independent jobs (one per worker). Also triggerable manually via
@@ -262,7 +262,7 @@ Note: there's no send_later tool in this session, so you can't auto-schedule the
 |-----------|---------|
 | `scripts/` | Data collection and processing scripts. See `scripts/CLAUDE.md` for Picks pipeline and AI-capture detail. |
 | `dashboard/` | Streamlit dashboard |
-| `worker/` | Cloudflare Worker (ticker lookup + cache ops) — see `worker/README.md` and `worker/CLAUDE.md` (ETF override layer, ADR-005). |
+| `worker/` | Cloudflare Worker (ticker lookup + cache ops) — see `worker/README.md` and `worker/CLAUDE.md` (ETF override layer, ADR-009). |
 | `docs/` | PWA (GitHub Pages) — `index.html`, `sw.js`, `manifest.json`. See `docs/CLAUDE.md` for display-threshold constants, release process, and PWA-specific testing. |
 | `data/` | Append-only CSVs (sectors, industries) |
 | `planning/` | Implementation plans and feature designs |
