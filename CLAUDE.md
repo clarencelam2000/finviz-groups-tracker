@@ -342,9 +342,14 @@ You must include the necessary and sufficient info for anyone else on the team t
 ---
 
 
-
 - Playwright must be installed with `playwright install chromium` (or `playwright install chromium --with-deps` in CI).
 - The `exports/` directory and `*.db` / `*.parquet` files are gitignored.
 - `.session/session-notes.md`, `.session/WORK_LOG.md`, and `.session/SPRINT.md` are tracked in Git (not gitignored) — cloud containers are ephemeral. They live in `.session/` (not `.claude/`) so Claude can edit them without permission prompts.
 - `.claude/rules/` IS committed — see `.claude/rules/README.md` for an index of all rules files and when to consult each.
 - All Python scripts handle empty CSVs (headers-only) gracefully without crashing.
+
+## Respecting and Reducing Token Usage
+
+- "For all (substantial) web research tasks or code exploration tasks or modular coding tasks use your judgement to decide an appropriate lower power model and run that in a subagent."
+Why: cost/efficiency — research and implementation work rarely needs the top-tier model; judgment, review, and synthesis stay with the main loop.
+How to apply: when a task in this project is primarily web research or exploring/writing/editing code, spawn an Agent with a model override (sonnet for substantive implementation, haiku for trivial/mechanical edits) and a self-contained prompt; review the result in the main loop before committing. Design, auditing, data synthesis, and anything judgment-heavy stays in the main model. 
