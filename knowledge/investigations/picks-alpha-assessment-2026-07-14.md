@@ -107,3 +107,12 @@ too small-N to act on. None of this is statistically conclusive; it is equally c
 "the selector buys strength and this 3-week window was a mean-reversion regime." Re-run after
 60–100+ trading days spanning more than one regime; consider renaming `risk_*_pct` → `risk_*_frac`
 (or documenting the units at every consumer) before anyone new builds stop logic on it.
+
+## Next steps (durable — see the plan doc)
+
+**`planning/picks-alpha-evaluation.md`** turns this one-off analysis into a repeatable pipeline
+and carries the full standing playbook: `scripts/evaluate_picks.py` (a daily forward-return
+scoreboard so the next assessment is a `--report` call, not a hand analysis — SPRINT `PICKS-4`),
+the FMP-OHLC unlock needed for R-multiple expectancy (`PICKS-4B`), the `risk_*_pct` rename
+(`PICKS-4C`), and the specific hypotheses (leaders-bucket drag, rotation-bucket edge, Focus
+gate) to confirm or kill at ~60 and ~100 sessions. Start there when picking this up again.
