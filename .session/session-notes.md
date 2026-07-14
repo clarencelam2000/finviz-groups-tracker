@@ -289,3 +289,45 @@ release-triplet 100% conformance, TODO discipline perfect, ADR/session-notes pra
 **Verification:** CI-equivalent non-Playwright suite passes (545 tests). Docs-only change.
 
 **Next steps:** merge PR, then pick up AUD-1 (branch sweep) and AUD-3 (ruff) — both small.
+
+---
+
+## 2026-07-14 — Picks alpha assessment (first empirical read) + evaluation-pipeline spec
+
+**Status: COMPLETE. PR #246 open on `claude/picks-alpha-assessment-p3jglg`. SAFE TO CLOSE.**
+Docs/analysis only — no code, no pipeline change.
+
+Owner asked whether the Picks tab is actually giving alpha, with an explicit risk/expectancy lens
+(top traders win ~35% — it's about small losses / big wins, assuming users honor the displayed
+stops). ~13 pick dates on hand (2026-06-25..07-14). A Sonnet subagent ran the empirical pass; I
+designed the framework, verified the one actionable bug, and wrote the durable artifacts.
+
+**Findings (`knowledge/investigations/picks-alpha-assessment-2026-07-14.md` — canonical):**
+- **Group-selection alpha is NEGATIVE at this N.** Selected groups vs SPY: h=5 −2.72% (29% hit,
+  N=140); vs the cross-sectional industry median −1.76%. Non-selected control ≈0 vs median.
+  Paired per-date: selected beat non-selected on only 2/8 dates at h=5.
+- **`leaders` bucket is the drag** (5d −4.70% vs SPY, 12% hit) — extended sustained-strength
+  leaders mean-reverted. **`rs_new_high`/`accel` (rotation triggers) were the only positives**
+  (rs_new_high +1.00% vs median, 67% hit, tiny N) — that's the product thesis holding.
+- **Focus gate showed no edge** (directionally worse, within noise).
+- **~10% of picks touched their stop within 5 sessions** (close-only ⇒ underestimate).
+- Nothing is statistically conclusive — ~8–13 independent date-trials in ONE regime.
+- Data-quality: **stooq unreachable** (anti-bot JS challenge) ⇒ no real OHLC ⇒ couldn't compute
+  the R-multiple expectancy the owner most wanted. `risk_*_pct` fields are fractions despite the
+  name (PWA-correct, but a footgun).
+
+**Durable deliverables (the lasting-impact part, since I rotate off):**
+- **`planning/picks-alpha-evaluation.md`** — full self-contained spec for `scripts/evaluate_picks.py`
+  (daily forward-return scoreboard: group returns vs SPY + vs cross-sectional median, per bucket,
+  last-write-wins with a settle column, `--report` roll-up + paired-date test) so the next
+  assessment is a `--report` call, not a hand analysis. Plus a "future eyes" standing playbook:
+  re-run at ~60/~100 sessions, the specific hypotheses to confirm/kill, the FMP-OHLC unlock for
+  R-multiples, and the `risk_*_pct` rename.
+- **SPRINT.md**: replaced the one-line `PICKS-4 (eval_picks.py)` placeholder with real referenced
+  tasks — PICKS-4 (group scoreboard, M), PICKS-4B (stock-level + R-multiple, blocked on FMP OHLC,
+  L), PICKS-4C (`risk_*_pct`→`_frac` rename, S). Added ~60/~100-session re-assessment rows to
+  Next Milestones.
+
+**Next steps:** merge PR #246. Highest-leverage follow-up is PICKS-4 (group scoreboard) — one
+focused session, no external deps. Then the FMP `/history` unlock (PICKS-4B) for the real
+expectancy analysis. Do NOT tune the selector on this data — N far too small.
