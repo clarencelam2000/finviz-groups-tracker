@@ -1,7 +1,11 @@
-# ADR-005: Curated-first ETF classification — manual overrides over automated aggregation
+# ADR-009: Curated-first ETF classification — manual overrides over automated aggregation
 
 **Date**: 2026-06-20
 **Status**: Accepted
+
+> **Renumbered 2026-07-10** — originally published as ADR-005, colliding with
+> `ADR-005-spy-relative-strength.md` (both dated 2026-06-20). Historical references to
+> "ADR-005 (ETF)" in SPRINT.md Done entries and session-note archives mean this document.
 
 ## Context
 

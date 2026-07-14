@@ -29,7 +29,7 @@ in `index.js` when `isEtf: true`. Response adds `classification_source` ("etf_ov
 (30d). Bust manually with `DELETE /cache?t=TICKER` for each seed ETF — see
 `worker/README.md` for the one-liner.
 
-**ADR:** `knowledge/decisions/ADR-005-etf-classification-curated-first.md`
+**ADR:** `knowledge/decisions/ADR-009-etf-classification-curated-first.md`
 
 ## Auto-deploy
 

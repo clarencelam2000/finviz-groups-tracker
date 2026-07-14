@@ -46,8 +46,9 @@ sessions of history exist, the delta is NaN. (The legacy calendar-based
 reference but is no longer on the main delta path.)
 
 To change windows, edit `LOOKBACK_WINDOWS`; every consumer derives its columns from
-`delta_config.delta_columns()`. The PWA still hardcodes the window literals (minimal
-renumber); making it read them from the CSV header is fast-follow LB-FF1.
+`delta_config.delta_columns()`. The PWA derives window buttons from the CSV header via
+`extractWindowsFromHeader()` (LB-FF1, done 2026-06-18, PR #110). Residual: two hardcoded
+`_20d` column literals remain in `docs/index.html` (~line 1741) — see SPRINT § LB-FF1-RESIDUAL.
 
 ## Momentum score formula
 ```python
