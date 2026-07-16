@@ -65,6 +65,15 @@ DELTAS_CSV = BASE_DIR / "data" / "industries" / "deltas.csv"
 # Top-40% floor means percentile rank >= (1 - ANTIFLASH_PCTILE).
 _PCTILE_CUTOFF = 1.0 - ANTIFLASH_PCTILE
 
+# Ticker-corruption guard (added after the 2026-07-15 incident where a Finviz
+# markup change made every scraped Ticker cell read as "<first-letter><real
+# ticker>", e.g. "HSBC" -> "HHSBC"). A real day's ticker list naturally has a
+# small rate of tickers whose first two letters coincide (AA, EE, MMM, ...);
+# measured baseline across 10 real trading days (2026-06-25 .. 2026-07-14) was
+# 1-4%. 25% gives wide headroom above that noise while still catching this
+# corruption class (which hits ~100% of rows) long before it reaches CSV.
+TICKER_DUP_RATE_MAX = 0.25
+
 
 def _f(val):
     """Format a value for CSV: NaN/None → '' (mirrors compute_deltas._fmt)."""
@@ -366,6 +375,18 @@ def build_run_rows(date_str, collected_at, ordered_groups, results, selections, 
     return all_new_rows, validated_groups, suspect_slugs
 
 
+def ticker_dup_rate(rows):
+    """Fraction of rows whose ticker's first two characters are identical.
+
+    Pure/testable signature-detector for the 2026-07-15 corruption class (see
+    TICKER_DUP_RATE_MAX above). Returns 0.0 for an empty list.
+    """
+    if not rows:
+        return 0.0
+    dup = sum(1 for r in rows if len(r.get("ticker", "")) >= 2 and r["ticker"][0] == r["ticker"][1])
+    return dup / len(rows)
+
+
 def _read_rows(csv_path):
     if not csv_path.exists():
         return []
@@ -618,6 +639,21 @@ def main():
             f"but got 0 rows total — likely a Cloudflare block or broken slugs. "
             f"NOT writing picks.csv (would wipe any existing {date_str} capture). "
             f"suspect slugs: {suspect_slugs}"
+        )
+        sys.exit(1)
+
+    # Ticker-corruption guard: catches a repeat of the 2026-07-15 incident (or
+    # any future Finviz markup change with the same signature) BEFORE writing
+    # — same "abort before write_picks" reasoning as the empty-scrape guard
+    # above, since write_picks evicts the date's existing rows first.
+    dup_rate = ticker_dup_rate(all_new_rows)
+    if dup_rate > TICKER_DUP_RATE_MAX:
+        sample = [r["ticker"] for r in all_new_rows[:10]]
+        print(
+            f"\nABORT: {dup_rate:.0%} of {len(all_new_rows)} scraped tickers have a "
+            f"duplicated leading character (max allowed {TICKER_DUP_RATE_MAX:.0%}) — "
+            f"likely a Finviz Ticker-cell markup change corrupting the parse. "
+            f"NOT writing picks.csv. sample: {sample}"
         )
         sys.exit(1)
 

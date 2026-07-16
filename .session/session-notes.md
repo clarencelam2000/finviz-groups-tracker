@@ -331,3 +331,43 @@ designed the framework, verified the one actionable bug, and wrote the durable a
 **Next steps:** merge PR #246. Highest-leverage follow-up is PICKS-4 (group scoreboard) — one
 focused session, no external deps. Then the FMP `/history` unlock (PICKS-4B) for the real
 expectancy analysis. Do NOT tune the selector on this data — N far too small.
+
+---
+
+## 2026-07-16 — Fix Focus/Picks ticker-duplication bug (prod)
+
+**Status: COMPLETE. Pushed to `claude/focus-ticker-duplication-mkxlnd`, PR to be opened.
+SAFE TO CLOSE once PR is up.**
+
+User reported every ticker on the PWA Focus tab showing its leading character duplicated
+(`C`→`CC`, `WFC`→`WWFC`, `HSBC`→`HHSBC`, etc.).
+
+**RCA** (full writeup: `knowledge/investigations/picks-ticker-duplication-2026-07-15.md`):
+confirmed the corruption was in `data/picks/picks.csv`/`picks_latest.csv` itself (not a display
+bug) and isolated to exactly `2026-07-15` — 100% of that date's 229 rows matched the
+duplicated-leading-character signature vs. a ~1-4% natural baseline across the prior 10 dates.
+No code changed around that date, so the cause is external: Finviz's screener Ticker `<td>`
+apparently added decorative markup (e.g. an avatar/logo-fallback letter) ahead of the real `<a>`
+ticker link, and `probe_picks._parse_table()` was extracting `cell.get_text(strip=True)` on the
+whole cell, swallowing both.
+
+**Fix landed:**
+- `scripts/probe_picks.py::_parse_table()` — Ticker column now reads from the cell's `<a>` tag
+  specifically, not the whole cell text (falls back to full-cell text if no anchor).
+  `collect_picks.py` imports this same function, so one fix covers both.
+- `scripts/collect_picks.py` — added `ticker_dup_rate()` + `TICKER_DUP_RATE_MAX = 0.25` guard in
+  `main()`, aborting (loud, no write) before `write_picks()` if too many tickers in a run show
+  the duplication signature — defense-in-depth against any future Finviz markup change with the
+  same symptom, independent of whether the anchor-text fix above fully covers it.
+- Repaired `data/picks/picks.csv` + `picks_latest.csv`: stripped the one duplicated leading
+  character from every `2026-07-15` ticker (verified inverse-correct against the 100% signature
+  match).
+- New regression tests: `tests/test_probe_picks.py` (avatar-markup fixture + anchor-fallback),
+  `tests/test_collect_picks.py::TestTickerDupRate`. Full suite green (554 passed, CI ignore list
+  unaffected — no new Playwright test files).
+- Documented the gotcha in `scripts/CLAUDE.md` § Picks pipeline per house rules.
+
+**Next steps:** open PR, verify CI green, merge. No further action needed after merge — next
+`collect_picks.yml` cron run will naturally validate the anchor-text fix against live Finviz on
+Azure IPs (can't verify live HTML from this cloud session; Cloudflare blocks it, see root
+CLAUDE.md § Playwright notes).

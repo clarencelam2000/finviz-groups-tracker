@@ -88,6 +88,17 @@ a two-way-door superset migration (`ensure_deltas_csv()` pattern).
   blocked run must be a loud no-op: CI goes red and `collect_picks.yml`'s `if:failure()` step
   uploads the debug HTML. Last-write-wins per date still applies to *non-empty* re-runs (the EOD
   run's picks win over an earlier intraday run's).
+- **Ticker-corruption guard (2026-07-15 incident):** Finviz's screener Ticker `<td>` can carry
+  extra decorative markup ahead of the real `<a>` ticker link (observed: a single-letter
+  avatar/logo placeholder) — `probe_picks._parse_table()` reads the Ticker column from the
+  cell's anchor text specifically (not `cell.get_text()` on the whole `<td>`) to avoid
+  swallowing it, which was silently turning `HSBC` into `HHSBC`, `C` into `CC`, etc. across
+  every scraped row. As defense-in-depth against a *different* future markup change with the
+  same symptom, `collect_picks.py` also runs `ticker_dup_rate()` against `TICKER_DUP_RATE_MAX
+  = 0.25` right before `write_picks()` and aborts (loud, no write) if too many tickers in a run
+  show a duplicated leading character — real baseline is ~1-4% (AA, EE, MMM, ...), so 25% only
+  trips on genuine corruption. Full RCA:
+  `knowledge/investigations/picks-ticker-duplication-2026-07-15.md`.
 
 ## AI capture constants (`scripts/generate_ai.py`)
 

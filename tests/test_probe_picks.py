@@ -238,6 +238,32 @@ TH_HEADER_HTML = """
 """
 
 
+# 2026-07-15 incident: Finviz's Ticker cell wrapped the real ticker link in
+# extra decorative markup (e.g. a single-letter avatar placeholder) whose text
+# node preceded the link. get_text(strip=True) on the whole cell concatenated
+# both, turning "HSBC" into "HHSBC". Model that shape here as a regression
+# fixture; the Company cell (no such wrapper) must stay unaffected.
+AVATAR_MARKUP_HTML = """
+<html><body>
+<table class="screener_table">
+<tr><th>Ticker</th><th>Company</th><th>Price</th></tr>
+<tr><td><span class="ticker-avatar">H</span><a href="/quote.ashx?t=HSBC">HSBC</a></td><td>HSBC Holdings</td><td>45.10</td></tr>
+<tr><td><span class="ticker-avatar">C</span><a href="/quote.ashx?t=C">C</a></td><td>Citigroup</td><td>81.20</td></tr>
+</table>
+</body></html>
+"""
+
+# Ticker cell with no anchor at all (defensive fallback path).
+NO_ANCHOR_HTML = """
+<html><body>
+<table class="screener_table">
+<tr><th>Ticker</th><th>Company</th><th>Price</th></tr>
+<tr><td>NVDA</td><td>NVIDIA</td><td>142.50</td></tr>
+</table>
+</body></html>
+"""
+
+
 class TestParseTable:
     def test_parses_header_and_rows(self):
         headers, rows = _parse_table(SAMPLE_HTML)
@@ -245,6 +271,17 @@ class TestParseTable:
         assert len(rows) == 2
         assert rows[0]["Ticker"] == "NVDA"
         assert rows[1]["Price"] == "165.20"
+
+    def test_ticker_cell_ignores_markup_ahead_of_anchor(self):
+        # Regression for the 2026-07-15 duplication incident.
+        headers, rows = _parse_table(AVATAR_MARKUP_HTML)
+        assert rows[0]["Ticker"] == "HSBC"
+        assert rows[0]["Company"] == "HSBC Holdings"
+        assert rows[1]["Ticker"] == "C"
+
+    def test_ticker_cell_falls_back_to_full_text_without_anchor(self):
+        headers, rows = _parse_table(NO_ANCHOR_HTML)
+        assert rows[0]["Ticker"] == "NVDA"
 
     def test_parses_th_header_row(self):
         # Regression: Finviz header cells are <th>; must still parse 84-style
