@@ -143,6 +143,20 @@ Each commit is one logical, self-contained change. A reader must understand what
 | `test:` | Tests only, no logic change |
 | `refactor:` | Code restructure, no behavior change |
 | `data:` | Auto-generated data commits (GitHub Actions only — don't replicate manually) |
+| `ops:` | Scheduler, workflow, secrets, or deploy changes (cron expressions, `deploy-workers.yml`, GitHub Actions config) |
+| `spike:` | Exploratory/throwaway work not meant to be the final shape — e.g. an abandoned draft, a probe to answer a question |
+| `process:` | Dev-workflow/rules changes — this file, PR template, CI ignore-list conventions, session-handoff process |
+
+**PR titles use the same prefix table as commits** — one convention, not two. Look at
+`git log --oneline` before naming a PR if unsure which prefix fits; drift between commit
+prefixes and PR titles has happened before (some merged PRs shipped with no prefix at all).
+
+If a PR is part of a named phase (e.g. "Phase 3d", "Phase B") from a planning doc, append it
+as a parenthetical suffix, not a competing prefix — it shouldn't fight `feat:`/`fix:` for the
+first-token slot: `feat: Focus liquidity floor + earnings-risk penalty (Phase 3d)`.
+
+Standalone strategy/direction docs (no code shipping) belong in `planning/` or
+`knowledge/decisions/` as an ADR, not a tagged PR — a PR tag implies something shipped as code.
 
 **Imperative mood** — write the summary as a command, not a description:
 - `add rank_day metric to delta schema` ✓
