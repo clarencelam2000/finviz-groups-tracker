@@ -1,6 +1,17 @@
 {
-  "current": "2026.07.04.2",
+  "current": "2026.07.16",
   "releases": [
+    {
+      "version": "2026.07.16",
+      "date": "2026-07-16",
+      "title": "Focus score: less weight on group strength, more on quiet setup",
+      "tag": "improvement",
+      "tab": "picks",
+      "notes": [
+        "Rebalanced the Focus score formula: group/leader strength now counts for 20% (was 40%), with the freed weight moved to the quiet-bar component (now 40%, was 20%). Stop-tightness stays at 40%.",
+        "This shifts Focus rankings to favor name-specific setup quality over how strong the overall group is — no change to the underlying data or gates, just the scoring mix."
+      ]
+    },
     {
       "version": "2026.07.04.2",
       "date": "2026-07-04",

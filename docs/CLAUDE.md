@@ -30,9 +30,9 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start; flags a held position as a trim-10% candidate. |
 | `ATR_EXT_PENALTY_START` | `2.5` | Focus-score extension penalty ramp start; 0 penalty below this, ramps to `PENALTY_MAX` at `ATR_EXT_ACTIONABLE`. |
 | `PENALTY_MAX` | `0.5` | Max Focus extension-discount fraction (50% haircut at 4×). `score = base × (1 − penalty_fraction)`, always ∈ [0, 1]. |
-| `FOCUS_W_GROUP` | `0.4` | Focus score weight for group sustained-strength component (`grp_sum_mid_rank`). |
+| `FOCUS_W_GROUP` | `0.2` | Focus score weight for group sustained-strength component (`grp_sum_mid_rank`). Lowered from `0.4` on 2026-07-16 (`display_methodology.json` v3); freed weight moved to `FOCUS_W_QUIET`. |
 | `FOCUS_W_TIGHT` | `0.4` | Focus score weight for nearest-MA stop tightness component. |
-| `FOCUS_W_QUIET` | `0.2` | Focus score weight for quiet-bar component (`range_atr`). |
+| `FOCUS_W_QUIET` | `0.4` | Focus score weight for quiet-bar component (`range_atr`). Raised from `0.2` on 2026-07-16 (`display_methodology.json` v3). |
 | `FOCUS_MIN_POOL` | `5` | Min Focus candidates before falling back from min–max to rank-based normalization. |
 | `BUTTON_V` | `'311'` | Lookup deep-link button: Finviz screener view number (tight Stage-2 layout). Mirror of `data/picks/screener_config.json` `button.v`. Anti-drift guard in `tests/test_picks_button_config.py`. |
 | `BUTTON_BASE_FILTERS` | `['cap_midover','ta_sma20_sa50','ta_sma50_pa']` | Lookup deep-link button: base Finviz filters prepended before `ind_<slug>` / `sec_<slug>` token. Mirror of `screener_config.json` `button.base_filters`. |
