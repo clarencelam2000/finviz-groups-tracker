@@ -511,9 +511,11 @@
     const ATR_EXT_PENALTY_START = 2.5;  // penalty starts here; no discount below this extension
     const PENALTY_MAX           = 0.5;  // max multiplicative discount (50% haircut at 4× extension)
     // Focus component weights — must sum to 1. Group strength, nearest-MA stop tightness, quiet bar.
-    const FOCUS_W_GROUP = 0.4;
+    // Lowered FOCUS_W_GROUP 0.4->0.2 (2026-07-16): group/leader strength was overweighted relative
+    // to name-specific setup quality; freed weight moved entirely to FOCUS_W_QUIET (0.2->0.4).
+    const FOCUS_W_GROUP = 0.2;
     const FOCUS_W_TIGHT = 0.4;
-    const FOCUS_W_QUIET = 0.2;
+    const FOCUS_W_QUIET = 0.4;
     // Min Focus pool for min–max normalization; smaller pools fall back to rank-based percentile.
     const FOCUS_MIN_POOL = 5;
 

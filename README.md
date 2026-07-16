@@ -318,9 +318,9 @@ These constants control when visual indicators appear or change state. All are n
 | `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start (≥8× = trim-10% candidate for held positions). Amber band is 4–8×. |
 | `ATR_EXT_PENALTY_START` | `2.5` | ATR-extension at which the Focus-score extension penalty begins ramping. Zero penalty below this; full `PENALTY_MAX` at `ATR_EXT_ACTIONABLE` (4×). |
 | `PENALTY_MAX` | `0.5` | Maximum Focus-score extension discount fraction (50% haircut at 5×). `score = base × (1 − penalty_fraction)`, always ∈ [0, 1]. |
-| `FOCUS_W_GROUP` | `0.4` | Focus score weight for the sustained group-strength component (`grp_sum_mid_rank` inverted min-max). |
+| `FOCUS_W_GROUP` | `0.2` | Focus score weight for the sustained group-strength component (`grp_sum_mid_rank` inverted min-max). Lowered from `0.4` on 2026-07-16. |
 | `FOCUS_W_TIGHT` | `0.4` | Focus score weight for the nearest-MA stop tightness component (`min(risk_20ma_pct, risk_50ma_pct)` where both > 0, inverted min-max). |
-| `FOCUS_W_QUIET` | `0.2` | Focus score weight for the quiet-bar component (`range_atr`, inverted min-max — lower range = quieter = better). |
+| `FOCUS_W_QUIET` | `0.4` | Focus score weight for the quiet-bar component (`range_atr`, inverted min-max — lower range = quieter = better). Raised from `0.2` on 2026-07-16. |
 | `FOCUS_MIN_POOL` | `5` | Minimum Focus candidates before switching from min-max to rank-based normalization (avoids degenerate single-point scaling). |
 | `BUTTON_V` | `'311'` | Finviz screener view number used by the Lookup deep-link button (tight Stage-2 layout). Must stay in sync with `data/picks/screener_config.json` `button.v`. |
 | `BUTTON_BASE_FILTERS` | `['cap_midover','ta_sma20_sa50','ta_sma50_pa']` | Base Finviz screener filters prepended before the `ind_<slug>` / `sec_<slug>` token. Must stay in sync with `data/picks/screener_config.json` `button.base_filters`. |

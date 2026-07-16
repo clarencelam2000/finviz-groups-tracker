@@ -55,9 +55,13 @@ class TestDisplayMethodologyStructure:
         dates = [v["effective_date"] for v in self.meth["versions"]]
         assert dates == sorted(dates, reverse=True)
 
-    def test_current_is_v2_effective_2026_07_01(self):
-        assert self.meth["versions"][0]["version"] == "v2"
-        assert self.meth["versions"][0]["effective_date"] == "2026-07-01"
+    def test_current_is_v3_effective_2026_07_16(self):
+        assert self.meth["versions"][0]["version"] == "v3"
+        assert self.meth["versions"][0]["effective_date"] == "2026-07-16"
+
+    def test_v2_still_present_with_original_effective_date(self):
+        v2 = next(v for v in self.meth["versions"] if v["version"] == "v2")
+        assert v2["effective_date"] == "2026-07-01"
 
     def test_v1_still_present_with_original_effective_date(self):
         v1 = next(v for v in self.meth["versions"] if v["version"] == "v1")
