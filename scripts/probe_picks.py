@@ -122,9 +122,25 @@ def _parse_table(html: str) -> tuple[list[str], list[dict]]:
 
     data_rows = []
     for tr in rows[1:]:
-        cells = [c.get_text(strip=True) for c in tr.find_all(["th", "td"])]
-        if len(cells) == len(headers):
-            data_rows.append(dict(zip(headers, cells)))
+        cell_tags = tr.find_all(["th", "td"])
+        if len(cell_tags) != len(headers):
+            continue
+        cells = []
+        for label, tag in zip(headers, cell_tags):
+            if label == "Ticker":
+                # 2026-07-15 incident: Finviz's Ticker cell can carry extra
+                # decorative markup ahead of the real ticker link (e.g. a
+                # single-letter avatar placeholder) — c.get_text(strip=True)
+                # on the whole cell silently concatenates it onto the ticker
+                # ("C" + "C" -> "CC" for Citigroup, "H" + "HSBC" -> "HHSBC").
+                # The <a> is always the real ticker link, so read from it
+                # directly instead of the whole cell. See
+                # knowledge/investigations/picks-ticker-duplication-2026-07-15.md.
+                anchor = tag.find("a")
+                cells.append(anchor.get_text(strip=True) if anchor else tag.get_text(strip=True))
+            else:
+                cells.append(tag.get_text(strip=True))
+        data_rows.append(dict(zip(headers, cells)))
 
     return headers, data_rows
 

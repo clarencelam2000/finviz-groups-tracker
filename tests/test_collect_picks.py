@@ -35,6 +35,8 @@ from collect_picks import (
     write_picks,
     flip_validated,
     ensure_picks_csv,
+    ticker_dup_rate,
+    TICKER_DUP_RATE_MAX,
     _PCTILE_CUTOFF,
 )
 from picks_config import (
@@ -389,6 +391,35 @@ class TestBuildRunRows:
         write_picks(picks, latest, [], "2026-06-24", cols)
         assert list(csv.DictReader(open(picks))) == []
         assert list(csv.DictReader(open(latest))) == []
+
+
+# ---------------------------------------------------------------------------
+# ticker_dup_rate — corruption-signature guard (2026-07-15 incident)
+# ---------------------------------------------------------------------------
+
+class TestTickerDupRate:
+    def test_empty_rows_is_zero(self):
+        assert ticker_dup_rate([]) == 0.0
+
+    def test_normal_run_stays_under_threshold(self):
+        # One legitimately doubled-first-letter ticker (AA) among 19 clean
+        # ones (~5%) — matches the observed 1-4% real baseline, comfortably
+        # under the guard threshold.
+        clean = ["MSFT", "NVDA", "AMD", "TSLA", "DINO", "VLO", "PSX", "SUN",
+                 "JPM", "WFC", "SAN", "CM", "HSBC", "BBVA", "ING", "KEX",
+                 "MATX", "AFN", "ZIM", "COO"]
+        rows = [{"ticker": t} for t in ["AA"] + clean]
+        assert ticker_dup_rate(rows) < TICKER_DUP_RATE_MAX
+
+    def test_corrupted_run_trips_threshold(self):
+        # Every ticker prefixed with its own first letter — the exact
+        # 2026-07-15 signature ("HSBC" -> "HHSBC", "C" -> "CC").
+        rows = [{"ticker": t} for t in ["HHSBC", "CC", "WWFC", "SSAN", "IING"]]
+        assert ticker_dup_rate(rows) == 1.0
+        assert ticker_dup_rate(rows) > TICKER_DUP_RATE_MAX
+
+    def test_short_ticker_not_misflagged(self):
+        assert ticker_dup_rate([{"ticker": "E"}]) == 0.0
 
 
 # ---------------------------------------------------------------------------
