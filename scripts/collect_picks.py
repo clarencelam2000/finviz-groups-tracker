@@ -74,6 +74,22 @@ _PCTILE_CUTOFF = 1.0 - ANTIFLASH_PCTILE
 # corruption class (which hits ~100% of rows) long before it reaches CSV.
 TICKER_DUP_RATE_MAX = 0.25
 
+# Header-drift guard (PICKS-2-HDR). build_pick_rows maps scraped cells by the
+# config's 84 header labels (stock.get(col, "")) — if Finviz renames a label so
+# it no longer matches screener_config.json, every affected column writes BLANK
+# silently onto the irreplaceable capture. Policy is tiered, because aborting
+# the whole day over one renamed column would trade bounded column loss for
+# total loss of that day's list:
+#   - "Ticker" missing, or > HEADER_MISSING_ABORT_FRAC of expected labels
+#     missing → the parse itself is untrustworthy → abort BEFORE write (exit 1,
+#     CI red, debug HTML uploads).
+#   - any smaller drift → WRITE the partial capture (most columns intact),
+#     print the missing labels loudly, then exit 1 AFTER the write so CI still
+#     goes red and a human fixes screener_config.json before the next run.
+# 0.10 of 84 labels ≈ 8 columns: enough headroom that a cosmetic single-label
+# rename never nukes a day, low enough that a structural table change does.
+HEADER_MISSING_ABORT_FRAC = 0.10
+
 
 def _f(val):
     """Format a value for CSV: NaN/None → '' (mirrors compute_deltas._fmt)."""
@@ -375,6 +391,42 @@ def build_run_rows(date_str, collected_at, ordered_groups, results, selections, 
     return all_new_rows, validated_groups, suspect_slugs
 
 
+def missing_header_labels(results, expected_cols):
+    """Union of expected Finviz labels absent from every scraped group header.
+
+    results: {group: (header, rows)} from scrape_selected_groups. Only groups
+    that returned rows are considered (an empty header just means a wrong slug /
+    empty table, which the suspect-slug path already surfaces). A label counts
+    as missing only if NO group's header contains it — all groups share one
+    &c= column list, so a label present anywhere proves the config still maps.
+    Returns a sorted list; [] when nothing usable was scraped.
+    """
+    seen = set()
+    any_rows = False
+    for _g, (header, rows) in results.items():
+        if rows:
+            any_rows = True
+            seen.update(header)
+    if not any_rows:
+        return []
+    return sorted(set(expected_cols) - seen)
+
+
+def header_check_action(missing, expected_n):
+    """Tiered policy for header drift: 'ok' | 'warn' | 'abort' (pure).
+
+    'abort': Ticker missing (rows would be unkeyed) or more than
+    HEADER_MISSING_ABORT_FRAC of the expected labels missing — the parse is
+    untrustworthy, do not write. 'warn': some labels missing but the capture is
+    mostly intact — write it, but exit non-zero after so CI goes red.
+    """
+    if not missing:
+        return "ok"
+    if "Ticker" in missing or len(missing) > HEADER_MISSING_ABORT_FRAC * expected_n:
+        return "abort"
+    return "warn"
+
+
 def ticker_dup_rate(rows):
     """Fraction of rows whose ticker's first two characters are identical.
 
@@ -642,6 +694,20 @@ def main():
         )
         sys.exit(1)
 
+    # Header-drift guard (PICKS-2-HDR): see missing_header_labels /
+    # header_check_action + the HEADER_MISSING_ABORT_FRAC comment for the
+    # tiered policy (abort pre-write vs write-then-fail-loud).
+    missing = missing_header_labels(results, finviz_cols)
+    header_action = header_check_action(missing, len(finviz_cols))
+    if header_action == "abort":
+        print(
+            f"\nABORT: scraped header is missing {len(missing)}/{len(finviz_cols)} expected "
+            f"Finviz labels — screener_config.json no longer matches the live screener "
+            f"table; the parse is untrustworthy. NOT writing picks.csv. "
+            f"missing: {missing}"
+        )
+        sys.exit(1)
+
     # Ticker-corruption guard: catches a repeat of the 2026-07-15 incident (or
     # any future Finviz markup change with the same signature) BEFORE writing
     # — same "abort before write_picks" reasoning as the empty-scrape guard
@@ -670,6 +736,19 @@ def main():
         print(f"  WARNING suspect slugs (0 rows): {suspect_slugs}")
     if skipped:
         print(f"  groups skipped (global cap hit): {skipped}")
+
+    # Header-drift 'warn' tier: the capture above was written (bounded column
+    # loss beats losing the whole day), but exit non-zero so CI goes red, the
+    # debug-HTML artifact uploads, and the success-only healthcheck ping is
+    # skipped — a human must reconcile screener_config.json with the live table.
+    if header_action == "warn":
+        print(
+            f"\nFAIL (after write): scraped header is missing {len(missing)} expected "
+            f"Finviz label(s): {missing} — those columns were written BLANK for "
+            f"{date_str}. Update data/picks/screener_config.json to match the live "
+            f"screener header."
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":

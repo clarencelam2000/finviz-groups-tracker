@@ -289,6 +289,7 @@ prepending an entry to `data/picks/selector_versions.json` (enforced by tests â€
 | `PAGE_CAP` | `2` | Per-group hard page cap (40 names). Lowered from 15 after historical data showed only Biotechnology (a structurally oversized Finviz industry, ~100 names/day) ever exceeded 40 names. Screener sorts `-marketcap` desc, so the cap keeps the biggest/most-liquid names in an oversized group. |
 | `GLOBAL_FETCH_CAP` | `50` | **Hard global daily page cap (VP-set).** Job scrapes in priority order (leaders first) and stops at 50 pages. Revisit after live data. |
 | `PAGE_DELAY_S` | `3` | Polite inter-fetch delay (s). `PICKS_PAGE_DELAY=0` to skip during debugging. |
+| `HEADER_MISSING_ABORT_FRAC` | `0.10` | Header-drift guard (`collect_picks.py`): if `Ticker` is missing from the scraped screener header, or more than this fraction of the config's 84 labels are missing, the run aborts **before** writing (parse untrustworthy). A smaller drift still writes the partial capture (affected columns blank) but exits 1 **after** the write so CI goes red and `screener_config.json` gets fixed before the next run. |
 
 > **Behavior note (not a constant) â€” empty-scrape guard:** if **no** selected group returns any
 > rows (the signature of a Cloudflare block: HTTP 200 with an empty table), `collect_picks.py`

@@ -69,8 +69,12 @@ head-to-head Phase-4 comparison. Renaming/removing one is one-way once data flow
 a two-way-door superset migration (`ensure_deltas_csv()` pattern).
 
 **Workflow & guards:**
-- `.github/workflows/collect_picks.yml` — separate workflow, own EOD cron (`8 20 * * 1-5`, ~20 min
-  after `collect.yml`). `workflow_dispatch` for manual runs.
+- `.github/workflows/collect_picks.yml` — separate workflow, `workflow_dispatch`-only (PICKS-2-CRON,
+  2026-07-19): fired by the Cloudflare `finviz-cron-dispatcher` at `31 22 * * 2-6` UTC (6:31 PM EDT,
+  90 min after the EOD `collect.yml` dispatch so deltas are pushed first). **No GitHub `schedule:`
+  backstop by design** — this scrape costs up to 50 pages and a drift-early fire loses the day's
+  list to the stale-read guard; the alert path is the healthchecks.io dead-man's-switch pinged on
+  success (`PICKS_HEALTHCHECK_URL` secret; skipped silently if unset).
 - **Shared concurrency guard (G1):** both `collect_picks.yml` AND `collect.yml` declare
   `concurrency: { group: finviz-data-commit, cancel-in-progress: false }` — a group only serializes
   workflows sharing the name, so **both files must have it.** Rebase-before-push.
@@ -100,6 +104,14 @@ a two-way-door superset migration (`ensure_deltas_csv()` pattern).
   show a duplicated leading character — real baseline is ~1-4% (AA, EE, MMM, ...), so 25% only
   trips on genuine corruption. Full RCA:
   `knowledge/investigations/picks-ticker-duplication-2026-07-15.md`.
+- **Header-drift guard (PICKS-2-HDR, 2026-07-19):** `build_pick_rows` maps scraped cells by the
+  config's 84 header labels — a Finviz label rename would write the affected columns **blank
+  silently**. `missing_header_labels()` (union across all scraped group headers) +
+  `header_check_action()` apply a tiered policy: `Ticker` missing or > `HEADER_MISSING_ABORT_FRAC`
+  (0.10, ≈8 labels) missing → **abort before write** (parse untrustworthy); any smaller drift →
+  **write the partial capture, then exit 1 after the write** — bounded column loss beats losing the
+  whole irreplaceable day, but CI still goes red, the debug HTML uploads, and the healthcheck ping
+  is skipped so the drift is fixed in `screener_config.json` before the next run.
 
 ## AI capture constants (`scripts/generate_ai.py`)
 

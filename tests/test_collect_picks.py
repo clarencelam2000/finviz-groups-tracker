@@ -36,7 +36,10 @@ from collect_picks import (
     flip_validated,
     ensure_picks_csv,
     ticker_dup_rate,
+    missing_header_labels,
+    header_check_action,
     TICKER_DUP_RATE_MAX,
+    HEADER_MISSING_ABORT_FRAC,
     _PCTILE_CUTOFF,
 )
 from picks_config import (
@@ -623,3 +626,58 @@ class TestEnsurePicksCsvCollectedAt:
         mtime_before = csv_path.stat().st_mtime
         ensure_picks_csv(csv_path)
         assert csv_path.stat().st_mtime == mtime_before
+
+
+class TestHeaderDriftGuard:
+    """PICKS-2-HDR: missing_header_labels + header_check_action tiered policy."""
+
+    EXPECTED = ["Ticker", "Company", "Price", "Change", "Volume"]
+
+    def test_no_drift_returns_empty_and_ok(self):
+        results = {"G": (self.EXPECTED, [{"Ticker": "AAPL"}])}
+        missing = missing_header_labels(results, self.EXPECTED)
+        assert missing == []
+        assert header_check_action(missing, len(self.EXPECTED)) == "ok"
+
+    def test_renamed_label_detected_as_missing(self):
+        drifted = ["Ticker", "Company Name", "Price", "Change", "Volume"]
+        results = {"G": (drifted, [{"Ticker": "AAPL"}])}
+        assert missing_header_labels(results, self.EXPECTED) == ["Company"]
+
+    def test_label_present_in_any_group_not_missing(self):
+        # All groups share one &c= list — one group proving a label maps clears it.
+        results = {
+            "A": (["Ticker", "Company", "Price", "Change"], [{"Ticker": "X"}]),
+            "B": (["Ticker", "Company", "Price", "Volume"], [{"Ticker": "Y"}]),
+        }
+        assert missing_header_labels(results, self.EXPECTED) == []
+
+    def test_empty_header_groups_ignored(self):
+        # A wrong slug (header == [], 0 rows) is the suspect-slug path, not drift.
+        results = {
+            "good": (self.EXPECTED, [{"Ticker": "AAPL"}]),
+            "bad": ([], []),
+        }
+        assert missing_header_labels(results, self.EXPECTED) == []
+
+    def test_all_empty_scrape_returns_no_missing(self):
+        # Nothing usable scraped → empty-scrape guard's job, not this guard's.
+        assert missing_header_labels({"G": ([], [])}, self.EXPECTED) == []
+        assert missing_header_labels({}, self.EXPECTED) == []
+
+    def test_missing_ticker_aborts(self):
+        assert header_check_action(["Ticker"], 84) == "abort"
+
+    def test_small_drift_warns(self):
+        # 1 missing of 84 is well under HEADER_MISSING_ABORT_FRAC → warn tier.
+        assert 1 <= HEADER_MISSING_ABORT_FRAC * 84
+        assert header_check_action(["P/E"], 84) == "warn"
+
+    def test_large_drift_aborts(self):
+        missing = [f"col{i}" for i in range(int(HEADER_MISSING_ABORT_FRAC * 84) + 1)]
+        assert header_check_action(missing, 84) == "abort"
+
+    def test_threshold_boundary_is_warn(self):
+        # Exactly at the fraction (not above) stays in the warn tier.
+        at_threshold = [f"col{i}" for i in range(int(HEADER_MISSING_ABORT_FRAC * 100))]
+        assert header_check_action(at_threshold, 100) == "warn"
