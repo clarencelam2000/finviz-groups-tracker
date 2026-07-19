@@ -146,7 +146,16 @@ tests + add `worker-cron-test:` job to `.github/workflows/tests.yml` (mirrors th
 
 ---
 
-## Phase 5 — Extend dispatcher for `collect_picks.yml` (PICKS-2-CRON) ⏳ PLANNED
+## Phase 5 — Extend dispatcher for `collect_picks.yml` (PICKS-2-CRON) ✅ SHIPPED 2026-07-19
+
+> **Shipped as planned, with one correction:** the cron expressions below are written `* * 1-5`,
+> but Cloudflare cron uses 1=Sunday..0=Saturday — the deployed expressions use `2-6`
+> (Monday–Friday), matching the existing entries in `worker-cron/wrangler.toml`. The deployed
+> picks entry is `31 22 * * 2-6`, and `PICKS_CRON` in `src/index.js` matches it byte-for-byte.
+> Also implemented: `/last` additionally surfaces the pre-migration `last_dispatch` KV record
+> under a `legacy` key. Deploys via `deploy-workers.yml` on merge; the VP action item
+> (healthchecks.io check + `PICKS_HEALTHCHECK_URL` secret) is still required for the
+> dead-man's-switch to be live — the ping step skips silently until the secret exists.
 
 ### Context
 
