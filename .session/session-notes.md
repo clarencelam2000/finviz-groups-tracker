@@ -371,3 +371,38 @@ whole cell, swallowing both.
 `collect_picks.yml` cron run will naturally validate the anchor-text fix against live Finviz on
 Azure IPs (can't verify live HTML from this cloud session; Cloudflare blocks it, see root
 CLAUDE.md § Playwright notes).
+
+---
+
+## 2026-07-19 — PICKS-4: picks alpha scoreboard built + wired (the measurement instrument)
+
+**Status: COMPLETE. PR open on `claude/picks-alpha-measurement-3fldvj`. SAFE TO CLOSE.**
+
+Staff review of the PICKS-4 spec (`planning/picks-alpha-evaluation.md`) concluded it IS the
+right thing to build — the ~60-session re-assessment (Sept) is impossible without it — but
+shipped it with three deliberate amendments:
+1. **`data/picks/eval/group_scores.csv` is derived, fully rebuilt each run** — not the spec'd
+   append-only/last-write-wins design. Same output, partial-horizon rows self-correct for
+   free, kills that bug class. Filter `n_sessions_avail == horizon` for settled rows.
+2. **Added the non-selected control columns** (`n_nonsel`, `fwd_ret_nonsel_mean`,
+   `excess_nonsel`) — the spec's own headline paired per-date test was not computable from
+   its spec'd schema. Also stores `selector_version` per row (Part-3.3 discontinuity label).
+3. **NOT a third data writer.** Wired as a step in `collect.yml` right after
+   `compute_deltas.py` (rides `finviz-data-commit` + existing commit step) instead of the
+   spec's "separate workflow joining the concurrency group." Also added the AUD-4
+   `git pull --rebase` to collect.yml's push while touching it.
+Deliberately did NOT build `ticker_scores.csv` — survivorship-biased until real OHLC
+(PICKS-4B/FMP unlock remains the next big item).
+
+Landed: `scripts/evaluate_picks.py` (+15 tests in `tests/test_evaluate_picks.py`, full suite
+566 green), collect.yml wiring, first real build committed, triple-docs (README § Configurable
+parameters, root + scripts CLAUDE.md, SPRINT PICKS-4 → done).
+
+**First `--report` read (15 dates, still NOT powered — the report says so itself):** the
+07-14 assessment's pattern holds and sharpens with horizon: `leaders` −6.30% vs SPY at h=10
+(18% hit); `rs_new_high` +2.48% vs median at h=10 (76% hit), monotonically improving with h;
+paired per-date h=10: 1/6 dates positive. Rotation-edge / leaders-drag hypothesis intact.
+Do not tune the selector before ~40 dates (~mid-Sept); then it's just `--report`.
+
+**Next steps:** PICKS-4B (FMP OHLC → stock-level scoreboard + R-multiple expectancy),
+PICKS-4C (`risk_*_pct` rename). Both unchanged in SPRINT backlog.

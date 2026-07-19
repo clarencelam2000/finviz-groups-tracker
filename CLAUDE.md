@@ -40,6 +40,7 @@ python scripts/export_db.py
 | `scripts/generate_ai.py` | Gemini AI analysis from latest deltas; writes `data/ai/YYYY-MM-DD.json`. Auth: Vertex express key (GOOGLE_API_KEY) > Vertex ADC > AI Studio (GEMINI_API_KEY). Supports `--preview` (no API), `--capture` (Tier-2 debug). | ~1300 |
 | `scripts/export_db.py` | Exports CSVs → SQLite (`finviz_groups.db`) + Parquet in `./exports/` (not committed) | ~150 |
 | `scripts/backfill.py` | Shows current date coverage; prints manual backfill instructions. Accepts `--status` | ~50 |
+| `scripts/evaluate_picks.py` | Picks alpha scoreboard: rebuilds `data/picks/eval/group_scores.csv` (forward group returns vs SPY + cross-sectional median + non-selected control, per bucket, horizons 1/3/5/10 sessions). `--report` prints the alpha roll-up with a sample-size guard. Derived artifact — fully rebuilt each run, not append-only. Runs in `collect.yml` after `compute_deltas.py`. | ~150 |
 | `scripts/seed_taxonomy.py` | Seeds `data/finviz_sector_industry_map.{json,csv}` by parsing fasiha/finviz-git-scraper's `map-sec_all.json` (plain HTTP — no Playwright, no Cloudflare). Run once; re-run only after Finviz restructures taxonomy. Validates against snapshot CSVs automatically. | ~80 |
 | `dashboard/app.py` | Streamlit dashboard: Snapshot, Top Movers, Time Series, Momentum tabs | ~100 |
 
@@ -64,6 +65,7 @@ data/
   picks/
     display_methodology.json  # versioned display/scoring constants for Picks (All/Focus); see § Picks pipeline
     ariel_match_config.json   # documentation-only Ariel-match constants; no anti-drift guard (see § Picks pipeline)
+    eval/group_scores.csv     # DERIVED (rebuilt daily, not append-only): picks alpha scoreboard; see scripts/evaluate_picks.py
 ```
 
 ### finviz_sector_industry_map files

@@ -297,6 +297,19 @@ prepending an entry to `data/picks/selector_versions.json` (enforced by tests â€
 > is a loud no-op (CI red + debug-HTML artifact uploaded), not a destructive overwrite. Non-empty
 > re-runs still follow last-write-wins per date.
 
+### Picks alpha scoreboard (`scripts/evaluate_picks.py`)
+
+| Parameter | Default | What it controls |
+|-----------|---------|-----------------|
+| `HORIZONS` | `[1, 3, 5, 10]` | Forward horizons in **trading sessions** for the group scoreboard (`data/picks/eval/group_scores.csv`). Adding one is safe (the file is fully rebuilt each run); removing one drops its rows on the next rebuild. |
+| `MIN_POWERED_DATES` | `40` | Distinct settled pick dates below which `--report` prints the "NOT YET POWERED" caveat. Dates (not rows) are the effective N â€” forward windows overlap heavily. Don't tune the selector below this. |
+
+> `group_scores.csv` is a **derived artifact, fully rebuilt on every run** (not append-only):
+> partial-horizon rows (`n_sessions_avail < horizon`) self-correct as new sessions arrive.
+> Filter to `n_sessions_avail == horizon` for the settled scoreboard. Rebuilt daily by
+> `collect.yml` right after `compute_deltas.py`. `python scripts/evaluate_picks.py --report`
+> prints the alpha roll-up (per-bucket stats + paired per-date selected-vs-non-selected test).
+
 ### PWA display thresholds (`docs/index.html`)
 
 These constants control when visual indicators appear or change state. All are near the top of the `<script>` block.
