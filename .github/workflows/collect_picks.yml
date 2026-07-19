@@ -3,16 +3,16 @@ name: Daily Picks Scrape
 # Selects leading groups from data/industries/deltas.csv and logs individual stock
 # rows into data/picks/picks.csv. Runs on Azure IPs (GitHub Actions) — Cloudflare
 # blocks the headless screener scrape from Google Cloud IPs.
+# PICKS-2-CRON: scheduled ONLY via the Cloudflare `finviz-cron-dispatcher`
+# Worker (worker-cron/), which POSTs a workflow_dispatch at 22:31 UTC (6:31 PM
+# EDT) — 90 min after the EOD collect.yml dispatch, so deltas.csv is pushed
+# before picks select groups. There is deliberately NO GitHub `schedule:`
+# backstop here (unlike collect.yml): this scrape costs up to 50 screener
+# pages, GitHub cron drifts hours, and a drifted early fire trips the
+# stale-read guard — a safe no-op, but then that day's unrecoverable picks
+# list is lost until someone notices. Failure detection is the
+# healthchecks.io dead-man's-switch pinged below instead.
 on:
-  schedule:
-    # Fires AFTER the Daily Snapshot job (collect.yml runs at :48; deltas must be
-    # current before picks select groups). The stale-read guard in collect_picks.py
-    # aborts if deltas.csv's max date != today's trading date, so a too-early run is
-    # a safe no-op rather than a wrong-day scrape. Weekday-only.
-    #
-    # Like collect.yml, GitHub cron drifts and is unreliable; this is a backstop —
-    # promote to a Cloudflare-cron workflow_dispatch trigger if timing matters.
-    - cron: '8 20 * * 1-5'   # ~4:08 PM ET summer — ~20 min after the EOD snapshot
   workflow_dispatch:
 permissions:
   contents: write
@@ -59,3 +59,14 @@ jobs:
           git diff --cached --quiet || git commit -m "data: picks $(TZ=America/New_York date +%Y-%m-%d)"
           git pull --rebase
           git push
+      - name: Ping healthcheck
+        if: steps.picks.outcome == 'success'
+        env:
+          PICKS_HEALTHCHECK_URL: ${{ secrets.PICKS_HEALTHCHECK_URL }}
+        run: |
+          # Dead-man's-switch: with no GitHub cron backstop, a silently-failing
+          # Cloudflare dispatch would otherwise go unnoticed until the picks
+          # list is already lost. Silently skip if the secret isn't configured.
+          # Setup: healthchecks.io → New Check → period 24h, grace 2h → copy URL
+          # → repo Settings → Secrets → PICKS_HEALTHCHECK_URL
+          [ -z "$PICKS_HEALTHCHECK_URL" ] || curl -fsS --retry 3 "$PICKS_HEALTHCHECK_URL" > /dev/null

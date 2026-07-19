@@ -406,3 +406,46 @@ Do not tune the selector before ~40 dates (~mid-Sept); then it's just `--report`
 
 **Next steps:** PICKS-4B (FMP OHLC → stock-level scoreboard + R-multiple expectancy),
 PICKS-4C (`risk_*_pct` rename). Both unchanged in SPRINT backlog.
+
+---
+
+## 2026-07-19 — Harden data collection: AUD-4 + PICKS-2-CRON + PICKS-2-HDR
+
+**Status: COMPLETE. PR open on `claude/harden-data-collection-5ac09d`. SAFE TO CLOSE once merged.**
+
+Three failure modes in the append-only capture pipeline, settled under one design decision:
+**every workflow that writes `data/` serializes on the single `finviz-data-commit` concurrency
+group, and every guard on the irreplaceable picks capture fails loud (red CI) without trading a
+partial capture for no capture.**
+
+**1. AUD-4 (done — half had already landed).** PR #250 already added `git pull --rebase` to
+collect.yml's push. This session moved generate_ai.yml from its own `generate-ai` group into
+`finviz-data-commit`. Known trade-off (documented in the workflow comment): GitHub keeps only the
+newest *pending* run per group, so an AI run superseded while queued gets dropped — recoverable
+via workflow_dispatch force_ai, unlike a raced data commit.
+
+**2. PICKS-2-CRON (done per the Phase 5 plan).** worker-cron: 4th cron `31 22 * * 2-6` (6:31 PM
+EDT, EOD +90 min); `dispatchCollect` → `dispatchWorkflow(env, cron, workflow)` with routing by
+exact `event.cron` string (`workflowForCron`); per-workflow KV keys; `/last` → `{collect, picks,
+legacy}`. **Correction to the plan:** it wrote `1-5` day-of-week, but Cloudflare cron is
+1=Sunday — deployed as `2-6` matching the existing entries. collect_picks.yml: GitHub `schedule:`
+removed (deliberate — no backstop; 50-page scrape too expensive to misfire), success-only
+`PICKS_HEALTHCHECK_URL` ping added. 20 worker tests pass. Deploys automatically via
+deploy-workers.yml on merge. **Open VP action item: create the healthchecks.io check (period 24h,
+grace 2h) and add the `PICKS_HEALTHCHECK_URL` repo secret — the ping skips silently until then,
+meaning NO dead-man alert coverage yet.**
+
+**3. PICKS-2-HDR (done — the judgment call).** Tiered header-drift policy in collect_picks.py:
+`missing_header_labels()` + `header_check_action()`. `Ticker` missing or >10% of the 84 labels
+(`HEADER_MISSING_ABORT_FRAC`) → abort BEFORE write; smaller drift → write the partial capture
+then exit 1 AFTER the write (CI red, debug HTML uploads, healthcheck ping skipped). Rationale:
+aborting the whole day over one renamed column would convert bounded column loss into total loss
+of an unrecoverable day. 9 new unit tests; triple-documented.
+
+**Verification:** CI-equivalent non-Playwright suite 578 passed; worker-cron vitest 20 passed.
+Cannot live-test the CF dispatch or an actual picks run from cloud (Cloudflare/IP block) — first
+real validation is the first post-merge 22:31 UTC fire; check `/last` on the worker if in doubt.
+
+**Next steps:** merge PR → deploy-workers.yml ships the dispatcher; VP creates the healthchecks
+check + secret; watch the first scheduled picks fire. Backlog unchanged otherwise (AUD-1/2/3/5,
+PICKS-4B/4C remain).
