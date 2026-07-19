@@ -105,6 +105,13 @@ jobs:
       - name: Compute deltas
         id: deltas
         run: python scripts/compute_deltas.py
+      # PICKS-4: rebuild the picks alpha scoreboard from the freshly-computed
+      # snapshots. Lives HERE (not a separate workflow) so the eval CSV rides
+      # this job's finviz-data-commit concurrency group and commit step —
+      # deliberately avoiding a third independent data/ writer (AUD-4 class).
+      - name: Evaluate picks scoreboard
+        id: evalpicks
+        run: python scripts/evaluate_picks.py
       - name: Log fetch result
         if: always()
         env:
@@ -182,6 +189,9 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/
           git diff --cached --quiet || git commit -m "data: snapshot $(TZ=America/New_York date +%Y-%m-%d)"
+          # Rebase before push (AUD-4): generate_ai.yml / collect_picks.yml can
+          # land a data/ commit between our checkout and this push.
+          git pull --rebase
           git push
       - name: Ping healthcheck
         if: steps.collect.outcome == 'success' && steps.verify.outcome == 'success' && steps.deltas.outcome == 'success'
