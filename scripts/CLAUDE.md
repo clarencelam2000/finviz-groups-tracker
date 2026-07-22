@@ -103,7 +103,16 @@ a two-way-door superset migration (`ensure_deltas_csv()` pattern).
   = 0.25` right before `write_picks()` and aborts (loud, no write) if too many tickers in a run
   show a duplicated leading character — real baseline is ~1-4% (AA, EE, MMM, ...), so 25% only
   trips on genuine corruption. Full RCA:
-  `knowledge/investigations/picks-ticker-duplication-2026-07-15.md`.
+  `knowledge/investigations/picks-ticker-duplication-2026-07-15.md`. A follow-on 2026-07-16
+  corruption (issue #252) exposed a blind spot: the real bug was `_parse_table()`'s Ticker
+  branch reading `tag.find("a")` (first anchor), but Finviz's Ticker cell has a decorative
+  avatar placeholder that is *itself* an `<a>` and comes first, so it silently returned the
+  avatar's single-letter text (`"HSBC"` -> `"H"`) — and `ticker_dup_rate()` is blind to this
+  class since a 1-char ticker has no duplicated pair. Fixed by `_extract_ticker()` (preferring
+  the quote link's `t=` query param) plus a complementary guard, `single_char_ticker_rate()`
+  against `TICKER_SHORT_RATE_MAX = 0.30`, run alongside `ticker_dup_rate()` right before
+  `write_picks()`. Real baseline for single-char tickers is ~1.3-1.4%, so 30% only trips on
+  genuine corruption.
 - **Header-drift guard (PICKS-2-HDR, 2026-07-19):** `build_pick_rows` maps scraped cells by the
   config's 84 header labels — a Finviz label rename would write the affected columns **blank
   silently**. `missing_header_labels()` (union across all scraped group headers) +
