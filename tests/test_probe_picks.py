@@ -263,6 +263,40 @@ NO_ANCHOR_HTML = """
 </body></html>
 """
 
+# 2026-07-16 corruption (issue #252): the avatar placeholder is itself an <a>
+# (not a <span>) and comes FIRST, so a naive tag.find("a") returns "H" instead
+# of "HSBC". Only the real ticker anchor carries a `t=` query param.
+AVATAR_ANCHOR_MARKUP_HTML = """
+<html><body>
+<table class="screener_table">
+<tr><th>Ticker</th><th>Company</th><th>Price</th></tr>
+<tr><td><a href="/screener.ashx?t=HSBC">H</a><a href="/quote.ashx?t=HSBC">HSBC</a></td><td>HSBC Holdings</td><td>45.10</td></tr>
+</table>
+</body></html>
+"""
+
+# Avatar anchor with no t= param at all (e.g. a "#logo" href) — must still
+# fall back correctly to the real ticker link.
+AVATAR_ANCHOR_NO_T_PARAM_HTML = """
+<html><body>
+<table class="screener_table">
+<tr><th>Ticker</th><th>Company</th><th>Price</th></tr>
+<tr><td><a href="#logo">H</a><a href="/quote.ashx?t=HSBC">HSBC</a></td><td>HSBC Holdings</td><td>45.10</td></tr>
+</table>
+</body></html>
+"""
+
+# Legitimate 1-char ticker with only a single anchor — must not be mangled or
+# dropped by the new t= extraction logic.
+SINGLE_CHAR_TICKER_HTML = """
+<html><body>
+<table class="screener_table">
+<tr><th>Ticker</th><th>Company</th><th>Price</th></tr>
+<tr><td><a href="/quote.ashx?t=C">C</a></td><td>Citigroup</td><td>81.20</td></tr>
+</table>
+</body></html>
+"""
+
 
 class TestParseTable:
     def test_parses_header_and_rows(self):
@@ -278,6 +312,19 @@ class TestParseTable:
         assert rows[0]["Ticker"] == "HSBC"
         assert rows[0]["Company"] == "HSBC Holdings"
         assert rows[1]["Ticker"] == "C"
+
+    def test_ticker_cell_avatar_anchor_precedes_real_link(self):
+        # 2026-07-16 corruption (issue #252): avatar itself is an <a>, first.
+        headers, rows = _parse_table(AVATAR_ANCHOR_MARKUP_HTML)
+        assert rows[0]["Ticker"] == "HSBC"
+
+    def test_ticker_cell_avatar_anchor_without_t_param(self):
+        headers, rows = _parse_table(AVATAR_ANCHOR_NO_T_PARAM_HTML)
+        assert rows[0]["Ticker"] == "HSBC"
+
+    def test_ticker_cell_legitimate_single_char_ticker(self):
+        headers, rows = _parse_table(SINGLE_CHAR_TICKER_HTML)
+        assert rows[0]["Ticker"] == "C"
 
     def test_ticker_cell_falls_back_to_full_text_without_anchor(self):
         headers, rows = _parse_table(NO_ANCHOR_HTML)
