@@ -23,6 +23,36 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup
 
+# Matches the `t=SYMBOL` query param on a Finviz quote/screener link
+# (`quote.ashx?t=HSBC`, `screener.ashx?...&t=HSBC`). Used by _extract_ticker
+# (issue #252) to find the real ticker anchor among decorative markup.
+_QUOTE_T_RE = re.compile(r"[?&]t=([A-Za-z0-9.\-]+)", re.IGNORECASE)
+
+
+def _extract_ticker(cell) -> str:
+    """Extract the ticker symbol from a Finviz screener Ticker <td>.
+
+    Robust to decorative markup (a single-letter avatar placeholder that is
+    itself an <a> and precedes the real ticker link — the 2026-07-16
+    corruption, issue #252). Strategy, most-reliable first:
+      1. The canonical quote link's `t=` query param (`quote.ashx?t=SYMBOL`) —
+         works whether the avatar is a <span> or an <a>, since only the real
+         ticker anchor carries a `t=` param.
+      2. Fall back to the anchor text of the last <a> (avatars precede the
+         ticker link).
+      3. Fall back to the whole cell text.
+    """
+    for a in cell.find_all("a"):
+        href = a.get("href") or ""
+        m = _QUOTE_T_RE.search(href)
+        if m:
+            return m.group(1).strip()
+    anchors = cell.find_all("a")
+    if anchors:
+        return anchors[-1].get_text(strip=True)
+    return cell.get_text(strip=True)
+
+
 # ---------------------------------------------------------------------------
 # Config — document all constants per house rules
 # ---------------------------------------------------------------------------
@@ -128,16 +158,15 @@ def _parse_table(html: str) -> tuple[list[str], list[dict]]:
         cells = []
         for label, tag in zip(headers, cell_tags):
             if label == "Ticker":
-                # 2026-07-15 incident: Finviz's Ticker cell can carry extra
-                # decorative markup ahead of the real ticker link (e.g. a
-                # single-letter avatar placeholder) — c.get_text(strip=True)
-                # on the whole cell silently concatenates it onto the ticker
-                # ("C" + "C" -> "CC" for Citigroup, "H" + "HSBC" -> "HHSBC").
-                # The <a> is always the real ticker link, so read from it
-                # directly instead of the whole cell. See
-                # knowledge/investigations/picks-ticker-duplication-2026-07-15.md.
-                anchor = tag.find("a")
-                cells.append(anchor.get_text(strip=True) if anchor else tag.get_text(strip=True))
+                # issue #252 (2026-07-16 corruption, superseding the 2026-07-15
+                # incident's fix): Finviz's Ticker cell carries a decorative
+                # avatar placeholder that is ITSELF an <a> and comes first, so
+                # a naive tag.find("a") (first anchor) returns the avatar's
+                # single-letter text instead of the real ticker ("HSBC" -> "H").
+                # _extract_ticker() instead prefers the canonical quote link's
+                # `t=` query param, which only the real ticker anchor carries.
+                # See knowledge/investigations/picks-ticker-duplication-2026-07-15.md.
+                cells.append(_extract_ticker(tag))
             else:
                 cells.append(tag.get_text(strip=True))
         data_rows.append(dict(zip(headers, cells)))

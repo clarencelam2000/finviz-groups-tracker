@@ -74,6 +74,14 @@ _PCTILE_CUTOFF = 1.0 - ANTIFLASH_PCTILE
 # corruption class (which hits ~100% of rows) long before it reaches CSV.
 TICKER_DUP_RATE_MAX = 0.25
 
+# Single-char-ticker guard (issue #252 — the 2026-07-16 corruption where every
+# scraped Ticker read as a single avatar letter, which ticker_dup_rate() is blind
+# to because a 1-char string has no duplicated PAIR). A real day carries a few
+# genuine 1-char tickers (C, F, V, A, ...): measured baseline 2026-07-09..07-15
+# was ~1.3-1.4%. 30% sits far above that noise and far below the ~100% a fully
+# corrupted run shows, giving clean separation.
+TICKER_SHORT_RATE_MAX = 0.30
+
 # Header-drift guard (PICKS-2-HDR). build_pick_rows maps scraped cells by the
 # config's 84 header labels (stock.get(col, "")) — if Finviz renames a label so
 # it no longer matches screener_config.json, every affected column writes BLANK
@@ -439,6 +447,19 @@ def ticker_dup_rate(rows):
     return dup / len(rows)
 
 
+def single_char_ticker_rate(rows):
+    """Fraction of rows whose ticker is a single character.
+
+    Complements ticker_dup_rate() (issue #252): catches the 2026-07-16
+    corruption class where the parser returned only the avatar's leading letter,
+    which the pair-duplication check misses (len<2). Returns 0.0 for empty input.
+    """
+    if not rows:
+        return 0.0
+    short = sum(1 for r in rows if len(r.get("ticker", "")) == 1)
+    return short / len(rows)
+
+
 def _read_rows(csv_path):
     if not csv_path.exists():
         return []
@@ -719,6 +740,20 @@ def main():
             f"\nABORT: {dup_rate:.0%} of {len(all_new_rows)} scraped tickers have a "
             f"duplicated leading character (max allowed {TICKER_DUP_RATE_MAX:.0%}) — "
             f"likely a Finviz Ticker-cell markup change corrupting the parse. "
+            f"NOT writing picks.csv. sample: {sample}"
+        )
+        sys.exit(1)
+
+    # Single-char-ticker guard (issue #252): complements the dup-rate guard
+    # above by catching the class of corruption the pair-based check is blind
+    # to (a 1-char ticker has no duplicated pair to detect).
+    short_rate = single_char_ticker_rate(all_new_rows)
+    if short_rate > TICKER_SHORT_RATE_MAX:
+        sample = [r["ticker"] for r in all_new_rows[:10]]
+        print(
+            f"\nABORT: {short_rate:.0%} of {len(all_new_rows)} scraped tickers are a "
+            f"single character (max allowed {TICKER_SHORT_RATE_MAX:.0%}) — likely a "
+            f"Finviz Ticker-cell markup change corrupting the parse (issue #252). "
             f"NOT writing picks.csv. sample: {sample}"
         )
         sys.exit(1)

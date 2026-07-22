@@ -36,9 +36,11 @@ from collect_picks import (
     flip_validated,
     ensure_picks_csv,
     ticker_dup_rate,
+    single_char_ticker_rate,
     missing_header_labels,
     header_check_action,
     TICKER_DUP_RATE_MAX,
+    TICKER_SHORT_RATE_MAX,
     HEADER_MISSING_ABORT_FRAC,
     _PCTILE_CUTOFF,
 )
@@ -423,6 +425,33 @@ class TestTickerDupRate:
 
     def test_short_ticker_not_misflagged(self):
         assert ticker_dup_rate([{"ticker": "E"}]) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# single_char_ticker_rate — complementary guard for 1-char corruption (#252)
+# ---------------------------------------------------------------------------
+
+class TestSingleCharTickerRate:
+    def test_empty_rows_is_zero(self):
+        assert single_char_ticker_rate([]) == 0.0
+
+    def test_all_single_char_trips_threshold(self):
+        rows = [{"ticker": t} for t in ["A", "B", "C", "D"]]
+        assert single_char_ticker_rate(rows) == 1.0
+        assert single_char_ticker_rate(rows) > TICKER_SHORT_RATE_MAX
+
+    def test_healthy_mix_stays_under_threshold(self):
+        # A couple of legitimate 1-char tickers (C, F) among many multi-char
+        # ones — matches the observed ~1.3-1.4% real baseline.
+        clean = ["MSFT", "NVDA", "AMD", "TSLA", "DINO", "VLO", "PSX", "SUN",
+                 "JPM", "WFC", "SAN", "HSBC", "BBVA", "ING", "KEX",
+                 "MATX", "AFN", "ZIM", "COO"]
+        rows = [{"ticker": t} for t in ["C", "F"] + clean]
+        assert single_char_ticker_rate(rows) < TICKER_SHORT_RATE_MAX
+
+    def test_multi_char_only_is_zero(self):
+        rows = [{"ticker": t} for t in ["MSFT", "NVDA", "AMD"]]
+        assert single_char_ticker_rate(rows) == 0.0
 
 
 # ---------------------------------------------------------------------------
