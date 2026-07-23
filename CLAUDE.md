@@ -193,14 +193,21 @@ All Playwright-in-cloud work should first read
   workflows on Azure runners. All cron expressions live in `worker-cron/wrangler.toml`
   `[triggers] crons`. Cloudflare cron is fixed-UTC and cannot follow DST — adjust manually on
   2nd Sunday March (EST→EDT) and 1st Sunday November (EDT→EST).
-  - **`collect.yml` — 3 daily triggers:** `30 14` (10:30 AM EDT intraday), `48 19` (3:48 PM EDT
-    pre-close), `01 21` (5:01 PM EDT EOD post-close). The EOD run captures the day's final
-    closing data.
-  - **`collect_picks.yml` — 1 daily trigger:** `31 22` (6:31 PM EDT / 3:31 PM PDT / 2:31 PM PST
-    winter) — 90 min after the EOD collect, giving `collect.yml + compute_deltas + push` time to
-    complete before picks selects groups from `deltas.csv`. No GitHub cron backstop for picks
-    (scrapes up to 50 pages — misfiring is too expensive). A healthchecks.io dead-man's-switch
-    on `collect_picks.yml` provides a before-bed alert if the CF flow fails silently.
+  - **`collect.yml` — 2 daily CF triggers:** `48 19` (3:48 PM EDT pre-close), `01 21` (5:01 PM
+    EDT EOD post-close). The EOD run captures the day's final closing data. The former `30 14`
+    (10:30 AM EDT intraday) trigger was removed (issue #252) to free a slot under the Cloudflare
+    account's hard 5-cron-trigger limit (shared with unrelated `distil-*` workers). No committed-
+    data loss: `collect.py` is last-write-wins per date, so the EOD run always overwrote the
+    intraday one anyway.
+  - **`collect_picks.yml` — 1 daily CF trigger + GitHub backstop:** CF cron `31 22` (6:31 PM EDT /
+    3:31 PM PDT / 2:31 PM PST winter) — 90 min after the EOD collect, giving `collect.yml +
+    compute_deltas + push` time to complete before picks selects groups from `deltas.csv`. The CF
+    picks cron failed to deploy for a stretch (same 5-cron-trigger limit above), leaving picks
+    with no trigger and no data from 2026-07-17 onward, so an interim GitHub `schedule:` backstop
+    (`31 23 * * 1-5`, weekdays in GitHub's 0=Sunday convention) was added (issue #252,
+    PICKS-FIX-C) — it fires after the EOD collect+deltas-push in both DST seasons. A
+    healthchecks.io dead-man's-switch on `collect_picks.yml` still provides a before-bed alert if
+    both flows fail silently.
   - **Why a separate scheduler:** GitHub's `schedule:` cron drifts hours and is dropped under
     load; `workflow_dispatch` is event-driven and prompt. See `planning/cloudflare-cron-scheduler.md`
     and `knowledge/decisions/` for the full rationale.

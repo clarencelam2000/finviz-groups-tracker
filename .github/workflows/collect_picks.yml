@@ -3,17 +3,32 @@ name: Daily Picks Scrape
 # Selects leading groups from data/industries/deltas.csv and logs individual stock
 # rows into data/picks/picks.csv. Runs on Azure IPs (GitHub Actions) — Cloudflare
 # blocks the headless screener scrape from Google Cloud IPs.
-# PICKS-2-CRON: scheduled ONLY via the Cloudflare `finviz-cron-dispatcher`
+# PICKS-2-CRON: scheduled primarily via the Cloudflare `finviz-cron-dispatcher`
 # Worker (worker-cron/), which POSTs a workflow_dispatch at 22:31 UTC (6:31 PM
 # EDT) — 90 min after the EOD collect.yml dispatch, so deltas.csv is pushed
-# before picks select groups. There is deliberately NO GitHub `schedule:`
-# backstop here (unlike collect.yml): this scrape costs up to 50 screener
-# pages, GitHub cron drifts hours, and a drifted early fire trips the
+# before picks select groups. PICKS-2-CRON originally left this file with
+# deliberately NO GitHub `schedule:` backstop (this scrape costs up to 50
+# screener pages, GitHub cron drifts hours, and a drifted early fire trips the
 # stale-read guard — a safe no-op, but then that day's unrecoverable picks
-# list is lost until someone notices. Failure detection is the
-# healthchecks.io dead-man's-switch pinged below instead.
+# list is lost until someone notices). Failure detection is the
+# healthchecks.io dead-man's-switch pinged below.
+# ISSUE #252 / PICKS-FIX-C: the Cloudflare picks cron FAILED to deploy (the
+# account hit its 5-cron-trigger limit), leaving picks with no trigger at all
+# and no data since 2026-07-17. An interim GitHub `schedule:` backstop is
+# restored below until the Cloudflare deploy is confirmed working.
 on:
   workflow_dispatch:
+  # Interim GitHub schedule backstop (issue #252 PICKS-FIX-C). Primary scheduling
+  # is the Cloudflare finviz-cron-dispatcher's 31 22 UTC picks cron, but that cron
+  # failed to deploy (account 5-cron-trigger limit) leaving picks with NO trigger
+  # and no data since 2026-07-17. This backstop resumes collection independent of
+  # Cloudflare. 23:31 UTC is chosen so it lands AFTER the EOD collect+deltas-push
+  # in BOTH DST seasons (summer EOD 21:01 UTC, winter 22:01 UTC), so it needs no
+  # twice-yearly adjustment — unlike the Cloudflare crons. A too-early drift is a
+  # safe no-op (collect_picks.py's stale-read guard); a same-day re-run after the
+  # Cloudflare cron is harmless (last-write-wins per date). GitHub weekdays = 1-5.
+  schedule:
+    - cron: '31 23 * * 1-5'
 permissions:
   contents: write
 # Shared concurrency group with collect.yml (ADR-008 / G1): both jobs commit to
