@@ -2,7 +2,7 @@
  * Finviz Cron Dispatcher — Cloudflare Worker.
  *
  * Pure scheduler: Cron Triggers (defined in wrangler.toml) fire the scheduled()
- * handler, which POSTs a workflow_dispatch to GitHub to launch collect.yml (3
+ * handler, which POSTs a workflow_dispatch to GitHub to launch collect.yml (2
  * crons/day) or collect_picks.yml (1 cron/day, PICKS-2-CRON) on GitHub's Azure
  * runners (which pass Finviz's Cloudflare bot-detection; our Cloudflare/GCP IPs
  * do not — see planning/cloudflare-cron-scheduler.md).
@@ -20,7 +20,7 @@ const REPO_WORKFLOWS_URL =
 
 // PICKS_CRON must stay byte-identical to the picks entry in wrangler.toml
 // [triggers] crons — scheduled() routes by exact event.cron string match.
-// Any other cron expression (the three collect entries, or a future addition
+// Any other cron expression (the two collect entries, or a future addition
 // not routed here) dispatches collect.yml, the safe default: collect is
 // last-write-wins per date so a spurious extra run is harmless, whereas a
 // spurious picks run scrapes up to 50 screener pages.

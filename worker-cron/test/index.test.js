@@ -44,7 +44,7 @@ describe('workflowForCron — cron routing', () => {
   });
 
   it('routes every collect cron to collect', () => {
-    for (const cron of ['01 21 * * 2-6', '30 14 * * 2-6', '48 19 * * 2-6']) {
+    for (const cron of ['01 21 * * 2-6', '48 19 * * 2-6']) {
       expect(workflowForCron(cron)).toBe('collect');
     }
   });

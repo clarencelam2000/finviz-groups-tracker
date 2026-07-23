@@ -32,10 +32,17 @@ compatibility_date = "2024-09-23"
 # Also: Cloudflare cron is fixed-UTC with no DST support. Must adjust manually:
 # - On 2nd Sunday of March: add 1 hour to UTC times (EST→EDT transition)
 # - On 1st Sunday of November: subtract 1 hour from UTC times (EDT→EST transition)
-# Winter UTC equivalents: ["22:01 * * 2-6", "15:30 * * 2-6", "20:48 * * 2-6", "31 23 * * 2-6"]
+# Winter UTC equivalents: ["22:01 * * 2-6", "20:48 * * 2-6", "31 23 * * 2-6"]
 # (a winter shift of the picks cron also requires updating PICKS_CRON in src/index.js).
 [triggers]
-crons = ["01 21 * * 2-6", "30 14 * * 2-6", "48 19 * * 2-6", "31 22 * * 2-6"]
+# ISSUE #252: the intraday 10:30 AM EDT collect cron ("30 14 * * 2-6") was
+# removed to free a slot — the Cloudflare account has a hard 5-cron-trigger
+# limit shared with unrelated `distil-*` workers, and that limit is what
+# caused the picks cron below to fail to deploy in the first place. The
+# intraday run was the safe one to cut: collect.py is last-write-wins per
+# date, so the EOD run ("01 21") always overwrites it — no committed-data
+# loss — and the 3:48 PM pre-close run ("48 19") remains as an EOD fallback.
+crons = ["01 21 * * 2-6", "48 19 * * 2-6", "31 22 * * 2-6"]
 
 [vars]
 # The git ref that collect.yml runs on. Stored as a var (not a secret) so it can
