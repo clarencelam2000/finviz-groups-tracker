@@ -5,6 +5,110 @@
 
 ---
 
+## 2026-06-30 — Charts link ordering + PICKS-STATE-PERSIST (A4 reversal) + Playwright knowledge doc
+
+**Status: COMPLETE. PR open. SAFE TO CLOSE.**
+
+Follow-up session after PR #216 merged. PR #216's branch was restarted from the latest default
+per the amendment policy (`git checkout -B claude/pensive-albattani-jm9k7q origin/claude/elegant-babbage-hlxnfy`)
+since amending a merged PR isn't possible.
+
+Three things landed, three commits on `claude/pensive-albattani-jm9k7q`:
+
+**1. Charts deep-link ordering fix + `&o=tickersfilter`** — owner noticed the All-view
+tab-level Charts link's ticker order was effectively random (raw CSV/scrape row order). Traced
+all 4 link sites:
+- Per-group header + Lookup Stage-2: already ATR-extension ascending, matches what's rendered — no change.
+- Focus tab-level: was a genuine bug — built from `candidates` *before* the `scored.sort(score desc)`
+  ran, so it never matched the visible Focus list. Fixed to read from `scored`.
+- All tab-level: switched from raw CSV order to a flatten of the same category → group →
+  ATR-ascending order already used to render the list (not "Focus score desc" — most All-view
+  stocks don't qualify for a Focus score at all, so that wouldn't generalize cleanly).
+- Added `&o=tickersfilter` to `buildChartsUrl()` so Finviz actually renders the charts grid in
+  the URL's ticker order instead of its own default sort.
+- Release triplet v2026.06.30.6.
+
+**2. PICKS-STATE-PERSIST — reverses A4 (explicit VP call)** — `state.picksExpanded` (Set of
+stable `ticker_category` keys) persists which risk panels are open; `renderPickRow` checks it
+to start a row pre-expanded; `__togglePickRow(key, expandKey)` updates the set. `switchTab()` no
+longer forces `picksView` back to `'all'`. Because `renderPickRow` is shared between the Picks
+tab and the Lookup Stage-2 section, expand-persistence applies to both for free — not scoped
+to just the Picks tab as originally planned. A4's original rationale ("stale-Focus confusion on
+data reload") is preserved as a `> Note` in `planning/stock-picks-from-leading-groups.md`, with
+the reversal appended below it (not rewritten) — same treatment in the `state.picksView` code
+comment, the All/Focus toggle HTML comment, and the PICKS-3B SPRINT.md entry (footnoted, not
+edited). Release triplet v2026.06.30.7, `sw.js` → finviz-v42.
+
+**3. `knowledge/investigations/playwright-cloud-session-testing.md`** — wrote up the debugging
+from PR #216's verification work: pinned `playwright==1.44.0` expects Chromium revision 1117 but
+this cloud session's pre-installed browser is revision 1194 (needs explicit `executable_path`);
+CDN scripts and `raw.githubusercontent.com` aren't reachable directly from Chromium in this
+sandbox even though `curl` reaches them fine (route-stub everything); and a sharp glob-pattern
+gotcha — `page.route()` patterns need `**/` with a trailing slash as a segment boundary, `"**X"`
+without it silently never matches. **Found and fixed the same bug in CLAUDE.md's own canonical
+Playwright example** (`'**/raw.githubusercontent.com/**snapshots.csv'` → `'**/snapshots.csv'`).
+Flagged but did **not** fix: `tests/test_pwa_picks_hod.py` may have the same broken pattern —
+noted in the investigation doc for whoever's next in that file, not chased further to keep this
+session scoped.
+
+**Verification:** 531 non-Playwright tests pass. Both the ordering fix and the state-persistence
+feature were verified end-to-end with a real headless Chromium session (the harness documented
+in the new investigation doc) — confirmed `o=tickersfilter` present, Focus-view expand+collapse
+persisting correctly across a tab switch away and back, and the All/Focus selection surviving
+tab navigation.
+
+**Next steps**: none outstanding from this session. `PICKS-STATE-PERSIST-LOOKUP` SPRINT entry
+from the prior session was folded into the main PICKS-STATE-PERSIST entry once it became clear
+the Lookup Stage-2 coverage was automatic, not a separate task.
+
+---
+
+## 2026-06-30 — Charts deep-links (v=211 multi-ticker grid) + scroll retention
+
+**Status: COMPLETE. PR open. SAFE TO CLOSE.**
+
+User asked for Finviz's multi-ticker charts-grid URL (`screener?v=211&ft=3&t=A,B,C`) to be
+surfaced anywhere the PWA shows a list of stocks. Scoped to Picks tab + Lookup Stage-2 section.
+
+What landed (all on `claude/pensive-albattani-jm9k7q`):
+- `docs/index.html`:
+  - `buildChartsUrl(tickers)` — dedupes via `Set`, no cap (tickers are short; URL length is a
+    non-issue), inlined next to `buildScreenerUrl()`.
+  - "Charts ↗" links added in 4 places: per-group header in Picks All view (next to the
+    "N names" count), tab-level "View all N charts in Finviz ↗" in both All and Focus views,
+    and beside the existing Stage-2 screener button in the Lookup tab's Stage-2 section
+    (only shown when the group has picks today).
+  - Fixed 2 pre-existing internal-nav buttons that incorrectly used `↗` (the external-link
+    convention) instead of `›` (the internal nav-to-Lookup convention used everywhere else in
+    the app): the All-view per-group name button and the Focus/Lookup row group-subtitle button.
+  - Scroll position retention: `state.scrollPos` (per-tab) + `state.restoreScrollOnRender` flag;
+    saved in `switchTab()`, restored at the end of `render()`. Skips saving when leaving Picks
+    from Focus view, since `switchTab` always resets `picksView` to `'all'` on re-entry (A4,
+    PICKS-3B) — a saved Focus-view scroll position wouldn't match the All-view content shown
+    on return.
+- `docs/releases.json` — v2026.06.30.5 entry, tag "feature", tab "picks".
+- `docs/sw.js` — CACHE finviz-v40 → finviz-v41.
+- `.session/SPRINT.md` — PICKS-CHARTS marked done; new PICKS-STATE-PERSIST fast-follow task
+  for the deferred scope (expanded-row state + All/Focus view retention — see below).
+
+**Verification:** 531 non-Playwright tests pass unchanged. Manually verified the full feature
+end-to-end with a real headless Chromium session (fixture-intercept pattern matching
+`tests/test_pwa_picks_hod.py`) — confirmed dedup on both per-group and tab-level Charts links,
+the `›`/`↗` convention fix, and scroll-position restore across a tab switch away-and-back.
+No new automated Playwright tests added (none of the existing Picks/Lookup Playwright suites
+run in this environment — pinned `playwright==1.44.0` expects browser revision 1117 but the
+cloud session's pre-installed Chromium is revision 1194; this is a pre-existing environment gap,
+not something introduced this session — see PICKS-3C-PLAYWRIGHT-GAP for the existing tracked gap).
+
+**Deferred** (discussed with owner, explicit decision to split into a follow-up PR):
+- Expanded risk-panel rows currently collapse on every Picks tab re-entry (full `innerHTML`
+  rebuild loses panel state) — needs a persisted identity key per row.
+- All/Focus view selection always resets to All on tab entry (A4, intentional prior design) —
+  retaining it would reverse that decision and needs an explicit call before changing.
+- Tracked as **PICKS-STATE-PERSIST** in SPRINT.md.
+
+---
+
 ## 2026-07-02 — PR #178 rebased, reconciled, and landed (sector breadth bar + drill-down)
 
 **Status: LANDED on this session's branch, PR open for review. SAFE TO CLOSE once PR merges.**
