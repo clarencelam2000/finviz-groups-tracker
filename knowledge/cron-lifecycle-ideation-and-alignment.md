@@ -25,7 +25,10 @@ aligned*; the ADRs and planning docs are the *what*.
 | `knowledge/cron-lifecycle-ideation-and-alignment.md` | **This file** — the alignment/memory record |
 | PR #257 | Ships the three docs above |
 | Issues #258–#266 | Tracked work (WS1×3, WS2, WS3, WS4, WS5 epic, taxonomy check, parked tracker) |
-| WS2 ADR, WS5 ADR + design doc, WS3/WS4 design docs | **Not yet written** — to be authored by main-model Claude (see § 7) |
+| `knowledge/decisions/ADR-011-session-dimension.md` | WS2 keystone decision — authored by main-model Claude; **ends in an owner decision point** (Option A vs C) |
+| `knowledge/decisions/ADR-012-trade-lifecycle-engine.md` | WS5 architecture decision — authored by main-model Claude |
+| `planning/trade-lifecycle-engine.md` | WS5 deep design — the formalized daily-advancement engine, authored by main-model Claude |
+| WS3/WS4 design docs | **Deferred by design** — depend on how WS2 resolves; deep-doc them once WS2's A/C decision lands (not an oversight) |
 
 ---
 
@@ -191,8 +194,10 @@ triple-documented config constants.
   were drafted by a Sonnet subagent and reviewed/corrected by main-model Claude. The owner flagged
   (correctly) that judgment-heavy synthesis of a conversation only the main model was in should be
   authored by the main model. Per `CLAUDE.md`: *"Design, auditing, data synthesis, and anything
-  judgment-heavy stays in the main model."* Remaining deep docs (WS2 ADR, WS5 ADR + design,
-  WS3/WS4 docs) are to be authored by main-model Claude directly.
+  judgment-heavy stays in the main model."* **Correction applied same session:** the WS2 ADR
+  (ADR-011), WS5 ADR (ADR-012), and WS5 deep design (`planning/trade-lifecycle-engine.md`) were
+  authored **directly by main-model Claude**, no subagent. WS3/WS4 deep docs are deferred on
+  purpose (they depend on WS2's A/C resolution), not delegated.
 - **Nothing is implemented.** All work to date is docs + tracking. No code, workflow, or
   `wrangler.toml` change. Implementation waits on the owner's explicit go-word, starting with WS1.
 - WS2 and WS5 each require their **own ADR before implementation** (tracked in #261, #264).
