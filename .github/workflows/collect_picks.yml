@@ -4,9 +4,13 @@ name: Daily Picks Scrape
 # rows into data/picks/picks.csv. Runs on Azure IPs (GitHub Actions) — Cloudflare
 # blocks the headless screener scrape from Google Cloud IPs.
 # PICKS-2-CRON: scheduled primarily via the Cloudflare `finviz-cron-dispatcher`
-# Worker (worker-cron/), which POSTs a workflow_dispatch at 22:31 UTC (6:31 PM
-# EDT) — 90 min after the EOD collect.yml dispatch, so deltas.csv is pushed
-# before picks select groups. PICKS-2-CRON originally left this file with
+# Worker (worker-cron/), which POSTs a workflow_dispatch at its `picks` job's
+# 18:30 ET target (worker-cron/src/routing.js JOB_SCHEDULE, ADR-010 WS1;
+# auto-DST, so no fixed UTC time here) — a fixed time margin after the EOD
+# collect.yml dispatch, so deltas.csv is pushed before picks selects groups.
+# (A dependency check against collect.yml's actual success, replacing this
+# fixed margin, is tracked separately — issue #259, not yet implemented.)
+# PICKS-2-CRON originally left this file with
 # deliberately NO GitHub `schedule:` backstop (this scrape costs up to 50
 # screener pages, GitHub cron drifts hours, and a drifted early fire trips the
 # stale-read guard — a safe no-op, but then that day's unrecoverable picks
@@ -19,10 +23,11 @@ name: Daily Picks Scrape
 on:
   workflow_dispatch:
   # Interim GitHub schedule backstop (issue #252 PICKS-FIX-C). Primary scheduling
-  # is the Cloudflare finviz-cron-dispatcher's 31 22 UTC picks cron, but that cron
-  # failed to deploy (account 5-cron-trigger limit) leaving picks with NO trigger
-  # and no data since 2026-07-17. This backstop resumes collection independent of
-  # Cloudflare. 23:31 UTC is chosen so it lands AFTER the EOD collect+deltas-push
+  # is the Cloudflare finviz-cron-dispatcher's in-code `picks` job (ADR-010 WS1,
+  # 18:30 ET target), but the picks trigger previously failed to deploy (account
+  # 5-cron-trigger limit) leaving picks with NO trigger and no data since
+  # 2026-07-17. This backstop resumes collection independent of Cloudflare.
+  # 23:31 UTC is chosen so it lands AFTER the EOD collect+deltas-push
   # in BOTH DST seasons (summer EOD 21:01 UTC, winter 22:01 UTC), so it needs no
   # twice-yearly adjustment — unlike the Cloudflare crons. A too-early drift is a
   # safe no-op (collect_picks.py's stale-read guard); a same-day re-run after the

@@ -1,0 +1,144 @@
+import { describe, it, expect } from 'vitest';
+import { computeEtNow, jobsInWindow, jobsForTick, JOB_SCHEDULE, DISPATCH_WINDOW_MINUTES } from '../src/routing.js';
+
+describe('computeEtNow — ET wall-clock + auto-DST', () => {
+  it('produces EDT (summer) wall-clock time, 4 hours behind UTC', () => {
+    // 2026-07-15 19:50 UTC = 15:50 EDT (UTC-4), a Wednesday.
+    const etNow = computeEtNow(new Date('2026-07-15T19:50:00Z'));
+    expect(etNow).toEqual({ hour: 15, minute: 50, weekday: 3, dateStr: '2026-07-15' });
+  });
+
+  it('produces EST (winter) wall-clock time, 5 hours behind UTC', () => {
+    // 2026-01-15 20:50 UTC = 15:50 EST (UTC-5), a Thursday.
+    const etNow = computeEtNow(new Date('2026-01-15T20:50:00Z'));
+    expect(etNow).toEqual({ hour: 15, minute: 50, weekday: 4, dateStr: '2026-01-15' });
+  });
+
+  it('crosses correctly on the spring-forward transition day (2nd Sunday March 2026-03-08)', () => {
+    // 06:30 UTC = 01:30 EST (still winter offset, pre-2am local transition).
+    const before = computeEtNow(new Date('2026-03-08T06:30:00Z'));
+    expect(before).toEqual({ hour: 1, minute: 30, weekday: 7, dateStr: '2026-03-08' });
+
+    // 07:30 UTC = 03:30 EDT (clocks jumped 2am -> 3am local at the transition).
+    const after = computeEtNow(new Date('2026-03-08T07:30:00Z'));
+    expect(after).toEqual({ hour: 3, minute: 30, weekday: 7, dateStr: '2026-03-08' });
+  });
+
+  it('crosses correctly on the fall-back transition day (1st Sunday November 2026-11-01)', () => {
+    // 05:30 UTC = 01:30 EDT (pre-transition, still summer offset).
+    const before = computeEtNow(new Date('2026-11-01T05:30:00Z'));
+    expect(before).toEqual({ hour: 1, minute: 30, weekday: 7, dateStr: '2026-11-01' });
+
+    // 07:30 UTC = 02:30 EST (post-transition, winter offset resumed).
+    const after = computeEtNow(new Date('2026-11-01T07:30:00Z'));
+    expect(after).toEqual({ hour: 2, minute: 30, weekday: 7, dateStr: '2026-11-01' });
+  });
+
+  it('handles a Friday-evening ET tick that is already Saturday in UTC', () => {
+    // 2026-07-18 (Sat) 02:00 UTC = 2026-07-17 (Fri) 22:00 EDT.
+    const etNow = computeEtNow(new Date('2026-07-18T02:00:00Z'));
+    expect(etNow.weekday).toBe(5); // Friday, ET
+    expect(etNow.dateStr).toBe('2026-07-17');
+  });
+
+  it('handles a Sunday-night ET tick that is already Monday in UTC', () => {
+    // 2026-07-13 (Mon) 03:00 UTC = 2026-07-12 (Sun) 23:00 EDT.
+    const etNow = computeEtNow(new Date('2026-07-13T03:00:00Z'));
+    expect(etNow.weekday).toBe(7); // Sunday, ET
+    expect(etNow.dateStr).toBe('2026-07-12');
+  });
+});
+
+describe('JOB_SCHEDULE — sanity', () => {
+  it('every target time lands on the */5 tick grid', () => {
+    for (const job of JOB_SCHEDULE) {
+      expect(job.minute % 5).toBe(0);
+    }
+  });
+
+  it('every job name is unique (KV key collisions would silently cross-suppress dispatch)', () => {
+    const names = JOB_SCHEDULE.map((j) => j.name);
+    expect(new Set(names).size).toBe(names.length);
+  });
+});
+
+describe('jobsInWindow — pure, no "already dispatched" awareness', () => {
+  it('returns [] outside any job window (illustrative routing table: any-other-tick)', () => {
+    const etNow = { hour: 12, minute: 0, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(etNow)).toEqual([]);
+  });
+
+  it('returns collect_preclose at 15:50 ET on a weekday', () => {
+    const etNow = { hour: 15, minute: 50, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(etNow)).toEqual(['collect_preclose']);
+  });
+
+  it('returns collect_eod at 17:00 ET on a weekday', () => {
+    const etNow = { hour: 17, minute: 0, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(etNow)).toEqual(['collect_eod']);
+  });
+
+  it('returns picks at 18:30 ET on a weekday', () => {
+    const etNow = { hour: 18, minute: 30, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(etNow)).toEqual(['picks']);
+  });
+
+  it('stays open for the full window, not just the exact target minute', () => {
+    // 15 minutes late, still inside the 30-minute window.
+    const etNow = { hour: 17, minute: 15, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(etNow)).toEqual(['collect_eod']);
+  });
+
+  it('closes once the window elapses', () => {
+    const etNow = {
+      hour: 17,
+      minute: DISPATCH_WINDOW_MINUTES, // exactly windowMinutes past target = closed
+      weekday: 3,
+      dateStr: '2026-07-15',
+    };
+    expect(jobsInWindow(etNow)).toEqual([]);
+  });
+
+  it('gates on weekday: no jobs fire on Saturday or Sunday even at a valid time-of-day', () => {
+    const saturday = { hour: 17, minute: 0, weekday: 6, dateStr: '2026-07-18' };
+    const sunday = { hour: 17, minute: 0, weekday: 7, dateStr: '2026-07-19' };
+    expect(jobsInWindow(saturday)).toEqual([]);
+    expect(jobsInWindow(sunday)).toEqual([]);
+  });
+});
+
+describe('jobsForTick — self-healing dispatch (staff amendment on #258)', () => {
+  it('dispatches a job whose window is open and not yet dispatched today', () => {
+    const etNow = { hour: 17, minute: 0, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsForTick(etNow, {})).toEqual(['collect_eod']);
+  });
+
+  it('does not re-dispatch a job already recorded as dispatched today', () => {
+    const etNow = { hour: 17, minute: 0, weekday: 3, dateStr: '2026-07-15' };
+    const dispatchedToday = { collect_eod: '2026-07-15' };
+    expect(jobsForTick(etNow, dispatchedToday)).toEqual([]);
+  });
+
+  it('re-dispatches if the recorded date is stale (yesterday, not today)', () => {
+    const etNow = { hour: 17, minute: 0, weekday: 3, dateStr: '2026-07-15' };
+    const dispatchedToday = { collect_eod: '2026-07-14' };
+    expect(jobsForTick(etNow, dispatchedToday)).toEqual(['collect_eod']);
+  });
+
+  it('self-heals a delayed tick: a late tick within the window still dispatches', () => {
+    // The exact :00 tick was skipped/delayed by Cloudflare; the :20 tick
+    // picks it up because the job hasn't been dispatched today yet.
+    const etNow = { hour: 17, minute: 20, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsForTick(etNow, {})).toEqual(['collect_eod']);
+  });
+
+  it('does not dispatch once the window has closed, even if never dispatched', () => {
+    const etNow = { hour: 17, minute: DISPATCH_WINDOW_MINUTES, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsForTick(etNow, {})).toEqual([]);
+  });
+
+  it('a plain no-op tick (no job in window) returns [] regardless of dispatchedToday', () => {
+    const etNow = { hour: 12, minute: 0, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsForTick(etNow, { collect_eod: '2026-07-14' })).toEqual([]);
+  });
+});
