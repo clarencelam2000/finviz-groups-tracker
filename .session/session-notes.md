@@ -386,3 +386,61 @@ A/C decision).
 `SEVERE_BREAKDOWN_ATR` calibration; widen-policy auto-vs-opt-in; ticker-quote store CSV-vs-D1
 (shared WS2/WS5 decision); picks dependency-gate window width; whether GitHub backstop crons go
 ET-derived. **No implementation until the owner's explicit go-word — WS1 (#258) is the start.**
+
+---
+
+## 2026-08-07 — Staff review of PR #257 + issues #258–#266 (trade-lifecycle workstream readiness)
+
+**Status: safe to close once PR #267 merges.** Review + durable-capture session; no product code.
+PR #257 was already merged by the owner before review — docs verified against the default branch.
+Owner then answered the open decisions in a Q&A round; all answers committed (see below) rather than
+left in chat — an earlier draft of this entry wrongly called the session safe-to-close while the
+deliverables were still trapped in a chat artifact; corrected.
+
+**Verdict: team is ready to pick up WS1.** All 7 docs read in full; a Sonnet subagent verified
+every `file:line` citation against source — substance is accurate (minor line-number drift only;
+one relocated fact: the earnings/days-to-earnings parse lives in `scripts/replay_picks.py` +
+`docs/index.html`, NOT `scripts/picks_metrics.py` — WS4 (#263) needs it ported Python-side).
+
+**Findings filed as issue comments (don't lose):**
+- **#259** — the dependency gate's run-success check can be satisfied by the 15:50 *pre-close*
+  run (same workflow file), dispatching picks against pre-close deltas; require run start ≥ EOD
+  target ET. Also: `GITHUB_DISPATCH_TOKEN` is POST-only today — verify it can READ run status.
+- **#258** — exact-minute tick matching is fragile (delayed/skipped CF ticks silently drop a
+  job); use "target passed + no dispatch recorded today (KV)" within a bounded window. Also the
+  stale `#FOLLOWUP` placeholder in the issue body.
+- **#264** — exits should capture the user's *actual* fill like entries do (suggest a `closing`
+  state between Managing/Closed); signal-close vs execution-close distinction; `pos.sma50` →
+  `bar.sma50` pseudocode nit.
+
+**Mocks created** (owner asked for visuals): claude.ai artifact "Picks Workstream Mocks —
+WS3/WS4/WS5" — WS3 morning-confirmation states, WS4 trade ticket, WS5 position cards, in the
+PWA's slate/sky idiom, each with embedded owner questions (gapped-through "I took it"?; where
+does risk-per-trade $ come from?; exit auto-close vs confirmed fill?).
+
+**Endorsements:** ADR-011 Option C (physical separation) — concur decisively; WS3-before-
+morning-picks sequencing — correct; D1 spine+bag+event-log — right shape.
+
+**Owner Q&A round (2026-08-07) — all decisions committed to `knowledge/cron-lifecycle-ideation-
+and-alignment.md` § 10** (owner-intent source of truth). Locked: gapped-through also gets "I took
+it"; risk-per-trade = free input on ticket; stop-hit awaits confirmed fill (new `closing` state —
+design doc §4 needs updating, #264); ADR-011 **Option C**; `SEVERE_BREAKDOWN_ATR` default **3.0**;
+**WS1 go-word GIVEN** (start #258). New scope: **WS3b pre-close ~15:30 surface** (owner checks the
+last half-hour; more on-thesis than morning; needs its own issue), WS3 Failed-breakout + No-quote
+states, WS5 aggregate-exposure footer.
+
+**Durable capture (the fix for the process miss):** mocks committed to
+`planning/mocks/trade-lifecycle-surfaces.html`; decision record appended to the alignment file § 10;
+roadmap given a "START HERE" reading-order block naming the mocks + alignment record. Artifact alone
+would have been lost — that was the miss the owner correctly flagged.
+
+**Where the team picks up:** roadmap doc (front door) → alignment § 10 (intent+decisions) → per-WS
+ADR/design → issue → mocks. Start coding at #258 with the #258/#259 amendments.
+
+**Process gaps surfaced for follow-up (not yet actioned):** (1) no rule that ephemeral deliverables
+(artifacts/mocks) must be committed — recommend adding to `.claude/rules`; (2) needs a WS3b tracking
+issue; (3) design-doc §4 (auto-close) now contradicts the committed decision — must be reconciled
+before WS5 phase 3.
+
+**Next steps:** open a WS3b issue; reconcile trade-lifecycle-engine.md §4 with the `closing`-state
+decision; then implement #258.
