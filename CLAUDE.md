@@ -188,29 +188,43 @@ All Playwright-in-cloud work should first read
 
 ## Automation
 
-- **Primary scheduler: the Cloudflare Worker `finviz-cron-dispatcher` (`worker-cron/`).** Its
-  Cron Triggers fire **weekdays only** and POST GitHub `workflow_dispatch` events to launch
-  workflows on Azure runners. All cron expressions live in `worker-cron/wrangler.toml`
-  `[triggers] crons`. Cloudflare cron is fixed-UTC and cannot follow DST — adjust manually on
-  2nd Sunday March (EST→EDT) and 1st Sunday November (EDT→EST).
-  - **`collect.yml` — 2 daily CF triggers:** `48 19` (3:48 PM EDT pre-close), `01 21` (5:01 PM
-    EDT EOD post-close). The EOD run captures the day's final closing data. The former `30 14`
-    (10:30 AM EDT intraday) trigger was removed (issue #252) to free a slot under the Cloudflare
-    account's hard 5-cron-trigger limit (shared with unrelated `distil-*` workers). No committed-
-    data loss: `collect.py` is last-write-wins per date, so the EOD run always overwrote the
-    intraday one anyway.
-  - **`collect_picks.yml` — 1 daily CF trigger + GitHub backstop:** CF cron `31 22` (6:31 PM EDT /
-    3:31 PM PDT / 2:31 PM PST winter) — 90 min after the EOD collect, giving `collect.yml +
-    compute_deltas + push` time to complete before picks selects groups from `deltas.csv`. The CF
-    picks cron failed to deploy for a stretch (same 5-cron-trigger limit above), leaving picks
-    with no trigger and no data from 2026-07-17 onward, so an interim GitHub `schedule:` backstop
+- **Primary scheduler: the Cloudflare Worker `finviz-cron-dispatcher` (`worker-cron/`).** As of
+  WS1 (`knowledge/decisions/ADR-010-single-trigger-cron-dispatch.md`,
+  `planning/cron-consolidation-state-machine.md`) it runs on a **single** Cron Trigger,
+  `*/5 * * * *` (`worker-cron/wrangler.toml`), firing `scheduled()` every 5 minutes around the
+  clock. Which job (if any) actually dispatches on a given tick is decided entirely in code —
+  `worker-cron/src/routing.js` `JOB_SCHEDULE` + `jobsForTick(etNow, dispatchedToday)` — gated on
+  Eastern wall-clock time computed via `Intl.DateTimeFormat('en-US', { timeZone:
+  'America/New_York' })`, which tracks EST/EDT automatically. **This removed the twice-yearly
+  manual DST edit** that the old 3-cron-trigger design required across `wrangler.toml`,
+  `src/index.js`, and `collect.yml` in lockstep.
+  - **Self-healing dispatch, not exact-minute matching.** A job is due whenever the tick falls
+    inside its `[target, target + DISPATCH_WINDOW_MINUTES)` ET window (default 30 min) **and**
+    has no successful dispatch recorded for today's ET date yet (per-job KV key
+    `last_dispatch_<jobName>`, e.g. `last_dispatch_collect_eod`). A delayed or skipped
+    Cloudflare tick no longer silently drops that day's job — the next 5-minute tick still picks
+    it up inside the window. No-op ticks (no job's window open) do zero I/O, keeping the
+    ~288 ticks/day this design produces free of observability noise.
+  - **Current jobs** (`worker-cron/src/routing.js` `JOB_SCHEDULE`, Mon–Fri): `collect_preclose`
+    at 15:50 ET (pre-close snapshot, shifted from legacy `:48`), `collect_eod` at 17:00 ET (EOD
+    post-close snapshot, shifted from legacy `:01`), `picks` at 18:30 ET (picks selector, shifted
+    from legacy `:31`; still a **fixed time margin**, not a dependency check against whether
+    `collect.yml` actually succeeded — that dependency gate is tracked separately, issue #259,
+    deliberately out of WS1's scope). The EOD collect run captures the day's final closing data.
+  - **`collect_picks.yml` also keeps its GitHub backstop:** an interim `schedule:` cron
     (`31 23 * * 1-5`, weekdays in GitHub's 0=Sunday convention) was added (issue #252,
-    PICKS-FIX-C) — it fires after the EOD collect+deltas-push in both DST seasons. A
+    PICKS-FIX-C) after the old per-workflow Cloudflare picks trigger failed to deploy under the
+    5-trigger account limit, leaving picks with no trigger and no data from 2026-07-17 onward. A
     healthchecks.io dead-man's-switch on `collect_picks.yml` still provides a before-bed alert if
-    both flows fail silently.
+    both flows fail silently. Per ADR-010, a single Cloudflare trigger is now a *stronger* single
+    point of failure than the old 3 independent triggers were, so both GitHub `schedule:`
+    backstops (`collect.yml` and `collect_picks.yml`) are kept, not removed, by this design.
   - **Why a separate scheduler:** GitHub's `schedule:` cron drifts hours and is dropped under
     load; `workflow_dispatch` is event-driven and prompt. See `planning/cloudflare-cron-scheduler.md`
     and `knowledge/decisions/` for the full rationale.
+  - Config constants (tick interval, per-job ET target times, `DISPATCH_WINDOW_MINUTES`) are
+    documented in-code in `worker-cron/src/routing.js` and in `worker-cron/README.md`
+    § Configurable parameters, per this repo's 3-places rule.
 - **Backstop: one GitHub cron** (`48 19 * * 1-5`) remains in `collect.yml` as redundancy. It
   fires at the *same time* as the Cloudflare EOD trigger (not a delayed fallback — GitHub cron is
   too timing-unreliable for that). The expected double-run is harmless: last-write-wins per date.

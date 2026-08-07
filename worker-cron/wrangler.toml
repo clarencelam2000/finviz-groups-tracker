@@ -17,32 +17,21 @@ name = "finviz-cron-dispatcher"
 main = "src/index.js"
 compatibility_date = "2024-09-23"
 
-# Cron Triggers (UTC, weekday-only, Monday=2 through Friday=6). Scheduled for summer EDT:
-# - 21:01 UTC = 5:01 PM EDT — collect (EOD post-close)
-# - 14:30 UTC = 10:30 AM EDT — collect (intraday)
-# - 19:48 UTC = 3:48 PM EDT — collect (pre-close)
-# - 22:31 UTC = 6:31 PM EDT — picks (EOD +90 min; deltas must be pushed first —
-#   the margin covers collect.yml + compute_deltas + push; the stale-read guard
-#   in collect_picks.py makes a too-early fire a safe no-op, but then that day's
-#   picks list is lost, so keep this comfortably after the 21:01 collect).
-#   The "31 22" expression must stay byte-identical to PICKS_CRON in src/index.js
-#   — scheduled() routes picks-vs-collect by exact event.cron string match.
-# NOTE: Cloudflare cron uses 1=Sunday, 2=Monday...6=Friday, 0=Saturday.
-# Do NOT use 1-5 (that's Sunday-Thursday); use 2-6 for Monday-Friday.
-# Also: Cloudflare cron is fixed-UTC with no DST support. Must adjust manually:
-# - On 2nd Sunday of March: add 1 hour to UTC times (EST→EDT transition)
-# - On 1st Sunday of November: subtract 1 hour from UTC times (EDT→EST transition)
-# Winter UTC equivalents: ["22:01 * * 2-6", "20:48 * * 2-6", "31 23 * * 2-6"]
-# (a winter shift of the picks cron also requires updating PICKS_CRON in src/index.js).
+# Single trigger (ADR-010, WS1): fires scheduled() every 5 minutes, all day,
+# every day. Which job (if any) actually dispatches on a given tick is
+# decided entirely in code — src/routing.js `JOB_SCHEDULE` + `jobsForTick` —
+# gated on Eastern wall-clock time via Intl.DateTimeFormat, which tracks
+# EST/EDT automatically. This replaced the old 3-cron-trigger design (one
+# trigger string per job, hand-edited twice a year for DST) and frees 2 of
+# the account's hard 5-cron-trigger limit (shared with unrelated `distil-*`
+# workers) for future jobs — see knowledge/decisions/ADR-010-single-trigger-
+# cron-dispatch.md and planning/cron-consolidation-state-machine.md.
+#
+# To change *when* a job fires, edit its entry in worker-cron/src/routing.js
+# `JOB_SCHEDULE` (also documented in worker-cron/README.md § Configurable
+# parameters and CLAUDE.md § Automation) — not this file.
 [triggers]
-# ISSUE #252: the intraday 10:30 AM EDT collect cron ("30 14 * * 2-6") was
-# removed to free a slot — the Cloudflare account has a hard 5-cron-trigger
-# limit shared with unrelated `distil-*` workers, and that limit is what
-# caused the picks cron below to fail to deploy in the first place. The
-# intraday run was the safe one to cut: collect.py is last-write-wins per
-# date, so the EOD run ("01 21") always overwrites it — no committed-data
-# loss — and the 3:48 PM pre-close run ("48 19") remains as an EOD fallback.
-crons = ["01 21 * * 2-6", "48 19 * * 2-6", "31 22 * * 2-6"]
+crons = ["*/5 * * * *"]
 
 [vars]
 # The git ref that collect.yml runs on. Stored as a var (not a secret) so it can

@@ -6,6 +6,67 @@
 
 ---
 
+## 2026-08-07 — WS1 implementation: single-tick cron dispatcher (#258)
+
+**Status: safe to close** (see caveat on deploy below). Implemented WS1 from
+`planning/roadmap-cron-lifecycle.md` — the first coding step of the cron→trade-lifecycle
+roadmap, on the owner's go-word recorded in the alignment doc § 10 and issue #258's comments.
+Entry point was the roadmap's "START HERE" front door (not #257, which is superseded) →
+alignment § 10 → ADR-010 → `planning/cron-consolidation-state-machine.md` → issue #258 (incl.
+its staff-review comment) → the mocks (not applicable to WS1, no UI surface).
+
+**What landed:**
+- `worker-cron/src/routing.js` (new) — pure, I/O-free routing: `computeEtNow(date)` (ET
+  wall-clock via `Intl.DateTimeFormat`, auto-DST — no more twice-yearly manual edit),
+  `JOB_SCHEDULE` (3 jobs: `collect_preclose` 15:50 ET, `collect_eod` 17:00 ET, `picks` 18:30 ET,
+  all shifted from the legacy `:48`/`:01`/`:31` minutes onto the new 5-minute tick grid),
+  `jobsInWindow(etNow)`, and `jobsForTick(etNow, dispatchedToday)`.
+- `worker-cron/src/index.js` — rewritten around the new routing module. `scheduled()` now:
+  (1) computes `etNow` from `event.scheduledTime`, (2) does a **zero-I/O** check
+  (`jobsInWindow`) — if nothing's in-window, returns immediately (no KV read, no fetch, no
+  log), (3) only for in-window jobs, reads each job's `last_dispatch_<jobName>` KV record to
+  build `dispatchedToday`, (4) calls `jobsForTick` and dispatches whatever comes back.
+  `dispatchWorkflow` → `dispatchJob(env, jobName, workflow, etDateStr)`, KV keyed per job name
+  (not per workflow — `collect_preclose`/`collect_eod` share the `collect` workflow but must
+  track "dispatched today" independently, or the pre-close dispatch would wrongly suppress the
+  EOD one). Removed `workflowForCron`/`PICKS_CRON`/`dispatchCollect` (obsolete exact-cron-string
+  routing).
+- **Folded in the #258 staff-review amendment**: don't match ticks by exact-minute equality — a
+  delayed/skipped Cloudflare tick would silently drop that day's job with nothing to retry.
+  Instead a job is due whenever the tick falls in `[target, target+30min)` ET **and** has no
+  successful dispatch recorded for today's ET date — self-healing, one mechanism (not a separate
+  one for the #259 picks gate later).
+- `worker-cron/wrangler.toml` — single trigger `crons = ["*/5 * * * *"]`, replacing the 3
+  per-job cron strings; DST comment block removed (no longer applicable).
+- Tests: `worker-cron/test/routing.test.js` (new, 21 tests) — ET/DST calc incl. both 2026
+  transition days verified against real `Intl.DateTimeFormat` output (not hand-derived),
+  Friday-23:55-ET-is-Saturday-UTC and Sunday-night-is-Monday-UTC boundary cases, full window/
+  self-heal table. `worker-cron/test/index.test.js` — rewritten for the new `dispatchJob`/
+  `scheduled()` contract (24 tests). All 45 pass (`npm test` in `worker-cron/`).
+- Docs (3-places rule): in-code comments in `routing.js`; `worker-cron/README.md` rewritten
+  (design section + Configurable parameters table); `CLAUDE.md` § Automation updated to describe
+  the single-trigger design and current job list; `.github/workflows/collect_picks.yml` comments
+  updated to stop citing the retired fixed `31 22 UTC` cron string.
+
+**Explicitly out of scope (per issue #258's own scope line and the roadmap):** the picks
+dependency gate against `collect.yml`'s actual run state (#259) — `picks` still fires on a fixed
+ET time target here, just via the new self-healing mechanism instead of the old exact-match one.
+Also out of scope: WS2+ (session dimension and everything downstream).
+
+**Not done in this session (operational, not code):** the design doc's rollout steps 3–5 —
+running the new routing in parallel with the old 3 triggers in production for a few trading days
+before cutting `wrangler.toml` over, and confirming the 2 freed trigger slots on the Cloudflare
+dashboard. This PR ships the code in its final single-trigger form directly (matches issue
+#258's acceptance criterion "3→1 trigger cut confirmed on the CF dashboard") since a real
+multi-day production comparison isn't something a coding session can execute — **the owner
+should deploy (`cd worker-cron && npm run deploy`) and then confirm on the CF dashboard that
+exactly 1 trigger shows for `finviz-cron-dispatcher`.**
+
+**Next steps:** #259 (picks dependency gate + self-heal, replacing the fixed-margin `picks` job
+time), then WS2 (session-dimension ADR-011 Option C, already decided) per the roadmap sequencing.
+
+---
+
 ## 2026-07-02 — Picks selector dedup fix + per-group page cap (SELECTOR_VERSION v2)
 
 **Status: safe to close.** Two related, user-requested changes to the picks selector, spiked
