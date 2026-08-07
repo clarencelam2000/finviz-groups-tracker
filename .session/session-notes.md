@@ -345,3 +345,44 @@ real validation is the first post-merge 22:31 UTC fire; check `/last` on the wor
 **Next steps:** merge PR → deploy-workers.yml ships the dispatcher; VP creates the healthchecks
 check + secret; watch the first scheduled picks fire. Backlog unchanged otherwise (AUD-1/2/3/5,
 PICKS-4B/4C remain).
+
+---
+
+## 2026-08-06 — Cron consolidation → trade-lifecycle initiative (planning only, no code)
+
+**Status: safe-to-close on Claude's side; one owner action remains — review/merge PR #257** so
+the docs + memory record land on the default branch (until merged they're reachable only on
+`claude/finviz-cron-consolidation-8uilrk`, so the next session won't auto-see them).
+
+**What this was:** a staff-level ideation session (no implementation) triggered by the shared
+Cloudflare account's hard 5-cron-trigger limit (issue #252 history) and the owner's pain point of
+having no morning market-open data. Adopted the sibling project's doctrine: one cron trigger per
+project, gate logical jobs in code by ET time-of-day/weekday.
+
+**What landed (all on branch `claude/finviz-cron-consolidation-8uilrk`, PR #257):**
+- `knowledge/decisions/ADR-010` — collapse 3 CF crons → one `*/5` tick, in-code ET routing,
+  auto-DST via `Intl.DateTimeFormat`, dependency-driven picks dispatch (replaces 90-min margin).
+- `planning/cron-consolidation-state-machine.md` — implementation-ready WS1 design.
+- `planning/roadmap-cron-lifecycle.md` — sequenced WS1–WS5 + cheap wins + parked/rejected.
+- `knowledge/cron-lifecycle-ideation-and-alignment.md` — **memory record**: idea-by-idea
+  decisions, owner's swing-trading ruleset, corrections to Claude's thinking. Source of truth for
+  owner intent.
+- `knowledge/decisions/ADR-011` — WS2 session-dimension keystone. **Ends in an owner decision
+  point: Option A (session column in existing files) vs Option C (canonical/provisional physical
+  separation, recommended).** Not yet decided.
+- `knowledge/decisions/ADR-012` + `planning/trade-lifecycle-engine.md` — WS5 lifecycle engine:
+  D1 storage (spine + JSON bag + event log), app-layer tenant isolation, and the formalized
+  daily-advancement engine encoding the owner's real rules (profit-floor invariant NOT naive
+  ratchet-up; two-close-below-20MA exit; ATR≥7 10%-of-remaining trims).
+
+**Tracked work:** issues #258–#266 (WS1×3, WS2, WS3, WS4, WS5 epic, taxonomy check, parked).
+
+**Process note:** first drafts of the three cron docs were done by a Sonnet subagent; owner
+correctly flagged that judgment-heavy design synthesis is main-model work. WS2/WS5 docs were then
+authored directly by main-model Claude. WS3/WS4 deep docs deferred on purpose (depend on WS2's
+A/C decision).
+
+**Open decisions for the owner (none block review; all captured in the docs):** WS2 Option A vs C;
+`SEVERE_BREAKDOWN_ATR` calibration; widen-policy auto-vs-opt-in; ticker-quote store CSV-vs-D1
+(shared WS2/WS5 decision); picks dependency-gate window width; whether GitHub backstop crons go
+ET-derived. **No implementation until the owner's explicit go-word — WS1 (#258) is the start.**
