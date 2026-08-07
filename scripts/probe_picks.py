@@ -83,6 +83,19 @@ PAGE_SIZE = 20
 EXPECTED_COL_COUNT = 84
 EXPECTED_COL_0 = "Ticker"
 
+# Scraped header label -> canonical screener_config.json/golden-header label.
+# Finviz renamed these two on 2026-08-07 (appended " %"); picks.csv's on-disk
+# schema keeps the pre-rename names ("Change", "Change from Open") since
+# write_picks() fully rewrites the file each run keyed by the *current* config
+# labels (extrasaction="ignore") — renaming the canonical label instead of
+# aliasing it here would blank every historical row's value for that column on
+# the next write (see scripts/CLAUDE.md § Header-drift guard). Mirrors the
+# same alias pattern used for collect.py's HEADER_MAP/SPY_LABEL_MAP.
+HEADER_LABEL_ALIASES = {
+    "Change %": "Change",
+    "Change from Open %": "Change from Open",
+}
+
 SCREENER_BASE = "https://finviz.com/screener.ashx"
 
 # CSS selector for the screener results table. Verified against live Finviz
@@ -149,6 +162,7 @@ def _parse_table(html: str) -> tuple[list[str], list[dict]]:
     # len(cells)==len(headers) guard below. This was the real cause of the
     # "0 rows / 0 cols" probe failure (collect.parse_table uses ["th","td"] too).
     headers = [c.get_text(strip=True) for c in rows[0].find_all(["th", "td"])]
+    headers = [HEADER_LABEL_ALIASES.get(h, h) for h in headers]
 
     data_rows = []
     for tr in rows[1:]:
