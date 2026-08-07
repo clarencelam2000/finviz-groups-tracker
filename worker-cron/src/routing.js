@@ -7,6 +7,13 @@
  * arguments so it can be unit-tested with fixed clock fixtures.
  */
 
+// Issue #259: picks no longer fires on a fixed time margin — it re-checks
+// collect.yml's actual EOD run outcome every tick inside its window (see
+// picksGate.js and index.js's runPicksGate). PICKS_GATE_WINDOW_MINUTES lives
+// in picksGate.js (the module that owns the gate decision logic, also I/O
+// free); imported here only to size the 'picks' JOB_SCHEDULE entry's window.
+import { PICKS_GATE_WINDOW_MINUTES } from './picksGate.js';
+
 // IANA zone for all job scheduling. Cloudflare Workers' V8 runtime ships full
 // ICU tz data, so Intl.DateTimeFormat tracks EST/EDT transitions with no
 // lookup table to maintain — this is what makes the twice-yearly manual DST
@@ -101,14 +108,29 @@ export const JOB_SCHEDULE = [
     name: 'picks',
     workflow: 'picks',
     weekdays: [1, 2, 3, 4, 5],
-    hour: 18,
-    minute: 30, // shifted from legacy 18:31 (EOD collect + 90min margin).
-    // NOTE: this is still fixed-time-margin dispatch, not the dependency
-    // gate against collect.yml's actual run state — that's #259, split out
-    // of WS1 deliberately (see issue #258 scope). WS1 only fixes *how* a
-    // fixed-time job is matched to a tick (self-heal amendment below), not
-    // *what* picks waits on.
-    windowMinutes: DISPATCH_WINDOW_MINUTES,
+    // Target is the SAME as collect_eod's (17:00 ET), not a fixed margin
+    // after it (legacy was 18:31 = EOD + 90min). Issue #259: picks no
+    // longer waits out a fixed margin and hopes — the window opens as soon
+    // as collect_eod's own window opens, and `gated: true` below means
+    // index.js's runPicksGate re-checks collect.yml's *actual* EOD run
+    // outcome (via the GitHub Actions API) every tick inside the window,
+    // dispatching picks the moment a success is confirmed rather than
+    // waiting until 18:30 regardless of how fast collect_eod actually ran.
+    hour: 17,
+    minute: 0,
+    // PICKS_GATE_WINDOW_MINUTES (120 = 17:00-19:00 ET), not the shorter
+    // DISPATCH_WINDOW_MINUTES used for plain self-heal — the gate needs
+    // room for collect_eod's own self-heal window (up to 30 min late) plus
+    // its run time, not just a single job's normal margin. See
+    // picksGate.js for the exact reasoning.
+    windowMinutes: PICKS_GATE_WINDOW_MINUTES,
+    // gated: true marks this job as dependency-gated rather than plain
+    // fire-at-window-open — index.js's scheduled() branches on this flag to
+    // call runPicksGate() instead of dispatchJob() directly. jobsInWindow/
+    // jobsForTick treat it identically to any other job for the "is a
+    // window open" and "already dispatched today" checks (same self-heal
+    // mechanism, not a second one-off — see PR #269).
+    gated: true,
   },
 ];
 

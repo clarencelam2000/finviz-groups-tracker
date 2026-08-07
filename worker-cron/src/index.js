@@ -23,9 +23,16 @@
  */
 
 import { computeEtNow, jobsInWindow, jobsForTick, JOB_SCHEDULE } from './routing.js';
+import { evaluatePicksGate, findEodRun } from './picksGate.js';
 
 const REPO_WORKFLOWS_URL =
   'https://api.github.com/repos/clarencelam2000/finviz-groups-tracker/actions/workflows';
+
+// GET endpoint for the picks dependency gate (issue #259) to read collect.yml's
+// actual run history/status — distinct from the dispatches POST endpoints in
+// WORKFLOWS below, which only ever get a 204-or-not accepted/rejected signal,
+// never the underlying workflow's real outcome.
+const COLLECT_RUNS_URL = `${REPO_WORKFLOWS_URL}/collect.yml/runs`;
 
 // Maps a job's `workflow` field (routing.js JOB_SCHEDULE) to the GitHub
 // Actions dispatch endpoint. Job-level "already dispatched today" tracking
@@ -136,6 +143,89 @@ export async function dispatchJob(env, jobName, workflow, etDateStr) {
   return record;
 }
 
+/**
+ * Fetch collect.yml's recent run history and pick out the run that
+ * corresponds to our own EOD dispatch (disambiguating from the earlier
+ * same-day pre-close dispatch — issue #259 review finding #1). Never
+ * throws: a fetch/auth failure surfaces as `fetchError`, which
+ * evaluatePicksGate treats as "not yet satisfied" (never dispatches picks
+ * on an unverifiable read) so the gate fails closed, not open.
+ *
+ * GITHUB_DISPATCH_TOKEN is documented (wrangler.toml) as a fine-grained PAT
+ * with "Actions: Read and write" on this repo, which per GitHub's
+ * permission model covers this GET as well as the dispatches POST already
+ * in use — but this was flagged in the #259 review as worth confirming live
+ * (a classic PAT would also work; a narrower fine-grained grant might not).
+ * A `github_401`/`github_403` fetchError here is the concrete signal if
+ * that assumption turns out wrong in prod.
+ */
+export async function fetchEodRun(env, dispatchTs) {
+  if (!env.GITHUB_DISPATCH_TOKEN) return { eodRun: null, fetchError: 'missing_token' };
+  try {
+    const url = `${COLLECT_RUNS_URL}?event=workflow_dispatch&branch=${encodeURIComponent(env.DISPATCH_REF)}&per_page=10`;
+    const resp = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${env.GITHUB_DISPATCH_TOKEN}`,
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'finviz-cron-dispatcher',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+    });
+    if (!resp.ok) {
+      return { eodRun: null, fetchError: `github_${resp.status}` };
+    }
+    const body = await resp.json();
+    return { eodRun: findEodRun(body.workflow_runs || [], dispatchTs), fetchError: null };
+  } catch (e) {
+    return { eodRun: null, fetchError: 'fetch_failed' };
+  }
+}
+
+/**
+ * The picks dependency gate (issue #259): reads collect_eod's own dispatch
+ * record, fetches the corresponding GitHub Actions run's real outcome,
+ * decides dispatch/waiting/miss via the pure evaluatePicksGate, records the
+ * outcome to KV (`last_gate_check_picks`, surfaced via /last), and only
+ * calls dispatchJob when collect.yml's EOD run has actually concluded
+ * `success` — replacing the old "EOD + 90min, hope for the best" margin.
+ */
+export async function runPicksGate(env, job, etNow) {
+  let collectEodDispatch = null;
+  try {
+    const raw = await env.DISPATCH_LOG.get('last_dispatch_collect_eod');
+    collectEodDispatch = raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    collectEodDispatch = null;
+  }
+
+  let eodRun = null;
+  let fetchError = null;
+  if (collectEodDispatch && collectEodDispatch.ok && collectEodDispatch.etDate === etNow.dateStr) {
+    ({ eodRun, fetchError } = await fetchEodRun(env, collectEodDispatch.ts));
+  }
+
+  const { outcome, reason } = evaluatePicksGate({ job, etNow, collectEodDispatch, eodRun, fetchError });
+
+  const record = { ts: new Date().toISOString(), outcome, reason, etDate: etNow.dateStr };
+  try {
+    await env.DISPATCH_LOG.put('last_gate_check_picks', JSON.stringify(record));
+  } catch (_) {
+    // observability write must never break the gate path
+  }
+  log({ event: 'picks_gate', ...record });
+
+  if (outcome === 'dispatch') {
+    await dispatchJob(env, 'picks', job.workflow, etNow.dateStr);
+  } else if (outcome === 'miss') {
+    log({
+      level: 'error',
+      message: "picks dependency gate window closed without a successful EOD collect run",
+      reason,
+      etDate: etNow.dateStr,
+    });
+  }
+}
+
 async function handleHealth(env) {
   let kvOk = false;
   try {
@@ -156,6 +246,16 @@ async function handleLast(env) {
     } catch (_) {
       out[name] = null;
     }
+  }
+  // Picks dependency-gate outcome (issue #259) — distinct from
+  // last_dispatch_picks: this records every gate *check* (dispatch/waiting/
+  // miss), not just an eventual successful dispatch, so a stuck "waiting"
+  // or a "miss" is visible on /last even on a day picks never fires.
+  try {
+    const raw = await env.DISPATCH_LOG.get('last_gate_check_picks');
+    out.picks_gate_check = raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    out.picks_gate_check = null;
   }
   // Legacy per-workflow keys from before WS1's per-job KV keys existed —
   // surfaced so the first /last check after deploy still shows the
@@ -203,7 +303,15 @@ export default {
 
     for (const jobName of due) {
       const job = JOB_SCHEDULE.find((j) => j.name === jobName);
-      await dispatchJob(env, jobName, job.workflow, etNow.dateStr);
+      // gated jobs (currently just 'picks', issue #259) don't dispatch
+      // directly on window-open — they re-check collect.yml's actual EOD
+      // run outcome first; runPicksGate calls dispatchJob itself once that
+      // check passes.
+      if (job.gated) {
+        await runPicksGate(env, job, etNow);
+      } else {
+        await dispatchJob(env, jobName, job.workflow, etNow.dateStr);
+      }
     }
   },
   fetch: handleRequest,

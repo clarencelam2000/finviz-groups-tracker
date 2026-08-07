@@ -46,9 +46,18 @@ that's delayed or skipped doesn't silently drop that day's job — the next
 ticks (no job's window open) do zero I/O — no KV read, no fetch, no log — so
 the ~288 ticks/day this design produces stay free of observability noise.
 
-The picks job is still fired on a **fixed ET time target**, not a dependency
-check against whether `collect.yml` actually succeeded — that dependency
-gate is tracked separately (issue #259), deliberately out of scope for WS1.
+**Picks is dependency-gated (issue #259), not fixed-time.** Instead of firing
+at a fixed margin after collect_eod and hoping, `src/picksGate.js` +
+`runPicksGate` in `index.js` re-check collect.yml's *actual* EOD run outcome
+every tick inside picks' window (which now starts at the same 17:00 ET
+target as collect_eod, not 90 minutes later): read `last_dispatch_collect_eod`
+KV, fetch collect.yml's run history from the GitHub Actions API, match the
+run that corresponds to the EOD dispatch (disambiguating from the earlier
+same-day pre-close run by `created_at`), and dispatch picks the moment that
+run is `conclusion === 'success'`. If the window closes without a success, a
+`last_gate_check_picks` "miss" record is written (surfaced via `/last`)
+instead of the day silently going missing — see § Picks dependency gate
+below for the full detail.
 
 ## Live deployment
 
@@ -66,20 +75,87 @@ gate is tracked separately (issue #259), deliberately out of scope for WS1.
   `DISPATCH_LOG` KV under `last_dispatch_<jobName>`.
 - `GET /health` — liveness + KV ping.
 - `GET /last` — the last dispatch record per job (for debugging drift /
-  failures), plus legacy pre-WS1 per-workflow keys if present.
+  failures), the picks dependency-gate's last check outcome
+  (`picks_gate_check`), plus legacy pre-WS1 per-workflow keys if present.
+
+## Picks dependency gate (issue #259)
+
+Replaces the old "EOD collect + 90 minutes, hope `compute_deltas.py` and the
+git push finished" margin with an actual state check, closing out the last
+piece of ADR-010's dependency-driven dispatch:
+
+1. Picks' `JOB_SCHEDULE` entry (`gated: true`) targets the **same** 17:00 ET
+   time as `collect_eod`, with a much wider window
+   (`PICKS_GATE_WINDOW_MINUTES`, 120 min = 17:00–19:00 ET) — not a fixed
+   later time.
+2. On each tick inside that window where picks hasn't dispatched
+   successfully yet today, `index.js`'s `runPicksGate` reads the
+   `last_dispatch_collect_eod` KV record. If collect_eod hasn't been
+   dispatched for today's ET date yet, the gate just waits (no GitHub call)
+   — nothing to check yet.
+3. Once collect_eod has been dispatched today, the gate fetches
+   `collect.yml`'s recent run history (`GET .../collect.yml/runs`) and picks
+   out the run that corresponds to *that* dispatch (`picksGate.js`'s
+   `findEodRun` — matched by `created_at` at/after the dispatch timestamp,
+   within a small clock-skew tolerance). This disambiguates from the
+   earlier same-day `collect_preclose` dispatch's run — collect.yml fires
+   twice a day, so "most recent run succeeded" alone can be satisfied by
+   the wrong one (the #259 review's finding #1).
+4. If the matched run is `conclusion === 'success'`, picks dispatches
+   immediately (`dispatchJob`, same as any other job). If not yet resolved
+   (still running, or no matching run found yet), the gate records
+   `outcome: 'waiting'` and retries next tick — the same self-heal mechanism
+   `jobsForTick` already provides, not a second one-off.
+5. If the window closes (120 min after target) without a success, the gate
+   records `outcome: 'miss'` and logs at `error` level, instead of the day
+   silently going missing (issue #252's failure mode). This is the basis for
+   eventually retiring the healthchecks.io dead-man's-switch on
+   `collect_picks.yml` — not done yet; see ADR-010 rollout step 7.
+6. Every gate check (`waiting`/`dispatch`/`miss`) is written to
+   `last_gate_check_picks` KV, surfaced as `picks_gate_check` on `GET /last`
+   — so a stuck "waiting" or a "miss" is visible without digging through
+   Worker logs.
+
+`collect.yml` runs `collect.py → compute_deltas.py → evaluate_picks.py →
+git commit && git push` all in one job, push last — so a `success`
+conclusion on the matched run already implies deltas were computed and
+pushed; no separate commit-presence check is needed (resolved during design
+review, see `planning/cron-consolidation-state-machine.md`).
+
+**Fails closed, not open:** if the GitHub Actions runs-list read itself
+fails (e.g. `GITHUB_DISPATCH_TOKEN` lacks read scope — see § Token read
+scope below), the gate treats that the same as "not yet successful" and
+keeps waiting/eventually misses — it never dispatches picks on an
+unverifiable check.
+
+### Token read scope
+
+`GITHUB_DISPATCH_TOKEN` is documented (see `wrangler.toml`'s setup comment)
+as a fine-grained PAT scoped to this repo with **"Actions: Read and
+write"** — which per GitHub's permission model should already cover the
+`GET .../collect.yml/runs` call the gate makes, the same token already used
+for the `workflow_dispatch` POST. This was flagged in the #259 review as
+worth confirming live rather than assumed: **after first deploy, check
+`GET /last`'s `picks_gate_check` for a `run_status_fetch_failed:github_401`
+or `github_403` reason** — that's the concrete signal the token can't read
+run status and needs a scope fix (or rotation to a classic PAT with `repo`
+scope, which always includes Actions read).
 
 ## Configurable parameters
 
-All schedule constants live in `src/routing.js`. Edit `JOB_SCHEDULE` to
-change *when* something fires, or add a new job — not `wrangler.toml` (which
-now only holds the fixed `*/5 * * * *` trigger).
+All schedule constants live in `src/routing.js` (job timing) and
+`src/picksGate.js` (gate window). Edit `JOB_SCHEDULE` to change *when*
+something fires, or add a new job — not `wrangler.toml` (which now only
+holds the fixed `*/5 * * * *` trigger).
 
 | Parameter | Default | What it controls |
 |-----------|---------|-------------------|
 | Tick interval (`wrangler.toml [triggers] crons`) | `*/5 * * * *` | How often `scheduled()` fires; the grid every `JOB_SCHEDULE` target time must land on (target minutes must be multiples of 5). |
-| `DISPATCH_WINDOW_MINUTES` | `30` | How long after a job's target ET time the tick keeps considering that job due, and the self-heal retry budget for a delayed/skipped Cloudflare tick. |
-| `JOB_SCHEDULE[*].hour` / `.minute` | `collect_preclose` 15:50, `collect_eod` 17:00, `picks` 18:30 (ET) | Per-job target wall-clock time. Shifted from the legacy `:48`/`:01`/`:31` cron minutes to land on the 5-minute grid. |
+| `DISPATCH_WINDOW_MINUTES` | `30` | How long after `collect_preclose`/`collect_eod`'s target ET time the tick keeps considering that job due, and the self-heal retry budget for a delayed/skipped Cloudflare tick. |
+| `PICKS_GATE_WINDOW_MINUTES` (`picksGate.js`) | `120` | How long after picks' 17:00 ET target the dependency gate keeps re-checking collect.yml's EOD run status before giving up and recording a `miss`. Wider than `DISPATCH_WINDOW_MINUTES` since it must cover collect_eod's own self-heal window plus its run time, not just one job's normal margin. |
+| `JOB_SCHEDULE[*].hour` / `.minute` | `collect_preclose` 15:50, `collect_eod` 17:00, `picks` 17:00 (ET, gated — see § Picks dependency gate) | Per-job target wall-clock time. |
 | `JOB_SCHEDULE[*].weekdays` | `[1,2,3,4,5]` (Mon–Fri) for all current jobs | ISO weekday gate per job; a future Sunday-only job (e.g. the roadmap's weekly taxonomy check) would use `[7]`. |
+| `JOB_SCHEDULE[*].gated` | `true` for `picks` only | Marks a job as dependency-gated (routed through `runPicksGate` instead of dispatched directly on window-open). |
 
 Also documented in `CLAUDE.md` § Automation, per this repo's 3-places rule
 for configurable constants.
@@ -90,7 +166,7 @@ for configurable constants.
 |-----|-----------------------|---------|
 | `collect_preclose` | 15:50 | pre-close snapshot before the market close |
 | `collect_eod` | 17:00 | EOD post-close snapshot |
-| `picks` | 18:30 | picks selector (fixed time margin — dependency gate is #259) |
+| `picks` | 17:00 (gated, window through 19:00) | picks selector — dependency-gated on collect_eod's actual run success (issue #259), not a fixed later time; see § Picks dependency gate |
 
 ## Monitoring and validation
 
@@ -104,13 +180,31 @@ curl https://finviz-cron-dispatcher.salmonbaby8.workers.dev/health
 curl https://finviz-cron-dispatcher.salmonbaby8.workers.dev/last
 ```
 
-`/last` returns `{last_dispatch: {collect_preclose, collect_eod, picks, legacy}}`,
-each a `{ts, status, ok, error, job, workflow, ref, etDate}` record written to
-KV on every successful or attempted dispatch (never on a no-op tick).
+`/last` returns
+`{last_dispatch: {collect_preclose, collect_eod, picks, picks_gate_check, legacy}}`.
+`collect_preclose`/`collect_eod`/`picks` are each a
+`{ts, status, ok, error, job, workflow, ref, etDate}` record written to KV on
+every successful or attempted dispatch (never on a no-op tick).
 - `ok: true, status: 204` = GitHub accepted the dispatch.
 - `error: "github_401"` = PAT expired — rotate `GITHUB_DISPATCH_TOKEN`.
 - `error: "github_422"` = `DISPATCH_REF` branch no longer exists; update `wrangler.toml` vars and redeploy.
 - `error: "fetch_failed"` = network issue on Cloudflare's side.
+
+`picks_gate_check` is a separate `{ts, outcome, reason, etDate}` record
+(issue #259) — written on **every** gate evaluation, not just an eventual
+dispatch, so a stuck check is visible even on a day picks never fires:
+- `outcome: "dispatch"` = the gate found a successful matching EOD run and
+  dispatched picks this tick (a `last_dispatch_picks` record follows).
+- `outcome: "waiting"` = not yet resolved; will retry next tick within the
+  17:00–19:00 ET window. Check `reason`: `collect_eod_not_dispatched` (EOD
+  collect hasn't fired yet today), `eod_run_not_found` /
+  `eod_run_in_progress` (dispatched, but the matching Actions run hasn't
+  shown up / finished yet), `eod_run_<conclusion>` (e.g.
+  `eod_run_failure` — the EOD run itself failed), or
+  `run_status_fetch_failed:<code>` (the GitHub Actions runs-list read
+  itself failed — see § Token read scope if this persists).
+- `outcome: "miss"` = the window closed (120 min after target) without a
+  successful EOD run; picks did not fire today. Logged at `error` level too.
 
 ### Cross-check: did the scrape actually run?
 

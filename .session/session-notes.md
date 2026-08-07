@@ -6,6 +6,68 @@
 
 ---
 
+## 2026-08-07 — WS1 follow-up: picks dependency gate + self-heal (#259)
+
+**Status: safe to close.** Implemented #259 — the last piece of ADR-010's "dependency-driven
+dispatch" — right after WS1 (#258/PR #269) merged. Entry point was the roadmap's "START HERE"
+front door → alignment § 10 → ADR-010 → `planning/cron-consolidation-state-machine.md` →
+issue #259 (incl. its staff-review comment) → mocks (not applicable, no UI surface for WS1/#259).
+
+**What landed:**
+- `worker-cron/src/picksGate.js` (new) — pure decision logic, no I/O: `findEodRun(runs,
+  dispatchTs)` disambiguates the EOD collect.yml run from the earlier same-day pre-close run
+  (the #259 review's finding #1 — "most recent run succeeded" can be satisfied by the wrong
+  run), `isTerminalTick` / `evaluatePicksGate` decide `dispatch`/`waiting`/`miss` per tick.
+  `PICKS_GATE_WINDOW_MINUTES = 120` (17:00–19:00 ET).
+- `worker-cron/src/routing.js` — picks' `JOB_SCHEDULE` entry now targets 17:00 ET (same as
+  `collect_eod`, not a fixed 18:31/18:30 margin after it) with the 120-min gate window, marked
+  `gated: true`.
+- `worker-cron/src/index.js` — new `fetchEodRun` (GET `collect.yml/runs`, reusing
+  `GITHUB_DISPATCH_TOKEN`) and `runPicksGate` (reads `last_dispatch_collect_eod` KV, calls
+  `fetchEodRun`, evaluates the gate, writes every check outcome to `last_gate_check_picks` KV,
+  dispatches picks only on a confirmed EOD success). `scheduled()` branches on `job.gated` to
+  call `runPicksGate` instead of `dispatchJob` directly for picks. `/last` now also surfaces
+  `picks_gate_check`.
+- Fails closed: a GitHub API read failure (auth/network) is treated as "not yet satisfied," never
+  as a green light — picks never fires on an unverifiable check.
+- Tests: `worker-cron/test/picksGate.test.js` (new, 19 tests, no network) + updates to
+  `worker-cron/test/index.test.js` (new "picks dependency gate" describe block, 8 tests covering
+  wait/dispatch/miss/disambiguation/fetch-failure) and `worker-cron/test/routing.test.js`
+  (existing collect_eod-window tests updated since picks now shares its 17:00 target). 70/70 pass.
+- Docs (3-places rule): in-code comments in `picksGate.js`/`routing.js`/`index.js`; new
+  `worker-cron/README.md` § Picks dependency gate + § Token read scope + updated Configurable
+  parameters table; `CLAUDE.md` § Automation updated; `.github/workflows/collect_picks.yml`
+  header comments updated to stop describing the retired fixed-margin behavior.
+
+**Two non-obvious things worth flagging:**
+1. **Token read-scope risk is mitigated by setup docs, not proven live.** `wrangler.toml`'s setup
+   comment says the PAT was provisioned with "Actions: Read and write," which per GitHub's
+   permission model should cover the new GET as well as the existing dispatch POST — but this
+   session had no way to exercise the real deployed token against the real GitHub API (sandboxed,
+   no live secrets). **Owner: after deploying, check `GET /last`'s `picks_gate_check` — if
+   `reason` ever shows `run_status_fetch_failed:github_401` or `github_403`, the token needs a
+   scope fix/rotation.** The design fails closed either way (never dispatches on an unverifiable
+   read), so the failure mode is "picks stays gated, GitHub backstop still covers it" rather than
+   a wrong dispatch — but it's the one thing I couldn't fully verify.
+2. **`session-notes.md`'s actual convention is newest-entry-at-top**, not literally "append" as
+   the file's own header text says (confirmed by checking where PR #269's WS1 entry landed — right
+   after the header, not at the bottom). This entry follows that established practice, not the
+   literal instruction text; flagging the mismatch in case it's worth fixing the header wording
+   itself sometime.
+
+**Also ran the requested `curl .../last` health check** (see PR body / chat) — `collect_preclose`,
+`collect_eod`, and `picks` all showed fresh 2026-08-07 dispatch records under the new per-job KV
+keys before this session's changes were deployed, confirming #258/PR #269 is live and healthy.
+No action needed there.
+
+**Next steps:** deploy this PR (`cd worker-cron && npm run deploy`), then watch `GET /last`'s
+`picks_gate_check` over a few trading days to confirm the gate fires cleanly (ideally `dispatch`
+within a tick or two of `collect_eod` landing, not riding out the full 120-min window) and to
+settle the token-read-scope question above. After that, WS2 (session dimension, ADR-011 Option C
+already decided) is next per the roadmap.
+
+---
+
 ## 2026-08-07 — Daily Snapshot failure investigation: Finviz "Change %" rename
 
 **Status: safe to close.** User asked to investigate 3 failing Daily Snapshot runs today

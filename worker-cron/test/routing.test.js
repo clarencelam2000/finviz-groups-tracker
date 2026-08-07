@@ -73,29 +73,29 @@ describe('jobsInWindow — pure, no "already dispatched" awareness', () => {
     expect(jobsInWindow(etNow)).toEqual(['collect_preclose']);
   });
 
-  it('returns collect_eod at 17:00 ET on a weekday', () => {
+  it('returns collect_eod AND picks at 17:00 ET on a weekday (issue #259: picks shares collect_eod\'s target, gated on dependency not a later fixed time)', () => {
     const etNow = { hour: 17, minute: 0, weekday: 3, dateStr: '2026-07-15' };
-    expect(jobsInWindow(etNow)).toEqual(['collect_eod']);
+    expect(jobsInWindow(etNow)).toEqual(['collect_eod', 'picks']);
   });
 
-  it('returns picks at 18:30 ET on a weekday', () => {
+  it('returns just picks once collect_eod\'s own (shorter) window has closed but picks\' (longer, gate) window is still open', () => {
     const etNow = { hour: 18, minute: 30, weekday: 3, dateStr: '2026-07-15' };
     expect(jobsInWindow(etNow)).toEqual(['picks']);
   });
 
   it('stays open for the full window, not just the exact target minute', () => {
-    // 15 minutes late, still inside the 30-minute window.
+    // 15 minutes late, still inside collect_eod's 30-minute window (and
+    // picks' much wider 120-minute gate window, since #259 sized it to
+    // start at the same 17:00 target).
     const etNow = { hour: 17, minute: 15, weekday: 3, dateStr: '2026-07-15' };
-    expect(jobsInWindow(etNow)).toEqual(['collect_eod']);
+    expect(jobsInWindow(etNow)).toEqual(['collect_eod', 'picks']);
   });
 
-  it('closes once the window elapses', () => {
-    const etNow = {
-      hour: 17,
-      minute: DISPATCH_WINDOW_MINUTES, // exactly windowMinutes past target = closed
-      weekday: 3,
-      dateStr: '2026-07-15',
-    };
+  it('closes once a job\'s own window elapses (collect_preclose, isolated — does not overlap picks\' window)', () => {
+    // collect_preclose targets 15:50 with DISPATCH_WINDOW_MINUTES (30) window
+    // -> closes at 16:20, exactly the tick asserted here.
+    expect(DISPATCH_WINDOW_MINUTES).toBe(30);
+    const etNow = { hour: 16, minute: 20, weekday: 3, dateStr: '2026-07-15' };
     expect(jobsInWindow(etNow)).toEqual([]);
   });
 
@@ -108,32 +108,32 @@ describe('jobsInWindow — pure, no "already dispatched" awareness', () => {
 });
 
 describe('jobsForTick — self-healing dispatch (staff amendment on #258)', () => {
-  it('dispatches a job whose window is open and not yet dispatched today', () => {
+  it('dispatches every job whose window is open and not yet dispatched today (collect_eod and picks share the 17:00 target — #259)', () => {
     const etNow = { hour: 17, minute: 0, weekday: 3, dateStr: '2026-07-15' };
-    expect(jobsForTick(etNow, {})).toEqual(['collect_eod']);
+    expect(jobsForTick(etNow, {})).toEqual(['collect_eod', 'picks']);
   });
 
-  it('does not re-dispatch a job already recorded as dispatched today', () => {
+  it('does not re-dispatch a job already recorded as dispatched today, while an undispatched sibling in the same window still is', () => {
     const etNow = { hour: 17, minute: 0, weekday: 3, dateStr: '2026-07-15' };
     const dispatchedToday = { collect_eod: '2026-07-15' };
-    expect(jobsForTick(etNow, dispatchedToday)).toEqual([]);
+    expect(jobsForTick(etNow, dispatchedToday)).toEqual(['picks']);
   });
 
   it('re-dispatches if the recorded date is stale (yesterday, not today)', () => {
     const etNow = { hour: 17, minute: 0, weekday: 3, dateStr: '2026-07-15' };
     const dispatchedToday = { collect_eod: '2026-07-14' };
-    expect(jobsForTick(etNow, dispatchedToday)).toEqual(['collect_eod']);
+    expect(jobsForTick(etNow, dispatchedToday)).toEqual(['collect_eod', 'picks']);
   });
 
   it('self-heals a delayed tick: a late tick within the window still dispatches', () => {
     // The exact :00 tick was skipped/delayed by Cloudflare; the :20 tick
     // picks it up because the job hasn't been dispatched today yet.
     const etNow = { hour: 17, minute: 20, weekday: 3, dateStr: '2026-07-15' };
-    expect(jobsForTick(etNow, {})).toEqual(['collect_eod']);
+    expect(jobsForTick(etNow, {})).toEqual(['collect_eod', 'picks']);
   });
 
-  it('does not dispatch once the window has closed, even if never dispatched', () => {
-    const etNow = { hour: 17, minute: DISPATCH_WINDOW_MINUTES, weekday: 3, dateStr: '2026-07-15' };
+  it('does not dispatch a job once its own window has closed, even if never dispatched (collect_preclose, isolated)', () => {
+    const etNow = { hour: 16, minute: 20, weekday: 3, dateStr: '2026-07-15' }; // collect_preclose window closes at 16:20
     expect(jobsForTick(etNow, {})).toEqual([]);
   });
 
