@@ -6,6 +6,41 @@
 
 ---
 
+## 2026-08-07 — Daily Snapshot failure investigation: Finviz "Change %" rename
+
+**Status: safe to close.** User asked to investigate 3 failing Daily Snapshot runs today
+(19:50, 20:23, 21:00 UTC) and whether they were related to recent PRs (#269 WS1 cron
+dispatcher, #267 docs, #257 docs).
+
+**Root cause (confirmed via WebFetch against live Finviz):** Finviz renamed the daily-change
+column/label from `"Change"` to `"Change %"` on both the groups table
+(`finviz.com/groups?g=sector|industry`) and the SPY quote page (`finviz.com/stock?t=SPY&p=d`),
+some time today. `scripts/collect.py`'s `HEADER_MAP` and `SPY_LABEL_MAP` only recognized the
+old `"Change"` label, so: (1) the groups table's `change` column silently dropped (logged as
+`[warn] Unknown headers (will be dropped): ['Change %']`, sector/industry row counts
+unaffected), and (2) `collect_spy()`'s parse-completeness guard (added 2026-06-20, by design)
+correctly caught only 6/7 perf values and raised, exiting `collect.py` non-zero — which is why
+CI went red on all 3 runs despite `data/sectors|industries/snapshots.csv` being written fine
+each time (last-write-wins commits succeeded via `if: always()`). Verify/compute_deltas/
+evaluate_picks were skipped on all 3 runs since they lack `if: always()`.
+
+**Ruled out the recent PRs:** `scripts/collect.py` was last touched 2026-06-21 — none of
+#269/#267/#257 touch it. Separately verified the 3 runs firing within ~70min today
+(preclose@15:50 ET, GitHub-cron backstop@~19:48 UTC drifted late, EOD@17:00 ET) is the
+existing, expected multi-trigger pattern (same shape seen on prior successful days like
+2026-08-05) — not a WS1 dispatcher regression.
+
+**Fix:** added `"Change %"` as an accepted alias alongside `"Change"` in both `HEADER_MAP` and
+`SPY_LABEL_MAP` (`scripts/collect.py`). Added regression tests:
+`test_collect_parsing.py::test_change_pct_header_accepted`,
+`test_collect_benchmark.py::test_change_pct_label_accepted`. Full suite: 637 passed.
+
+**Next steps:** none required from this session — PR fixes the label immediately. No SPY
+benchmark row exists yet for 2026-08-07 (all 3 attempts failed before writing); once this PR
+merges, the next Daily Snapshot dispatch (or a manual `workflow_dispatch`) should backfill it.
+
+---
+
 ## 2026-08-07 — WS1 implementation: single-tick cron dispatcher (#258)
 
 **Status: safe to close** (see caveat on deploy below). Implemented WS1 from

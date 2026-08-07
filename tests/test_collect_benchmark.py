@@ -80,6 +80,26 @@ FIXTURE_HTML_ALT_LABELS = """
 
 FIXTURE_HTML_EMPTY = "<html><body></body></html>"
 
+# 2026-08-07: Finviz renamed the quote-page daily-change label from "Change"
+# to "Change %". Both forms must resolve to perf_day (SPY_LABEL_MAP).
+FIXTURE_HTML_CHANGE_PCT_LABEL = """
+<html><body>
+<table class="snapshot-table2">
+  <tr>
+    <td>Change %</td><td>0.61%</td>
+    <td>Perf Week</td><td>1.23%</td>
+    <td>Perf Month</td><td>2.34%</td>
+    <td>Perf Quart</td><td>5.67%</td>
+  </tr>
+  <tr>
+    <td>Perf Half Y</td><td>8.90%</td>
+    <td>Perf Year</td><td>15.23%</td>
+    <td>Perf YTD</td><td>12.34%</td>
+  </tr>
+</table>
+</body></html>
+"""
+
 
 # ---------------------------------------------------------------------------
 # parse_spy_quote
@@ -142,6 +162,11 @@ class TestParseSpyQuote:
         assert rec["perf_day"] == pytest.approx(0.54)
         assert rec["perf_quarter"] == pytest.approx(5.67)
         assert rec["perf_half"] == pytest.approx(8.90)
+
+    def test_change_pct_label_accepted(self):
+        # 2026-08-07 Finviz rename: "Change" -> "Change %" on the quote page.
+        rec = self._parse(FIXTURE_HTML_CHANGE_PCT_LABEL)
+        assert rec["perf_day"] == pytest.approx(0.61)
 
     def test_empty_page_returns_all_none(self):
         rec = self._parse(FIXTURE_HTML_EMPTY)
