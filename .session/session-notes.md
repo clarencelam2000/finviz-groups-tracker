@@ -386,3 +386,37 @@ A/C decision).
 `SEVERE_BREAKDOWN_ATR` calibration; widen-policy auto-vs-opt-in; ticker-quote store CSV-vs-D1
 (shared WS2/WS5 decision); picks dependency-gate window width; whether GitHub backstop crons go
 ET-derived. **No implementation until the owner's explicit go-word — WS1 (#258) is the start.**
+
+---
+
+## 2026-08-07 — Staff review of PR #257 + issues #258–#266 (trade-lifecycle workstream readiness)
+
+**Status: safe to close.** Review-only session; no code. PR #257 was already merged by the owner
+before review — docs verified against the default branch instead.
+
+**Verdict: team is ready to pick up WS1.** All 7 docs read in full; a Sonnet subagent verified
+every `file:line` citation against source — substance is accurate (minor line-number drift only;
+one relocated fact: the earnings/days-to-earnings parse lives in `scripts/replay_picks.py` +
+`docs/index.html`, NOT `scripts/picks_metrics.py` — WS4 (#263) needs it ported Python-side).
+
+**Findings filed as issue comments (don't lose):**
+- **#259** — the dependency gate's run-success check can be satisfied by the 15:50 *pre-close*
+  run (same workflow file), dispatching picks against pre-close deltas; require run start ≥ EOD
+  target ET. Also: `GITHUB_DISPATCH_TOKEN` is POST-only today — verify it can READ run status.
+- **#258** — exact-minute tick matching is fragile (delayed/skipped CF ticks silently drop a
+  job); use "target passed + no dispatch recorded today (KV)" within a bounded window. Also the
+  stale `#FOLLOWUP` placeholder in the issue body.
+- **#264** — exits should capture the user's *actual* fill like entries do (suggest a `closing`
+  state between Managing/Closed); signal-close vs execution-close distinction; `pos.sma50` →
+  `bar.sma50` pseudocode nit.
+
+**Mocks created** (owner asked for visuals): claude.ai artifact "Picks Workstream Mocks —
+WS3/WS4/WS5" — WS3 morning-confirmation states, WS4 trade ticket, WS5 position cards, in the
+PWA's slate/sky idiom, each with embedded owner questions (gapped-through "I took it"?; where
+does risk-per-trade $ come from?; exit auto-close vs confirmed fill?).
+
+**Endorsements:** ADR-011 Option C (physical separation) — concur decisively; WS3-before-
+morning-picks sequencing — correct; D1 spine+bag+event-log — right shape.
+
+**Next steps:** owner answers the mock questions + ADR-011 A/C + gives WS1 go-word → implement
+#258 with the two robustness amendments above.
