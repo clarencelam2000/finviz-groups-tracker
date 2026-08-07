@@ -201,3 +201,59 @@ triple-documented config constants.
 - **Nothing is implemented.** All work to date is docs + tracking. No code, workflow, or
   `wrangler.toml` change. Implementation waits on the owner's explicit go-word, starting with WS1.
 - WS2 and WS5 each require their **own ADR before implementation** (tracked in #261, #264).
+
+---
+
+## 10. Decision update — 2026-08-07 (staff review of #257 + owner Q&A)
+
+Second alignment pass. Staff review of the merged #257 docs and issues #258–#266; owner answered
+the open mock questions and several roadmap decisions. **These supersede the "open" flags above
+where they conflict.** Companion visual: `planning/mocks/trade-lifecycle-surfaces.html` (committed
+mocks for WS3/WS4/WS5 — open in a browser).
+
+### Owner decisions locked this session
+
+| Topic | Decision | Notes |
+|---|---|---|
+| WS3 gapped-through action | ✏️ Gapped-through **also gets "I took it"** | "At least for now, can revisit later." Both Triggered and Gapped hand off to WS5. |
+| WS4 risk-per-trade source | ✅ **Free input on the ticket** | Per-ticket $ risk the user types; shares recompute live. NOT a global constant or % of account — so no new config-table constant. |
+| WS5 stop-hit handling | ✅ **Await user's confirmed fill** (new `closing` state) | Symmetric with entry-fill freeze. Engine signals exit + shows modeled price as *expected*; user confirms *actual* fill or "still holding" (discretionary override). Required for an honest R-multiple record. **`planning/trade-lifecycle-engine.md` §4 currently auto-closes at modeled price — must be updated to add the `closing` state.** Tracked #264. |
+| ADR-011 A vs C | ✅ **Option C (physical separation)** — recommended and endorsed | Integrity is structural, not disciplinary. Owner's pre-close idea (below) *reinforces* C: another provisional session absorbed for free. |
+| `SEVERE_BREAKDOWN_ATR` | ✅ **Default 3.0 ATR** (documented, recalibrate after real data) — or ship phase 3 without it, relying on close-below-50MA alone | 1 ATR = noise, ~2 = bad day, 3+ = "something broke." Don't leave TBD blocking impl. |
+| WS1 go-word | ✅ **Given** — start #258 | Safest first step: no user-facing change, reversible (parallel-run rollout), unblocks everything. Fold in the two robustness amendments from the #258/#259 review comments. |
+
+### New scope captured (do not orphan)
+
+- **WS3b — pre-close (~15:30 ET) confirmation surface.** Owner: *"I usually check the markets the
+  last half hour of the trading day too."* A sibling of the morning surface showing which of today's
+  setups are confirming *into the close*, so the user can enter near the close rather than waiting a
+  day. **More on-thesis than the morning surface** for a close-reacting swing trader. Pre-close
+  collect trigger already exists (15:50 ET); under Option C it's just another `session` value — near-
+  zero new architecture. Sequence alongside/after WS3. Needs its own tracking issue.
+- **WS3 additional v1 states** beyond the original four (Triggered/Setting-up/Gapped/Invalidated):
+  **Failed-breakout** (tagged then fell back below trigger ≠ still-setting-up) and **No-quote** (feed
+  miss shown explicitly, never silently dropped). Noted-for-later: earnings-gapped-overnight, whipsaw
+  (trigger + stop hit same session). Update #262.
+- **WS5 aggregate-exposure footer** — surfaces the parked "crowding" idea as *information only*: total
+  $ exposure, same-group clustering, total open risk (heat = Σ(entry − current_stop)×qty). Never
+  framed as "diversify." Realizes the roadmap's § Cross-cutting "light sizing reminder" inside WS5.
+
+### Staff findings filed on issues (fold into implementation)
+
+- **#258** — don't match ticks by exact-minute equality (a delayed/skipped CF tick silently drops a
+  job); use "target passed + no dispatch recorded today (KV)" within a bounded window — unifies with
+  the picks self-heal, one mechanism not two.
+- **#259** — run-success gate can be satisfied by the 15:50 **pre-close** run (same workflow file);
+  require the successful run's start ≥ EOD target ET (or match the EOD `last_dispatch_collect` KV
+  record). Also: `GITHUB_DISPATCH_TOKEN` is POST-only today (`worker-cron/src/index.js`, no GET) —
+  **verify it can READ run status before building**, or the first gate tick 403s.
+- **#264** — exits asymmetric with entries on fill truth (→ `closing` state, above); signal-close vs
+  execution-close (engine runs after close → real exit is next open at earliest); `pos.sma50` →
+  `bar.sma50` pseudocode nit.
+- **Relocated fact for WS4 (#263):** the earnings/days-to-earnings parse is NOT in
+  `scripts/picks_metrics.py` — it lives in `scripts/replay_picks.py` (`parse_earnings_days_until`,
+  `earnings_penalty_frac`) and mirrored JS in `docs/index.html`. WS4 must port it Python-side.
+
+### Endorsed without change
+ADR-011 Option C; WS3-before-morning-picks sequencing; D1 spine + JSON bag + event-log shape; keeping
+both GitHub backstops; the profit-floor-not-monotonic-stop invariant (ADR-012 §2).

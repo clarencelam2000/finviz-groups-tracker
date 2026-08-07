@@ -1,0 +1,298 @@
+<title>Picks Workstream Mocks — WS3 / WS4 / WS5</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#0f172a; --panel2:#1e293b; --line:#334155;
+    --ink:#f1f5f9; --mut:#94a3b8; --dim:#64748b;
+    --accent:#38bdf8; --good:#34d399; --warn:#fbbf24; --bad:#f87171; --violet:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,"SF Pro Text",Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 24px 80px}
+  header.page h1{font-size:26px;margin:0 0 6px;letter-spacing:-.02em}
+  header.page p{color:var(--mut);max-width:62ch;margin:0 0 8px}
+  .meta{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+  .row{display:flex;flex-wrap:wrap;gap:36px;margin-top:36px;align-items:flex-start}
+  .mockcol{flex:0 0 360px}
+  .notes{flex:1 1 320px;min-width:280px}
+  .notes h3{margin:0 0 4px;font-size:15px;color:var(--accent)}
+  .notes .ws{font-size:11px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
+  .notes ul{margin:10px 0 0;padding-left:18px;color:var(--mut);font-size:13.5px}
+  .notes li{margin-bottom:8px}
+  .notes b{color:var(--ink);font-weight:600}
+  .q{border-left:3px solid var(--warn);padding:2px 0 2px 10px;margin-top:14px;font-size:13px;color:var(--warn)}
+  /* phone frame */
+  .phone{width:360px;background:var(--panel);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  .phead{padding:12px 16px 8px;border-bottom:1px solid var(--line);background:rgba(15,23,42,.95)}
+  .phead .t{font-weight:700;font-size:15px}
+  .phead .s{font-size:11px;color:var(--mut)}
+  .body{padding:12px 12px 18px;display:flex;flex-direction:column;gap:10px}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .tick{font-weight:700;font-size:15px;letter-spacing:.02em}
+  .grp{font-size:11px;color:var(--dim)}
+  .num{font-variant-numeric:tabular-nums}
+  .pill{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.05em;padding:2px 8px;border-radius:999px;text-transform:uppercase}
+  .p-good{background:rgba(52,211,153,.15);color:var(--good)}
+  .p-warn{background:rgba(251,191,36,.15);color:var(--warn)}
+  .p-bad{background:rgba(248,113,113,.15);color:var(--bad)}
+  .p-mut{background:rgba(148,163,184,.14);color:var(--mut)}
+  .p-vio{background:rgba(167,139,250,.15);color:var(--violet)}
+  .kv{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mut);margin-top:4px}
+  .kv .v{color:var(--ink);font-weight:600}
+  .stripe{border-left:3px solid var(--line)}
+  .stripe.good{border-left-color:var(--good)} .stripe.warn{border-left-color:var(--warn)}
+  .stripe.bad{border-left-color:var(--bad)} .stripe.mut{border-left-color:var(--dim)}
+  .banner{font-size:11px;color:var(--warn);background:rgba(251,191,36,.08);border:1px dashed rgba(251,191,36,.4);border-radius:8px;padding:6px 10px}
+  .btn{display:inline-block;text-align:center;font-size:12.5px;font-weight:700;border-radius:8px;padding:8px 12px;border:1px solid var(--line);color:var(--mut)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#082f49}
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:11.5px}
+  .seg div{flex:1;text-align:center;padding:6px 4px;color:var(--mut)}
+  .seg .on{background:rgba(56,189,248,.18);color:var(--accent);font-weight:700}
+  .hr{height:1px;background:var(--line);margin:8px 0}
+  .small{font-size:11.5px;color:var(--mut)}
+  .flow{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);flex-wrap:wrap;margin-top:6px}
+  .flow .st{border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+  .flow .on{border-color:var(--accent);color:var(--accent);font-weight:700}
+  section.block{margin-top:56px}
+  section.block>h2{font-size:19px;margin:0;letter-spacing:-.01em}
+  section.block>.sub{color:var(--dim);font-size:13px;margin:4px 0 0}
+  a{color:var(--accent)}
+  @media (prefers-color-scheme: light){ :root{} } /* app is committed dark; mocks stay dark deliberately */
+</style>
+
+<div class="wrap">
+<header class="page">
+  <div class="meta">finviz-groups-tracker · design mocks · 2026-08-07</div>
+  <h1>Trade-lifecycle workstream — surface mocks</h1>
+  <p>Companion visuals for issues #262 (WS3), #263 (WS4), #264 (WS5). Rendered in the shipping PWA's
+  visual language (slate-900 / sky-400 / Tailwind idiom) so these translate 1:1 into <code>docs/index.html</code>.
+  Deliberately dark-only — the app itself is single-theme dark.</p>
+</header>
+
+<!-- ============ WS3 ============ -->
+<section class="block">
+  <h2>WS3 — Morning confirmation surface (~9:45 ET)</h2>
+  <p class="sub">Yesterday's picks, each tagged with what the open actually did to the setup. Issue #262.</p>
+  <div class="row">
+    <div class="mockcol">
+      <div class="phone">
+        <div class="phead">
+          <div class="t">Picks · Morning check</div>
+          <div class="s">Thu Aug 7 · snapshot 9:45 ET · <span style="color:var(--warn)">provisional — not settled</span></div>
+        </div>
+        <div class="body">
+          <div class="banner">Morning prices are mid-session reads. Nothing here changes your EOD data.</div>
+
+          <div class="card stripe good">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">AXON</span> <span class="grp">· Aerospace &amp; Defense</span></span>
+              <span class="pill p-good">Triggered</span>
+            </div>
+            <div class="kv"><span>Trigger (prior high)</span><span class="v num">612.40</span></div>
+            <div class="kv"><span>Now</span><span class="v num">614.05 · +0.9%</span></div>
+            <div class="kv"><span>ATR from LoD</span><span class="v num" style="color:var(--good)">0.6 — ok to act</span></div>
+            <div class="hr"></div>
+            <span class="btn primary" style="width:100%">I took it →</span>
+          </div>
+
+          <div class="card stripe mut">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">CLS</span> <span class="grp">· Electronic Components</span></span>
+              <span class="pill p-mut">Setting up</span>
+            </div>
+            <div class="kv"><span>Trigger (prior high)</span><span class="v num">71.20</span></div>
+            <div class="kv"><span>Now</span><span class="v num">70.15 · −0.3%</span></div>
+            <div class="small">Below trigger. Nothing to do yet.</div>
+          </div>
+
+          <div class="card stripe warn">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">VRT</span> <span class="grp">· Electrical Equipment</span></span>
+              <span class="pill p-warn">Gapped through</span>
+            </div>
+            <div class="kv"><span>Trigger</span><span class="v num">98.75</span></div>
+            <div class="kv"><span>Opened</span><span class="v num">102.30 · +4.2% gap</span></div>
+            <div class="kv"><span>ATR from LoD</span><span class="v num" style="color:var(--warn)">1.8 — chase risk</span></div>
+            <div class="small">Entry here has poor R vs the planned stop.</div>
+          </div>
+
+          <div class="card stripe warn">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">FIX</span> <span class="grp">· Engineering &amp; Construction</span></span>
+              <span class="pill p-warn">Failed breakout</span>
+            </div>
+            <div class="kv"><span>Trigger (prior high)</span><span class="v num">118.30</span></div>
+            <div class="kv"><span>Tagged then fell back</span><span class="v num">116.90 · below trigger</span></div>
+            <div class="small">Broke out and failed. Don't chase a re-break blindly.</div>
+          </div>
+
+          <div class="card stripe bad">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">SMCI</span> <span class="grp">· Computer Hardware</span></span>
+              <span class="pill p-bad">Invalidated</span>
+            </div>
+            <div class="kv"><span>Planned stop (prior low)</span><span class="v num">44.10</span></div>
+            <div class="kv"><span>Now</span><span class="v num">43.20 — below stop</span></div>
+            <div class="small">Setup dead. Drop from watch.</div>
+          </div>
+
+          <div class="card stripe mut">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">PWR</span> <span class="grp">· Electrical Equipment</span></span>
+              <span class="pill p-mut">No quote</span>
+            </div>
+            <div class="small">Morning feed missed this ticker — shown explicitly, never silently dropped.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="ws">Design intent</div>
+      <h3>Actionable states, one glance</h3>
+      <ul>
+        <li><b>Severity stripe + pill</b> carry state; numbers are secondary. The user decides in seconds pre-open of their workday.</li>
+        <li><b>Provisional banner is non-negotiable</b> (ADR-011): a 9:45 number must never read as settled. Banner + timestamp + amber tint.</li>
+        <li><b>ATR-from-LoD renders only on actionable states</b> (Triggered / Gapped-through) — it's an entry-quality gate, meaningless for Setting-up/Invalidated.</li>
+        <li><b>"I took it" on Triggered AND Gapped-through</b> (owner 2026-08-07: gaps are takeable too, revisit later) — this is the WS3→WS5 handoff (creates a position, see WS5 mock).</li>
+        <li><b>Failed-breakout and No-quote are v1 states</b> beyond the original four (owner-requested edge coverage): a tagged-then-failed setup ≠ still-setting-up, and a missing quote must never look like a vanished setup.</li>
+        <li><b>Further edge states noted for later:</b> earnings-gapped-overnight (tag via the guardrail), and whipsaw (trigger + stop both hit same session).</li>
+        <li>Sort order = actionability: Triggered → Gapped → Failed → Setting-up → Invalidated → No-quote.</li>
+      </ul>
+      <div class="q">Future extension (owner 2026-08-07): a <b>pre-close ~15:30 ET</b> sibling of this surface — which of today's setups are confirming into the close so you can enter near the close, not wait a day. Pre-close collect trigger already exists (15:50); under ADR-011 Option C it's just another <code>session</code> value. Tracked as WS3b.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WS4 ============ -->
+<section class="block">
+  <h2>WS4 — Trade ticket (expanded pick card, EOD)</h2>
+  <p class="sub">Stop menu + risk sizing + earnings guardrail. Issue #263.</p>
+  <div class="row">
+    <div class="mockcol">
+      <div class="phone">
+        <div class="phead">
+          <div class="t">AXON · Trade ticket</div>
+          <div class="s">Aerospace &amp; Defense · from Picks (leaders · rs_new_high)</div>
+        </div>
+        <div class="body">
+          <div class="card">
+            <div class="kv"><span>Entry trigger — break of prior high</span><span class="v num">612.40</span></div>
+            <div class="kv"><span>Last close</span><span class="v num">609.85</span></div>
+            <div class="kv"><span>ATR (14)</span><span class="v num">14.20</span></div>
+          </div>
+
+          <div class="card">
+            <div class="small" style="margin-bottom:6px;font-weight:700;color:var(--ink)">Stop — pick your basis</div>
+            <div class="seg">
+              <div class="on">Prior low<br><span class="num">597.10</span></div>
+              <div>Today low<br><span class="num">601.30</span></div>
+              <div>20MA<br><span class="num">588.45</span></div>
+              <div>50MA<br><span class="num">561.20</span></div>
+            </div>
+            <div class="kv" style="margin-top:8px"><span>Risk / share (R)</span><span class="v num">15.30 · 2.5%</span></div>
+            <div class="kv"><span>My risk this trade <span class="pill p-mut" style="margin-left:4px">free input</span></span><span class="v num">$500</span></div>
+            <div class="kv"><span>→ Shares</span><span class="v num">32</span></div>
+          </div>
+
+          <div class="card stripe warn">
+            <div class="kv"><span><span class="pill p-warn">Earnings in 4 sessions</span></span><span></span></div>
+            <div class="small">Inside your hold window — this is an earnings gamble, not a swing setup.</div>
+          </div>
+
+          <div class="small" style="padding:0 4px">
+            Focus score 0.81 — watchlist context only, not part of this ticket.
+            <br>No profit target. Exits are managed by the lifecycle rules after entry.
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="ws">Design intent</div>
+      <h3>The ticket answers "is this a good trade right now"</h3>
+      <ul>
+        <li><b>Stop menu is a segmented control</b>, live-recomputing R, %-risk, and share count on selection — the ticket's one interaction.</li>
+        <li><b>No profit target anywhere</b>, stated explicitly so the absence reads as a choice, not an omission (owner's ruleset).</li>
+        <li><b>Focus score demoted to a footnote</b> — roadmap's "watchlist gate, not ticket headline" rule made visible.</li>
+        <li><b>Earnings guardrail is a hard amber card</b>, not a chip — it should interrupt.</li>
+        <li><b>Risk-per-trade is a free input on the ticket</b> (owner 2026-08-07): the user types their $ risk for this trade and shares recompute. Not a global constant — per-ticket, per-conviction. Add to WS4 scope; no config-table constant needed.</li>
+      </ul>
+      <div class="q">Resolved: risk-per-trade = free input on the ticket (not a fixed constant or % of account).</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ WS5 ============ -->
+<section class="block">
+  <h2>WS5 — Position card (Managing state)</h2>
+  <p class="sub">The daily engine's output: profit floor, active stop, trim ledger, exit watch. Issue #264.</p>
+  <div class="row">
+    <div class="mockcol">
+      <div class="phone">
+        <div class="phead">
+          <div class="t">Positions</div>
+          <div class="s">Advanced after close · Wed Aug 6</div>
+        </div>
+        <div class="body">
+          <div class="card stripe good">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">AXON</span> <span class="grp">· 32 → 26 sh</span></span>
+              <span class="pill p-good">Managing · +3.4R</span>
+            </div>
+            <div class="flow">
+              <span class="st">Watching</span>→<span class="st">Open</span>→<span class="st on">Managing</span>→<span class="st">Closed</span>
+            </div>
+            <div class="hr"></div>
+            <div class="kv"><span>Entry (your fill)</span><span class="v num">613.10 · Jul 18</span></div>
+            <div class="kv"><span>Profit floor <span class="pill p-good" style="margin-left:4px">never red again</span></span><span class="v num">613.10</span></div>
+            <div class="kv"><span>Active stop · 50MA <span class="pill p-vio" style="margin-left:4px">widened Jul 30</span></span><span class="v num">618.40</span></div>
+            <div class="kv"><span>Trims taken</span><span class="v num">7 ATR ✓ · 8 ATR ✓ (10% each)</span></div>
+            <div class="kv"><span>20MA watch</span><span class="v num" style="color:var(--good)">above · no caution</span></div>
+          </div>
+
+          <div class="card stripe warn">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">CLS</span> <span class="grp">· 45 sh</span></span>
+              <span class="pill p-warn">Caution</span>
+            </div>
+            <div class="kv"><span>1st close below 20MA</span><span class="v num">watching next close</span></div>
+            <div class="kv"><span>Active stop · 20MA</span><span class="v num">69.80</span></div>
+            <div class="small">2nd consecutive close below 20MA → exit signal.</div>
+          </div>
+
+          <div class="card stripe bad">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">VRT</span> <span class="grp">· exit signal</span></span>
+              <span class="pill p-bad">Stop hit · gap-through</span>
+            </div>
+            <div class="kv"><span>Stop was</span><span class="v num">98.20 · opened 96.40</span></div>
+            <div class="kv"><span>Engine assumes exit at</span><span class="v num">96.40 (open)</span></div>
+            <div class="hr"></div>
+            <span class="btn" style="width:48%">Confirm my fill</span>
+            <span class="btn" style="width:48%">Still holding</span>
+          </div>
+
+          <div class="card" style="border-style:dashed">
+            <div class="small" style="font-weight:700;color:var(--ink);margin-bottom:4px">Aggregate exposure — information, not advice</div>
+            <div class="kv"><span>Open positions</span><span class="v num">3 · $18,400</span></div>
+            <div class="kv"><span>Same group</span><span class="v" style="color:var(--warn)">AXON + VRT in Electrical/Defense adjacency</span></div>
+            <div class="kv"><span>Total open risk (heat)</span><span class="v num">$640</span></div>
+            <div class="small">A group stop-day moves these together. Press the best horse — not a reason to diversify.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="ws">Design intent</div>
+      <h3>State the engine holds so the user doesn't have to</h3>
+      <ul>
+        <li><b>Profit floor and active stop shown as two separate rows</b> — the ADR-012 invariant made legible. Floor = the guarantee (monotonic, "never red again"); active stop = the working order (trails, may widen 20MA→50MA). The "widened" pill explains why the stop can sit on a lower basis without alarm.</li>
+        <li><b>Trim ledger is visible history</b> ("7 ATR ✓ · 8 ATR ✓"), so an idempotent no-trim day is self-explanatory.</li>
+        <li><b>Caution state gets its own card treatment</b> — the stateful two-close rule is the ruleset's subtlest part; the UI must show the counter, not just the outcome.</li>
+        <li><b>Exit awaits confirmed fill</b> (owner 2026-08-07, confirmed): stop-hit puts the position in a <code>closing</code> state showing the modeled price as <i>expected</i>; the user confirms the <i>actual</i> fill (or "still holding" = discretionary override). Symmetric with entry — required for an honest R-multiple record.</li>
+        <li><b>Aggregate-exposure footer</b> surfaces the roadmap's parked "crowding" idea as <i>information</i> only — total $ exposure, same-group clustering, and total open risk (heat = Σ(entry − current_stop)×qty). Never framed as "diversify."</li>
+      </ul>
+      <div class="q">Resolved: exit awaits confirmed fill (new <code>closing</code> state). Design-doc §4 currently auto-closes at the modeled price — needs updating to match; tracked on #264.</div>
+    </div>
+  </div>
+</section>
+</div>

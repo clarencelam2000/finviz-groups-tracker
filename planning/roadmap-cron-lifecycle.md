@@ -1,5 +1,15 @@
 # Roadmap: Cron Lifecycle → Trade Lifecycle
 
+> **START HERE if you're picking up this workstream.** Read in this order:
+> 1. **This roadmap** — the map (workstreams, sequencing, what's parked and why).
+> 2. **`knowledge/cron-lifecycle-ideation-and-alignment.md`** — owner intent + all decisions
+>    (incl. § 10, the 2026-08-07 decision update). If any doc contradicts it on intent, it wins.
+> 3. The per-workstream ADR + design doc (linked per row below), then the tracking issue.
+> 4. **`planning/mocks/trade-lifecycle-surfaces.html`** — committed WS3/WS4/WS5 UI mocks (open in a browser).
+>
+> **Start coding at #258 (WS1)** — owner go-word given 2026-08-07; fold in the review amendments on
+> #258/#259. Everything else waits on the decisions recorded in the alignment record § 10.
+
 ## Framing
 
 Cron consolidation (WS1) looks like small infra cleanup, but it's the unblocker for a cascade
