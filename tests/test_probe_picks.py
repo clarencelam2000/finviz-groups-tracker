@@ -33,6 +33,7 @@ from probe_picks import (
     EXPECTED_COL_COUNT,
     EXPECTED_COL_0,
     GOLDEN_HEADER_PATH,
+    HEADER_LABEL_ALIASES,
 )
 
 BASE_DIR = Path(__file__).parent.parent
@@ -305,6 +306,31 @@ class TestParseTable:
         assert len(rows) == 2
         assert rows[0]["Ticker"] == "NVDA"
         assert rows[1]["Price"] == "165.20"
+
+    def test_change_pct_header_aliased_to_canonical_label(self):
+        # 2026-08-07 Finviz rename: "Change" -> "Change %" and "Change from
+        # Open" -> "Change from Open %" on the screener. picks.csv's on-disk
+        # schema must keep the pre-rename names (write_picks() rewrites the
+        # whole file keyed by the config's canonical labels each run, so an
+        # unaliased rename would blank every historical row for that column).
+        html = """
+        <html><body>
+        <table class="screener_table">
+        <tr><th>Ticker</th><th>Change %</th><th>Change from Open %</th></tr>
+        <tr><td>NVDA</td><td>1.23%</td><td>0.45%</td></tr>
+        </table>
+        </body></html>
+        """
+        headers, rows = _parse_table(html)
+        assert headers == ["Ticker", "Change", "Change from Open"]
+        assert rows[0]["Change"] == "1.23%"
+        assert rows[0]["Change from Open"] == "0.45%"
+
+    def test_header_label_aliases_map_to_expected_canonical_names(self):
+        assert HEADER_LABEL_ALIASES == {
+            "Change %": "Change",
+            "Change from Open %": "Change from Open",
+        }
 
     def test_ticker_cell_ignores_markup_ahead_of_anchor(self):
         # Regression for the 2026-07-15 duplication incident.
