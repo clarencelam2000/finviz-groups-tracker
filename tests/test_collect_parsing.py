@@ -198,6 +198,21 @@ class TestParseTable:
         records = parse_table(MINIMAL_HTML, "sector", "2026-06-09", "2026-06-09T22:00:00Z")
         assert records[0]["perf_day"] == records[0]["change"]
 
+    def test_change_pct_header_accepted(self):
+        # 2026-08-07 Finviz rename: "Change" -> "Change %" on the groups table.
+        html = textwrap.dedent("""\
+            <html><body>
+            <table class="groups_table">
+              <tr><th>No.</th><th>Name</th><th>Change %</th></tr>
+              <tr><td>1</td><td>Tech</td><td>1.23%</td></tr>
+            </table>
+            </body></html>
+        """)
+        records = parse_table(html, "sector", "2026-06-09", "2026-06-09T22:00:00Z")
+        assert len(records) == 1
+        assert records[0]["change"] == pytest.approx(1.23)
+        assert records[0]["perf_day"] == pytest.approx(1.23)
+
     def test_empty_table(self):
         html = (
             '<html><body><table class="groups_table">'

@@ -58,6 +58,7 @@ HEADER_MAP = {
     "Rel Volume": "rel_volume",
     "Volume": None,
     "Change": "change",
+    "Change %": "change",
 }
 
 PERF_COLS = {
@@ -80,6 +81,7 @@ SPY_URL = "https://finviz.com/stock?t=SPY&p=d"
 # Multiple label forms accepted for resilience to Finviz wording changes.
 SPY_LABEL_MAP = {
     "Change": "perf_day",
+    "Change %": "perf_day",
     "Perf Day": "perf_day",
     "Perf Week": "perf_week",
     "Perf Month": "perf_month",
