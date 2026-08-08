@@ -235,6 +235,21 @@ All Playwright-in-cloud work should first read
     both flows fail silently. Per ADR-010, a single Cloudflare trigger is now a *stronger* single
     point of failure than the old 3 independent triggers were, so both GitHub `schedule:`
     backstops (`collect.yml` and `collect_picks.yml`) are kept, not removed, by this design.
+  - **Issue #260 (self-heal + retry-on-miss) is code-complete, retirement step still open.**
+    Its acceptance criteria — a missed dispatch retries for free within a job's window
+    (`jobsForTick`'s self-heal, shared by every job) and a window that closes without success
+    writes an explicit `miss` record + `error`-level log instead of silence (`picksGate.js`'s
+    `evaluatePicksGate` + `runPicksGate`) — were already delivered by #269 and #272, since
+    picks' dependency gate *is* that mechanism (issue text: "fall out of the picks
+    dependency-gate's state loop"). The one remaining action from #260's scope — retiring the
+    `PICKS_HEALTHCHECK_URL` healthchecks.io dead-man's-switch on `collect_picks.yml` — is
+    deliberately **not** done yet: ADR-010 rollout step 7 requires ≥1 full trading week of the
+    `last_gate_check_picks` miss-record path observed live first. The gate went live with #272
+    (merged 2026-08-08, a non-trading day); the first tradeable observation week is
+    2026-08-10–2026-08-14 (Mon–Fri). **Do not remove the healthchecks.io ping before
+    2026-08-17** — check `GET /last`'s `picks_gate_check` history over that week first (a
+    `miss` on a day collect_eod also failed is expected/healthy; a `miss` on a day collect_eod
+    actually succeeded would mean the gate itself is broken and healthchecks.io should stay).
   - **Why a separate scheduler:** GitHub's `schedule:` cron drifts hours and is dropped under
     load; `workflow_dispatch` is event-driven and prompt. See `planning/cloudflare-cron-scheduler.md`
     and `knowledge/decisions/` for the full rationale.
