@@ -266,6 +266,20 @@ them. Full steps, the Guide-glossary sync, and the "Start Here" intro carousel: 
 
 > These are instructions for future Claude instances, not the user. The user runs Claude Code on the web (code.claude.com), not the CLI.
 
+### PR activity monitoring policy (token cost critical)
+
+**DO NOT use `subscribe_pr_activity`, `unsubscribe_pr_activity`, or `send_later` tools to monitor PRs or schedule check-ins UNLESS the owner explicitly requests it.** These tools waste tokens and money. Specifically:
+
+- **Never** call `mcp__claude-code-remote__subscribe_pr_activity` to auto-monitor CI events or review comments
+- **Never** call `mcp__claude-code-remote__send_later` to schedule hourly PR status re-checks
+- **Never** call `mcp__claude-code-remote__fire_trigger` / `mcp__claude-code-remote__create_trigger` to set up recurring PR checks
+
+Only use these if the owner explicitly asks you to watch a PR. If they do ask, acknowledge the request and set it up; when they ask you to stop, unsubscribe immediately.
+
+**What to do instead:** If the user creates a PR in this session, mention that you've created it and ask if they'd like you to monitor it — do not assume. If a PR you created gets a CI failure or review comment, you will be notified passively; respond as events arrive, do not poll.
+
+---
+
 - **Starting a session**: This `CLAUDE.md` auto-loads at session start. Also read `.session/session-notes.md` immediately — it holds the last 4 session entries with recent findings, blockers, and next steps. Start the session by summarizing what's in the notes so the user knows you're oriented. Older history is in `.session/archive/session-notes-archive.md` — only read it if the user asks or context demands it.
 - **Sync first**: Run `git fetch origin && git log --oneline origin/claude/elegant-babbage-hlxnfy -5` before doing anything else — GitHub Actions may have pushed data overnight, and you need the latest base before branching or editing. See `.claude/rules/branch-commit-discipline.md` for the full session-start checklist.
 - **Ending a session**: Before the user closes, **append** a new `---` delimited block to `.session/session-notes.md`. Header format: `## YYYY-MM-DD — <workstream description>` (date + what you worked on, not the branch name — branches are ephemeral). Include: status, what landed, any blockers, and next steps. Be specific — vague notes are useless next session. Do NOT replace existing entries; append only.
@@ -275,8 +289,6 @@ them. Full steps, the Guide-glossary sync, and the "Start Here" intro carousel: 
 - **Subagents for analysis**: Use subagents (Agent tool) for exploratory pandas/data work to avoid bloating the main context window.
 - **Context pressure**: Use `/compact` when nearing limits. Prioritize keeping INITIAL_SPEC.md decisions and script logic in context; data rows are expendable.
 - **Save research before it's lost**: If a session involved substantial research (API evaluation, debugging a non-obvious root cause, evaluating architectural trade-offs), write a summary to `knowledge/` before ending. A future Claude — or a human reading the code — should not have to rediscover it. Research logs go in `knowledge/` as free-form `.md` files; architectural decisions (and the alternatives rejected) go in `knowledge/decisions/` as ADRs. See `knowledge/README.md` for templates.
-
-Note: there's no send_later tool in this session, so you can't auto-schedule the hourly re-check — webhooks won't tell you about CI success or merge-conflict transitions, so user will ping you if they would like me to re-check, or you can respond to any review-comment/CI-failure events as they arrive.
 ---
 
 ## Repository structure
