@@ -89,6 +89,21 @@ export const DISPATCH_WINDOW_MINUTES = 30;
  */
 export const JOB_SCHEDULE = [
   {
+    name: 'collect_morning',
+    workflow: 'morning',
+    weekdays: [1, 2, 3, 4, 5], // Mon-Fri
+    hour: 9,
+    minute: 45,
+    windowMinutes: DISPATCH_WINDOW_MINUTES,
+    // ADR-013 Decision 6 (WS3 Phase B): ungated, unlike `picks`. The input —
+    // yesterday's committed picks_latest.csv — already exists at dispatch
+    // time (no same-day upstream job to wait on), so there is nothing to
+    // gate on. collect_morning.py's own stale-input guard (max date strictly
+    // before today, <= MAX_STALE_SESSIONS old) covers the failure case
+    // instead. Late self-heal dispatch up to ~10:15 ET is acceptable — the
+    // store records real collected_at and the PWA displays it.
+  },
+  {
     name: 'collect_preclose',
     workflow: 'collect',
     weekdays: [1, 2, 3, 4, 5], // Mon-Fri

@@ -68,6 +68,50 @@ describe('jobsInWindow — pure, no "already dispatched" awareness', () => {
     expect(jobsInWindow(etNow)).toEqual([]);
   });
 
+  it('returns collect_morning at 09:45 ET on a weekday (ADR-013 Phase B)', () => {
+    const etNow = { hour: 9, minute: 45, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(etNow)).toEqual(['collect_morning']);
+  });
+
+  it('stays open through the window (10:14 ET, 29 min late, still inside the 30-min window)', () => {
+    const etNow = { hour: 10, minute: 14, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(etNow)).toEqual(['collect_morning']);
+  });
+
+  it('closes collect_morning\'s window at 10:15 ET (target 09:45 + 30 min)', () => {
+    const etNow = { hour: 10, minute: 15, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(etNow)).toEqual([]);
+  });
+
+  it('is not yet open at 09:44 ET, one minute before target', () => {
+    const etNow = { hour: 9, minute: 44, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(etNow)).toEqual([]);
+  });
+
+  it('does not fire collect_morning on a weekend even at 09:45 local time', () => {
+    const saturday = { hour: 9, minute: 45, weekday: 6, dateStr: '2026-07-18' };
+    const sunday = { hour: 9, minute: 45, weekday: 7, dateStr: '2026-07-19' };
+    expect(jobsInWindow(saturday)).toEqual([]);
+    expect(jobsInWindow(sunday)).toEqual([]);
+  });
+
+  it('collect_morning is ungated (no `gated` flag), unlike picks', () => {
+    const job = JOB_SCHEDULE.find((j) => j.name === 'collect_morning');
+    expect(job.gated).toBeUndefined();
+  });
+
+  it('09:45 ET holds across DST: summer (EDT) instant', () => {
+    // 2026-07-15 13:45 UTC = 09:45 EDT (UTC-4), a Wednesday.
+    const etNow = computeEtNow(new Date('2026-07-15T13:45:00Z'));
+    expect(jobsInWindow(etNow)).toEqual(['collect_morning']);
+  });
+
+  it('09:45 ET holds across DST: winter (EST) instant', () => {
+    // 2026-01-15 14:45 UTC = 09:45 EST (UTC-5), a Thursday.
+    const etNow = computeEtNow(new Date('2026-01-15T14:45:00Z'));
+    expect(jobsInWindow(etNow)).toEqual(['collect_morning']);
+  });
+
   it('returns collect_preclose at 15:50 ET on a weekday', () => {
     const etNow = { hour: 15, minute: 50, weekday: 3, dateStr: '2026-07-15' };
     expect(jobsInWindow(etNow)).toEqual(['collect_preclose']);
@@ -140,5 +184,20 @@ describe('jobsForTick — self-healing dispatch (staff amendment on #258)', () =
   it('a plain no-op tick (no job in window) returns [] regardless of dispatchedToday', () => {
     const etNow = { hour: 12, minute: 0, weekday: 3, dateStr: '2026-07-15' };
     expect(jobsForTick(etNow, { collect_eod: '2026-07-14' })).toEqual([]);
+  });
+
+  it('dispatches collect_morning at 09:45 ET when not yet dispatched today', () => {
+    const etNow = { hour: 9, minute: 45, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsForTick(etNow, {})).toEqual(['collect_morning']);
+  });
+
+  it('self-heals a delayed collect_morning tick (10:00 ET, 15 min late, still inside window)', () => {
+    const etNow = { hour: 10, minute: 0, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsForTick(etNow, {})).toEqual(['collect_morning']);
+  });
+
+  it('does not re-dispatch collect_morning already recorded as dispatched today', () => {
+    const etNow = { hour: 9, minute: 45, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsForTick(etNow, { collect_morning: '2026-07-15' })).toEqual([]);
   });
 });

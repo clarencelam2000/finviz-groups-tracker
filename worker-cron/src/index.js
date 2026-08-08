@@ -42,6 +42,9 @@ const COLLECT_RUNS_URL = `${REPO_WORKFLOWS_URL}/collect.yml/runs`;
 const WORKFLOWS = {
   collect: { url: `${REPO_WORKFLOWS_URL}/collect.yml/dispatches` },
   picks: { url: `${REPO_WORKFLOWS_URL}/collect_picks.yml/dispatches` },
+  // WS3 Phase B (ADR-013 Decision 6): ungated, dispatched directly by
+  // scheduled() like `collect` — ADR-013 morning status workflow.
+  morning: { url: `${REPO_WORKFLOWS_URL}/collect_morning.yml/dispatches` },
 };
 
 function jsonResponse(obj, status = 200) {
