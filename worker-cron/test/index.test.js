@@ -30,6 +30,26 @@ function mockFetch(status = 204) {
   global.fetch = vi.fn(async () => ({ status, ok: status >= 200 && status < 300 }));
 }
 
+/**
+ * Routes fetch calls by HTTP method: POST -> the dispatches endpoint mock
+ * (workflow_dispatch, 204/error), GET -> a fake collect.yml runs-list
+ * response. Needed because the picks gate makes both kinds of call — a GET
+ * to check collect_eod's run status, then possibly a POST to dispatch
+ * picks — sometimes in the same tick as collect_eod's own dispatch POST.
+ */
+function mockFetchRouter({ dispatchStatus = 204, runs = [] } = {}) {
+  global.fetch = vi.fn(async (url, opts = {}) => {
+    if ((opts.method || 'GET') === 'POST') {
+      return { status: dispatchStatus, ok: dispatchStatus >= 200 && dispatchStatus < 300 };
+    }
+    return {
+      status: 200,
+      ok: true,
+      json: async () => ({ workflow_runs: runs }),
+    };
+  });
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -159,50 +179,55 @@ describe('scheduled handler — single-tick routing (ADR-010)', () => {
     expect(stored.etDate).toBe('2026-07-15');
   });
 
-  it('dispatches picks at its ET target to collect_picks.yml', async () => {
-    mockFetch(204);
-    const kv = makeKV();
-    // 2026-07-15T22:30:00Z = 18:30 EDT.
-    await worker.scheduled({ scheduledTime: new Date('2026-07-15T22:30:00Z').getTime() }, makeEnv(kv), {});
-    expect(global.fetch.mock.calls[0][0]).toContain('/collect_picks.yml/');
-    expect(JSON.parse(kv._store.get('last_dispatch_picks')).job).toBe('picks');
-  });
-
   it('self-heals: a late tick within the window still dispatches if not already dispatched today', async () => {
-    mockFetch(204);
+    // No matching runs -> the picks gate (also in-window at 17:20, since
+    // picks now shares collect_eod's 17:00 target per #259) will make an
+    // opportunistic GET once collect_eod's dispatch lands in KV this same
+    // tick, find no run yet, and wait rather than dispatch picks.
+    mockFetchRouter({ runs: [] });
     const kv = makeKV();
     // 17:20 ET — 20 minutes past collect_eod's 17:00 target, exact-minute
     // fire was missed, but the window (30 min) is still open.
     await worker.scheduled({ scheduledTime: new Date('2026-07-15T21:20:00Z').getTime() }, makeEnv(kv), {});
-    expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(global.fetch.mock.calls[0][0]).toContain('/collect.yml/');
+    const postCalls = global.fetch.mock.calls.filter(([, opts]) => opts && opts.method === 'POST');
+    expect(postCalls).toHaveLength(1);
+    expect(postCalls[0][0]).toContain('/collect.yml/');
+    expect(kv._store.has('last_dispatch_picks')).toBe(false);
   });
 
-  it('does not re-dispatch a job already recorded as dispatched today', async () => {
-    mockFetch(204);
+  it('does not re-dispatch collect_eod once already recorded as dispatched today', async () => {
+    // picks shares collect_eod's window and is not yet dispatched itself, so
+    // its gate still makes a GET this tick (asserted separately below) —
+    // this test isolates that collect.yml itself is not re-dispatched.
+    mockFetchRouter({ runs: [] });
     const kv = makeKV({
       last_dispatch_collect_eod: JSON.stringify({ ok: true, etDate: '2026-07-15' }),
     });
     await worker.scheduled({ scheduledTime: new Date('2026-07-15T21:10:00Z').getTime() }, makeEnv(kv), {}); // 17:10 ET, still in window
-    expect(global.fetch).not.toHaveBeenCalled();
+    const postCalls = global.fetch.mock.calls.filter(([, opts]) => opts && opts.method === 'POST');
+    expect(postCalls).toHaveLength(0);
   });
 
   it('re-dispatches once a new ET calendar date begins, even inside the same window shape', async () => {
-    mockFetch(204);
+    mockFetchRouter({ runs: [] });
     const kv = makeKV({
       last_dispatch_collect_eod: JSON.stringify({ ok: true, etDate: '2026-07-14' }),
     });
     await worker.scheduled({ scheduledTime: new Date('2026-07-15T21:00:00Z').getTime() }, makeEnv(kv), {});
-    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const postCalls = global.fetch.mock.calls.filter(([, opts]) => opts && opts.method === 'POST');
+    expect(postCalls).toHaveLength(1);
+    expect(postCalls[0][0]).toContain('/collect.yml/');
   });
 
   it('does not treat a failed prior dispatch as satisfying "dispatched today"', async () => {
-    mockFetch(204);
+    mockFetchRouter({ runs: [] });
     const kv = makeKV({
       last_dispatch_collect_eod: JSON.stringify({ ok: false, etDate: '2026-07-15' }),
     });
     await worker.scheduled({ scheduledTime: new Date('2026-07-15T21:10:00Z').getTime() }, makeEnv(kv), {});
-    expect(global.fetch).toHaveBeenCalledTimes(1); // retried
+    const postCalls = global.fetch.mock.calls.filter(([, opts]) => opts && opts.method === 'POST');
+    expect(postCalls).toHaveLength(1); // retried
+    expect(postCalls[0][0]).toContain('/collect.yml/');
   });
 
   it('does not fire any job on a weekend tick even at a valid time-of-day', async () => {
@@ -211,6 +236,97 @@ describe('scheduled handler — single-tick routing (ADR-010)', () => {
     // 2026-07-18 is a Saturday; 21:00 UTC = 17:00 EDT.
     await worker.scheduled({ scheduledTime: new Date('2026-07-18T21:00:00Z').getTime() }, makeEnv(kv), {});
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('picks dependency gate (#259)', () => {
+  it('does not call GitHub run-status or dispatch picks if collect_eod has not been dispatched today', async () => {
+    mockFetchRouter();
+    const kv = makeKV();
+    // 18:00 ET: past collect_eod's own [17:00,17:30) window (so it's not a
+    // candidate this tick at all — isolates the picks-gate behavior), still
+    // well inside picks' [17:00,19:00) gate window, and no
+    // last_dispatch_collect_eod record exists.
+    await worker.scheduled({ scheduledTime: new Date('2026-07-15T22:00:00Z').getTime() }, makeEnv(kv), {});
+    expect(global.fetch).not.toHaveBeenCalled();
+    const gateRec = JSON.parse(kv._store.get('last_gate_check_picks'));
+    expect(gateRec.outcome).toBe('waiting');
+    expect(gateRec.reason).toBe('collect_eod_not_dispatched');
+    expect(kv._store.has('last_dispatch_picks')).toBe(false);
+  });
+
+  it('waits (GET only, no dispatch) when the matched EOD run has not completed yet', async () => {
+    mockFetchRouter({ runs: [{ created_at: '2026-07-15T21:00:03Z', status: 'in_progress', conclusion: null }] });
+    const kv = makeKV({
+      last_dispatch_collect_eod: JSON.stringify({ ok: true, etDate: '2026-07-15', ts: '2026-07-15T21:00:00.000Z' }),
+    });
+    await worker.scheduled({ scheduledTime: new Date('2026-07-15T21:10:00Z').getTime() }, makeEnv(kv), {});
+    // one GET to check run status, no POST to dispatch picks
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch.mock.calls[0][0]).toContain('/collect.yml/runs');
+    expect(JSON.parse(kv._store.get('last_gate_check_picks')).outcome).toBe('waiting');
+    expect(kv._store.has('last_dispatch_picks')).toBe(false);
+  });
+
+  it('dispatches picks once the matched EOD run has succeeded', async () => {
+    mockFetchRouter({ runs: [{ created_at: '2026-07-15T21:00:03Z', status: 'completed', conclusion: 'success' }] });
+    const kv = makeKV({
+      last_dispatch_collect_eod: JSON.stringify({ ok: true, etDate: '2026-07-15', ts: '2026-07-15T21:00:00.000Z' }),
+    });
+    await worker.scheduled({ scheduledTime: new Date('2026-07-15T21:15:00Z').getTime() }, makeEnv(kv), {});
+    expect(global.fetch).toHaveBeenCalledTimes(2); // GET run status, then POST dispatch
+    const postCall = global.fetch.mock.calls.find(([, opts]) => opts && opts.method === 'POST');
+    expect(postCall[0]).toContain('/collect_picks.yml/');
+    expect(JSON.parse(kv._store.get('last_dispatch_picks')).job).toBe('picks');
+    expect(JSON.parse(kv._store.get('last_gate_check_picks')).outcome).toBe('dispatch');
+  });
+
+  it('does not re-dispatch picks once already recorded as dispatched today, even inside the window', async () => {
+    mockFetchRouter({ runs: [{ created_at: '2026-07-15T21:00:03Z', status: 'completed', conclusion: 'success' }] });
+    const kv = makeKV({
+      last_dispatch_collect_eod: JSON.stringify({ ok: true, etDate: '2026-07-15', ts: '2026-07-15T21:00:00.000Z' }),
+      last_dispatch_picks: JSON.stringify({ ok: true, etDate: '2026-07-15' }),
+    });
+    await worker.scheduled({ scheduledTime: new Date('2026-07-15T21:20:00Z').getTime() }, makeEnv(kv), {});
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it('disambiguates the EOD run from an earlier pre-close run on the same day (does not dispatch on the stale pre-close success)', async () => {
+    // Only the pre-close run (created well before the EOD dispatch timestamp) is "seen" here;
+    // no run at/after the EOD dispatch ts exists yet.
+    mockFetchRouter({ runs: [{ created_at: '2026-07-15T19:50:05Z', status: 'completed', conclusion: 'success' }] });
+    const kv = makeKV({
+      last_dispatch_collect_eod: JSON.stringify({ ok: true, etDate: '2026-07-15', ts: '2026-07-15T21:00:00.000Z' }),
+    });
+    await worker.scheduled({ scheduledTime: new Date('2026-07-15T21:10:00Z').getTime() }, makeEnv(kv), {});
+    expect(kv._store.has('last_dispatch_picks')).toBe(false);
+    expect(JSON.parse(kv._store.get('last_gate_check_picks')).reason).toBe('eod_run_not_found');
+  });
+
+  it('records a miss (no dispatch) when the gate window closes without a successful run', async () => {
+    mockFetchRouter({ runs: [{ created_at: '2026-07-15T21:00:03Z', status: 'completed', conclusion: 'failure' }] });
+    const kv = makeKV({
+      last_dispatch_collect_eod: JSON.stringify({ ok: true, etDate: '2026-07-15', ts: '2026-07-15T21:00:00.000Z' }),
+    });
+    // 18:55 ET = the terminal tick of the 17:00-19:00 window.
+    await worker.scheduled({ scheduledTime: new Date('2026-07-15T22:55:00Z').getTime() }, makeEnv(kv), {});
+    expect(kv._store.has('last_dispatch_picks')).toBe(false);
+    const gateRec = JSON.parse(kv._store.get('last_gate_check_picks'));
+    expect(gateRec.outcome).toBe('miss');
+    expect(gateRec.reason).toBe('eod_run_failure');
+  });
+
+  it('never dispatches picks when the run-status read itself fails (fails closed, not open)', async () => {
+    global.fetch = vi.fn(async (url, opts = {}) => {
+      if ((opts.method || 'GET') === 'POST') return { status: 204, ok: true };
+      return { status: 403, ok: false };
+    });
+    const kv = makeKV({
+      last_dispatch_collect_eod: JSON.stringify({ ok: true, etDate: '2026-07-15', ts: '2026-07-15T21:00:00.000Z' }),
+    });
+    await worker.scheduled({ scheduledTime: new Date('2026-07-15T21:10:00Z').getTime() }, makeEnv(kv), {});
+    expect(kv._store.has('last_dispatch_picks')).toBe(false);
+    expect(JSON.parse(kv._store.get('last_gate_check_picks')).reason).toBe('run_status_fetch_failed:github_403');
   });
 });
 
@@ -236,20 +352,23 @@ describe('fetch — debug endpoints', () => {
     expect((await res.json()).kv_ok).toBe(false);
   });
 
-  it('GET /last returns a record per job plus legacy keys', async () => {
+  it('GET /last returns a record per job plus the picks gate check and legacy keys', async () => {
     const preCloseRec = { ts: 'X', status: 204, ok: true, error: null, job: 'collect_preclose' };
     const eodRec = { ts: 'Y', status: 204, ok: true, error: null, job: 'collect_eod' };
     const picksRec = { ts: 'Z', status: 204, ok: true, error: null, job: 'picks' };
+    const gateRec = { ts: 'W', outcome: 'dispatch', reason: 'eod_run_success', etDate: '2026-07-15' };
     const kv = makeKV({
       last_dispatch_collect_preclose: JSON.stringify(preCloseRec),
       last_dispatch_collect_eod: JSON.stringify(eodRec),
       last_dispatch_picks: JSON.stringify(picksRec),
+      last_gate_check_picks: JSON.stringify(gateRec),
     });
     const res = await handleRequest(req('/last'), makeEnv(kv));
     const body = await res.json();
     expect(body.last_dispatch.collect_preclose).toEqual(preCloseRec);
     expect(body.last_dispatch.collect_eod).toEqual(eodRec);
     expect(body.last_dispatch.picks).toEqual(picksRec);
+    expect(body.last_dispatch.picks_gate_check).toEqual(gateRec);
   });
 
   it('GET /last returns nulls when nothing has fired yet', async () => {
@@ -258,6 +377,7 @@ describe('fetch — debug endpoints', () => {
     expect(body.last_dispatch.collect_preclose).toBe(null);
     expect(body.last_dispatch.collect_eod).toBe(null);
     expect(body.last_dispatch.picks).toBe(null);
+    expect(body.last_dispatch.picks_gate_check).toBe(null);
     expect(body.last_dispatch.legacy.last_dispatch_collect).toBe(null);
   });
 

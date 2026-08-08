@@ -207,10 +207,26 @@ All Playwright-in-cloud work should first read
     ~288 ticks/day this design produces free of observability noise.
   - **Current jobs** (`worker-cron/src/routing.js` `JOB_SCHEDULE`, Mon–Fri): `collect_preclose`
     at 15:50 ET (pre-close snapshot, shifted from legacy `:48`), `collect_eod` at 17:00 ET (EOD
-    post-close snapshot, shifted from legacy `:01`), `picks` at 18:30 ET (picks selector, shifted
-    from legacy `:31`; still a **fixed time margin**, not a dependency check against whether
-    `collect.yml` actually succeeded — that dependency gate is tracked separately, issue #259,
-    deliberately out of WS1's scope). The EOD collect run captures the day's final closing data.
+    post-close snapshot, shifted from legacy `:01`), `picks` — also targets 17:00 ET, the same as
+    `collect_eod`, not a fixed margin after it. The EOD collect run captures the day's final
+    closing data.
+  - **Picks is dependency-gated, not fixed-time (issue #259, closing the last piece of ADR-010).**
+    `worker-cron/src/picksGate.js` + `index.js`'s `runPicksGate` replace the old "EOD + 90min,
+    hope collect.yml finished" margin with an actual state check: on every tick inside picks'
+    `[17:00, 17:00 + PICKS_GATE_WINDOW_MINUTES)` ET window (120 min, i.e. 17:00–19:00 ET), the
+    dispatcher reads its own `last_dispatch_collect_eod` KV record, then queries the GitHub
+    Actions API (`GET .../collect.yml/runs`, reusing `GITHUB_DISPATCH_TOKEN`) for the run that
+    corresponds to that EOD dispatch (matched by `created_at` at/after the dispatch timestamp,
+    disambiguating from the earlier same-day pre-close run — a naive "most recent run" check can
+    be satisfied by the wrong run). Picks dispatches the moment that run is confirmed
+    `conclusion === 'success'`; if the window closes first, an explicit **miss** record is written
+    to `last_gate_check_picks` KV (surfaced via `/last`) instead of the day silently going
+    missing. This is the same self-heal/retry mechanism `jobsForTick` already provides for
+    `collect_preclose`/`collect_eod` (not a second one-off) — the gate just adds the "was the
+    underlying workflow actually successful" check on top, which a plain time-window check can't
+    see. `collect.yml` running `collect.py → compute_deltas.py → evaluate_picks.py → git commit &&
+    git push` all in one job (push last) means run-success is a sufficient "deltas landed" proxy —
+    no separate commit-presence check is needed.
   - **`collect_picks.yml` also keeps its GitHub backstop:** an interim `schedule:` cron
     (`31 23 * * 1-5`, weekdays in GitHub's 0=Sunday convention) was added (issue #252,
     PICKS-FIX-C) after the old per-workflow Cloudflare picks trigger failed to deploy under the
