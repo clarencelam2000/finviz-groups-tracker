@@ -1,6 +1,18 @@
 {
-  "current": "2026.07.16",
+  "current": "2026.08.08",
   "releases": [
+    {
+      "version": "2026.08.08",
+      "date": "2026-08-08",
+      "title": "New: Morning check — how the open treated yesterday's picks",
+      "tag": "feature",
+      "tab": "morning",
+      "notes": [
+        "A new Morning tab tags each of yesterday's picks with what the ~10:05 ET open did to the setup: Triggered, Setting up, Gapped through, Failed breakout, Invalidated, or No quote — sorted so the actionable ones are on top.",
+        "Actionable cards (Triggered / Gapped through) show an ATR-from-low read so you can tell a clean entry (≤ 0.8) from a chase (> 1.0), and an 'I took it' button that marks the trade locally on your device.",
+        "These are mid-session, provisional reads — clearly banner-marked as not settled. Nothing here touches or changes your end-of-day data."
+      ]
+    },
     {
       "version": "2026.07.16",
       "date": "2026-07-16",

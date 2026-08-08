@@ -22,7 +22,7 @@ RELEASES = ROOT / "docs" / "releases.json"
 PRODUCT_INTRO_COPY = ROOT / "knowledge" / "product-intro-copy.md"
 
 # Must match the data-tab values on the PWA tab bar (#tab-bar in index.html).
-VALID_TAB_IDS = {"today", "movers", "momentum", "strength", "vsmarket", "ai", "lookup", "picks"}
+VALID_TAB_IDS = {"today", "movers", "momentum", "strength", "vsmarket", "ai", "lookup", "picks", "morning"}
 
 
 def _welcome_block():
