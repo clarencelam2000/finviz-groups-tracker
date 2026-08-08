@@ -91,4 +91,9 @@ jobs:
           # list is already lost. Silently skip if the secret isn't configured.
           # Setup: healthchecks.io → New Check → period 24h, grace 2h → copy URL
           # → repo Settings → Secrets → PICKS_HEALTHCHECK_URL
+          # TODO(#260): retire this ping once the picks dependency gate's
+          # last_gate_check_picks miss-record path (worker-cron/src/picksGate.js,
+          # live since PR #272) has been observed for >=1 full trading week —
+          # not before 2026-08-17. See CLAUDE.md § Automation "Issue #260" bullet
+          # and worker-cron/README.md § Picks dependency gate.
           [ -z "$PICKS_HEALTHCHECK_URL" ] || curl -fsS --retry 3 "$PICKS_HEALTHCHECK_URL" > /dev/null

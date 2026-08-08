@@ -108,9 +108,15 @@ piece of ADR-010's dependency-driven dispatch:
    `jobsForTick` already provides, not a second one-off.
 5. If the window closes (120 min after target) without a success, the gate
    records `outcome: 'miss'` and logs at `error` level, instead of the day
-   silently going missing (issue #252's failure mode). This is the basis for
+   silently going missing (issue #252's failure mode). This satisfies issue
+   #260's self-heal + retry-on-miss scope. This is also the basis for
    eventually retiring the healthchecks.io dead-man's-switch on
-   `collect_picks.yml` — not done yet; see ADR-010 rollout step 7.
+   `collect_picks.yml` — **not done yet; see ADR-010 rollout step 7 and
+   CLAUDE.md § Automation "Issue #260" bullet.** The gate went live with PR
+   #272 (merged 2026-08-08, a non-trading day); do not remove the
+   `PICKS_HEALTHCHECK_URL` ping before **2026-08-17** — that's after the
+   first full trading week (2026-08-10–2026-08-14) of `picks_gate_check`
+   history has been observed via `GET /last`.
 6. Every gate check (`waiting`/`dispatch`/`miss`) is written to
    `last_gate_check_picks` KV, surfaced as `picks_gate_check` on `GET /last`
    — so a stuck "waiting" or a "miss" is visible without digging through

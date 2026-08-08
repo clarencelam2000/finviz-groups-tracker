@@ -602,3 +602,48 @@ before WS5 phase 3.
 
 **Next steps:** open a WS3b issue; reconcile trade-lifecycle-engine.md §4 with the `closing`-state
 decision; then implement #258.
+
+---
+
+## 2026-08-08 — Issue #260 (self-heal + retry-on-miss): found already code-complete via #269/#272
+
+**Status: safe to close.** No code change — this was an investigation session. Entry point:
+roadmap "START HERE" → alignment § 10 → ADR-010 / `planning/cron-consolidation-state-machine.md`
+→ issue #260 (deps #258, #259) → mocks (not applicable, no UI surface for WS1).
+
+**Finding:** #260's stated acceptance criteria are already satisfied by code merged *before* this
+session started — #269 (self-heal within a job's window, `jobsForTick`) and #272 (the picks
+dependency gate's `evaluatePicksGate`/`runPicksGate`, which writes a `miss` KV record +
+`error`-level log when the 17:00–19:00 ET window closes without a successful EOD run). Confirmed
+by reading `worker-cron/src/picksGate.js` + `index.js` directly and re-running
+`worker-cron`'s test suite (70/70 pass, including the "records a miss... when the gate window
+closes without a successful run" case in `test/index.test.js`) — not just trusting the PR
+descriptions. #260's own issue text scopes it to "the picks dependency-gate's state loop," which
+is exactly what #259/PR #272 shipped; there is no broader "missed record for every job" ask in
+the roadmap or design doc.
+
+**What's genuinely still open (not code):** #260's third bullet — retiring the
+`PICKS_HEALTHCHECK_URL` healthchecks.io dead-man's-switch on `collect_picks.yml` — is explicitly
+gated on ≥1 full trading week of the miss-record path observed live in production (ADR-010
+rollout step 7), and the gate only went live with PR #272's merge on 2026-08-08 (a non-trading
+day). That observation week can't start until Monday 2026-08-10 and can't complete before Friday
+2026-08-14, so the earliest safe retirement is **2026-08-17**. This is a calendar-time blocker,
+not something today's session could implement around.
+
+**What this session did instead (durable capture, so a future session doesn't re-derive this):**
+- `CLAUDE.md` § Automation — new "Issue #260" bullet stating code-complete status + the
+  2026-08-17 earliest-retirement date + what to check on `/last`'s `picks_gate_check` first.
+- `worker-cron/README.md` § Picks dependency gate — same date/status cross-referenced.
+- `.github/workflows/collect_picks.yml` — `TODO(#260)` comment on the healthchecks ping itself,
+  pointing at the two docs above, so whoever eventually removes it doesn't have to search issue
+  history for the date.
+- Left issue #260 **open** (not closed) — the healthchecks.io retirement is real remaining scope,
+  just not actionable yet.
+
+**Next steps:** on/after 2026-08-17, check `GET https://finviz-cron-dispatcher.salmonbaby8.workers.dev/last`'s
+`picks_gate_check` history for that week (a `miss` recorded on a day `collect_eod` itself also
+failed is expected/healthy; a `miss` on a day `collect_eod` succeeded would mean the gate is
+broken and healthchecks.io should stay) — then remove the `PICKS_HEALTHCHECK_URL` ping/secret in
+a small follow-up PR and close #260. Otherwise: WS2 (session dimension, ADR-011 Option C decided)
+is next up per the roadmap. Also worth the owner's attention: PR #277 is open with three follow-up
+findings from the #272 review (#274/#275/#276) — unrelated to #260, not touched this session.
