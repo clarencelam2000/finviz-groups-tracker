@@ -68,29 +68,29 @@ describe('jobsInWindow — pure, no "already dispatched" awareness', () => {
     expect(jobsInWindow(etNow)).toEqual([]);
   });
 
-  it('returns collect_morning at 09:45 ET on a weekday (ADR-013 Phase B)', () => {
-    const etNow = { hour: 9, minute: 45, weekday: 3, dateStr: '2026-07-15' };
+  it('returns collect_morning at 10:05 ET on a weekday (ADR-013 Phase B)', () => {
+    const etNow = { hour: 10, minute: 5, weekday: 3, dateStr: '2026-07-15' };
     expect(jobsInWindow(etNow)).toEqual(['collect_morning']);
   });
 
-  it('stays open through the window (10:14 ET, 29 min late, still inside the 30-min window)', () => {
-    const etNow = { hour: 10, minute: 14, weekday: 3, dateStr: '2026-07-15' };
+  it('stays open through the window (10:34 ET, 29 min late, still inside the 30-min window)', () => {
+    const etNow = { hour: 10, minute: 34, weekday: 3, dateStr: '2026-07-15' };
     expect(jobsInWindow(etNow)).toEqual(['collect_morning']);
   });
 
-  it('closes collect_morning\'s window at 10:15 ET (target 09:45 + 30 min)', () => {
-    const etNow = { hour: 10, minute: 15, weekday: 3, dateStr: '2026-07-15' };
+  it('closes collect_morning\'s window at 10:35 ET (target 10:05 + 30 min)', () => {
+    const etNow = { hour: 10, minute: 35, weekday: 3, dateStr: '2026-07-15' };
     expect(jobsInWindow(etNow)).toEqual([]);
   });
 
-  it('is not yet open at 09:44 ET, one minute before target', () => {
-    const etNow = { hour: 9, minute: 44, weekday: 3, dateStr: '2026-07-15' };
+  it('is not yet open at 10:04 ET, one minute before target', () => {
+    const etNow = { hour: 10, minute: 4, weekday: 3, dateStr: '2026-07-15' };
     expect(jobsInWindow(etNow)).toEqual([]);
   });
 
-  it('does not fire collect_morning on a weekend even at 09:45 local time', () => {
-    const saturday = { hour: 9, minute: 45, weekday: 6, dateStr: '2026-07-18' };
-    const sunday = { hour: 9, minute: 45, weekday: 7, dateStr: '2026-07-19' };
+  it('does not fire collect_morning on a weekend even at 10:05 local time', () => {
+    const saturday = { hour: 10, minute: 5, weekday: 6, dateStr: '2026-07-18' };
+    const sunday = { hour: 10, minute: 5, weekday: 7, dateStr: '2026-07-19' };
     expect(jobsInWindow(saturday)).toEqual([]);
     expect(jobsInWindow(sunday)).toEqual([]);
   });
@@ -100,15 +100,15 @@ describe('jobsInWindow — pure, no "already dispatched" awareness', () => {
     expect(job.gated).toBeUndefined();
   });
 
-  it('09:45 ET holds across DST: summer (EDT) instant', () => {
-    // 2026-07-15 13:45 UTC = 09:45 EDT (UTC-4), a Wednesday.
-    const etNow = computeEtNow(new Date('2026-07-15T13:45:00Z'));
+  it('10:05 ET holds across DST: summer (EDT) instant', () => {
+    // 2026-07-15 14:05 UTC = 10:05 EDT (UTC-4), a Wednesday.
+    const etNow = computeEtNow(new Date('2026-07-15T14:05:00Z'));
     expect(jobsInWindow(etNow)).toEqual(['collect_morning']);
   });
 
-  it('09:45 ET holds across DST: winter (EST) instant', () => {
-    // 2026-01-15 14:45 UTC = 09:45 EST (UTC-5), a Thursday.
-    const etNow = computeEtNow(new Date('2026-01-15T14:45:00Z'));
+  it('10:05 ET holds across DST: winter (EST) instant', () => {
+    // 2026-01-15 15:05 UTC = 10:05 EST (UTC-5), a Thursday.
+    const etNow = computeEtNow(new Date('2026-01-15T15:05:00Z'));
     expect(jobsInWindow(etNow)).toEqual(['collect_morning']);
   });
 
@@ -186,13 +186,13 @@ describe('jobsForTick — self-healing dispatch (staff amendment on #258)', () =
     expect(jobsForTick(etNow, { collect_eod: '2026-07-14' })).toEqual([]);
   });
 
-  it('dispatches collect_morning at 09:45 ET when not yet dispatched today', () => {
-    const etNow = { hour: 9, minute: 45, weekday: 3, dateStr: '2026-07-15' };
+  it('dispatches collect_morning at 10:05 ET when not yet dispatched today', () => {
+    const etNow = { hour: 10, minute: 5, weekday: 3, dateStr: '2026-07-15' };
     expect(jobsForTick(etNow, {})).toEqual(['collect_morning']);
   });
 
-  it('self-heals a delayed collect_morning tick (10:00 ET, 15 min late, still inside window)', () => {
-    const etNow = { hour: 10, minute: 0, weekday: 3, dateStr: '2026-07-15' };
+  it('self-heals a delayed collect_morning tick (10:20 ET, 15 min late, still inside window)', () => {
+    const etNow = { hour: 10, minute: 20, weekday: 3, dateStr: '2026-07-15' };
     expect(jobsForTick(etNow, {})).toEqual(['collect_morning']);
   });
 

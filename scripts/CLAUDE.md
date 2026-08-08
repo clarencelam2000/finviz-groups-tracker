@@ -127,7 +127,7 @@ a two-way-door superset migration (`ensure_deltas_csv()` pattern).
 **ADR-013**, required reading before touching either file. First writer under the
 provisional-session pattern (`scripts/session_config.py`, ADR-011 Option C) — tags each
 prior-session pick with a morning status (Triggered / Setting-up / Gapped-through /
-Failed-breakout / Invalidated / No-quote) at ~09:45 ET.
+Failed-breakout / Invalidated / No-quote) at ~10:05 ET.
 
 - **`scripts/pick_status.py`** — pure status engine, no I/O, no clock/file reads.
   `compute_pick_status(trigger, stop, price, open_, high, low)` evaluates ADR-013 Decision 3's

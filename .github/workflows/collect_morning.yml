@@ -5,7 +5,7 @@ name: Morning Status
 # PROVISIONAL store data/picks/sessions/morning{,_latest}.csv.
 #
 # PRIMARY scheduler: the Cloudflare `finviz-cron-dispatcher` Worker's in-code
-# `collect_morning` job (worker-cron/src/routing.js JOB_SCHEDULE), firing at 09:45 ET,
+# `collect_morning` job (worker-cron/src/routing.js JOB_SCHEDULE), firing at 10:05 ET,
 # Mon-Fri, UNGATED (ADR-013 Decision 6 — no picks-style dependency gate: the input,
 # yesterday's committed picks_latest.csv, already exists at dispatch time; the
 # stale-input guard inside collect_morning.py covers the failure case). It runs via

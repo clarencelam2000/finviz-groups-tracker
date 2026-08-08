@@ -92,16 +92,21 @@ export const JOB_SCHEDULE = [
     name: 'collect_morning',
     workflow: 'morning',
     weekdays: [1, 2, 3, 4, 5], // Mon-Fri
-    hour: 9,
-    minute: 45,
+    hour: 10,
+    minute: 5,
     windowMinutes: DISPATCH_WINDOW_MINUTES,
     // ADR-013 Decision 6 (WS3 Phase B): ungated, unlike `picks`. The input —
     // yesterday's committed picks_latest.csv — already exists at dispatch
     // time (no same-day upstream job to wait on), so there is nothing to
     // gate on. collect_morning.py's own stale-input guard (max date strictly
     // before today, <= MAX_STALE_SESSIONS old) covers the failure case
-    // instead. Late self-heal dispatch up to ~10:15 ET is acceptable — the
-    // store records real collected_at and the PWA displays it.
+    // instead.
+    // 10:05 ET (owner-set 2026-08-08), NOT 09:30/09:45 — it leaves at least
+    // one full 30-min candle after the 09:30 open, so the intraday High/Low
+    // the state machine reads are a real session range, not a one-tick open
+    // print. Must stay in sync with session_config.py MORNING.capture_et.
+    // Late self-heal dispatch up to ~10:35 ET is acceptable — the store
+    // records real collected_at and the PWA displays it.
   },
   {
     name: 'collect_preclose',

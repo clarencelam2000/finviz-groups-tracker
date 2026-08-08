@@ -49,8 +49,11 @@ SESSIONS: dict[str, Session] = {
     # 17:00 ET matches the existing collect_eod cron target (CLAUDE.md § Automation).
     # This is the settled, existing pipeline — unchanged by ADR-011.
     EOD: Session(key=EOD, label="End of day", capture_et="17:00", settled=True),
-    # 09:45 ET per ADR-011 — a provisional morning check-in, no existing cron yet.
-    MORNING: Session(key=MORNING, label="Morning", capture_et="09:45", settled=False),
+    # 10:05 ET (owner-set 2026-08-08, ADR-013) — a provisional morning check-in. Chosen so at
+    # least one full 30-min candle has closed after the 09:30 open, giving the WS3 state machine
+    # a real intraday High/Low range to read rather than a one-tick open print. Matches the
+    # collect_morning cron target in worker-cron/src/routing.js (keep the two in sync).
+    MORNING: Session(key=MORNING, label="Morning", capture_et="10:05", settled=False),
     # 15:50 ET matches the existing collect_preclose cron target (CLAUDE.md § Automation).
     PRE_CLOSE: Session(key=PRE_CLOSE, label="Pre-close", capture_et="15:50", settled=False),
 }

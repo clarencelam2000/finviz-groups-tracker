@@ -10,7 +10,7 @@
 
 ## Context
 
-WS3 tags each **prior-session pick** with one of six states at ~9:45 ET (Triggered /
+WS3 tags each **prior-session pick** with one of six states at ~10:05 ET (Triggered /
 Setting-up / Gapped-through / Failed-breakout / Invalidated / No-quote) and surfaces them in
 the PWA. Dependencies WS1 (#258/#259) and WS2 (#261, `scripts/session_config.py`) are merged.
 WS2 deliberately shipped identity-only — WS3 is the **first** thing that writes a provisional
@@ -60,8 +60,8 @@ https://finviz.com/screener.ashx?v=151&t=TICK1,TICK2,...&c=1,81,86,87,88,65,66,4
   write); the cron job is enabled only after one clean manual run. Owner can also eyeball the
   sample URL above in a normal browser — if it renders a table with Prev Close/Open/High/Low
   for those tickers, the mechanism is confirmed. (Owner direction 2026-08-08: assume the `t=`
-  link works; the dry-run exists to catch field-population surprises at 9:45, e.g. whether
-  High/Low are intraday-fresh that early, not to re-debate the mechanism.)
+  link works; the dry-run exists to catch field-population surprises at 10:05, e.g. whether
+  High/Low are intraday-fresh, not to re-debate the mechanism.)
 
 ## Decision 3 — State machine: exact predicates with explicit precedence
 
@@ -80,19 +80,39 @@ so precedence is part of the spec, not an implementation detail):
 | 6 | `setting_up` | everything else |
 
 Notes locked here:
-- **Invalidated outranks everything with a quote** — a name below its planned stop is dead
-  even if it tagged the trigger earlier (the whipsaw distinction is explicitly deferred per
-  owner 2026-08-07; v1 shows it as Invalidated, which is the conservative read).
+- **Invalidated outranks everything with a quote** — a name whose *current price* is at or
+  below its planned stop is dead even if it tagged the trigger earlier the same session. This
+  is the conservative, correct read: the thesis is broken right now.
 - **Gapped-through outranks Triggered**: `open > trigger` means no entry near the trigger was
   available — that's the chase-risk case even though `price >= trigger` also holds. Triggered
-  therefore implies `open <= trigger < = price` — a genuine intraday break of the level.
-- **Invalidation is on `price` (current), not `low`** in v1 — an intraday stop-touch that
-  recovered is the whipsaw case, deferred. Do not "improve" this to `low <= stop` in an
-  implementation PR.
+  therefore implies `open <= trigger <= price` — a genuine intraday break of the level.
+- **Failed-breakout and the deferred "whipsaw" are structural mirror images** (owner insight,
+  2026-08-08). Failed-breakout = price *poked above the trigger* (`high >= trigger`) and fell
+  back below it — an upside poke-and-fail, which v1 **does** detect. The whipsaw is the exact
+  reverse on the downside: price *poked below the stop* (`low <= stop`) and recovered above it.
+  v1 does **not** surface that reverse case as its own state — that is the single deferred piece.
+- **Invalidation is on `price` (current), not `low` — and this is NOT under-reporting.** Do
+  not "fix" it to `low <= stop`. Reasons, in order of weight:
+  1. **It would over-report, not correct an under-report.** The owner's stops are close-based /
+     discretionary, not hard intraday stops. At the 10:05 snapshot an intraday wick that dipped
+     below the stop and recovered has **not** actually stopped the trade out, so `price <= stop`
+     (where the stock *is now*) is the accurate "are you out?" test. `low <= stop` (did any wick
+     touch it) would flag as *dead* many trades that are perfectly alive — the worse error for a
+     decision surface.
+  2. **It conflates two distinct states.** "Currently dead" and "wicked-your-stop-and-recovered"
+     are acted on differently; folding the second into Invalidated erases that under one red label.
+  3. **A 10:05 `low` is a partial-session low** — it can only fall further by the close, so a
+     provisional `low <= stop` call is a claim the settled EOD data may not support, shown with
+     the same amber "not settled" chrome but reading far more damning than a mid-morning wick is.
+  4. **The correct surfacing is a separate future annotation** ("wicked stop, recovered"), not a
+     broadening of Invalidated. Until that state is designed, the honest v1 behavior is to let
+     `price` speak. Anyone tempted to change `price <= stop` to `low <= stop` reads this bullet
+     first and, if still convinced, amends this ADR — not the code alone.
 - `ATR_from_LoD = (price − low_today) / atr_prior`, computed only for `triggered` and
-  `gapped_through` (mock: entry-quality gate, meaningless elsewhere). Display thresholds:
-  `<= 1.0` ok-to-act, `> 1.5` chase-risk, between = caution — these are PWA display constants
-  and land in `docs/index.html` + `docs/CLAUDE.md`'s threshold table per house rules.
+  `gapped_through` (mock: entry-quality gate, meaningless elsewhere). Display thresholds
+  (owner-set 2026-08-08): `<= 0.8` clean entry (ok to act), `> 1.0` chasing, `0.8 < x <= 1.0`
+  caution — these are PWA display constants and land in `docs/index.html` + `docs/CLAUDE.md`'s
+  threshold table per house rules.
 - The function is **session-agnostic by contract**: signature takes levels + a quote, never
   reads clocks, files, or session names. WS3b calls it verbatim with a 15:30 quote against
   *today's* setups. Name it `compute_pick_status` in a new `scripts/pick_status.py` (pure
@@ -143,12 +163,15 @@ can find it.
   write store; scrape function present but exercised via fixtures) + tests. Fully in-cloud
   verifiable. This is the WS3b-reused core.
 - **Phase B** — live scrape wiring + `collect_morning.yml` (`workflow_dispatch` + dry-run
-  first, then enable cron) + worker-cron `collect_morning` job at **09:45 ET, Mon–Fri,
+  first, then enable cron) + worker-cron `collect_morning` job at **10:05 ET, Mon–Fri,
   ungated,** standard 30-min self-heal window in `routing.js` `JOB_SCHEDULE` (+ KV key
-  `last_dispatch_collect_morning`, tests). No picks-style dependency gate needed: the input
-  (yesterday's committed picks) already exists at dispatch time; the stale-input guard in
-  Decision 4 covers the failure case. Late self-heal dispatch (up to ~10:15 ET) is
-  acceptable — the store records real `collected_at` and the PWA displays it.
+  `last_dispatch_collect_morning`, tests). **10:05 ET (owner-set 2026-08-08), not 09:45** —
+  it leaves at least one full 30-minute candle after the 09:30 open, so the intraday High/Low
+  the state machine reads are a real session range, not a one-tick print at the open. No
+  picks-style dependency gate needed: the input (yesterday's committed picks) already exists at
+  dispatch time; the stale-input guard in Decision 4 covers the failure case. Late self-heal
+  dispatch (up to ~10:35 ET) is acceptable — the store records real `collected_at` and the PWA
+  displays it.
 - **Phase C** — PWA "Morning check" surface, built **verbatim against the mock's WS3
   markup** (severity stripe + pill, provisional banner + amber tint non-negotiable per
   ADR-011, actionability sort Triggered → Gapped → Failed → Setting-up → Invalidated →
@@ -175,7 +198,7 @@ collect) turns contentious.
 - `data/picks/sessions/` becomes the pattern for all provisional pick-adjacent stores; WS5's
   held-tickers quote feed reuses `fetch_ticker_quotes` but stores positions in D1 per ADR-012
   (different data class — private/mutable vs public/append-only).
-- Risk accepted: the `t=` screener behavior at 9:45 ET (intraday High/Low freshness) is
+- Risk accepted: the `t=` screener behavior at 10:05 ET (intraday High/Low freshness) is
   confirmed only at Phase B's dry run. If it fails, the fallback is per-ticker
   `quote.ashx?t=` scrapes (slower, same parse idiom) — amend § Decision 2 here if that
   happens.

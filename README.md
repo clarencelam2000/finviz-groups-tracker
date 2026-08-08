@@ -310,7 +310,7 @@ session-keyed stores added later (not yet built).
 | Session | Capture (ET) | Settled? | Notes |
 |---------|--------------|----------|-------|
 | `eod` | `17:00` | Yes | The existing settled pipeline; matches the `collect_eod` cron. |
-| `morning` | `09:45` | No | Provisional; no existing cron yet — added per ADR-011. |
+| `morning` | `10:05` | No | Provisional (WS3, ADR-013); 10:05 ET leaves a full 30-min candle after the open so intraday High/Low are a real range. |
 | `pre_close` | `15:50` | No | Provisional; matches the existing `collect_preclose` cron. |
 
 `DEFAULT_SESSION` = `eod` — callers that don't yet think in terms of multiple sessions default here.

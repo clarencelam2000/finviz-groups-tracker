@@ -238,11 +238,11 @@ describe('scheduled handler — single-tick routing (ADR-010)', () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it('dispatches collect_morning at 09:45 ET and records it under its own KV key, ungated (no gate GET)', async () => {
+  it('dispatches collect_morning at 10:05 ET and records it under its own KV key, ungated (no gate GET)', async () => {
     mockFetch(204);
     const kv = makeKV();
-    // 2026-07-15T13:45:00Z = 09:45 EDT, a Wednesday.
-    await worker.scheduled({ scheduledTime: new Date('2026-07-15T13:45:00Z').getTime() }, makeEnv(kv), {});
+    // 2026-07-15T14:05:00Z = 10:05 EDT, a Wednesday.
+    await worker.scheduled({ scheduledTime: new Date('2026-07-15T14:05:00Z').getTime() }, makeEnv(kv), {});
     expect(global.fetch).toHaveBeenCalledTimes(1); // ungated: no run-status GET, just the dispatch POST
     const [url, opts] = global.fetch.mock.calls[0];
     expect(url).toBe(
@@ -261,7 +261,7 @@ describe('scheduled handler — single-tick routing (ADR-010)', () => {
     const kv = makeKV({
       last_dispatch_collect_morning: JSON.stringify({ ok: true, etDate: '2026-07-15' }),
     });
-    await worker.scheduled({ scheduledTime: new Date('2026-07-15T14:00:00Z').getTime() }, makeEnv(kv), {}); // 10:00 ET, still in window
+    await worker.scheduled({ scheduledTime: new Date('2026-07-15T14:20:00Z').getTime() }, makeEnv(kv), {}); // 10:20 ET, still in window
     expect(global.fetch).not.toHaveBeenCalled();
   });
 });

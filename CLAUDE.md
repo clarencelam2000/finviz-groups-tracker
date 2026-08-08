@@ -206,8 +206,9 @@ All Playwright-in-cloud work should first read
     it up inside the window. No-op ticks (no job's window open) do zero I/O, keeping the
     ~288 ticks/day this design produces free of observability noise.
   - **Current jobs** (`worker-cron/src/routing.js` `JOB_SCHEDULE`, Mon–Fri): `collect_morning`
-    at 09:45 ET (WS3 morning status, ADR-013, ungated — dispatches `collect_morning.yml`, KV key
-    `last_dispatch_collect_morning`), `collect_preclose`
+    at 10:05 ET (WS3 morning status, ADR-013, ungated — dispatches `collect_morning.yml`, KV key
+    `last_dispatch_collect_morning`; 10:05 leaves a full 30-min candle after the open so the
+    intraday High/Low the state machine reads are a real range), `collect_preclose`
     at 15:50 ET (pre-close snapshot, shifted from legacy `:48`), `collect_eod` at 17:00 ET (EOD
     post-close snapshot, shifted from legacy `:01`), `picks` — also targets 17:00 ET, the same as
     `collect_eod`, not a fixed margin after it. The EOD collect run captures the day's final
@@ -215,7 +216,7 @@ All Playwright-in-cloud work should first read
   - **Session dimension (WS2, ADR-011 Option C):** `scripts/session_config.py` is the single
     source of truth for the "session" concept referenced above. The `eod` session is exactly
     this existing settled pipeline — `collect_eod`'s output files stay byte-identical, no
-    migration. `morning` (09:45 ET, ADR-013 WS3, now writing
+    migration. `morning` (10:05 ET, ADR-013 WS3, now writing
     `data/picks/sessions/morning{,_latest}.csv` via `collect_morning.yml`) and `pre_close`
     (15:50 ET, matching the `collect_preclose` cron above, not yet built — WS3b/WS5) are
     provisional sessions living in physically-separate, session-keyed stores that this settled
