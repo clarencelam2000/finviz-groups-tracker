@@ -115,3 +115,27 @@ only the `(date, session, …)` naming convention.
   when a consumer appears.
 - PWA display: how a provisional/morning reading is visually marked as *not settled* so a user
   never mistakes a 09:45 number for a close.
+
+## WS2 resolution — 2026-08-08 (foundation slice, issue #261)
+
+Owner scope call: **foundation only** — establish the session dimension as a single source of
+truth, without building consumer-less stores or premature UI. Resolves the open questions above:
+
+- **Session enum + capture times — pinned** in `scripts/session_config.py` (the SSOT, mirroring
+  `delta_config.py`). Three sessions, designed for N: `eod` (17:00 ET, **settled** — this *is* the
+  existing pipeline, unchanged), `morning` (09:45 ET, provisional), `pre_close` (15:50 ET,
+  provisional). The two provisional times deliberately match the existing `collect_preclose`/
+  `collect_eod` cron targets (CLAUDE.md § Automation) so a future capture job needs no new schedule.
+- **Group-level `intraday.csv` — not created now.** Per Option C's "deferred — no consumer yet":
+  no store file, no writer, no schema is created until WS3/WS3b actually reads one. The module
+  documents the store *convention* (append-only, keyed `(date, session, <entity>)`, provisional
+  only) as constants, and provides an `assert_provisional()` guard so the "eod never enters a
+  provisional store" invariant is enforceable in code — but nothing is wired to a writer yet.
+- **PWA "not settled" marking — deferred to WS3.** There is no provisional data flowing to the PWA
+  until the morning surface exists; adding the visual convention now would ship chrome that shows
+  nothing (and would drag in a `releases.json`/`sw.js` cache bump for an invisible feature). The
+  marking lands with its first real consumer (WS3, issue #262) — the mock already shows the intended
+  treatment (`planning/mocks/trade-lifecycle-surfaces.html`: provisional banner + timestamp + amber).
+
+The ticker-level morning-quote store's backend (CSV vs D1) remains deferred to WS5's design doc,
+unchanged from § Coupling above.
