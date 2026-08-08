@@ -602,3 +602,38 @@ before WS5 phase 3.
 
 **Next steps:** open a WS3b issue; reconcile trade-lifecycle-engine.md §4 with the `closing`-state
 decision; then implement #258.
+
+---
+
+## 2026-08-08 — WS2 session-dimension keystone (foundation slice, #261)
+
+**Status: safe-to-close.** PR #279 open (feat: add session dimension SSOT), foundation slice complete.
+
+**Context:** Picked up #261 per the roadmap front door → alignment § 10 → ADR-011 → issue → mocks
+chain. Confirmed the dependency is cleared: WS1 (#258, commit 49b7cdd) and the picks gate (#259,
+21e2815) both landed, so #261's "needs trigger headroom" blocker is resolved. Owner had already
+locked ADR-011 **Option C** (existing files == eod, unchanged; provisional data in physically-
+separate session-keyed stores).
+
+**Owner scope call this session:** foundation only. Under Option C the ADR defers *both* concrete
+provisional stores (group intraday = "no consumer yet"; ticker quotes = "location decided with
+WS5"), so building either now would be speculative. CEO chose the thin keystone over standing up a
+live provisional writer or writing a plan-first doc.
+
+**What landed (PR #279):**
+- `scripts/session_config.py` — SSOT for session identity: `Session` dataclass, `EOD/MORNING/
+  PRE_CLOSE` constants, ordered `SESSIONS` registry with canonical ET capture times (eod 17:00 /
+  morning 09:45 / pre_close 15:50 — the two provisional times match existing crons), `DEFAULT_
+  SESSION = eod`, pure helpers, and `assert_provisional()` (the structural guard that makes "eod
+  never enters a provisional store" enforceable in code). No store/writer/PWA chrome — deferred to
+  consumers. Store-key convention `(date, session, <entity>)` documented as a constant only.
+- `tests/test_session_config.py` — 11 tests, green. Full non-Playwright suite green (650 passed;
+  the 62 failures are exclusively the known Playwright-in-cloud files).
+- README § Configurable parameters + CLAUDE.md § Automation — session capture times triple-documented.
+- ADR-011 — appended "WS2 resolution" section closing its three open questions.
+
+**Delegation note:** module + tests + doc tables built by a Sonnet subagent from a main-model spec;
+main model designed the module, wrote the ADR resolution note, and reviewed all code before commit.
+
+**Next steps:** WS3 (#262) is the first real consumer — introduces the first provisional writer +
+the PWA not-settled marking (deferred here). WS3b (#268) rides the same `pre_close` session.
