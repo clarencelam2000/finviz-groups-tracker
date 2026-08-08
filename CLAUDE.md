@@ -284,15 +284,13 @@ them. Full steps, the Guide-glossary sync, and the "Start Here" intro carousel: 
 
 ### PR activity monitoring policy (token cost critical)
 
-**DO NOT use `subscribe_pr_activity`, `unsubscribe_pr_activity`, or `send_later` tools to monitor PRs or schedule check-ins UNLESS the owner explicitly requests it.** These tools waste tokens and money. Specifically:
+**DO NOT use `subscribe_pr_activity`, or `send_later` tools to monitor PRs or schedule check-ins UNLESS the owner explicitly requests it.** These tools waste tokens and money. Specifically:
 
 - **Never** call `mcp__claude-code-remote__subscribe_pr_activity` to auto-monitor CI events or review comments
 - **Never** call `mcp__claude-code-remote__send_later` to schedule hourly PR status re-checks
 - **Never** call `mcp__claude-code-remote__fire_trigger` / `mcp__claude-code-remote__create_trigger` to set up recurring PR checks
 
-Only use these if the owner explicitly asks you to watch a PR. If they do ask, acknowledge the request and set it up; when they ask you to stop, unsubscribe immediately.
-
-**What to do instead:** If the user creates a PR in this session, mention that you've created it and ask if they'd like you to monitor it — do not assume. If a PR you created gets a CI failure or review comment, you will be notified passively; respond as events arrive, do not poll.
+Only use these if the owner explicitly asks you to watch a PR. If they do ask, acknowledge the request and set it up. 
 
 ---
 
