@@ -300,6 +300,21 @@ prepending an entry to `data/picks/selector_versions.json` (enforced by tests �
 > is a loud no-op (CI red + debug-HTML artifact uploaded), not a destructive overwrite. Non-empty
 > re-runs still follow last-write-wins per date.
 
+### Session dimension (`scripts/session_config.py`)
+
+Single source of truth for the "session" concept (WS2, ADR-011 Option C): `eod` is the
+existing settled pipeline — the current files stay byte-identical, unchanged. `morning`
+and `pre_close` are provisional sessions whose data will coexist in physically-separate,
+session-keyed stores added later (not yet built).
+
+| Session | Capture (ET) | Settled? | Notes |
+|---------|--------------|----------|-------|
+| `eod` | `17:00` | Yes | The existing settled pipeline; matches the `collect_eod` cron. |
+| `morning` | `09:45` | No | Provisional; no existing cron yet — added per ADR-011. |
+| `pre_close` | `15:50` | No | Provisional; matches the existing `collect_preclose` cron. |
+
+`DEFAULT_SESSION` = `eod` — callers that don't yet think in terms of multiple sessions default here.
+
 ### Picks alpha scoreboard (`scripts/evaluate_picks.py`)
 
 | Parameter | Default | What it controls |

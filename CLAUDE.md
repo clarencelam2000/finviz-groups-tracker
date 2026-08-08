@@ -210,6 +210,12 @@ All Playwright-in-cloud work should first read
     post-close snapshot, shifted from legacy `:01`), `picks` — also targets 17:00 ET, the same as
     `collect_eod`, not a fixed margin after it. The EOD collect run captures the day's final
     closing data.
+  - **Session dimension (WS2, ADR-011 Option C):** `scripts/session_config.py` is the single
+    source of truth for the "session" concept referenced above. The `eod` session is exactly
+    this existing settled pipeline — `collect_eod`'s output files stay byte-identical, no
+    migration. `morning` (09:45 ET) and `pre_close` (15:50 ET, matching the `collect_preclose`
+    cron above) are provisional sessions; their data will live in physically-separate,
+    session-keyed stores (not yet built — WS3/WS5) that this settled pipeline never reads.
   - **Picks is dependency-gated, not fixed-time (issue #259, closing the last piece of ADR-010).**
     `worker-cron/src/picksGate.js` + `index.js`'s `runPicksGate` replace the old "EOD + 90min,
     hope collect.yml finished" margin with an actual state check: on every tick inside picks'
