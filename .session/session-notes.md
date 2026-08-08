@@ -6,6 +6,62 @@
 
 ---
 
+## 2026-08-08 — Review of PR #272 (#259 picks dependency gate) + 3 follow-up issues filed
+
+**Status: safe to close.** Pure review + durable-capture session, no product code changed
+(worker-cron code itself is untouched — this session only reviewed PR #272 and filed
+follow-ups). Also cross-checked PR #272 against #259's acceptance criteria, the design doc
+(`planning/cron-consolidation-state-machine.md`), and — per the owner's ask — against the
+already-merged PR #267 (WS3/4/5 mocks + roadmap front door + alignment §10), confirming no
+overlap/conflict: #267 is WS3-5 UI/trade-lifecycle scope, PR #272 is WS1's #259 tail; both
+correctly sequenced per the roadmap.
+
+**PR #272 verdict: correct, well-tested, ready to merge as-is.** Walked the full diff
+(`picksGate.js`, `index.js`, `routing.js` + all 3 test files) line by line, then actually
+checked out `claude/picks-dependency-gate-ta89dn` into a worktree and ran `npm test` in
+`worker-cron/` myself — **70/70 pass**, confirming the PR's own claim rather than trusting it.
+`findEodRun`'s disambiguation (excludes the earlier same-day pre-close run via a 60s-tolerance
+cutoff on `created_at`) correctly closes the #259 review's finding #1. Fail-closed behavior
+(`fetchError`/non-`success` conclusion never produces `outcome: 'dispatch'`) correctly closes
+finding #2's risk. Owner separately confirmed via screenshot that `GITHUB_DISPATCH_TOKEN`
+(fine-grained PAT, "Read and Write access to actions") has sufficient scope for the new GET
+call the gate makes — the one thing the PR itself flagged as unverified.
+
+**Three follow-up gaps surfaced during the deeper discussion after the initial review — filed
+as GitHub issues (not left as chat-only findings, per the owner's explicit ask this session
+not to orphan things):**
+
+- **#274** — `PICKS_GATE_WINDOW_MINUTES = 120` is an engineering estimate, not derived from
+  real `collect.yml` run-duration data, even though 30+ days of Actions run history already
+  exists to check it against right now (no need to wait and observe — the data already exists).
+  This was an explicit open question in the design doc that PR #272 shipped without resolving.
+- **#275** — Both GitHub `schedule:` backstop crons are fixed-UTC, don't track DST. Computed
+  the actual overlap: `collect_picks.yml`'s backstop (`31 23 * * 1-5` UTC) lands at 18:31 ET in
+  **winter (EST)** — inside the picks gate's 17:00–19:00 ET window, 29 min before it closes.
+  Partially self-mitigated by `collect_picks.py`'s stale-read guard, but not a clean design.
+  Also found `collect.yml`'s own backstop (`48 19 * * 1-5` UTC = 15:48/14:48 ET) computes
+  nowhere near `collect_eod`'s 17:00 ET target despite the in-code comment's claim it fires "at
+  the SAME time" — likely a stale leftover from before the pre-close/EOD split; `collect.yml`
+  may currently have no real backstop for a failed EOD run at all.
+- **#276** — "Self-heal" (`jobsForTick`) only retries a missed/delayed *dispatch* POST, not a
+  `collect_eod` run that dispatched fine but then failed inside GitHub Actions — consistent with
+  the documented "no workflow-level job retry" behavior, but worth an explicit decision on
+  whether the picks gate specifically should get one bounded retry-on-failure rather than going
+  straight to a `miss` for the day (tied to #275, since the assumed secondary-chance mechanism —
+  `collect.yml`'s backstop — may not actually be covering this today).
+
+None of the three are urgent — the gate fails closed correctly in every scenario found — but
+all three are now tracked instead of living only in this chat session. Cross-referenced to each
+other in their issue bodies. Also added a "Known gaps" callout to `CLAUDE.md` § Automation
+(this file) pointing at all three, so a future Claude touching `picksGate.js`, the backstop
+cron expressions, or `PICKS_GATE_WINDOW_MINUTES` sees them before making changes.
+
+**Next steps:** none required from this session. #274/#275/#276 are unassigned backlog items —
+pick up whenever picks-gate/backstop timing work is next prioritized. PR #272 itself is ready
+for the owner to merge independently of these three (they're improvements on top, not blockers).
+
+---
+
 ## 2026-08-07 — Daily Snapshot failure investigation: Finviz "Change %" rename
 
 **Status: safe to close.** User asked to investigate 3 failing Daily Snapshot runs today

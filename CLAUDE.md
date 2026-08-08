@@ -222,6 +222,30 @@ All Playwright-in-cloud work should first read
   - **Why a separate scheduler:** GitHub's `schedule:` cron drifts hours and is dropped under
     load; `workflow_dispatch` is event-driven and prompt. See `planning/cloudflare-cron-scheduler.md`
     and `knowledge/decisions/` for the full rationale.
+  - **Known gaps in the picks dependency gate (issue #259 / PR #272), tracked, not yet fixed:**
+    surfaced during PR #272's review (2026-08-08), each filed as its own issue rather than left
+    as chat-only findings:
+    - **#274** — `PICKS_GATE_WINDOW_MINUTES = 120` is an engineering *estimate* (worst-case
+      `collect.py` retries + script runtime + GH Actions queueing), not derived from real data,
+      even though 30+ days of `collect.yml` run history already exists to check it against. This
+      was an explicit open question in `planning/cron-consolidation-state-machine.md` that PR
+      #272 shipped without resolving.
+    - **#275** — both GitHub `schedule:` backstop crons are fixed-UTC and don't track DST, unlike
+      the Worker's ET-computed windows. Consequence: `collect_picks.yml`'s backstop (`31 23 * * 1-5`
+      UTC = 18:31 ET in **winter/EST**) lands *inside* the picks gate's 17:00–19:00 ET window,
+      risking a redundant/premature `collect_picks.yml` fire during winter months (partially
+      self-mitigated by `collect_picks.py`'s stale-read guard, but not by design). Separately,
+      `collect.yml`'s own backstop (`48 19 * * 1-5` UTC = 15:48/14:48 ET) computes nowhere near
+      `collect_eod`'s 17:00 ET target despite its comment's claim otherwise — it may not be
+      backstopping the EOD run at all, likely a stale leftover from before the pre-close/EOD split.
+    - **#276** — "self-heal" only retries a missed/delayed *dispatch* (the `workflow_dispatch`
+      POST); it does not retry `collect_eod` if the triggered GitHub Actions run itself fails
+      (script error, push conflict, etc.) — consistent with the "no workflow-level job retry"
+      note above, but worth an explicit decision on whether the picks gate specifically should
+      get one bounded retry rather than going straight to a `miss`.
+    None of these are urgent (the gate still fails closed correctly in every case above), but
+    read all three before touching `worker-cron/src/picksGate.js`, the backstop cron expressions,
+    or `PICKS_GATE_WINDOW_MINUTES`.
   - Config constants (tick interval, per-job ET target times, `DISPATCH_WINDOW_MINUTES`) are
     documented in-code in `worker-cron/src/routing.js` and in `worker-cron/README.md`
     § Configurable parameters, per this repo's 3-places rule.
