@@ -67,6 +67,11 @@ picks, no new selection logic) and higher-value (it makes the product usable at 
 moment of action — when the user is deciding whether to act on yesterday's setup), and it
 exercises the WS2 session schema on a read path before anything writes against it.
 
+> **Design record:** `knowledge/decisions/ADR-013-ws3-morning-status.md` (2026-08-08) closes
+> all WS3 open decisions — state-machine predicates + precedence, provisional store under
+> `data/picks/sessions/`, batched `t=` screener quote scrape, "I took it" local-marker behavior,
+> and the 3-PR phasing. Implement against it; amend it there if reality disagrees.
+
 ### WS4 — Trade tickets
 
 Surface the metrics `scripts/picks_metrics.py` already computes as a trade-ready ticket:

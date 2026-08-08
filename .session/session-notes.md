@@ -6,6 +6,41 @@
 
 ---
 
+## 2026-08-08 — WS3 staff guidance: ADR-013 closes all open decisions (#262)
+
+**Status: safe to close once PR merges.** Staff-eng session (docs only, no product code).
+Senior-eng WS3 assessment raised 7 open decision points; verified their findings against the
+repo/issues myself and closed **all of them** in
+**`knowledge/decisions/ADR-013-ws3-morning-status.md`** — read that first, it is now the
+implementation spec for #262 (and by reuse #268). Roadmap § WS3 links it.
+
+**Decisions locked (headline):** state-machine predicates with explicit top-down precedence
+(no_quote → invalidated → gapped_through → triggered → failed_breakout → setting_up;
+Invalidated on `price <= stop`, whipsaw deferred); committed store `data/picks/sessions/
+morning{,_latest}.csv` keyed (date, ticker) with a `session` column + `assert_provisional()`
+at the write boundary; quote scrape = screener `&t=` ticker filter, **batched ≤50** (225
+unique tickers/day — batching is required, senior eng missed the count), narrow 9-column
+`morning` block in `screener_config.json`, shared `fetch_ticker_quotes()` for WS3b/WS5;
+"I took it" ships as a **localStorage marker** (not a dead stub, not omitted); 3 PRs
+(A engine+store, B scrape+cron 09:45 ET ungated, C PWA vs mock + release triplet); no
+separate design-review gate — the ADR is the design doc.
+
+**Corrections to the senior-eng report:** #268 already exists (their Q7 moot); screener
+config lives at `data/picks/screener_config.json` not `scripts/`; morning runs must **skip**
+non-trading days (exit 0, no write) — do NOT copy `collect.py`'s `trading_date()` rollback;
+also guard that `picks_latest.csv`'s max date is strictly before today's ET date.
+
+**Owner verification aid** (owner said assume `t=` works; this confirms field shape):
+`https://finviz.com/screener.ashx?v=151&t=ABNB,ACIW,ADBE,ADIG,ADP,ADSK,AER,AG&c=1,81,86,87,88,65,66,49,67`
+— should render Ticker/Prev Close/Open/High/Low/Price/Change/ATR/Volume. Phase B's first
+slice is a `workflow_dispatch` dry-run on Actions (Azure IPs) before enabling the cron.
+
+**Next steps:** implement Phase A per ADR-013 § Decision 6 (Sonnet subagent against the ADR;
+`scripts/pick_status.py` pure engine + `collect_morning.py` writer + tests). Then B, then C
+(lead owns Phase C markup against the mock).
+
+---
+
 ## 2026-08-07 — WS1 follow-up: picks dependency gate + self-heal (#259)
 
 **Status: safe to close.** Implemented #259 — the last piece of ADR-010's "dependency-driven
