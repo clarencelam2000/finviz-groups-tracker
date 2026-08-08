@@ -40,6 +40,21 @@ derived from ADR-013; main model reviewed all code (precedence, guards, tz/dep c
 ungated 09:45 ET `collect_morning` job in `worker-cron/routing.js` + KV/tests), then Phase C
 (lead owns markup vs `planning/mocks/trade-lifecycle-surfaces.html` + release triplet).
 
+**Phase B (also this session, same PR #281):** shipped the scrape workflow +
+scheduled job. `.github/workflows/collect_morning.yml` (`workflow_dispatch` + `dry_run`
+boolean input, default false; shared `finviz-data-commit` concurrency; commits only
+`data/picks/sessions/`). `worker-cron`: new **ungated** `collect_morning` job at 09:45 ET
+Mon–Fri in `JOB_SCHEDULE` (no dependency gate — yesterday's picks already exist at dispatch;
+`collect_morning.py` stale-input guard covers failure), `morning` endpoint in `WORKFLOWS`.
+worker-cron `npm test` 83 passed (12 new). No new Cloudflare *trigger* (rides the single
+`*/5` tick — stays under the 5-trigger limit). No `schedule:` backstop/healthcheck yet
+(deferred, documented in workflow header). **Senior staging call:** merging auto-deploys the
+worker (cron live next trading day) and GitHub only surfaces `workflow_dispatch` on default,
+so the workflow defaults to a real run and the owner runs one manual `dry_run=true` on a
+trading day post-merge to confirm intraday High/Low freshness at 9:45 ET (the one
+unverifiable-from-cloud item; `quote.ashx` fallback in ADR-013 Decision 2). Low blast radius
+(store is provisional). **Only Phase C (PWA surface, lead owns taste) remains.**
+
 ---
 
 ## 2026-08-08 — WS3 staff guidance: ADR-013 closes all open decisions (#262)
