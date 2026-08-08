@@ -1,0 +1,405 @@
+"""
+collect_morning.py — WS3 morning status writer (ADR-013). Phase A skeleton: the
+pure/impure split is real (load -> fetch -> build -> write), but `fetch_ticker_quotes`
+is exercised only via fixtures in this phase — live scrape wiring + the cron job are
+Phase B (`collect_morning.yml`, `--dry-run` first, per ADR-013 Decision 6).
+
+Writes a PROVISIONAL store (`data/picks/sessions/morning*.csv`) — never the settled
+snapshot/delta/picks files. `session_config.assert_provisional("morning")` is called
+at the write boundary (write_store) per ADR-011's enforcement point.
+
+Must run on GitHub Actions (Azure IPs) once Phase B wires the live scrape — Cloudflare
+blocks headless Chromium from Google Cloud IPs, same constraint as collect.py/collect_picks.py.
+"""
+
+import csv
+import math
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+import probe_picks  # noqa: E402  (reuse _parse_table, PAGE_SIZE, SCREENER_TABLE_SELECTOR)
+import session_config  # noqa: E402
+from collect import NYSE_HOLIDAYS, _is_trading_day  # noqa: E402  (reuse holiday table only — NOT trading_date's rollback)
+from pick_status import compute_pick_status, compute_atr_from_lod, ACTIONABLE_STATUSES  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+BASE_DIR = Path(__file__).parent.parent
+DATA_DIR = BASE_DIR / "data"
+PICKS_DIR = DATA_DIR / "picks"
+SESSIONS_DIR = PICKS_DIR / "sessions"
+
+CONFIG_PATH = PICKS_DIR / "screener_config.json"
+PICKS_LATEST_PATH = PICKS_DIR / "picks_latest.csv"
+
+# Provisional morning store (ADR-013 Decision 4). append-only history + latest-date slice.
+MORNING_STORE = SESSIONS_DIR / "morning.csv"
+MORNING_LATEST = SESSIONS_DIR / "morning_latest.csv"
+
+# Store schema — exact column order (ADR-013 Decision 4). `session` is redundant with
+# the filename on purpose: rows stay self-describing once sessions are concatenated
+# later (session_config.PROVISIONAL_KEY_PREFIX == ("date", "session")).
+STORE_COLUMNS = [
+    "date", "session", "collected_at", "ticker", "group", "list_category",
+    "trigger", "stop", "atr", "price", "open", "high", "low", "change",
+    "status", "atr_from_lod",
+]
+
+# URL-length safety: batch the ~225 unique tickers/day into chunks of <= 50 per
+# `t=` screener URL (ADR-013 Decision 2 — batching is mandatory, not optional).
+# Configurable constant — see README.md § Configurable parameters and
+# scripts/CLAUDE.md § WS3 morning status for the other two required mentions.
+MORNING_BATCH_SIZE = 50
+
+# How stale picks_latest.csv is allowed to be (in trading sessions) before the
+# morning run refuses to tag setups against it (ADR-013 Decision 4 stale-input guard).
+MAX_STALE_SESSIONS = 5
+
+SCREENER_BASE = "https://finviz.com/screener.ashx"
+
+
+# ---------------------------------------------------------------------------
+# Pure helpers
+# ---------------------------------------------------------------------------
+
+
+def build_ticker_url(config: dict, tickers: list, offset: int = 1) -> str:
+    """Build a `t=`-filtered screener URL from the `morning` config block.
+
+    offset is the &r= pagination parameter (1-based; page 2 = r=21, ...), same
+    convention as probe_picks._build_url. No &f= is emitted when base_filters is
+    empty (ADR-013: morning wants exactly the given tickers, no cap/volume filters).
+    """
+    morning = config["morning"]
+    col_ids = ",".join(str(c["id"]) for c in morning["columns"])
+    t_str = ",".join(tickers)
+    url = (
+        f"{SCREENER_BASE}"
+        f"?v={morning['v']}"
+        f"&t={t_str}"
+    )
+    if morning["base_filters"]:
+        f_str = ",".join(morning["base_filters"])
+        url += f"&f={f_str}"
+    url += f"&ft={morning['ft']}" f"&c={col_ids}" f"&r={offset}"
+    return url
+
+
+def _batched(items: list, size: int) -> list:
+    """Split items into consecutive chunks of at most `size`."""
+    return [items[i:i + size] for i in range(0, len(items), size)]
+
+
+def fetch_ticker_quotes(page, tickers: list, config: dict) -> list:
+    """Fetch quote rows for `tickers` via the morning screener config, batched.
+
+    Chunks `tickers` into MORNING_BATCH_SIZE-sized batches, and within each batch
+    paginates with &r= (probe_picks.PAGE_SIZE=20 rows/page) exactly mirroring
+    probe_picks._scrape_group's loop. Returns a flat list of row dicts keyed by
+    the scraped Finviz labels (Ticker, Prev Close, Open, High, Low, Price, Change,
+    ATR, Volume).
+
+    Shared component (ADR-013 Decision 2): WS3b and WS5's held-tickers feed call
+    this verbatim. NOT exercised against live Finviz in Phase A — only via fixtures
+    in tests, since Cloudflare blocks this from a cloud dev session. `page` is a
+    Playwright Page (or, in tests, a stub exposing .goto/.wait_for_selector/.content).
+    """
+    all_rows: list = []
+    for batch in _batched(tickers, MORNING_BATCH_SIZE):
+        offset = 1
+        while True:
+            url = build_ticker_url(config, batch, offset=offset)
+            page.goto(url, wait_until="domcontentloaded", timeout=30_000)
+            page.wait_for_selector(probe_picks.SCREENER_TABLE_SELECTOR, timeout=30_000)
+            html = page.content()
+            _hdrs, rows = probe_picks._parse_table(html)
+            if not rows:
+                break
+            all_rows.extend(rows)
+            if len(rows) < probe_picks.PAGE_SIZE:
+                break
+            offset += probe_picks.PAGE_SIZE
+    return all_rows
+
+
+def _to_float(x):
+    """Parse a Finviz-scraped numeric string (or already-numeric value) to float.
+
+    Empty string / None / unparseable -> None (never raises). Strips a trailing
+    '%' since some columns (e.g. Change) are percent-formatted.
+    """
+    if x is None:
+        return None
+    if isinstance(x, float):
+        return None if math.isnan(x) else x
+    s = str(x).strip()
+    if s in ("", "-"):
+        return None
+    s = s.rstrip("%").replace(",", "")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def load_pick_levels(picks_latest) -> list:
+    """Extract per-ticker reference levels from picks_latest's most-recent date.
+
+    `picks_latest` may be a path (str/Path) to picks_latest.csv, or an already-
+    loaded list of dict rows (e.g. from csv.DictReader) — either is accepted so
+    tests can pass an in-memory fixture without touching the filesystem.
+
+    Returns one dict per ticker: ticker, group, list_category, trigger (=today's
+    reference High as float), stop (=reference Low as float), atr (float). Rows
+    with an unparseable date are skipped; only the max date's rows are used.
+    Missing/NaN High/Low/ATR are carried through as None (not dropped) — a
+    ticker with no usable trigger/stop still gets a no_quote-worthy row.
+    """
+    if isinstance(picks_latest, (str, Path)):
+        with open(picks_latest, newline="", encoding="utf-8") as f:
+            rows = list(csv.DictReader(f))
+    else:
+        rows = list(picks_latest)
+
+    if not rows:
+        return []
+
+    max_date = max(r["date"] for r in rows if r.get("date"))
+    levels = []
+    for r in rows:
+        if r.get("date") != max_date:
+            continue
+        levels.append({
+            "ticker": r.get("ticker", ""),
+            "group": r.get("group", ""),
+            "list_category": r.get("list_category", ""),
+            "trigger": _to_float(r.get("High")),
+            "stop": _to_float(r.get("Low")),
+            "atr": _to_float(r.get("ATR")),
+        })
+    return levels
+
+
+def build_status_rows(pick_levels: list, quotes: list, collected_at: str, date: str,
+                       session: str = session_config.MORNING) -> list:
+    """Join quotes to pick_levels by ticker and compute each row's status.
+
+    PURE — the main in-cloud-tested function. `quotes` is the flat list returned
+    by fetch_ticker_quotes (or an equivalent fixture); tickers with no matching
+    quote row, or an unparseable price/open/high/low, get status=no_quote via
+    compute_pick_status's own missing-value check. atr_from_lod is computed only
+    for actionable statuses (triggered/gapped_through) per ADR-013 Decision 3 —
+    left as "" otherwise, matching the CSV empty-value convention.
+    """
+    quotes_by_ticker = {q.get("Ticker"): q for q in quotes if q.get("Ticker")}
+
+    rows = []
+    for lvl in pick_levels:
+        ticker = lvl["ticker"]
+        q = quotes_by_ticker.get(ticker)
+
+        price = _to_float(q.get("Price")) if q else None
+        open_ = _to_float(q.get("Open")) if q else None
+        high = _to_float(q.get("High")) if q else None
+        low = _to_float(q.get("Low")) if q else None
+        change = _to_float(q.get("Change")) if q else None
+
+        status = compute_pick_status(lvl["trigger"], lvl["stop"], price, open_, high, low)
+
+        atr_from_lod = None
+        if status in ACTIONABLE_STATUSES:
+            atr_from_lod = compute_atr_from_lod(price, low, lvl["atr"])
+
+        rows.append({
+            "date": date,
+            "session": session,
+            "collected_at": collected_at,
+            "ticker": ticker,
+            "group": lvl["group"],
+            "list_category": lvl["list_category"],
+            "trigger": _fmt(lvl["trigger"]),
+            "stop": _fmt(lvl["stop"]),
+            "atr": _fmt(lvl["atr"]),
+            "price": _fmt(price),
+            "open": _fmt(open_),
+            "high": _fmt(high),
+            "low": _fmt(low),
+            "change": _fmt(change),
+            "status": status,
+            "atr_from_lod": _fmt(atr_from_lod),
+        })
+    return rows
+
+
+def _trading_sessions_between(start_date, end_date) -> int:
+    """Count trading days strictly between start_date and end_date (exclusive of
+    start, inclusive of end), via collect._is_trading_day. Used for the
+    MAX_STALE_SESSIONS guard — picks_latest more than N trading sessions behind
+    today means the reference levels are too old to trust for morning tagging.
+    """
+    from datetime import timedelta
+    n = 0
+    d = start_date + timedelta(days=1)
+    while d <= end_date:
+        if _is_trading_day(d):
+            n += 1
+        d += timedelta(days=1)
+    return n
+
+
+def _fmt(x):
+    """NaN/None -> '', else pass the value through (data-pipeline.md convention)."""
+    if x is None:
+        return ""
+    if isinstance(x, float) and math.isnan(x):
+        return ""
+    return x
+
+
+# ---------------------------------------------------------------------------
+# Writer (impure)
+# ---------------------------------------------------------------------------
+
+
+def _read_existing(path: Path) -> list:
+    if not path.exists():
+        return []
+    with open(path, newline="", encoding="utf-8") as f:
+        return list(csv.DictReader(f))
+
+
+def write_store(rows: list) -> None:
+    """Dedup last-write-wins per (date, ticker) into MORNING_STORE; rewrite
+    MORNING_LATEST as the max-date slice. Same convention as picks.csv:
+    collected_at is NOT part of the uniqueness key.
+
+    Calls session_config.assert_provisional("morning") first — the ADR-011
+    enforcement point; this is the first writer to actually use it (ADR-013).
+    """
+    session_config.assert_provisional(session_config.MORNING)
+
+    if not rows:
+        return
+
+    SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+
+    existing = _read_existing(MORNING_STORE)
+    by_key = {(r["date"], r["ticker"]): r for r in existing}
+    for r in rows:
+        by_key[(r["date"], r["ticker"])] = r
+
+    all_rows = sorted(by_key.values(), key=lambda r: (r["date"], r["ticker"]))
+    with open(MORNING_STORE, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=STORE_COLUMNS)
+        writer.writeheader()
+        for r in all_rows:
+            writer.writerow({col: r.get(col, "") for col in STORE_COLUMNS})
+
+    max_date = max(r["date"] for r in all_rows)
+    latest_rows = [r for r in all_rows if r["date"] == max_date]
+    with open(MORNING_LATEST, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=STORE_COLUMNS)
+        writer.writeheader()
+        for r in latest_rows:
+            writer.writerow({col: r.get(col, "") for col in STORE_COLUMNS})
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main() -> None:
+    import argparse
+    import json
+    import pytz
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--dry-run", action="store_true",
+                         help="Scrape + parse + print row counts; do not write the store.")
+    args = parser.parse_args()
+
+    et = pytz.timezone("America/New_York")
+    now_et = datetime.now(et)
+    today = now_et.date()
+
+    # Guard (a): non-trading day -> exit 0 WITHOUT writing. Deliberately does NOT
+    # import/reuse collect.trading_date()'s rollback — a morning run on a closed
+    # day has no live session to snapshot; rolling back would mis-tag yesterday's
+    # setups under today (ADR-013 Decision 4).
+    if today.weekday() >= 5:
+        print(f"{today} is a weekend — no morning session to capture. Exiting 0.")
+        sys.exit(0)
+    if today.strftime("%Y-%m-%d") in NYSE_HOLIDAYS:
+        print(f"{today} is an NYSE holiday — no morning session to capture. Exiting 0.")
+        sys.exit(0)
+    if not _is_trading_day(today):
+        print(f"{today} is not a trading day — no morning session to capture. Exiting 0.")
+        sys.exit(0)
+
+    # Guard (b): picks_latest must be strictly before today, and not stale by more
+    # than MAX_STALE_SESSIONS trading sessions -> exit 1 LOUD, no write.
+    pick_levels = load_pick_levels(PICKS_LATEST_PATH)
+    if not pick_levels:
+        print("picks_latest.csv is empty — cannot tag morning statuses.", file=sys.stderr)
+        sys.exit(1)
+
+    with open(PICKS_LATEST_PATH, newline="", encoding="utf-8") as f:
+        picks_max_date = max(r["date"] for r in csv.DictReader(f) if r.get("date"))
+
+    today_str = today.strftime("%Y-%m-%d")
+    if picks_max_date >= today_str:
+        print(f"picks_latest.csv max date {picks_max_date} is not strictly before "
+              f"today {today_str} — refusing to write.", file=sys.stderr)
+        sys.exit(1)
+
+    picks_date = datetime.strptime(picks_max_date, "%Y-%m-%d").date()
+    stale_sessions = _trading_sessions_between(picks_date, today)
+    if stale_sessions > MAX_STALE_SESSIONS:
+        print(f"picks_latest.csv is stale ({stale_sessions} trading sessions old, max "
+              f"date {picks_max_date}) — refusing to write.", file=sys.stderr)
+        sys.exit(1)
+
+    config = json.loads(CONFIG_PATH.read_text())
+    tickers = [lvl["ticker"] for lvl in pick_levels if lvl["ticker"]]
+
+    if args.dry_run:
+        print(f"[dry-run] {len(tickers)} tickers to fetch, "
+              f"{len(_batched(tickers, MORNING_BATCH_SIZE))} batch(es).")
+        # Dry-run still exercises the real scrape+parse path per ADR-013 Decision 2
+        # verification note — only the final write_store() call is skipped.
+
+    from playwright.sync_api import sync_playwright  # guarded import, mirrors probe_picks.py
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        ctx = browser.new_context(
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/125.0.0.0 Safari/537.36"
+            ),
+            ignore_https_errors=True,
+        )
+        page = ctx.new_page()
+        quotes = fetch_ticker_quotes(page, tickers, config)
+        browser.close()
+
+    collected_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rows = build_status_rows(pick_levels, quotes, collected_at, today_str)
+
+    print(f"Built {len(rows)} status rows from {len(quotes)} quote rows.")
+
+    if args.dry_run:
+        print("[dry-run] not writing.")
+        return
+
+    write_store(rows)
+    print(f"Wrote {len(rows)} rows to {MORNING_STORE} and {MORNING_LATEST}.")
+
+
+if __name__ == "__main__":
+    main()

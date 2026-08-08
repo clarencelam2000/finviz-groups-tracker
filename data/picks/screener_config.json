@@ -95,6 +95,23 @@
       {"id": 128, "label": "Revenue Surprise"}
     ]
   },
+  "morning": {
+    "v": "151",
+    "base_filters": [],
+    "sort": "",
+    "ft": "4",
+    "columns": [
+      {"id": 1,  "label": "Ticker"},
+      {"id": 81, "label": "Prev Close"},
+      {"id": 86, "label": "Open"},
+      {"id": 87, "label": "High"},
+      {"id": 88, "label": "Low"},
+      {"id": 65, "label": "Price"},
+      {"id": 66, "label": "Change"},
+      {"id": 49, "label": "ATR"},
+      {"id": 67, "label": "Volume"}
+    ]
+  },
   "button": {
     "v": "311",
     "base_filters": [

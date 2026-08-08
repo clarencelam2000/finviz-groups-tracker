@@ -315,6 +315,19 @@ session-keyed stores added later (not yet built).
 
 `DEFAULT_SESSION` = `eod` — callers that don't yet think in terms of multiple sessions default here.
 
+### WS3 morning status (`scripts/collect_morning.py`)
+
+First writer under the provisional-session store pattern (ADR-013). Pure status engine
+lives in `scripts/pick_status.py`; see `scripts/CLAUDE.md` § WS3 morning status for the
+full pipeline description.
+
+| Parameter | Default | What it controls |
+|-----------|---------|-----------------|
+| `MORNING_BATCH_SIZE` | `50` | Max tickers per `t=`-filtered screener URL fetch (URL-length safety); ~225 tickers/day makes batching mandatory. Each batch is paginated internally with `&r=` same as `probe_picks`. |
+| `MAX_STALE_SESSIONS` | `5` | Max trading sessions `picks_latest.csv` may lag behind today before `collect_morning.py` refuses to write (exits 1 loud). |
+| `MORNING_STORE` | `data/picks/sessions/morning.csv` | Append-only provisional history, keyed `(date, ticker)`, last-write-wins (same convention as `picks.csv`). |
+| `MORNING_LATEST` | `data/picks/sessions/morning_latest.csv` | Max-date slice of `MORNING_STORE` — the PWA fetch target (Phase C). |
+
 ### Picks alpha scoreboard (`scripts/evaluate_picks.py`)
 
 | Parameter | Default | What it controls |

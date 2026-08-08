@@ -122,6 +122,44 @@ a two-way-door superset migration (`ensure_deltas_csv()` pattern).
   whole irreplaceable day, but CI still goes red, the debug HTML uploads, and the healthcheck ping
   is skipped so the drift is fixed in `screener_config.json` before the next run.
 
+## WS3 morning status (`collect_morning.py` / `pick_status.py`)
+
+**ADR-013**, required reading before touching either file. First writer under the
+provisional-session pattern (`scripts/session_config.py`, ADR-011 Option C) — tags each
+prior-session pick with a morning status (Triggered / Setting-up / Gapped-through /
+Failed-breakout / Invalidated / No-quote) at ~09:45 ET.
+
+- **`scripts/pick_status.py`** — pure status engine, no I/O, no clock/file reads.
+  `compute_pick_status(trigger, stop, price, open_, high, low)` evaluates ADR-013 Decision 3's
+  precedence table top-down, first match wins (order matters — see the in-code doc comment for
+  the invalidated-outranks-triggered / gapped-outranks-triggered rationale). Session-agnostic
+  by contract: WS3b (#268, 15:30 ET) calls it verbatim against a different quote snapshot.
+  `compute_atr_from_lod()` is the entry-quality metric, meaningful only for `ACTIONABLE_STATUSES`
+  (`triggered`, `gapped_through`) — display thresholds are a PWA concern, not this module's.
+- **`scripts/collect_morning.py`** — the writer. `fetch_ticker_quotes(page, tickers, config)` is
+  the **shared component** WS3b and WS5's held-tickers feed reuse: batches tickers into
+  `MORNING_BATCH_SIZE`-sized (50) chunks against the `morning` block in `screener_config.json`
+  (a narrow 9-column `t=`-filtered screener URL, distinct from `wide`'s 84-column filter-based
+  URL — see `build_ticker_url` vs `probe_picks._build_url`), and paginates each batch with `&r=`
+  exactly like `probe_picks._scrape_group`. `load_pick_levels` / `build_status_rows` are pure and
+  fully unit-tested in cloud; `fetch_ticker_quotes` itself is only exercised via fixtures (Phase
+  A) since Cloudflare blocks it from a cloud dev session — live wiring is Phase B.
+  - **Store:** `data/picks/sessions/morning.csv` (append-only, keyed `(date, ticker)`,
+    last-write-wins, `collected_at` not part of the key — same convention as `picks.csv`) +
+    `data/picks/sessions/morning_latest.csv` (max-date slice, the PWA fetch target). Committed
+    to the repo, not gitignored — see ADR-013 Decision 4 for why (public data, static-Pages PWA).
+  - **Write-boundary guard:** `write_store()` calls `session_config.assert_provisional("morning")`
+    before writing anything — the first real enforcement of the ADR-011 invariant.
+  - **Non-trading-day guard differs from `collect.py`:** `main()` imports `NYSE_HOLIDAYS` /
+    `_is_trading_day` from `collect.py` but deliberately does **not** import `trading_date()`'s
+    rollback logic — a weekend/holiday morning run exits 0 without writing (no live session to
+    snapshot), it never re-stamps the prior day's data under today.
+  - **Stale-input guard:** `picks_latest.csv`'s max date must be strictly before today's ET date
+    and no more than `MAX_STALE_SESSIONS` (5) trading sessions old, else `sys.exit(1)` loud,
+    no write.
+  - **`--dry-run`:** scrapes + parses + prints row counts, skips `write_store()`. This is Phase
+    B's `collect_morning.yml` first-slice hook (`workflow_dispatch` dry run before cron enable).
+
 ## AI capture constants (`scripts/generate_ai.py`)
 
 > Added in Phase 1 of the AI capture plan (ADR-006). Document changes to these in all three

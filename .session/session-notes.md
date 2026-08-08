@@ -6,6 +6,42 @@
 
 ---
 
+## 2026-08-08 — WS3 Phase A: morning status engine + provisional store (#262)
+
+**Status: safe to close once PR #281 merges.** Senior-eng session driving WS3 forward on the
+staff ADR-013 guidance (PR #280). Reviewed the staff guidance against the code first —
+**it's congruent and complete; all 7 junior questions genuinely closed.** Two senior flags,
+neither blocking: (1) owner's "missing earnings?" concern is *resolved not a gap* — WS3 status
+math needs only price/open/high/low + prior trigger/stop/atr, all already on the EOD pick row;
+earnings is WS4's ticket, so the narrow 9-col morning set is correct. (2) The one real unknown
+is whether Finviz screener High(87)/Low(88) are *today's intraday* at 9:45 ET — `failed_breakout`
++ ATR-from-LoD depend on it; unverifiable from cloud, correctly deferred to Phase B's dry-run
+(ADR-013 § Decision 2, `quote.ashx` fallback documented).
+
+**What landed (PR #281, Phase A):**
+- `scripts/pick_status.py` — pure, session-agnostic status engine (`compute_pick_status`
+  top-down precedence per ADR-013 Decision 3; `compute_atr_from_lod`; `STATUS_PRECEDENCE`;
+  `ACTIONABLE_STATUSES`). WS3b (#268) reuses verbatim.
+- `scripts/collect_morning.py` — writer skeleton: shared `fetch_ticker_quotes` (batch ≤50,
+  `&r=` pagination reusing `probe_picks`), pure `load_pick_levels`/`build_status_rows`,
+  `write_store` (last-write-wins `(date,ticker)`) gated by `assert_provisional("morning")` —
+  first real call site of the WS2 guard. Non-trading-day exit-0 (NOT collect's rollback) +
+  stale-input guard + `--dry-run` hook for Phase B.
+- `data/picks/sessions/morning{,_latest}.csv` store (committed, public data per Decision 4).
+- `morning` block in `screener_config.json` (9 cols, empty filters, matches owner's sample link).
+- Tests: `tests/test_pick_status.py` (15), `tests/test_collect_morning.py` (18); full suite
+  632 passed, no regressions. Neither test file needs the Playwright ignore list (lazy imports).
+- Docs: README § Configurable parameters + scripts/CLAUDE.md WS3 subsection (3-places rule).
+
+**Delegation:** Phase A mechanical build done by a Sonnet subagent against a main-model spec
+derived from ADR-013; main model reviewed all code (precedence, guards, tz/dep checks) before commit.
+
+**Next steps:** Phase B (Sonnet — live scrape wiring + `collect_morning.yml` dry-run-first +
+ungated 09:45 ET `collect_morning` job in `worker-cron/routing.js` + KV/tests), then Phase C
+(lead owns markup vs `planning/mocks/trade-lifecycle-surfaces.html` + release triplet).
+
+---
+
 ## 2026-08-08 — WS3 staff guidance: ADR-013 closes all open decisions (#262)
 
 **Status: safe to close once PR merges.** Staff-eng session (docs only, no product code).
