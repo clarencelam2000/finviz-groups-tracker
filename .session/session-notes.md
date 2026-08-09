@@ -508,3 +508,49 @@ same-day `.1` suffix per convention), `current` bumped, `sw.js` `CACHE` `finviz-
 
 **Next steps:** none — this closes out the PR #289 review finding. WS4-C/WS4-RT next steps
 are unchanged from the entry above.
+
+---
+
+## 2026-08-09 — WS4 trade ticket: extend pick-reason + add Focus score (follow-up to #289)
+
+**Status:** Done, safe to close. Owner explicitly asked to close both follow-ups flagged in
+PR #289's own review notes (see the "Follow-ups noted" paragraph two entries above).
+
+**Pick-reason (ADR-014 §9):** `ws4PickReason()` previously only checked `grp_rs_new_high`.
+It now also checks `grp_momentum_accel > ACCEL_STRONG` (→ `accel+`) and
+`grp_regime_short_long > REGIME_THRESHOLD` (→ `emerging regime`) — reusing the existing PWA
+display constants rather than inventing new thresholds; they happen to equal the selector's
+own `ACCEL_THRESHOLD`/`EMERGING_REGIME_FLOOR` (`scripts/picks_config.py`), so the label lines
+up with what the selector itself gated on. Each tag is skipped when it just restates the
+row's own `list_category` (already shown next to it), so e.g. an `accel`-category pick
+doesn't get a redundant `accel+` tag — only *other* grp_* signals that also fired show up.
+Multiple tags join with ` + `.
+
+**Focus score:** the ticket footnote now shows the pick's actual Focus score instead of the
+static "watchlist context only" line. `ws4FocusScore(picksRow)` builds the same global
+Focus-eligible/deduped-by-ticker candidate pool the Lookup tab's `globalFocusCandidates` /
+`lookupFocusMap` already builds (`isFocusEligible` filter + ticker dedup over
+`state.picksData`), runs it through the existing `computeFocusScores()`, and looks up this
+row's score — so the "not cleanly reusable for a single row" concern in the original PR note
+turned out to already have a working precedent elsewhere in the file; it just hadn't been
+applied here yet. Returns `null` (rendered as "n/a — not a Focus candidate today") when the
+row fails `isFocusEligible` (ATR-extension or liquidity gate) or isn't in the pool at all.
+The pool-relative caveat stays in the copy since the owner confirmed they want the number
+despite knowing it's min-max'd against the day's other candidates, not an absolute score.
+
+**Verified:** extended `tests/fixtures` inline picks CSV in `tests/test_pwa_trade_ticket.py`
+with `atr_ext_50`/`Avg Volume`/`range_atr`/`grp_sum_mid_rank`/`grp_momentum_accel`/
+`grp_regime_short_long` so AXON clears `isFocusEligible` and exercises all three reason
+flags; added `test_focus_score_shown_in_footnote` (expects exactly `0.30` — single-candidate
+pool, 0 liquidity penalty, `EARNINGS_PENALTY_MAX` earnings penalty from the fixture's 2-day-out
+earnings date) and rewrote `test_pick_reason_line_from_grp_flag` to assert all three tags
+render (`rs_new_high + accel+ + emerging regime`). Ran the full `test_pwa_trade_ticket.py`
+suite live (Chromium revision-symlink trick per
+`knowledge/investigations/playwright-cloud-session-testing.md`) — all 8 pass. Full
+non-Playwright suite (632 tests, CI's `--ignore=` list) — all pass.
+
+**Release surface:** user-visible ticket copy change, so it gets the release triplet:
+`releases.json` `2026.08.09.2` (tag `feature`, same-day suffix per convention), `current`
+bumped, `sw.js` `CACHE` `finviz-v60` → `v61`.
+
+**Next steps:** none outstanding from this thread.

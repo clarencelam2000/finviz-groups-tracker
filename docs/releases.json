@@ -1,6 +1,17 @@
 {
-  "current": "2026.08.09.1",
+  "current": "2026.08.09.2",
   "releases": [
+    {
+      "version": "2026.08.09.2",
+      "date": "2026-08-09",
+      "title": "Trade ticket: more pick reasons + Focus score",
+      "tag": "feature",
+      "tab": "morning",
+      "notes": [
+        "The pick-reason line now surfaces every signal that fired on a pick's group — not just RS new high — including building momentum acceleration and an emerging regime shift.",
+        "The trade ticket now shows the pick's Focus score, alongside a note that it's ranked against today's other Focus candidates and isn't part of this ticket's own math."
+      ]
+    },
     {
       "version": "2026.08.09.1",
       "date": "2026-08-09",

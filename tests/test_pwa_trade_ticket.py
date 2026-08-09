@@ -36,13 +36,22 @@ MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", 
 
 def _picks_body() -> str:
     """AXON picks row with Earnings 2 days out (computed at test time so the guardrail
-    test is stable regardless of when the suite runs) and grp_rs_new_high set (pick
-    reason line). VRT (present in the morning fixture) is intentionally absent here to
-    exercise the no-EOD-match degraded path."""
+    test is stable regardless of when the suite runs), list_category=leaders, and every
+    grp_* pick-reason flag set (grp_rs_new_high, grp_momentum_accel, grp_regime_short_long)
+    so the "extend beyond rs_new_high" reason wiring can be exercised even though this row's
+    own category is leaders. atr_ext_50/Avg Volume/range_atr/grp_sum_mid_rank are populated
+    so the row clears isFocusEligible and a Focus score can be computed (single-candidate
+    pool: score = 1.0 x (1 - liquidity penalty) x (1 - earnings penalty); the 2-day-out
+    earnings here pins the earnings penalty at EARNINGS_PENALTY_MAX=0.7, liquidity penalty
+    is 0 given the ample Avg Volume, so the expected score is exactly 0.30). VRT (present in
+    the morning fixture) is intentionally absent here to exercise the no-EOD-match degraded
+    path."""
     d = datetime.date.today() + datetime.timedelta(days=2)
     earnings = f"{MONTHS[d.month - 1]} {d.day:02d}/a"
-    header = "date,list_category,Ticker,Price,ATR,SMA20,SMA50,Earnings,grp_rs_new_high\n"
-    row = f"2026-08-08,leaders,AXON,610.00,14.00,2.00%,5.00%,{earnings},1.0\n"
+    header = ("date,list_category,Ticker,Price,ATR,SMA20,SMA50,Earnings,Avg Volume,"
+              "atr_ext_50,range_atr,grp_sum_mid_rank,grp_rs_new_high,grp_momentum_accel,"
+              "grp_regime_short_long\n")
+    row = f"2026-08-08,leaders,AXON,610.00,14.00,2.00%,5.00%,{earnings},5000000,1.0,1.0,50,1.0,0.15,0.30\n"
     return header + row
 
 
@@ -188,6 +197,9 @@ def test_earnings_guardrail_renders(server):
 
 
 def test_pick_reason_line_from_grp_flag(server):
+    """AXON's list_category is 'leaders', but its grp_* snapshot also has rs_new_high,
+    momentum_accel, and regime_short_long all past their respective thresholds — all
+    three should surface as extra reason tags since none of them restate 'leaders'."""
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -196,7 +208,25 @@ def test_pick_reason_line_from_grp_flag(server):
         page.click("text=▾ Trade ticket >> nth=0")
         page.wait_for_timeout(300)
         html = page.inner_html("#morning-list")
-        assert "from Picks · leaders · rs_new_high" in html
+        assert "from Picks · leaders · rs_new_high + accel+ + emerging regime" in html
+        browser.close()
+
+
+def test_focus_score_shown_in_footnote(server):
+    """AXON clears isFocusEligible (atr_ext_50=1.0, ample Avg Volume) and is the only
+    Focus-eligible row in the picks fixture, so its Focus score is computed against a
+    single-candidate pool: base=1.0, 0 liquidity penalty, EARNINGS_PENALTY_MAX (0.7)
+    earnings penalty from the 2-day-out earnings date -> score = 1 * 1 * 0.3 = 0.30."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _open_morning_tab(page)
+        page.click("text=▾ Trade ticket >> nth=0")
+        page.wait_for_timeout(300)
+        html = page.inner_html("#morning-list")
+        assert "Focus score: 0.30" in html
+        assert "pool-relative" in html
         browser.close()
 
 
