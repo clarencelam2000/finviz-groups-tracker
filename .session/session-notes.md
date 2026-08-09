@@ -471,3 +471,40 @@ populating the `pre_close` session store. WS4-RT (real-time quotes / Alpaca) par
 Follow-ups noted: pick-reason currently wires only `grp_rs_new_high` — extend to other `grp_*`
 flags if desired; Focus score omitted from the footnote (pool-relative `computeFocusScores` not
 cleanly reusable for a single row) — revisit if a numeric Focus value is wanted on the ticket.
+
+---
+
+## 2026-08-09 — WS4 Phase B follow-up: fix hardcoded snapshot timestamp
+
+**Status:** Done, safe to close. Found during a post-merge review of PR #289 (owner requested
+a full roadmap + user-perspective review after merge) and fixed in a same-day follow-up PR,
+per the merged-PR amendment policy (`.claude/rules/branch-commit-discipline.md`).
+
+**What was wrong:** `ws4TicketHtml()` hardcoded the ticket's "Price now" label as
+`(10:05 read · edit)` and the note below it as "As of the 10:05 ET snapshot..." — always,
+regardless of the row's actual `collected_at`. The morning job dispatches inside a
+self-healing `[10:05, 10:35)` ET window (CLAUDE.md § Automation), so on a delayed-tick day
+the label would understate how stale the read actually was — directly contradicting
+ADR-014 §3's own "never call it more precise than it is" rationale for not showing a
+live/minute-precise price.
+
+**Fix:** `ws4TicketHtml()` now calls the existing `freshnessLabel(r.date, r.collected_at)`
+helper — the same one the Morning-tab header already uses above the list — and derives both
+the compact chip (last `·`-segment of `fresh.text`, e.g. "7:05 AM PT") and the full sentence
+from it. As a side effect this also correctly flags genuinely stale morning data (e.g.
+"Yesterday's data · ...") instead of always implying "read this morning," which the old
+hardcoded string could not do.
+
+**Verified:** added a 7th Playwright test (`test_price_snapshot_label_reflects_actual_collected_at`)
+asserting the old hardcoded strings are gone and the label reflects the fixture's
+`collected_at` (2026-08-09T14:05:00Z → 7:05 AM PT). Ran all 7 `test_pwa_trade_ticket.py`
+tests live (Chromium revision-symlink trick, same as PR #289) — all pass. `node --check` on
+the extracted script — valid. Full non-Playwright suite (632 tests, same `--ignore=` list CI
+uses) — all pass.
+
+**Release surface:** this changes ticket copy users see, so it gets the release triplet per
+house rule even though it's a fix, not a feature: `releases.json` `2026.08.09.1` (tag `fix`,
+same-day `.1` suffix per convention), `current` bumped, `sw.js` `CACHE` `finviz-v59` → `v60`.
+
+**Next steps:** none — this closes out the PR #289 review finding. WS4-C/WS4-RT next steps
+are unchanged from the entry above.
