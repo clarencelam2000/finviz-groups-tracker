@@ -437,3 +437,37 @@ rule (owner directive), SPRINT WS4 block, this note. Issue **#287** opened (Alpa
 
 **Next steps:** Phase B — PWA ticket surface built against the mock + ADR-014, Sonnet-drafted /
 main-reviewed, own PR with release triplet. Add any new Playwright test to `tests.yml` `--ignore=`.
+
+---
+
+## 2026-08-09 — WS4 Phase B (trade-ticket PWA surface)
+
+**Status:** Phase B built + verified; committed and pushed on `claude/ws4-gh-issue-263-qkzq16`, PR
+opened. Safe to close after the Phase B PR merges.
+
+**What landed:** `docs/index.html` (~275 lines) expands actionable morning cards (triggered /
+gapped_through) into the WS4 live trade ticket per ADR-014 + `planning/mocks/ws4-trade-ticket.html`:
+per-ticker join to `picks_latest` (`ws4FindPicksRow`), 4-base stop menu, two don't-chase gates
+(ATR-from-LoD reusing `morningAtrLabel`; ATR-ext-50MA via `deriveRiskMetrics`), overridable
+snapshot price with in-place recompute (`ws4Recompute`, no full re-render — smooth typing),
+free-input risk (localStorage `ws4_risk_default`), earnings hard-card, pick-reason header,
+graceful no-EOD-match degrade. Release triplet (releases.json `2026.08.09` + `current` + sw.js
+v58→v59). New `tests/test_pwa_trade_ticket.py` (6 tests) + fixture, added to `tests.yml --ignore`.
+
+**Delegation + verification:** implementation by a Sonnet subagent from a main-model spec (mock +
+ADR + exact integration points/helpers). Main model verified: full diff read, JS `node --check`,
+JSON validity, math/helpers (no 20/50MA swap, correct sizing), and **ran the 6 Playwright tests
+live (all pass)** + a rendered screenshot to check content/order — using the Chromium
+revision-symlink trick (sandbox ships rev 1194, pip playwright wants 1234; symlinked the inner
+`chrome-headless-shell` path). Symlinks are ephemeral, not committed.
+
+**Staff decision folded in:** ADR-014 §7 amended — earnings guardrail reuses existing
+`EARNINGS_IMMINENT_DAYS`/`EARNINGS_CAUTION_DAYS` instead of a new `EARNINGS_GUARDRAIL_SESSIONS`
+(DRY, avoids days-vs-sessions mismatch). WS4 adds **no** new configurable constant, no backend
+column.
+
+**Next steps:** WS4-C (pre-close 15:50 rendering of the same component) — blocked on WS3b (#268)
+populating the `pre_close` session store. WS4-RT (real-time quotes / Alpaca) parked at #287.
+Follow-ups noted: pick-reason currently wires only `grp_rs_new_high` — extend to other `grp_*`
+flags if desired; Focus score omitted from the footnote (pool-relative `computeFocusScores` not
+cleanly reusable for a single row) — revisit if a numeric Focus value is wanted on the ticket.
