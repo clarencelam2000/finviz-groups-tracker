@@ -1,0 +1,81 @@
+name: Morning Status
+# WS3 morning confirmation surface (ADR-013, issue #262). Scrapes live quotes for
+# yesterday's picks and tags each with a status (Triggered/Setting-up/Gapped-through/
+# Failed-breakout/Invalidated/No-quote) via scripts/collect_morning.py, writing the
+# PROVISIONAL store data/picks/sessions/morning{,_latest}.csv.
+#
+# PRIMARY scheduler: the Cloudflare `finviz-cron-dispatcher` Worker's in-code
+# `collect_morning` job (worker-cron/src/routing.js JOB_SCHEDULE), firing at 10:05 ET,
+# Mon-Fri, UNGATED (ADR-013 Decision 6 — no picks-style dependency gate: the input,
+# yesterday's committed picks_latest.csv, already exists at dispatch time; the
+# stale-input guard inside collect_morning.py covers the failure case). It runs via
+# workflow_dispatch on GitHub's Azure IPs, which pass Finviz's Cloudflare bot-detection
+# — our own Cloudflare Worker's Google Cloud IPs do not (see root CLAUDE.md § Playwright
+# notes).
+#
+# Deliberately NO GitHub `schedule:` backstop (unlike collect.yml/collect_picks.yml).
+# ADR-013 Decision 6 / Phase B scopes this to worker-cron-only for now: the mechanism
+# is new (first live-scrape validation happens via a manual `dry_run` dispatch before
+# the Cloudflare cron job is relied on), so a redundant fixed-time GitHub cron is
+# deferred rather than added speculatively. Revisit once the Cloudflare dispatch has a
+# clean track record — see ADR-013 for the follow-up note. No healthcheck ping either,
+# for the same reason (no new secret dependency added in this phase).
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Scrape+parse+log counts without writing the store (ADR-013 verification run)."
+        type: boolean
+        default: false
+permissions:
+  contents: write
+# Shared concurrency group with collect.yml/collect_picks.yml (ADR-008 / G1): all three
+# jobs commit to data/ on the same branch and MUST serialize. A concurrency group only
+# serializes workflows that declare the SAME group name, so this identical block is
+# required here too. cancel-in-progress: false so no data job is killed mid-run.
+concurrency:
+  group: finviz-data-commit
+  cancel-in-progress: false
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+jobs:
+  morning:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+      - name: Collect morning status
+        id: morning
+        # inputs.dry_run is only present on a manual workflow_dispatch; a worker-cron
+        # dispatch sends no inputs, and GitHub Actions defaults an unset boolean input
+        # to its declared `default` (false) — a real write. The ${{ }} && / || ternary
+        # is standard GitHub Actions expression syntax and is safe to inline directly
+        # into `run:` (it's substituted before the shell ever sees it, so there is no
+        # quoting/injection concern the way there would be with untrusted string
+        # inputs) — verified against GitHub's expression docs, not just assumed.
+        run: python scripts/collect_morning.py ${{ inputs.dry_run && '--dry-run' || '' }}
+      - name: Upload debug HTML on parse failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: morning-debug-html
+          path: data/picks/debug_html/
+          if-no-files-found: ignore
+      - name: Commit and push
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # A dry run writes nothing, so this stages no changes and the
+          # `git diff --cached --quiet ||` idiom below already no-ops the commit.
+          git add data/picks/sessions/
+          git diff --cached --quiet || git commit -m "data: morning status $(TZ=America/New_York date +%Y-%m-%d)"
+          git pull --rebase
+          git push

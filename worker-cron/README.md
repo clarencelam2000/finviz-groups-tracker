@@ -153,9 +153,9 @@ holds the fixed `*/5 * * * *` trigger).
 | Tick interval (`wrangler.toml [triggers] crons`) | `*/5 * * * *` | How often `scheduled()` fires; the grid every `JOB_SCHEDULE` target time must land on (target minutes must be multiples of 5). |
 | `DISPATCH_WINDOW_MINUTES` | `30` | How long after `collect_preclose`/`collect_eod`'s target ET time the tick keeps considering that job due, and the self-heal retry budget for a delayed/skipped Cloudflare tick. |
 | `PICKS_GATE_WINDOW_MINUTES` (`picksGate.js`) | `120` | How long after picks' 17:00 ET target the dependency gate keeps re-checking collect.yml's EOD run status before giving up and recording a `miss`. Wider than `DISPATCH_WINDOW_MINUTES` since it must cover collect_eod's own self-heal window plus its run time, not just one job's normal margin. |
-| `JOB_SCHEDULE[*].hour` / `.minute` | `collect_preclose` 15:50, `collect_eod` 17:00, `picks` 17:00 (ET, gated — see § Picks dependency gate) | Per-job target wall-clock time. |
+| `JOB_SCHEDULE[*].hour` / `.minute` | `collect_morning` 10:05, `collect_preclose` 15:50, `collect_eod` 17:00, `picks` 17:00 (ET, gated — see § Picks dependency gate) | Per-job target wall-clock time. |
 | `JOB_SCHEDULE[*].weekdays` | `[1,2,3,4,5]` (Mon–Fri) for all current jobs | ISO weekday gate per job; a future Sunday-only job (e.g. the roadmap's weekly taxonomy check) would use `[7]`. |
-| `JOB_SCHEDULE[*].gated` | `true` for `picks` only | Marks a job as dependency-gated (routed through `runPicksGate` instead of dispatched directly on window-open). |
+| `JOB_SCHEDULE[*].gated` | `true` for `picks` only | Marks a job as dependency-gated (routed through `runPicksGate` instead of dispatched directly on window-open). `collect_morning` is ungated (ADR-013 Decision 6) — its input (yesterday's committed picks) already exists at dispatch time. |
 
 Also documented in `CLAUDE.md` § Automation, per this repo's 3-places rule
 for configurable constants.
@@ -164,6 +164,7 @@ for configurable constants.
 
 | Job | ET target (auto-DST) | Purpose |
 |-----|-----------------------|---------|
+| `collect_morning` | 10:05 (ungated) | WS3 morning status — tags prior-session picks with a Triggered/Setting-up/Gapped-through/Failed-breakout/Invalidated/No-quote status (ADR-013); dispatches `collect_morning.yml`; KV key `last_dispatch_collect_morning`. 10:05 ET leaves a full 30-min candle after the open. |
 | `collect_preclose` | 15:50 | pre-close snapshot before the market close |
 | `collect_eod` | 17:00 | EOD post-close snapshot |
 | `picks` | 17:00 (gated, window through 19:00) | picks selector — dependency-gated on collect_eod's actual run success (issue #259), not a fixed later time; see § Picks dependency gate |

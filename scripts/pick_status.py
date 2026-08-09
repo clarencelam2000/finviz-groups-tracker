@@ -3,7 +3,7 @@ pick_status.py — WS3 morning status engine (ADR-013 Decision 3). PURE module.
 
 No I/O, no clock reads, no file reads — `compute_pick_status` is session-agnostic by
 contract: it takes reference levels + a single quote snapshot and returns a state string.
-WS3 (09:45 ET) and WS3b (15:30 ET, issue #268) both call this verbatim against different
+WS3 (10:05 ET) and WS3b (15:30 ET, issue #268) both call this verbatim against different
 inputs; the function itself never knows which session invoked it.
 
 Mirrors the pure/impure split used by `worker-cron/src/picksGate.js` (pure state-machine core,
@@ -102,9 +102,10 @@ def compute_atr_from_lod(price, low, atr):
     """Return (price - low) / atr, or None if atr is missing/zero or an input is missing.
 
     Per ADR-013 Decision 3 this metric is only *meaningful* for actionable states
-    (triggered / gapped_through) — an entry-quality gate (display thresholds:
-    <=1.0 ok-to-act, >1.5 chase-risk, live in docs/index.html + docs/CLAUDE.md).
-    Kept pure and unconditional here; the caller decides when to compute/display it.
+    (triggered / gapped_through) — an entry-quality gate (display thresholds,
+    owner-set 2026-08-08: <=0.8 clean entry, >1.0 chasing, 0.8<x<=1.0 caution;
+    live in docs/index.html + docs/CLAUDE.md). Kept pure and unconditional here;
+    the caller decides when to compute/display it.
     """
     if _is_missing(price) or _is_missing(low) or _is_missing(atr):
         return None

@@ -237,6 +237,33 @@ describe('scheduled handler — single-tick routing (ADR-010)', () => {
     await worker.scheduled({ scheduledTime: new Date('2026-07-18T21:00:00Z').getTime() }, makeEnv(kv), {});
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  it('dispatches collect_morning at 10:05 ET and records it under its own KV key, ungated (no gate GET)', async () => {
+    mockFetch(204);
+    const kv = makeKV();
+    // 2026-07-15T14:05:00Z = 10:05 EDT, a Wednesday.
+    await worker.scheduled({ scheduledTime: new Date('2026-07-15T14:05:00Z').getTime() }, makeEnv(kv), {});
+    expect(global.fetch).toHaveBeenCalledTimes(1); // ungated: no run-status GET, just the dispatch POST
+    const [url, opts] = global.fetch.mock.calls[0];
+    expect(url).toBe(
+      'https://api.github.com/repos/clarencelam2000/finviz-groups-tracker/actions/workflows/collect_morning.yml/dispatches',
+    );
+    expect(opts.method).toBe('POST');
+    const stored = JSON.parse(kv._store.get('last_dispatch_collect_morning'));
+    expect(stored.ok).toBe(true);
+    expect(stored.job).toBe('collect_morning');
+    expect(stored.workflow).toBe('morning');
+    expect(stored.etDate).toBe('2026-07-15');
+  });
+
+  it('does not re-dispatch collect_morning once already recorded as dispatched today', async () => {
+    mockFetch(204);
+    const kv = makeKV({
+      last_dispatch_collect_morning: JSON.stringify({ ok: true, etDate: '2026-07-15' }),
+    });
+    await worker.scheduled({ scheduledTime: new Date('2026-07-15T14:20:00Z').getTime() }, makeEnv(kv), {}); // 10:20 ET, still in window
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
 });
 
 describe('picks dependency gate (#259)', () => {
@@ -333,7 +360,7 @@ describe('picks dependency gate (#259)', () => {
 describe('JOB_SCHEDULE wiring', () => {
   it('every job in the schedule has a corresponding workflow url in the dispatcher', () => {
     // Indirect check: dispatching each job name must not throw on an unknown workflow.
-    expect(JOB_SCHEDULE.map((j) => j.workflow).every((w) => ['collect', 'picks'].includes(w))).toBe(true);
+    expect(JOB_SCHEDULE.map((j) => j.workflow).every((w) => ['collect', 'picks', 'morning'].includes(w))).toBe(true);
   });
 });
 

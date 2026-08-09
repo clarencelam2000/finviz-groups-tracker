@@ -40,7 +40,7 @@ def test_default_session_is_eod():
 
 
 def test_capture_et_format_and_values():
-    expected = {"eod": "17:00", "morning": "09:45", "pre_close": "15:50"}
+    expected = {"eod": "17:00", "morning": "10:05", "pre_close": "15:50"}
     for key, session in sc.SESSIONS.items():
         assert TIME_RE.match(session.capture_et), session.capture_et
         hour, minute = session.capture_et.split(":")
