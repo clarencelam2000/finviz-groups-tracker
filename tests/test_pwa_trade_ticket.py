@@ -113,6 +113,27 @@ def test_ticket_expands_on_actionable_card(server):
         browser.close()
 
 
+def test_price_snapshot_label_reflects_actual_collected_at(server):
+    """Regression test: the snapshot label must be derived from the row's real
+    collected_at (via freshnessLabel), not a hardcoded '10:05' string — the morning
+    job's self-healing dispatch window (CLAUDE.md § Automation) can push the actual
+    snapshot well past 10:05 ET on a delayed tick."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _open_morning_tab(page)
+        page.click("text=▾ Trade ticket >> nth=0")
+        page.wait_for_timeout(300)
+        html = page.inner_html("#morning-list")
+        assert "10:05 read" not in html
+        assert "As of the 10:05 ET snapshot" not in html
+        # AXON's fixture collected_at (2026-08-09T14:05:00Z) is 7:05 AM PT.
+        assert "7:05" in html
+        assert "PT" in html
+        browser.close()
+
+
 def test_stop_basis_change_recomputes_shares(server):
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
