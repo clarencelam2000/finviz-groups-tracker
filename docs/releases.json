@@ -1,6 +1,19 @@
 {
-  "current": "2026.08.08",
+  "current": "2026.08.09",
   "releases": [
+    {
+      "version": "2026.08.09",
+      "date": "2026-08-09",
+      "title": "Morning tab: tap a triggered pick for a full trade ticket",
+      "tag": "feature",
+      "tab": "morning",
+      "notes": [
+        "Triggered and Gapped-through morning cards now expand into a live trade ticket: an editable price (defaults to the 10:05 ET read), two don't-chase gates (ATR-from-LoD and ATR-ext-from-50MA), and a pick-reason line pulled from Picks.",
+        "Pick your stop — prior low, today's low, 20MA, or 50MA — and risk/share, %risk, shares, and position size recompute instantly.",
+        "Type your own risk-per-trade dollar amount (remembered for next time) and it resizes the position for you.",
+        "A hard earnings warning appears when a pick's next report date falls inside your hold window. No profit targets — exits stay with the lifecycle rules."
+      ]
+    },
     {
       "version": "2026.08.08",
       "date": "2026-08-08",

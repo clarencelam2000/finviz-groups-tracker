@@ -440,6 +440,11 @@
       aiData: null,
       picksData: null,   // rows from picks_latest.csv; null = not yet loaded
       morningData: null, // rows from picks/sessions/morning_latest.csv (WS3); null = not yet loaded
+      // WS4 Phase B (ADR-014) trade-ticket UI state, keyed by ticker. Survives renderMorning()
+      // re-renders (module-level, not rebuilt each render). { expanded, stopBasis, priceOverride }.
+      // priceOverride is a string (raw input value) so an in-progress edit ("61" typed toward
+      // "612.4") never gets coerced/clobbered by a re-render; NaN/'' falls back to r.price.
+      morningTicket: {},
       // 'all' | 'focus'; persists across tab navigation within a session (A4 REVERSED
       // 2026-06-30 — VP call, see PICKS-STATE-PERSIST in SPRINT.md and the note in
       // planning/stock-picks-from-leading-groups.md). Previously reset to 'all' on every
@@ -4889,10 +4894,12 @@
 
       switch (r.status) {
         case 'triggered':
-          return _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + atrRow + cta;
+          return _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + atrRow
+               + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
         case 'gapped_through':
           return _mKv('Trigger', _mNum(r.trigger)) + _mKv('Opened', `${_mNum(r.open)} · ${_mChange(r.change)} gap`) + atrRow
-               + _mNote('Entry here has poor R vs the planned stop.') + cta;
+               + _mNote('Entry here has poor R vs the planned stop.')
+               + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
         case 'failed_breakout':
           return _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', `${_mNum(r.price)} · below trigger`)
                + _mNote('Broke out and failed. Don\'t chase a re-break blindly.');
@@ -4905,6 +4912,270 @@
         default: // no_quote
           return _mNote('Morning feed missed this ticker — shown explicitly, never silently dropped.');
       }
+    }
+
+    // ── WS4 Phase B trade ticket (ADR-014) ──────────────────────────────────
+    // Expands an actionable morning card (triggered / gapped_through) inline into a full
+    // trade ticket: WS3 morning row ⋈ prior EOD picks_latest row, keyed on ticker. No new
+    // backend column — join + recompute happen entirely here. See ADR-014 §2 for the field
+    // source table and planning/mocks/ws4-trade-ticket.html for the approved layout.
+
+    // Per-ticket $ risk default, persisted across tickets/sessions (ADR-014 §6 — free input,
+    // not a global constant or % of account).
+    const WS4_RISK_KEY = 'ws4_risk_default';
+    function ws4RiskDefault() {
+      try {
+        const v = parseFloat(localStorage.getItem(WS4_RISK_KEY));
+        return (!isNaN(v) && v > 0) ? v : 500;
+      } catch (e) { return 500; }
+    }
+    function ws4SaveRiskDefault(v) {
+      try { if (!isNaN(v) && v > 0) localStorage.setItem(WS4_RISK_KEY, String(v)); } catch (e) {}
+    }
+
+    // Lazily creates and returns the per-ticker UI state, so it survives renderMorning()
+    // re-renders (module-level state.morningTicket, not rebuilt each render).
+    function ws4GetTicket(ticker) {
+      if (!state.morningTicket[ticker]) {
+        state.morningTicket[ticker] = { expanded: false, stopBasis: 'prior_low', priceOverride: '' };
+      }
+      return state.morningTicket[ticker];
+    }
+
+    window.ws4ToggleTicket = function (ticker) {
+      const ts = ws4GetTicket(ticker);
+      ts.expanded = !ts.expanded;
+      renderMorning();
+    };
+
+    window.ws4SetStopBasis = function (ticker, basis) {
+      ws4GetTicket(ticker).stopBasis = basis;
+      renderMorning();
+    };
+
+    function ws4ToggleAffordance(r) {
+      const expanded = ws4GetTicket(r.ticker).expanded;
+      return `<button onclick="ws4ToggleTicket('${r.ticker}')"
+                class="mt-2 w-full text-center text-[11px] font-medium text-sky-400 hover:text-sky-300">
+                ${expanded ? '▴ Hide trade ticket' : '▾ Trade ticket'}
+              </button>`;
+    }
+
+    // Prior EOD picks_latest row for this ticker (picksData rows use the CSV header key
+    // 'Ticker', not the lowercase 'ticker' the morning session CSV uses — see index.html's
+    // existing `r.ticker || r.Ticker` convention used throughout the Picks/Lookup code).
+    function ws4FindPicksRow(ticker) {
+      const rows = state.picksData || [];
+      return rows.find(row => (row.Ticker || row.ticker || '') === ticker) || null;
+    }
+
+    // Pick-reason flag for the header line (ADR-014 §9). Only rs_new_high is wired today;
+    // extend this list if another grp_* flag earns a reason label.
+    function ws4PickReason(picksRow) {
+      if (!picksRow) return '';
+      if (_pF(picksRow.grp_rs_new_high) === 1) return 'rs_new_high';
+      return '';
+    }
+
+    // ATR-ext-from-50MA -> colored band label. Reuses the EXISTING Focus/positional bands
+    // (ATR_EXT_PENALTY_START 2.5 / ATR_EXT_ACTIONABLE 4.0) — no new constant (ADR-014 §4).
+    function ws4AtrExtLabel(v) {
+      if (isNaN(v)) return null;
+      if (v < ATR_EXT_PENALTY_START) return { text: v.toFixed(1) + ' · ok', cls: 'text-emerald-400' };
+      if (v > ATR_EXT_ACTIONABLE)    return { text: v.toFixed(1) + ' · extended', cls: 'text-red-400' };
+      return { text: v.toFixed(1) + ' · stretched', cls: 'text-amber-400' };
+    }
+
+    // Four stop bases (ADR-014 §5). dm (deriveRiskMetrics(picksRow) result) supplies the
+    // reconstructed 20MA/50MA dollar levels; null (no EOD match) leaves those two NaN.
+    function ws4StopLevels(r, dm) {
+      return {
+        prior_low: { label: 'Prior low', value: _pF(r.stop) },
+        today_low: { label: 'Today low', value: _pF(r.low) },
+        '20ma':    { label: '20MA',      value: dm ? dm.sma20Price : NaN },
+        '50ma':    { label: '50MA',      value: dm ? dm.sma50Price : NaN },
+      };
+    }
+
+    // priceForCalc = user override (if typed and valid) else the morning-row snapshot price.
+    function ws4PriceForCalc(r, ts) {
+      const v = parseFloat(ts.priceOverride);
+      return (!isNaN(v) && v > 0) ? v : _pF(r.price);
+    }
+
+    // Recomputes both gates + sizing off the current price/risk inputs and patches the
+    // affected spans in place (no full renderMorning() — keeps typing smooth per ADR-014
+    // Phase B spec). Called on every price/risk input event.
+    window.ws4Recompute = function (ticker) {
+      const r = (state.morningData || []).find(x => x.ticker === ticker);
+      if (!r) return;
+      const ts = ws4GetTicket(ticker);
+      const picksRow = ws4FindPicksRow(ticker);
+      const dm = picksRow ? deriveRiskMetrics(picksRow) : null;
+
+      const priceEl = document.getElementById(`ws4-price-${ticker}`);
+      if (priceEl) ts.priceOverride = priceEl.value;
+      const priceForCalc = ws4PriceForCalc(r, ts);
+
+      // Gate 1: intraday ATR-from-LoD.
+      const low = _pF(r.low), atr = _pF(r.atr);
+      const atrLod = (!isNaN(priceForCalc) && !isNaN(low) && !isNaN(atr) && atr > 0)
+        ? (priceForCalc - low) / atr : NaN;
+      const atrLodLbl = morningAtrLabel(atrLod);
+      const atrLodEl = document.getElementById(`ws4-atrlod-${ticker}`);
+      if (atrLodEl) {
+        atrLodEl.textContent = atrLodLbl ? atrLodLbl.text : '—';
+        atrLodEl.className = 'font-medium tabular-nums ' + (atrLodLbl ? atrLodLbl.cls : 'text-slate-500');
+      }
+
+      // Gate 2: positional ATR-ext-from-50MA (only when an EOD match exists).
+      const atrExtEl = document.getElementById(`ws4-atrext-${ticker}`);
+      if (atrExtEl && picksRow && dm && !isNaN(dm.sma50Price)) {
+        const atrPicks = _pF(picksRow['ATR']);
+        const atrExt = (!isNaN(priceForCalc) && !isNaN(atrPicks) && atrPicks > 0)
+          ? (priceForCalc - dm.sma50Price) / atrPicks : NaN;
+        const lbl = ws4AtrExtLabel(atrExt);
+        atrExtEl.textContent = lbl ? lbl.text : '—';
+        atrExtEl.className = 'font-medium tabular-nums ' + (lbl ? lbl.cls : 'text-slate-500');
+      }
+
+      // Stop menu sizing.
+      const stops = ws4StopLevels(r, dm);
+      const sel = stops[ts.stopBasis] || stops.prior_low;
+      const riskShare = (!isNaN(priceForCalc) && !isNaN(sel.value)) ? priceForCalc - sel.value : NaN;
+      const pctRisk = (!isNaN(riskShare) && priceForCalc > 0) ? (riskShare / priceForCalc * 100) : NaN;
+
+      const riskEl = document.getElementById(`ws4-riskdollar-${ticker}`);
+      let riskDollars = riskEl ? parseFloat(riskEl.value) : ws4RiskDefault();
+      if (isNaN(riskDollars) || riskDollars <= 0) riskDollars = 0;
+      else ws4SaveRiskDefault(riskDollars);
+
+      const shares = (!isNaN(riskShare) && riskShare > 0 && riskDollars > 0)
+        ? Math.floor(riskDollars / riskShare) : NaN;
+      const positionDollars = !isNaN(shares) ? shares * priceForCalc : NaN;
+
+      const rsEl = document.getElementById(`ws4-riskshare-${ticker}`);
+      if (rsEl) rsEl.textContent = !isNaN(riskShare)
+        ? '$' + riskShare.toFixed(2) + ' · ' + (isNaN(pctRisk) ? '—' : pctRisk.toFixed(1) + '%') : '—';
+
+      const posEl = document.getElementById(`ws4-position-${ticker}`);
+      if (posEl) posEl.textContent = !isNaN(shares)
+        ? shares + ' sh · $' + positionDollars.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—';
+    };
+
+    // Builds the expanded ticket panel markup (ADR-014 §Ticket contents & order). Degrades
+    // gracefully with no picksRow match (ADR-014 §10-style honesty): shows what the morning
+    // row alone supports, greys/omits join-only rows rather than hiding the ticket.
+    function ws4TicketHtml(r) {
+      const ticker = r.ticker;
+      const ts = ws4GetTicket(ticker);
+      const picksRow = ws4FindPicksRow(ticker);
+      const dm = picksRow ? deriveRiskMetrics(picksRow) : null;
+
+      const priceForCalc = ws4PriceForCalc(r, ts);
+
+      const low = _pF(r.low), atr = _pF(r.atr);
+      const atrLod = (!isNaN(priceForCalc) && !isNaN(low) && !isNaN(atr) && atr > 0)
+        ? (priceForCalc - low) / atr : NaN;
+      const atrLodLbl = morningAtrLabel(atrLod);
+
+      let atrExtLbl = null;
+      if (picksRow && dm && !isNaN(dm.sma50Price)) {
+        const atrPicks = _pF(picksRow['ATR']);
+        const atrExt = (!isNaN(priceForCalc) && !isNaN(atrPicks) && atrPicks > 0)
+          ? (priceForCalc - dm.sma50Price) / atrPicks : NaN;
+        atrExtLbl = ws4AtrExtLabel(atrExt);
+      }
+
+      const stops = ws4StopLevels(r, dm);
+      const basisOrder = ['prior_low', 'today_low', '20ma', '50ma'];
+      const sel = stops[ts.stopBasis] || stops.prior_low;
+      const riskShare = (!isNaN(priceForCalc) && !isNaN(sel.value)) ? priceForCalc - sel.value : NaN;
+      const pctRisk = (!isNaN(riskShare) && priceForCalc > 0) ? (riskShare / priceForCalc * 100) : NaN;
+      const riskDollars = ws4RiskDefault();
+      const shares = (!isNaN(riskShare) && riskShare > 0 && riskDollars > 0)
+        ? Math.floor(riskDollars / riskShare) : NaN;
+      const positionDollars = !isNaN(shares) ? shares * priceForCalc : NaN;
+
+      const segBtns = basisOrder.map(k => {
+        const s = stops[k];
+        const on = ts.stopBasis === k;
+        const disabled = isNaN(s.value);
+        const valStr = isNaN(s.value) ? '—' : s.value.toFixed(2);
+        return `<button ${disabled ? 'disabled' : `onclick="ws4SetStopBasis('${ticker}','${k}')"`}
+            class="flex-1 text-center px-1 py-1.5 text-[10.5px] border-r border-slate-700 last:border-r-0
+              ${on ? 'bg-sky-500/20 text-sky-400 font-semibold' : 'text-slate-400 hover:bg-slate-700/50'}
+              ${disabled ? 'opacity-40 cursor-not-allowed' : ''}">${s.label}
+            <div class="tabular-nums text-[9.5px] ${on ? 'text-sky-400' : 'text-slate-500'}">${valStr}</div></button>`;
+      }).join('');
+
+      const reason = ws4PickReason(picksRow);
+      const cat = escapeHtml(String((picksRow && picksRow.list_category) || r.list_category || ''));
+      const reasonHtml = picksRow
+        ? `<div class="text-[11px] text-slate-500">from Picks · ${cat}${reason ? ' · ' + escapeHtml(reason) : ''}</div>`
+        : `<div class="text-[11px] text-slate-500">from Picks · ${cat} <span class="text-slate-600">(no EOD match — degraded)</span></div>`;
+
+      let earningsHtml = '';
+      if (picksRow) {
+        const info = parseEarningsInfo(picksRow['Earnings']);
+        if (info && info.daysUntil != null && info.daysUntil >= 0 && info.daysUntil <= EARNINGS_CAUTION_DAYS) {
+          const imminent = info.daysUntil <= EARNINGS_IMMINENT_DAYS;
+          const cls = imminent ? 'border-red-500 bg-red-500/10 text-red-400' : 'border-amber-500 bg-amber-500/10 text-amber-400';
+          earningsHtml = `<div class="border ${cls} rounded-lg px-3 py-2">
+              <div class="text-xs font-semibold">⚠ Earnings in ${info.daysUntil} day${info.daysUntil === 1 ? '' : 's'}</div>
+              <div class="text-[11px] mt-1 text-slate-300">Inside the hold window — this is an earnings gamble, not a swing setup.</div>
+            </div>`;
+        }
+      }
+
+      const gate2Html = atrExtLbl
+        ? `<div class="flex justify-between text-xs mt-2"><span class="text-slate-400">Positional · ATR-ext from 50MA</span><span id="ws4-atrext-${ticker}" class="font-medium tabular-nums ${atrExtLbl.cls}">${atrExtLbl.text}</span></div>
+           <div class="text-[10.5px] text-slate-500 mt-0.5"><span class="text-emerald-400">ok &lt;2.5</span> · <span class="text-amber-400">stretched 2.5–4.0</span> · <span class="text-red-400">extended &gt;4.0</span></div>`
+        : `<div class="flex justify-between text-xs mt-2"><span class="text-slate-400">Positional · ATR-ext from 50MA</span><span id="ws4-atrext-${ticker}" class="text-slate-500">— (no EOD match)</span></div>`;
+
+      return `
+        <div class="mt-2.5 pt-2.5 border-t border-dashed border-slate-700 space-y-2.5">
+          ${reasonHtml}
+
+          <div class="bg-slate-900/60 border border-sky-900/50 rounded-lg px-3 py-2.5">
+            <div class="flex justify-between text-xs"><span class="text-slate-400">Entry — break of prior high</span><span class="text-slate-200 font-medium tabular-nums">${_mNum(r.trigger)}</span></div>
+            <div class="flex justify-between items-center text-xs mt-1.5">
+              <span class="text-slate-400">Price now <span class="text-slate-600">(10:05 read · edit)</span></span>
+              <input id="ws4-price-${ticker}" type="number" step="0.01" value="${ts.priceOverride || _mNum(r.price)}"
+                oninput="ws4Recompute('${ticker}')"
+                class="bg-slate-900 border border-sky-500 rounded px-1.5 py-0.5 w-20 text-right text-slate-100 font-semibold tabular-nums text-xs" />
+            </div>
+            <div class="flex justify-between text-xs mt-1"><span class="text-slate-400">ATR (14)</span><span class="text-slate-200 font-medium tabular-nums">${_mNum(r.atr)}</span></div>
+            <div class="text-[10.5px] text-slate-500 mt-1.5">As of the 10:05 ET snapshot. Checking later? Type the price you see — both gates and sizing recompute off your number.</div>
+          </div>
+
+          <div class="bg-slate-900/40 rounded-lg px-3 py-2.5">
+            <div class="text-xs font-semibold text-slate-300">Don't-chase gates</div>
+            <div class="flex justify-between text-xs mt-2"><span class="text-slate-400">Intraday · ATR-from-LoD</span><span id="ws4-atrlod-${ticker}" class="font-medium tabular-nums ${atrLodLbl ? atrLodLbl.cls : 'text-slate-500'}">${atrLodLbl ? atrLodLbl.text : '—'}</span></div>
+            <div class="text-[10.5px] text-slate-500 mt-0.5"><span class="text-emerald-400">ok ≤0.8</span> · <span class="text-amber-400">caution 0.8–1.0</span> · <span class="text-red-400">chase &gt;1.0</span></div>
+            ${gate2Html}
+          </div>
+
+          <div class="bg-slate-900/40 rounded-lg px-3 py-2.5">
+            <div class="text-xs font-semibold text-slate-300 mb-1.5">Stop — pick your basis</div>
+            <div class="flex border border-slate-700 rounded-md overflow-hidden">${segBtns}</div>
+            <div class="flex justify-between text-xs mt-2"><span class="text-slate-400">Risk / share</span><span id="ws4-riskshare-${ticker}" class="text-slate-200 font-medium tabular-nums">${!isNaN(riskShare) ? '$' + riskShare.toFixed(2) + ' · ' + (isNaN(pctRisk) ? '—' : pctRisk.toFixed(1) + '%') : '—'}</span></div>
+            <div class="flex justify-between items-center text-xs mt-1">
+              <span class="text-slate-400">My risk this trade <span class="text-slate-600">(free input)</span></span>
+              <input id="ws4-riskdollar-${ticker}" type="number" step="1" value="${riskDollars}"
+                oninput="ws4Recompute('${ticker}')"
+                class="bg-slate-900 border border-sky-500 rounded px-1.5 py-0.5 w-16 text-right text-slate-100 font-semibold tabular-nums text-xs" />
+            </div>
+            <div class="flex justify-between text-xs mt-1"><span class="text-slate-400">→ Position</span><span id="ws4-position-${ticker}" class="text-slate-200 font-medium tabular-nums">${!isNaN(shares) ? shares + ' sh · $' + positionDollars.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}</span></div>
+          </div>
+
+          ${earningsHtml}
+
+          <div class="text-[10.5px] text-slate-500 leading-relaxed">
+            <span class="text-slate-400 font-medium">No profit target</span> — exits are managed by the lifecycle rules after entry.
+            ${picksRow ? '<br><span class="text-slate-600">Focus score is watchlist context only, not part of this ticket.</span>' : ''}
+          </div>
+        </div>`;
     }
 
     function renderMorning() {
