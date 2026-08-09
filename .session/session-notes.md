@@ -723,3 +723,39 @@ main model designed the module, wrote the ADR resolution note, and reviewed all 
 
 **Next steps:** WS3 (#262) is the first real consumer — introduces the first provisional writer +
 the PWA not-settled marking (deferred here). WS3b (#268) rides the same `pre_close` session.
+
+---
+
+## 2026-08-09 — WS4 trade tickets (design gate: ADR-014 + approved mock)
+
+**Status:** Phase A landed on branch `claude/ws4-gh-issue-263-qkzq16`; Phase B (PWA build) delegated
+to a Sonnet subagent under main-model direction. Safe to close after Phase A PR merges; Phase B is a
+follow-up PR.
+
+**Staff read that reshaped WS4 (all confirmed against code):**
+- WS3 is fully shipped (A/B/C, #281/#282/#285). WS4 is **not a new surface** — it's the expansion of
+  the shipped WS3 morning pick card into a full trade ticket.
+- `atr_from_lod` already computed + stored by WS3 (`collect_morning.py`/`pick_status.py`) at bands
+  **0.8/1.0** (owner-set 2026-08-08; ADR-013's 1.0/1.5 already superseded). WS4 inherits it — NOT a
+  new `picks_metrics.py` EOD column.
+- Entry-trigger `status` also already computed by WS3.
+- Earnings is re-derivable from the `Earnings` column already in `picks.csv` + existing JS parse — no
+  Python port, no `days_to_earnings` column.
+- **Net: WS4 has essentially no backend work.** The earlier "delegate backend to Sonnet" plan
+  (add `atr_from_lod` METRICS_COL + earnings port) was cancelled as dead weight.
+
+**Owner decisions this session (folded into ADR-014):**
+- Ticket is **live-first, one render state** — the stray "EOD" mock label was an error, dropped.
+- Price is **snapshot-labeled + user-overridable** (localStorage); no live feed yet → #287 (Alpaca).
+  No minute-precise trigger timestamp (twice-daily snapshot cadence can't support it).
+- **Two** don't-chase gates: ATR-from-LoD (intraday, 0.8/1.0) + ATR-ext-50MA (positional, existing
+  `atr_ext_50` config 2.5/4.0).
+- Pick-reason in header; Focus stays a footnote; risk-per-trade free input (no config constant).
+- Pre-close ticket rendering = **Phase C, blocked on WS3b (#268)** (pre_close store not populated).
+
+**What landed (Phase A PR):** `ADR-014`, approved mock `planning/mocks/ws4-trade-ticket.html`
+(supersede note added to the old combined mock), `CLAUDE.md` "deliver mocks as Artifacts not files"
+rule (owner directive), SPRINT WS4 block, this note. Issue **#287** opened (Alpaca revisit).
+
+**Next steps:** Phase B — PWA ticket surface built against the mock + ADR-014, Sonnet-drafted /
+main-reviewed, own PR with release triplet. Add any new Playwright test to `tests.yml` `--ignore=`.
