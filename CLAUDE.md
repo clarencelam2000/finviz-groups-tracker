@@ -303,6 +303,15 @@ them. Full steps, the Guide-glossary sync, and the "Start Here" intro carousel: 
 
 Only use these if the owner explicitly asks you to watch a PR. If they do ask, acknowledge the request and set it up. 
 
+### Deliver mocks/visuals as Artifacts, not plain HTML files
+
+When you produce an HTML mock, visual, or any page for the owner to *look at* (design mocks,
+dashboards, comparisons), **publish it as an Artifact** (the `Artifact` tool) and hand over the
+URL — do **not** send it as a raw `.html` file via `SendUserFile`. Artifacts render in-panel;
+plain HTML files don't. (Owner directive, 2026-08-09.) Committing the mock's source into
+`planning/mocks/` for history is still expected — the Artifact is *how the owner reviews it*, the
+committed file is the durable record.
+
 ---
 
 - **Starting a session**: This `CLAUDE.md` auto-loads at session start. Also read `.session/session-notes.md` immediately — it holds the last 4 session entries with recent findings, blockers, and next steps. Start the session by summarizing what's in the notes so the user knows you're oriented. Older history is in `.session/archive/session-notes-archive.md` — only read it if the user asks or context demands it.

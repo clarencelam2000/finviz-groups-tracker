@@ -8,6 +8,17 @@
 
 ### 🔴 Backlog
 
+#### Trade Lifecycle (WS4 — trade tickets)
+
+Design: ADR-014 · roadmap § WS4 · mock `planning/mocks/ws4-trade-ticket.html` · issue #263.
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| WS4-A | ~~**ADR-014 + approved mock + CLAUDE.md rule**~~ | `knowledge/decisions/ADR-014-*`, `planning/mocks/ws4-trade-ticket.html`, `CLAUDE.md` | S | ✅ Phase A (this PR). Design gate; docs only. |
+| WS4-B | **PWA trade-ticket surface** | `docs/index.html`, `docs/sw.js`, `docs/releases.json` | M | Expand the WS3 morning pick card into the ticket: join morning session row ⋈ prior EOD `picks_latest`; stop menu (4 bases); two don't-chase gates (ATR-from-LoD 0.8/1.0 + ATR-ext-50MA 2.5/4.0); risk/share + free-input risk + position; snapshot-labeled **overridable** price that recomputes gates+sizing; earnings guardrail (`EARNINGS_GUARDRAIL_SESSIONS`, new PWA constant, default 5, triple-doc); pick-reason header; Focus footnote; `no_quote` degraded state. No backend change. Release triplet. |
+| WS4-C | **Pre-close (15:50) ticket rendering** | `docs/index.html` | S | Same component keyed on `session=pre_close`. **Blocked-by #268 (WS3b)** — `pre_close` session store not yet populated. |
+| WS4-RT | **Revisit with real-time quotes (Alpaca)** (#287) | — | — | Parked. Replace snapshot-read price with a live feed; keep manual override as fallback. Not scheduled. |
+
 #### Data Pipeline
 
 | # | Task | File(s) | Effort | Notes |

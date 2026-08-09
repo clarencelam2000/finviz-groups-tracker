@@ -1,0 +1,178 @@
+<title>WS4 — live trade ticket</title>
+<style>
+  /* App is committed dark-only; this mock deliberately matches the shipping PWA, single-theme.
+     Every color painted explicitly so it holds on any host ground. Tokens = app's mock palette. */
+  :root{
+    --bg:#0b1220; --panel:#0f172a; --panel2:#1e293b; --line:#334155;
+    --ink:#f1f5f9; --mut:#94a3b8; --dim:#64748b;
+    --accent:#38bdf8; --good:#34d399; --warn:#fbbf24; --bad:#f87171; --violet:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,"SF Pro Text",Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1120px;margin:0 auto;padding:40px 24px 80px}
+  .meta{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+  h1{font-size:25px;margin:6px 0 6px;letter-spacing:-.02em}
+  .lede{color:var(--mut);max-width:70ch;margin:0}
+  .lede code{color:var(--ink);background:var(--panel2);padding:1px 5px;border-radius:4px;font-size:12.5px}
+  .row{display:flex;flex-wrap:wrap;gap:40px;margin-top:34px;align-items:flex-start}
+  .mockcol{flex:0 0 372px}
+  .notes{flex:1 1 340px;min-width:300px}
+  .notes .ws{font-size:11px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
+  .notes h3{margin:2px 0 10px;font-size:16px;color:var(--accent);letter-spacing:-.01em}
+  .notes ul{margin:0;padding-left:18px;color:var(--mut);font-size:13.5px}
+  .notes li{margin-bottom:9px}
+  .notes b{color:var(--ink);font-weight:600}
+  .prov{margin-top:16px;border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--panel)}
+  .prov .h{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
+  .prov .r{display:flex;gap:8px;font-size:12.5px;margin-top:5px;color:var(--mut)}
+  .dot{flex:0 0 10px;width:10px;height:10px;border-radius:3px;margin-top:5px}
+  .dot.live{background:var(--accent)} .dot.eod{background:var(--violet)} .dot.calc{background:var(--good)}
+  .lg{display:flex;gap:16px;margin-top:12px;font-size:11.5px;color:var(--mut);flex-wrap:wrap}
+  .lg span{display:inline-flex;align-items:center;gap:6px}
+  .sw{width:10px;height:10px;border-radius:3px;display:inline-block}
+
+  /* phone */
+  .phone{width:372px;background:var(--panel);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 14px 46px rgba(0,0,0,.55)}
+  .phead{padding:13px 16px 10px;border-bottom:1px solid var(--line);background:rgba(15,23,42,.96);display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+  .phead .t{font-weight:700;font-size:15.5px}
+  .phead .s{font-size:11px;color:var(--mut);margin-top:1px}
+  .body{padding:12px 12px 18px;display:flex;flex-direction:column;gap:10px}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 14px;position:relative}
+  .card .tag{position:absolute;top:9px;right:11px}
+  .num{font-variant-numeric:tabular-nums}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:.05em;padding:2px 8px;border-radius:999px;text-transform:uppercase}
+  .p-good{background:rgba(52,211,153,.15);color:var(--good)}
+  .p-warn{background:rgba(251,191,36,.15);color:var(--warn)}
+  .p-bad{background:rgba(248,113,113,.15);color:var(--bad)}
+  .p-mut{background:rgba(148,163,184,.14);color:var(--mut)}
+  .p-accent{background:rgba(56,189,248,.15);color:var(--accent)}
+  .p-vio{background:rgba(167,139,250,.16);color:var(--violet)}
+  .live-dot{width:6px;height:6px;border-radius:999px;background:currentColor;box-shadow:0 0 0 0 currentColor;animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(56,189,248,.5)}70%{box-shadow:0 0 0 6px rgba(56,189,248,0)}100%{box-shadow:0 0 0 0 rgba(56,189,248,0)}}
+  @media (prefers-reduced-motion:reduce){.live-dot{animation:none}}
+  .kv{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--mut);margin-top:5px}
+  .kv:first-child{margin-top:0}
+  .kv .v{color:var(--ink);font-weight:600}
+  .big{font-size:15px}
+  .stripe{border-left:3px solid var(--line)}
+  .stripe.good{border-left-color:var(--good)} .stripe.warn{border-left-color:var(--warn)}
+  .stripe.accent{border-left-color:var(--accent)}
+  .label{font-weight:700;color:var(--ink);font-size:12.5px}
+  .seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden;font-size:11.5px;margin-top:8px}
+  .seg div{flex:1;text-align:center;padding:7px 4px;color:var(--mut);border-right:1px solid var(--line);line-height:1.35}
+  .seg div:last-child{border-right:0}
+  .seg .on{background:rgba(56,189,248,.18);color:var(--accent);font-weight:700}
+  .seg .sub{font-size:9.5px;color:var(--dim);letter-spacing:.03em}
+  .seg .on .sub{color:var(--accent)}
+  .small{font-size:11.5px;color:var(--mut)}
+  .meter{height:7px;border-radius:999px;background:linear-gradient(90deg,var(--good) 0 44%,var(--warn) 44% 55%,var(--bad) 55% 100%);position:relative;margin:10px 0 6px}
+  .meter .pin{position:absolute;top:-3px;width:2px;height:13px;background:var(--ink);border-radius:2px;box-shadow:0 0 0 2px var(--panel2)}
+  .meter .tk{position:absolute;top:9px;width:1px;height:5px;background:var(--dim)}
+  .inp{background:#0b1220;border:1px solid var(--accent);border-radius:7px;color:var(--ink);font-weight:700;padding:3px 9px;width:82px;text-align:right;font-variant-numeric:tabular-nums;font-size:12.5px}
+</style>
+
+<div class="wrap">
+  <div class="meta">finviz-groups-tracker · WS4 · issue #263 · rev 2026-08-09</div>
+  <h1>Live trade ticket</h1>
+  <p class="lede">One surface, one job: <b>“is this a good trade right now.”</b> It expands the
+  already-shipped WS3 morning card, joined per-ticker with the prior EOD picks row. Price is
+  snapshot-read + user-overridable (no live feed yet — #287). No profit target. Two don’t-chase
+  gates: ATR-from-LoD (intraday) and ATR-ext-from-50MA (positional).</p>
+
+  <div class="row">
+    <div class="mockcol">
+      <div class="phone">
+        <div class="phead">
+          <div>
+            <div class="t">AXON · Trade ticket</div>
+            <div class="s">Aerospace &amp; Defense · from Picks · leaders · rs_new_high</div>
+          </div>
+          <span class="pill p-accent"><span class="live-dot"></span>Live 10:07</span>
+        </div>
+        <div class="body">
+
+          <!-- 1. entry + live trigger status: the first question -->
+          <div class="card stripe accent">
+            <span class="pill p-good tag">Triggered</span>
+            <div class="kv"><span>Entry — break of prior high</span><span class="v num big">612.40</span></div>
+            <div class="kv"><span>Price now&nbsp;<span class="pill p-mut">10:05 read · edit</span></span>
+              <span class="v"><span class="inp" style="width:92px">613.90</span></span></div>
+            <div class="kv"><span>ATR (14)</span><span class="v num">14.20</span></div>
+            <div class="small" style="margin-top:7px;color:var(--dim)">Status is from the 10:05 ET snapshot. Checking later? Type the price you actually see — both gates and the sizing recompute off your number.</div>
+          </div>
+
+          <!-- 2. don't-chase gates, promoted above the stop menu -->
+          <div class="card">
+            <div class="label" style="margin-bottom:2px">Don’t-chase gates</div>
+
+            <div class="kv" style="margin-top:9px"><span>Intraday · ATR-from-LoD</span>
+              <span class="v num" style="color:var(--good)">0.62 · ok</span></div>
+            <div class="meter">
+              <div class="tk" style="left:44%"></div><div class="tk" style="left:55%"></div>
+              <div class="pin" style="left:27%"></div>
+            </div>
+            <div class="small"><b style="color:var(--good)">ok&nbsp;&lt;0.8</b> · <b style="color:var(--warn)">caution&nbsp;0.8–1.0</b> · <b style="color:var(--bad)">chase&nbsp;&gt;1.0</b> — how far off today’s low (WS3 metric).</div>
+
+            <div class="kv" style="margin-top:13px"><span>Positional · ATR-ext from 50MA</span>
+              <span class="v num" style="color:var(--warn)">3.1 · stretched</span></div>
+            <div class="meter" style="background:linear-gradient(90deg,var(--good) 0 50%,var(--warn) 50% 80%,var(--bad) 80% 100%)">
+              <div class="tk" style="left:50%"></div><div class="tk" style="left:80%"></div>
+              <div class="pin" style="left:62%"></div>
+            </div>
+            <div class="small"><b style="color:var(--good)">ok&nbsp;&lt;2.5</b> · <b style="color:var(--warn)">stretched&nbsp;2.5–4.0</b> · <b style="color:var(--bad)">extended&nbsp;&gt;4.0</b> — rubber-band from the 50MA (existing <code style="color:var(--mut)">atr_ext_50</code> + config bands).</div>
+          </div>
+
+          <!-- 3. stop menu: the ticket's one interaction -->
+          <div class="card">
+            <div class="label" style="margin-bottom:2px">Stop — pick your basis</div>
+            <div class="seg">
+              <div class="on">Prior low<div class="sub num">597.10</div></div>
+              <div>Today low<div class="sub num">608.20</div></div>
+              <div>20MA<div class="sub num">588.45</div></div>
+              <div>50MA<div class="sub num">561.20</div></div>
+            </div>
+            <div class="kv" style="margin-top:10px"><span>Risk / share</span><span class="v num">16.80&nbsp;·&nbsp;2.7%</span></div>
+            <div class="kv"><span>My risk this trade&nbsp;<span class="pill p-mut">free input</span></span>
+              <span class="v"><span class="inp">$500</span></span></div>
+            <div class="kv"><span>→ Position</span><span class="v num">29 sh · $17,803</span></div>
+          </div>
+
+          <!-- 4. earnings hard guardrail -->
+          <div class="card stripe warn">
+            <div class="kv"><span class="pill p-warn">⚠ Earnings in 4 sessions</span><span></span></div>
+            <div class="small" style="margin-top:6px">Inside your hold window — this is an earnings gamble, not a swing setup.</div>
+          </div>
+
+          <!-- 5. footnotes: what this ticket is NOT -->
+          <div class="small" style="padding:2px 4px 0;line-height:1.6">
+            <b style="color:var(--mut)">No profit target</b> — exits are managed by the lifecycle rules after entry.<br>
+            <span style="color:var(--dim)">Focus 0.81 is a watchlist gate, not part of this ticket.</span>
+          </div>
+
+        </div>
+      </div>
+
+      <div class="prov">
+        <div class="h">Where each number comes from — WS4 expands the shipped WS3 card</div>
+        <div class="r"><span class="dot live"></span><span><b style="color:var(--ink)">WS3 morning session CSV</b> (already shipped): snapshot price, today’s high/low, ATR, <code style="color:var(--mut)">trigger</code>, <code style="color:var(--mut)">status</code>, <code style="color:var(--mut)">atr_from_lod</code>.</span></div>
+        <div class="r"><span class="dot eod"></span><span><b style="color:var(--ink)">Prior EOD picks row</b> (<code style="color:var(--mut)">picks_latest</code>): prior low, 20/50MA, <code style="color:var(--mut)">atr_ext_50</code>, Earnings, Focus, pick reason.</span></div>
+        <div class="r"><span class="dot calc"></span><span><b style="color:var(--ink)">Computed in the PWA</b>: risk/share, %risk, position — plus a re-compute of both gates &amp; sizing when the user overrides the price. No new backend column.</span></div>
+      </div>
+    </div>
+
+    <div class="notes">
+      <div class="ws">Design intent — rev 2026-08-09</div>
+      <h3>The ticket is live, or it isn’t a ticket</h3>
+      <ul>
+        <li><b>Status + price lead, honestly.</b> Status (<code>Triggered</code> / <code>Setting up</code> / <code>Gapped</code>) is read straight from WS3, tagged “as of 10:05.” No minute-precise “triggered 09:58” — we only snapshot twice a day, so that precision would be a lie.</li>
+        <li><b>Price is an editable override.</b> Defaults to the last snapshot; when you check at 11am and it’s moved, type the real number and both gates + sizing recompute. (Real live quotes → #287, when Alpaca lands.)</li>
+        <li><b>Two don’t-chase gates.</b> ATR-from-LoD (intraday, 0.8/1.0, from WS3) for “am I chasing today,” plus ATR-ext-from-50MA (positional, existing 2.5/4.0 config) for “is it rubber-banded.” Both above the stop menu because chase-risk gates stop choice.</li>
+        <li><b>Stop menu is the one interaction</b> — a segmented control live-recomputing risk/share, %risk, and shares. Four bases: prior low ≠ today low is real intraday.</li>
+        <li><b>Risk-per-trade is an editable field</b>, not static text (owner § 10): per-conviction $ the user types; position recomputes. localStorage per ticket, like WS3’s “I took it.”</li>
+        <li><b>Earnings = hard amber card; Focus = footnote.</b> No double-counting the screen gate as a ticket headline.</li>
+      </ul>
+      <p class="small" style="margin-top:16px;color:var(--dim)">Cut from the prior mock: the “EOD” framing and its phantom second render state; the false “live 09:58” precision; any new backend column — <code>atr_from_lod</code> already ships from WS3 at 0.8/1.0, and earnings is re-derivable from the <code>Earnings</code> column already in <code>picks.csv</code>.</p>
+    </div>
+  </div>
+</div>
