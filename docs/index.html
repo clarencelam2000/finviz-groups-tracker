@@ -92,6 +92,7 @@
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="ai">AI</button>
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="lookup">Lookup</button>
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="picks">Picks</button>
+    <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="morning">Morning</button>
   </nav>
 
   <main>
@@ -307,6 +308,13 @@
       <div id="picks-list" class="space-y-1"></div>
     </section>
 
+    <!-- WS3 Morning check (ADR-013). Yesterday's picks tagged with what the ~10:05 ET open
+         did to each setup. Provisional session — the banner/timestamp are non-negotiable per
+         ADR-011: a mid-session read must never look settled. Rendered by renderMorning(). -->
+    <section id="tab-morning" class="px-3 pt-3 pb-24 hidden">
+      <div id="morning-list" class="space-y-2"></div>
+    </section>
+
   </main>
 
   <!-- First-run intro carousel overlay (z-50 sits above the hub at z-40) -->
@@ -378,6 +386,9 @@
     const FETCH_LOG_URL = `${BASE}/fetch_log.csv`;
     const TAXONOMY_URL  = `${BASE}/finviz_sector_industry_map.json`;
     const PICKS_URL     = `${BASE}/picks/picks_latest.csv`;
+    // WS3 morning status (ADR-013). Provisional session store, keyed (date, ticker). Separate
+    // from the settled EOD picks file — a 10:05 ET snapshot, never mixed into picks_latest.csv.
+    const MORNING_URL   = `${BASE}/picks/sessions/morning_latest.csv`;
     const WORKER_URL = 'https://finviz-ticker-lookup.salmonbaby8.workers.dev';
 
     // localStorage keys for Lookup tab persistence (Ideas 5+7, planning/lookup-search-enhancements.md).
@@ -428,6 +439,7 @@
       taxonomy: null,  // { SectorName: [industry, ...] } from finviz_sector_industry_map.json
       aiData: null,
       picksData: null,   // rows from picks_latest.csv; null = not yet loaded
+      morningData: null, // rows from picks/sessions/morning_latest.csv (WS3); null = not yet loaded
       // 'all' | 'focus'; persists across tab navigation within a session (A4 REVERSED
       // 2026-06-30 — VP call, see PICKS-STATE-PERSIST in SPRINT.md and the note in
       // planning/stock-picks-from-leading-groups.md). Previously reset to 'all' on every
@@ -504,6 +516,11 @@
     // ATR extension color bands (C4). ≤ ACTIONABLE = emerald; ACTIONABLE–TRIM = amber; ≥ TRIM = red.
     const ATR_EXT_ACTIONABLE = 4.0;  // over-extended hard cutoff; also Focus hard-DQ line (Phase 3b)
     const ATR_EXT_TRIM       = 8.0;  // flags a held position as a trim-10% candidate
+    // WS3 morning "ATR from LoD" entry-quality bands (ADR-013 Decision 3; owner-set 2026-08-08).
+    // (price − session low) / ATR, shown only on actionable morning cards (Triggered/Gapped-through).
+    // Triple-documented: here, README § Configurable parameters, docs/CLAUDE.md threshold table.
+    const ATR_FROM_LOD_CLEAN = 0.8;  // <= this = clean entry (emerald, "ok to act")
+    const ATR_FROM_LOD_CHASE = 1.0;  // > this = chasing (red); between CLEAN and CHASE = caution (amber)
     // Focus List constants (Phase 3b). score = base × (1 − penalty_fraction). Triple-documented:
     // here, README § Configurable parameters, CLAUDE.md § PWA display thresholds.
     // Extension penalty ramps from 0 at PENALTY_START to PENALTY_MAX at ATR_EXT_ACTIONABLE (=4.0).
@@ -1357,6 +1374,19 @@
         state.picksData = res.data || [];
       } catch (e) {
         state.picksData = [];
+      }
+    }
+
+    // WS3 morning status (ADR-013). Fetches the provisional 10:05 ET store. A 404 (file
+    // not yet created — pre-first-run, or a non-trading day where collect_morning exits
+    // without writing) is normal and degrades to the empty state, never an error toast.
+    async function loadMorning(force = false) {
+      if (!force && state.morningData !== null) return;
+      try {
+        const res = await fetchCSV(MORNING_URL, force);
+        state.morningData = res.data || [];
+      } catch (e) {
+        state.morningData = [];
       }
     }
 
@@ -4758,6 +4788,7 @@
       if (state.tab === 'ai')       renderAI();
       if (state.tab === 'lookup')   { renderLookup(); renderLookupChips(); }
       if (state.tab === 'picks')    renderPicks();
+      if (state.tab === 'morning')  renderMorning();
 
       if (state.restoreScrollOnRender) {
         state.restoreScrollOnRender = false;
@@ -4781,6 +4812,146 @@
       }
     }
 
+    // ── WS3 Morning check (ADR-013 Decision 3/5, mock: planning/mocks/trade-lifecycle-surfaces.html) ──
+    //
+    // Per-status display metadata. `order` is the ADR/mock ACTIONABILITY sort (Triggered →
+    // Gapped → Failed → Setting-up → Invalidated → No-quote) — deliberately DIFFERENT from the
+    // engine's evaluation precedence (pick_status.STATUS_PRECEDENCE). `actionable` gates both
+    // the ATR-from-LoD line and the "I took it" button (Decision 3/5).
+    const MORNING_STATUS_META = {
+      triggered:       { label: 'Triggered',      order: 0, stripe: 'border-emerald-500', pill: 'bg-emerald-500/15 text-emerald-400', actionable: true },
+      gapped_through:  { label: 'Gapped through',  order: 1, stripe: 'border-amber-500',   pill: 'bg-amber-500/15 text-amber-400',   actionable: true },
+      failed_breakout: { label: 'Failed breakout', order: 2, stripe: 'border-amber-500',   pill: 'bg-amber-500/15 text-amber-400',   actionable: false },
+      setting_up:      { label: 'Setting up',      order: 3, stripe: 'border-slate-600',   pill: 'bg-slate-500/20 text-slate-300',   actionable: false },
+      invalidated:     { label: 'Invalidated',     order: 4, stripe: 'border-red-500',     pill: 'bg-red-500/15 text-red-400',       actionable: false },
+      no_quote:        { label: 'No quote',        order: 5, stripe: 'border-slate-700',   pill: 'bg-slate-500/20 text-slate-400',   actionable: false },
+    };
+
+    // ATR-from-LoD → colored label. Bands owner-set 2026-08-08 (ADR-013 Decision 3):
+    // <= CLEAN ok to act (emerald), > CHASE chasing (red), between = caution (amber).
+    function morningAtrLabel(raw) {
+      const v = parseFloat(raw);
+      if (isNaN(v)) return null;
+      if (v <= ATR_FROM_LOD_CLEAN) return { text: v.toFixed(1) + ' — ok to act',   cls: 'text-emerald-400' };
+      if (v >  ATR_FROM_LOD_CHASE) return { text: v.toFixed(1) + ' — chase risk',  cls: 'text-red-400' };
+      return { text: v.toFixed(1) + ' — caution', cls: 'text-amber-400' };
+    }
+
+    // "I took it" is a LOCAL-STATE marker (Decision 5) — not a position engine (that's WS5).
+    // Key shape `taken:<date>:<ticker>` is documented in docs/CLAUDE.md so WS5 can migrate it.
+    function morningTakenKey(date, ticker) { return `taken:${date}:${ticker}`; }
+    function isMorningTaken(date, ticker) {
+      try { return localStorage.getItem(morningTakenKey(date, ticker)) === 'true'; }
+      catch (e) { return false; }
+    }
+    window.__morningTookIt = function (date, ticker) {
+      try { localStorage.setItem(morningTakenKey(date, ticker), 'true'); } catch (e) {}
+      renderMorning();
+    };
+
+    function _mNum(raw, dp = 2) {
+      const v = parseFloat(raw);
+      return isNaN(v) ? '—' : v.toFixed(dp);
+    }
+    function _mChange(raw) {
+      const v = parseFloat(raw);
+      if (isNaN(v)) return '';
+      const sign = v > 0 ? '+' : '';
+      const cls = v > 0 ? 'text-emerald-400' : (v < 0 ? 'text-red-400' : 'text-slate-400');
+      return `<span class="${cls}">${sign}${v.toFixed(1)}%</span>`;
+    }
+    function _mKv(label, value) {
+      return `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">${label}</span><span class="text-slate-200 font-medium tabular-nums">${value}</span></div>`;
+    }
+    function _mNote(text) {
+      return `<div class="text-xs text-slate-400 mt-1.5">${text}</div>`;
+    }
+
+    // Build the body (key rows + note + CTA) for one morning card, by status.
+    function morningCardBody(r) {
+      const meta = MORNING_STATUS_META[r.status] || MORNING_STATUS_META.no_quote;
+      const now = `${_mNum(r.price)} · ${_mChange(r.change)}`;
+      const atr = morningAtrLabel(r.atr_from_lod);
+      const atrRow = atr
+        ? `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">ATR from LoD</span><span class="${atr.cls} font-medium tabular-nums">${atr.text}</span></div>`
+        : '';
+
+      let cta = '';
+      if (meta.actionable) {
+        cta = isMorningTaken(r.date, r.ticker)
+          ? `<div class="mt-2 pt-2 border-t border-slate-700">
+               <div class="text-center text-xs font-semibold text-emerald-400">✓ Taken</div>
+               <div class="text-center text-[11px] text-slate-500 mt-0.5">Position tracking arrives with the lifecycle engine.</div>
+             </div>`
+          : `<button onclick="__morningTookIt('${r.date}','${r.ticker}')"
+                     class="mt-2 w-full py-2 rounded-lg text-xs font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400">I took it →</button>`;
+      }
+
+      switch (r.status) {
+        case 'triggered':
+          return _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + atrRow + cta;
+        case 'gapped_through':
+          return _mKv('Trigger', _mNum(r.trigger)) + _mKv('Opened', `${_mNum(r.open)} · ${_mChange(r.change)} gap`) + atrRow
+               + _mNote('Entry here has poor R vs the planned stop.') + cta;
+        case 'failed_breakout':
+          return _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', `${_mNum(r.price)} · below trigger`)
+               + _mNote('Broke out and failed. Don\'t chase a re-break blindly.');
+        case 'setting_up':
+          return _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now)
+               + _mNote('Below trigger. Nothing to do yet.');
+        case 'invalidated':
+          return _mKv('Planned stop (prior low)', _mNum(r.stop)) + _mKv('Now', `${_mNum(r.price)} — below stop`)
+               + _mNote('Setup dead. Drop from watch.');
+        default: // no_quote
+          return _mNote('Morning feed missed this ticker — shown explicitly, never silently dropped.');
+      }
+    }
+
+    function renderMorning() {
+      const el = document.getElementById('morning-list');
+      if (!el) return;
+
+      const rows = state.morningData;
+      if (!rows || rows.length === 0) {
+        el.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">No morning check yet — this runs ~10:05 ET on trading days, tagging yesterday\'s picks with what the open did to each setup.</p>';
+        return;
+      }
+
+      // Provisional chrome is non-negotiable (ADR-011): timestamp + banner + amber tint so a
+      // mid-session read is never mistaken for settled EOD data. Reuses freshnessLabel for the
+      // date/time exactly like the other tabs.
+      const fresh = freshnessLabel(rows[0].date, rows[0].collected_at);
+      const header = `
+        <div class="mb-3">
+          <div class="text-xs ${fresh.cls}">Snapshot ${fresh.text} · <span class="text-amber-400 font-medium">provisional — not settled</span></div>
+          <div class="mt-2 text-xs text-amber-400 bg-amber-500/10 border border-dashed border-amber-500/40 rounded-lg px-3 py-2">
+            Morning prices are mid-session reads. Nothing here changes your EOD data.
+          </div>
+        </div>`;
+
+      // Actionability sort (ADR/mock), stable ticker tiebreak within a status bucket.
+      const sorted = [...rows].sort((a, b) => {
+        const oa = (MORNING_STATUS_META[a.status] || MORNING_STATUS_META.no_quote).order;
+        const ob = (MORNING_STATUS_META[b.status] || MORNING_STATUS_META.no_quote).order;
+        return oa - ob || String(a.ticker).localeCompare(String(b.ticker));
+      });
+
+      const cards = sorted.map(r => {
+        const meta = MORNING_STATUS_META[r.status] || MORNING_STATUS_META.no_quote;
+        const grp = r.group ? `<span class="text-xs text-slate-500">· ${r.group}</span>` : '';
+        return `
+          <div class="bg-slate-800 border border-slate-700 border-l-4 ${meta.stripe} rounded-lg px-3.5 py-3">
+            <div class="flex justify-between items-center">
+              <span><span class="font-bold text-sm tracking-wide">${r.ticker}</span> ${grp}</span>
+              <span class="text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${meta.pill}">${meta.label}</span>
+            </div>
+            ${morningCardBody(r)}
+          </div>`;
+      }).join('');
+
+      el.innerHTML = header + cards;
+    }
+
     async function loadAndRender(force = false, minMs = 0) {
       setLoading(true);
       await Promise.all([
@@ -4788,6 +4959,7 @@
         loadFetchLog(force),
         loadTaxonomy(force),
         loadPicks(force),
+        loadMorning(force),
         new Promise(r => setTimeout(r, minMs)),
       ]);
       // AI JSON is keyed by the latest data date — derive it after CSVs are loaded
@@ -4826,7 +4998,9 @@
       document.querySelectorAll('main section').forEach(s => {
         s.classList.toggle('hidden', s.id !== `tab-${tab}`);
       });
-      if (!state.data[state.group].snap || (tab === 'picks' && state.picksData === null)) {
+      if (!state.data[state.group].snap
+          || (tab === 'picks' && state.picksData === null)
+          || (tab === 'morning' && state.morningData === null)) {
         loadAndRender();
       } else {
         render();

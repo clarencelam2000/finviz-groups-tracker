@@ -28,6 +28,7 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `MIN_MARKET_CAP_B` | `5` | Picks tab base display filter (C6); rows below this market cap ($B) are hidden. |
 | `ATR_EXT_ACTIONABLE` | `4.0` | ATR-extension emerald band cap; also the Focus hard-DQ line (Phase 3b). |
 | `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start; flags a held position as a trim-10% candidate. |
+| `ATR_FROM_LOD_CLEAN` / `ATR_FROM_LOD_CHASE` | `0.8` / `1.0` | Morning tab (WS3, ADR-013) entry-quality bands on `atr_from_lod` = (price − session low) / ATR, shown only on actionable cards (Triggered / Gapped-through). `<= 0.8` clean entry (emerald "ok to act"), `> 1.0` chasing (red), between = caution (amber). Owner-set 2026-08-08. |
 | `ATR_EXT_PENALTY_START` | `2.5` | Focus-score extension penalty ramp start; 0 penalty below this, ramps to `PENALTY_MAX` at `ATR_EXT_ACTIONABLE`. |
 | `PENALTY_MAX` | `0.5` | Max Focus extension-discount fraction (50% haircut at 4×). `score = base × (1 − penalty_fraction)`, always ∈ [0, 1]. |
 | `FOCUS_W_GROUP` | `0.2` | Focus score weight for group sustained-strength component (`grp_sum_mid_rank`). Lowered from `0.4` on 2026-07-16 (`display_methodology.json` v3); freed weight moved to `FOCUS_W_QUIET`. |
@@ -52,6 +53,25 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `ARIEL_ATR_PCT_FULL_LOW` / `ARIEL_ATR_PCT_FULL_HIGH` | `4.0` / `7.0` | Ariel match: full-qualify band for the daily-move gate; the two outer bands (floor–low, high–ceiling) are soft-qualify. |
 | `ARIEL_GROWTH_MIN_FULL` | `25` | Ariel match: EPS YoY TTM AND Sales YoY TTM must each be ≥ this % for the growth gate to fully qualify (AND, not OR). |
 | `ARIEL_GROWTH_MIN_SOFT` | `15` | Ariel match: soft-qualify floor for EPS YoY TTM AND Sales YoY TTM — either metric below this fails the growth gate outright. |
+
+## Morning tab (WS3, ADR-013)
+
+The **Morning** tab (`renderMorning()` in `index.html`) reads the provisional store
+`data/picks/sessions/morning_latest.csv` (fetched via `MORNING_URL`) and tags each of
+yesterday's picks with a status computed server-side by `scripts/pick_status.py`. A missing
+file (pre-first-run, or a non-trading day when `collect_morning.py` exits without writing) is
+the empty state — a 404 is expected, never an error.
+
+- **Provisional chrome is non-negotiable** (ADR-011): the amber banner + "provisional — not
+  settled" timestamp must always render so a 10:05 ET read is never mistaken for settled EOD.
+- **Actionability sort** (`MORNING_STATUS_META[*].order`): Triggered → Gapped-through → Failed
+  breakout → Setting up → Invalidated → No quote. This is the *display* order and is
+  deliberately different from the engine's evaluation precedence (`pick_status.STATUS_PRECEDENCE`).
+- **`atr_from_lod` and the "I took it" button render only on actionable states** (Triggered /
+  Gapped-through), gated by `MORNING_STATUS_META[*].actionable`.
+- **"I took it" is a localStorage marker, not a position engine** (Decision 5). Key shape
+  **`taken:<date>:<ticker>`**, value `"true"`. WS5 phase 1 migrates these (`window.__morningTookIt`
+  writes them). Documented here so WS5 can find the key.
 
 ## Cutting a release ("What's New") — 3 steps, always together
 
