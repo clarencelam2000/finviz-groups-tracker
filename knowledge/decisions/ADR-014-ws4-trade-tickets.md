@@ -73,10 +73,15 @@ Per-ticket $ the user types (localStorage); position recomputes. Not a global co
 account (owner, alignment § 10). Nothing to triple-document.
 
 ### 7. Earnings guardrail — hard amber card
-Days-to-earnings from the existing `Earnings` column + existing JS parse. A **hard** amber card
-(not a chip — it should interrupt) when inside the hold window. Threshold `EARNINGS_GUARDRAIL_SESSIONS`
-is a **new PWA display constant** (triple-doc: `docs/CLAUDE.md` table, README, in-code), default
-**5 sessions**, recalibrate after use. This is the only new configurable item in WS4.
+Days-to-earnings from the existing `Earnings` column + existing JS parse (`parseEarningsInfo`). A
+**hard** card (not a chip — it should interrupt): amber when `daysUntil <= EARNINGS_CAUTION_DAYS`
+(10), red when `<= EARNINGS_IMMINENT_DAYS` (3).
+
+> **Amendment 2026-08-09 (implementation):** the earlier draft proposed a *new*
+> `EARNINGS_GUARDRAIL_SESSIONS` constant (default 5). During Phase B this was **rejected** in favor
+> of **reusing the existing `EARNINGS_IMMINENT_DAYS` / `EARNINGS_CAUTION_DAYS`** PWA constants — DRY,
+> avoids a redundant constant, and sidesteps a days-vs-sessions unit mismatch (the parse yields
+> calendar days). **WS4 adds no new configurable constant.**
 
 ### 8. Focus score stays a footnote
 The screen gate ("good stock to be in") must not be re-used as the ticket headline ("good trade
@@ -109,7 +114,7 @@ the ticket. Consistent with WS3 never hiding a `no_quote` pick.
 ## Consequences
 
 - WS4 ships as a PWA feature with **no backend/schema change** — low risk, fully in-cloud testable.
-- The one new configurable constant is `EARNINGS_GUARDRAIL_SESSIONS`.
+- **No new configurable constant** — all thresholds reuse existing PWA constants (see § 7 amendment).
 - ATR-from-LoD's single source of truth stays in WS3's config; WS4 must not fork it.
 - Pre-close coverage is explicitly deferred to Phase C behind #268, not dropped.
 
