@@ -554,3 +554,76 @@ non-Playwright suite (632 tests, CI's `--ignore=` list) — all pass.
 bumped, `sw.js` `CACHE` `finviz-v60` → `v61`.
 
 **Next steps:** none outstanding from this thread.
+
+---
+
+## 2026-08-10 — Correction to the above: pick-reason/Focus-score design was wrong, fixed same PR (#292)
+
+**Status:** Done, safe to close. Owner reviewed PR #292 and correctly called out that the
+prior approach was needlessly re-deriving data that already exists, and asked for evidence
+the Focus score actually matches the Picks tab. Both concerns were valid and confirmed
+against live `data/picks/picks_latest.csv` before fixing — recording the evidence here since
+it's the kind of thing a future Claude could plausibly re-introduce by copying the old pattern.
+
+**Pick-reason bug:** `collect_picks.py`'s `build_pick_rows()` already writes ONE ROW PER
+(ticker × list_category) — a ticker landing in multiple selector buckets (leaders/emerging/
+accel/rs_new_high) gets one row per bucket, each tagged with that bucket's own name. That's
+the actual, exact, zero-drift-risk answer to "why was this picked." The original
+`ws4PickReason()` ignored this and instead re-checked `grp_momentum_accel`/
+`grp_regime_short_long` against copies of the PWA's own display thresholds (`ACCEL_STRONG`,
+`REGIME_THRESHOLD`) — an approximation of the *real* selector logic in
+`scripts/picks_config.py`, which additionally requires `rs_score` floors and a
+`momentum_score` percentile floor that the PWA doesn't mirror at all. Checked against the
+live picks file: the accel-tag heuristic disagreed with the real `list_category` set on 98
+of 225 tickers checked (44%), the emerging-tag heuristic on 32 (14%). It also silently could
+never show "leaders" as an extra tag (no heuristic existed for it) even though ~30% of a
+day's picks carry 2+ real categories. **Fix:** replaced the threshold heuristics with
+`ws4PickCategories(ticker)`, which reads the actual `list_category` set for that ticker
+straight from `state.picksData` — no thresholds, can't drift. Primary category (shown next
+to "from Picks ·") is the highest-priority one present (selector priority order:
+leaders/emerging/accel/rs_new_high); any others render as "also X".
+
+**Focus score bug:** the original `ws4FocusScore()` mirrored the Lookup tab's
+`globalFocusCandidates` pattern (dedup by ticker, `isFocusEligible` only) rather than the
+canonical pool the Picks tab's own Focus view and All-view Focus badges use
+(`displayRows.filter(isFocusEligible)` in `renderPicks()`, where `displayRows` is built from
+`rows.filter(<C6 base filter>)` — market cap + trend gate — first). Checked against the live
+picks file: 20 of 124 tickers that pass `isFocusEligible` fail the C6 gate (mostly sub-$5B
+market cap) and would never appear in the Picks tab's Focus view at all — the old code would
+have confidently shown a Focus score for stocks that aren't Focus candidates by the app's own
+definition, and the normalization pool composition differed even for tickers that do pass
+both. **Fix:** extracted the C6 filter out of `renderPicks()` into a shared
+`passesPicksBaseFilter(r)` (used by both call sites now, so this gate can't re-diverge), and
+rewrote `ws4FocusScore()` to filter by `passesPicksBaseFilter` THEN `isFocusEligible`, not
+deduped by ticker — exactly matching `allFocusCandidates` in `renderPicks()`. Documented
+caveat: the ticket always uses the Picks tab's *default* settings (Ariel filter off, 'last'
+price basis); if the user has an Ariel filter active in the Picks tab right now, the number
+can legitimately differ from what's currently on screen there, since Ariel further narrows
+that view's pool. This is a disclosed, deliberate divergence (an opt-in display toggle), not
+silent drift.
+
+**Verified:** rewrote the `tests/test_pwa_trade_ticket.py` fixture to give AXON two real
+picks rows (`list_category` leaders + accel, identical Finviz/metrics columns — mirrors how
+`collect_picks.py` actually writes multi-category picks) plus the full real `METRICS_COLS`
+set (`risk_20ma_pct`/`risk_50ma_pct` were missing before, which silently changed the Focus
+score via `computeFocusScores`' NaN-component fallback — an earlier version of this session's
+test had that gap). Pinned Focus score (0.30) verified by extracting `computeFocusScores()`
+out of `docs/index.html` into a standalone Node snippet and running it directly against the
+fixture rows, not just hand-derived. Full `test_pwa_trade_ticket.py` suite (8 tests, Chromium
+revision-symlink trick) + the four Picks-tab-adjacent Playwright suites that exercise
+`renderPicks()`/Focus scoring (`test_pwa_focus_scoring.py`, `test_pwa_picks_hod.py`,
+`test_pwa_picks_atr_earnings.py`, `test_pwa_picks_chart.py`, `test_pwa_lookup_signal.py` —
+32 tests, confirming the `passesPicksBaseFilter` extraction is behavior-preserving for the
+Picks tab itself) — all pass. Full non-Playwright suite (632 tests) — all pass.
+
+**Release surface:** updated the existing (still-unmerged) `2026.08.09.2` entry's copy in
+place rather than adding a new `.3` — this is a same-PR correction to work that hasn't
+landed on default yet, not a new user-visible change on top of a shipped one.
+
+**Next steps:** none outstanding. If a future change touches Focus scoring again, remember
+there are now three related-but-distinct pools in the codebase (Lookup tab's
+ticker-deduped/no-C6 `globalFocusCandidates`, Picks tab's C6-filtered/non-deduped/
+Ariel-aware `displayRows`-based pool, and WS4's ticket `ws4FocusScore` which now matches the
+Picks tab's default-settings pool) — worth eventually consolidating into one shared builder
+if a fourth call site shows up, but not done here since the Lookup tab's existing pool choice
+wasn't in scope for this fix and changing it wasn't requested.

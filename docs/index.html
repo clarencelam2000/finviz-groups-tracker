@@ -4547,6 +4547,23 @@
       renderPicks();
     };
 
+    // C6 base display filter: Market Cap > MIN_MARKET_CAP_B AND
+    // (price>50MA OR price>200MA OR 20MA>50MA). Shared by renderPicks() (the Picks tab
+    // itself) and ws4FocusScore() (WS4 trade ticket) so the "which rows are even
+    // candidates" gate can't drift between the two call sites — a row that wouldn't show
+    // up in the Picks tab at all must not silently get a Focus score on the ticket.
+    function passesPicksBaseFilter(r) {
+      const capB = _pCapB(r['Market Cap']);
+      if (isNaN(capB) || capB <= MIN_MARKET_CAP_B) return false;
+      const sma50  = _pPct(r['SMA50']);
+      const sma200 = _pPct(r['SMA200']);
+      const sma20  = _pPct(r['SMA20']);
+      if (!isNaN(sma50)  && sma50  > 0) return true;
+      if (!isNaN(sma200) && sma200 > 0) return true;
+      if (!isNaN(sma50) && !isNaN(sma20) && sma50 > sma20) return true;
+      return false;
+    }
+
     function renderPicks() {
       const el = document.getElementById('picks-list');
       if (!el) return;
@@ -4557,19 +4574,7 @@
         return;
       }
 
-      // C6 base display filter: Market Cap > MIN_MARKET_CAP_B AND
-      // (price>50MA OR price>200MA OR 20MA>50MA).
-      const filtered = rows.filter(r => {
-        const capB = _pCapB(r['Market Cap']);
-        if (isNaN(capB) || capB <= MIN_MARKET_CAP_B) return false;
-        const sma50  = _pPct(r['SMA50']);
-        const sma200 = _pPct(r['SMA200']);
-        const sma20  = _pPct(r['SMA20']);
-        if (!isNaN(sma50)  && sma50  > 0) return true;
-        if (!isNaN(sma200) && sma200 > 0) return true;
-        if (!isNaN(sma50) && !isNaN(sma20) && sma50 > sma20) return true;
-        return false;
-      });
+      const filtered = rows.filter(passesPicksBaseFilter);
 
       if (filtered.length === 0) {
         el.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">No picks pass the base filter today.</p>';
@@ -4969,43 +4974,45 @@
       return rows.find(row => (row.Ticker || row.ticker || '') === ticker) || null;
     }
 
-    // Pick-reason flags for the header line (ADR-014 §9). picksRow.list_category (shown
-    // right next to this) already names the bucket the group was SELECTED under
-    // (leaders/emerging/accel/rs_new_high); this surfaces every OTHER grp_* boolean/
-    // threshold signal that also fired on the selecting group, so e.g. a "leaders" pick
-    // whose group is also accelerating or making an RS new high isn't silently hidden.
-    // Thresholds reuse the existing PWA display constants (ACCEL_STRONG, REGIME_THRESHOLD)
-    // rather than inventing new ones — they happen to equal the selector's own
-    // ACCEL_THRESHOLD/EMERGING_REGIME_FLOOR (scripts/picks_config.py), so the label lines
-    // up with what actually gated that bucket. A tag matching the row's own list_category
-    // is skipped as redundant (already shown via `cat`).
-    function ws4PickReason(picksRow) {
-      if (!picksRow) return '';
-      const cat = picksRow.list_category || '';
-      const tags = [];
-      if (cat !== 'rs_new_high' && _pF(picksRow.grp_rs_new_high) === 1) tags.push('rs_new_high');
-      if (cat !== 'accel' && _pF(picksRow.grp_momentum_accel) > ACCEL_STRONG) tags.push('accel+');
-      if (cat !== 'emerging' && _pF(picksRow.grp_regime_short_long) > REGIME_THRESHOLD) tags.push('emerging regime');
-      return tags.join(' + ');
+    // Every distinct list_category this ticker qualified under today, straight from the
+    // picks data — no re-derivation against grp_* thresholds. collect_picks.py's
+    // build_pick_rows() writes ONE ROW PER (ticker × list_category) at selection time
+    // (a ticker landing in multiple buckets — common: ~30% of today's picks are in 2+ —
+    // gets one row per bucket, each carrying that bucket's own grp_* snapshot), so the
+    // full, exact set of "why this was picked" reasons already exists as data. An earlier
+    // version of this tried to reconstruct extra reasons by re-checking grp_momentum_accel
+    // / grp_regime_short_long against copies of the selector's thresholds — verified
+    // against live picks_latest.csv, that approach's category calls disagreed with the
+    // real selector's list_category on 32-44% of multi-category tickers (it was missing
+    // the selector's compound rs_score/momentum-percentile floors, which aren't mirrored
+    // in the PWA at all). Reading list_category directly cannot drift, by construction.
+    function ws4PickCategories(ticker) {
+      const cats = new Set();
+      (state.picksData || []).forEach(row => {
+        if ((row.Ticker || row.ticker || '') === ticker && row.list_category) cats.add(row.list_category);
+      });
+      // Selector priority order (scripts/collect_picks.py select_groups) — same order
+      // used for the Picks tab's own category chips/sections (CAT_ORDER / catOrder).
+      const order = ['leaders', 'emerging', 'accel', 'rs_new_high'];
+      return order.filter(c => cats.has(c));
     }
 
-    // Focus score for a single ticket row, computed against the SAME global pool as the
-    // Picks tab's Focus ★ view (all today's Focus-eligible picks, deduped by ticker) —
-    // mirrors the Lookup tab's globalFocusCandidates/lookupFocusMap pattern rather than
-    // scoring this one row in isolation, since computeFocusScores is inherently
-    // pool-relative (min-max normalized against the candidate set). Returns null when the
-    // row isn't in the pool at all (no EOD match) or fails the Focus eligibility gate
-    // (ATR-extension / liquidity) — those cases render their own message in the footnote.
+    // Focus score for a single ticket row, computed against the SAME candidate pool the
+    // Picks tab's own Focus badges use (`allFocusCandidates` in renderPicks(): the C6 base
+    // filter — passesPicksBaseFilter — THEN isFocusEligible, not deduped by ticker), so
+    // the number shown here matches what the Picks tab shows for this ticker today. An
+    // earlier version deduped by ticker and skipped the C6 filter (mirroring the Lookup
+    // tab's globalFocusCandidates instead) — verified against live picks_latest.csv, that
+    // pool wrongly included ~16% of Focus-eligible tickers that fail the C6 gate (mostly
+    // sub-$5B market cap) and would never actually appear in the Picks tab's Focus view.
+    // Caveat: this always uses the DEFAULT Picks-tab settings (Ariel filter off, 'last'
+    // price basis) — if the user has an Ariel filter active in the Picks tab right now,
+    // this number can legitimately differ from what they currently see there, since the
+    // Ariel filter further narrows that view's candidate pool. Returns null when the row
+    // fails either gate — the footnote renders its own "not a Focus candidate" message.
     function ws4FocusScore(picksRow) {
-      if (!picksRow || !isFocusEligible(picksRow)) return null;
-      const seen = new Set();
-      const candidates = (state.picksData || []).filter(row => {
-        if (!isFocusEligible(row)) return false;
-        const t = row.Ticker || row.ticker || '';
-        if (seen.has(t)) return false;
-        seen.add(t);
-        return true;
-      });
+      if (!picksRow || !passesPicksBaseFilter(picksRow) || !isFocusEligible(picksRow)) return null;
+      const candidates = (state.picksData || []).filter(row => passesPicksBaseFilter(row) && isFocusEligible(row));
       const ticker = picksRow.Ticker || picksRow.ticker || '';
       const hit = computeFocusScores(candidates).find(s => (s.r.Ticker || s.r.ticker || '') === ticker);
       return hit ? hit.score : null;
@@ -5153,10 +5160,13 @@
             <div class="tabular-nums text-[9.5px] ${on ? 'text-sky-400' : 'text-slate-500'}">${valStr}</div></button>`;
       }).join('');
 
-      const reason = ws4PickReason(picksRow);
-      const cat = escapeHtml(String((picksRow && picksRow.list_category) || r.list_category || ''));
+      // Full set of selection categories for this ticker (see ws4PickCategories) — not
+      // just picksRow's own row, since a ticker can carry multiple category rows.
+      const pickCats = picksRow ? ws4PickCategories(ticker) : [];
+      const cat = escapeHtml(pickCats[0] || (picksRow && picksRow.list_category) || r.list_category || '');
+      const extraCats = pickCats.slice(1).join(' + ');
       const reasonHtml = picksRow
-        ? `<div class="text-[11px] text-slate-500">from Picks · ${cat}${reason ? ' · ' + escapeHtml(reason) : ''}</div>`
+        ? `<div class="text-[11px] text-slate-500">from Picks · ${cat}${extraCats ? ' · also ' + escapeHtml(extraCats) : ''}</div>`
         : `<div class="text-[11px] text-slate-500">from Picks · ${cat} <span class="text-slate-600">(no EOD match — degraded)</span></div>`;
 
       let earningsHtml = '';

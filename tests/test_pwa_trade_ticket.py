@@ -35,24 +35,38 @@ MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", 
 
 
 def _picks_body() -> str:
-    """AXON picks row with Earnings 2 days out (computed at test time so the guardrail
-    test is stable regardless of when the suite runs), list_category=leaders, and every
-    grp_* pick-reason flag set (grp_rs_new_high, grp_momentum_accel, grp_regime_short_long)
-    so the "extend beyond rs_new_high" reason wiring can be exercised even though this row's
-    own category is leaders. atr_ext_50/Avg Volume/range_atr/grp_sum_mid_rank are populated
-    so the row clears isFocusEligible and a Focus score can be computed (single-candidate
-    pool: score = 1.0 x (1 - liquidity penalty) x (1 - earnings penalty); the 2-day-out
-    earnings here pins the earnings penalty at EARNINGS_PENALTY_MAX=0.7, liquidity penalty
-    is 0 given the ample Avg Volume, so the expected score is exactly 0.30). VRT (present in
+    """AXON has TWO picks rows sharing identical Finviz/metrics columns but different
+    list_category ('leaders' and 'accel') — mirrors collect_picks.py's real behavior of
+    writing one row per (ticker x list_category) when a ticker's group qualifies in more
+    than one bucket (~30% of a typical day's picks, verified against live picks_latest.csv).
+    This exercises ws4PickCategories() reading the true category set directly off the data
+    (no re-derived grp_* threshold heuristics).
+
+    Columns include the real METRICS_COLS set (atr_ext_50, risk_20ma_pct, risk_50ma_pct,
+    range_atr — scripts/picks_metrics.py) plus grp_sum_mid_rank, so this exercises the same
+    3-component base Focus score real rows do (an earlier draft omitted risk_20ma_pct/
+    risk_50ma_pct, which isn't representative of production picks_latest.csv and silently
+    changed the expected score via computeFocusScores' NaN-component fallback). Score is
+    pinned by construction, not just derived by hand — verified via a standalone extraction
+    of computeFocusScores() from docs/index.html run under plain Node (see PR discussion):
+    with only these two identical-valued rows in the candidate pool (n=2 < FOCUS_MIN_POOL=5),
+    normalizeInv's rank-based fallback gives every component a perfect 1.0 (both entries tie
+    for "best" in a 2-way tie) -> base = 0.2*1 + 0.4*1 + 0.4*1 = 1.0. 0 liquidity penalty
+    (ample Avg Volume), 0 extension penalty (atr_ext_50=1.0 is below ATR_EXT_PENALTY_START),
+    EARNINGS_PENALTY_MAX (0.7) from the 2-day-out earnings date (computed at test time so
+    this is stable regardless of when the suite runs) -> score = 1.0 * (1-0.7) = 0.30.
+    Market Cap/SMA200 are populated so both rows clear the Picks tab's own C6 base filter
+    (passesPicksBaseFilter), matching what the Picks tab itself would show. VRT (present in
     the morning fixture) is intentionally absent here to exercise the no-EOD-match degraded
     path."""
     d = datetime.date.today() + datetime.timedelta(days=2)
     earnings = f"{MONTHS[d.month - 1]} {d.day:02d}/a"
-    header = ("date,list_category,Ticker,Price,ATR,SMA20,SMA50,Earnings,Avg Volume,"
-              "atr_ext_50,range_atr,grp_sum_mid_rank,grp_rs_new_high,grp_momentum_accel,"
-              "grp_regime_short_long\n")
-    row = f"2026-08-08,leaders,AXON,610.00,14.00,2.00%,5.00%,{earnings},5000000,1.0,1.0,50,1.0,0.15,0.30\n"
-    return header + row
+    header = ("date,list_category,Ticker,Price,ATR,SMA20,SMA50,SMA200,Market Cap,Earnings,"
+              "Avg Volume,atr_ext_50,risk_20ma_pct,risk_50ma_pct,range_atr,grp_sum_mid_rank\n")
+    common = "610.00,14.00,2.00%,5.00%,10.00%,50,{earnings},5000000,1.0,0.03,0.05,1.0,50"
+    row1 = f"2026-08-08,leaders,AXON,{common.format(earnings=earnings)}\n"
+    row2 = f"2026-08-08,accel,AXON,{common.format(earnings=earnings)}\n"
+    return header + row1 + row2
 
 
 def _launch_server(port: int):
@@ -196,10 +210,11 @@ def test_earnings_guardrail_renders(server):
         browser.close()
 
 
-def test_pick_reason_line_from_grp_flag(server):
-    """AXON's list_category is 'leaders', but its grp_* snapshot also has rs_new_high,
-    momentum_accel, and regime_short_long all past their respective thresholds — all
-    three should surface as extra reason tags since none of them restate 'leaders'."""
+def test_pick_reason_line_lists_every_real_category(server):
+    """AXON has two real picks.csv rows for today — list_category 'leaders' AND 'accel' —
+    so the reason line must show both, straight off the data (ws4PickCategories), not a
+    re-derived grp_* threshold guess. Primary category is 'leaders' (selector priority
+    order), the rest render as 'also <category>'."""
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -208,15 +223,13 @@ def test_pick_reason_line_from_grp_flag(server):
         page.click("text=▾ Trade ticket >> nth=0")
         page.wait_for_timeout(300)
         html = page.inner_html("#morning-list")
-        assert "from Picks · leaders · rs_new_high + accel+ + emerging regime" in html
+        assert "from Picks · leaders · also accel" in html
         browser.close()
 
 
 def test_focus_score_shown_in_footnote(server):
-    """AXON clears isFocusEligible (atr_ext_50=1.0, ample Avg Volume) and is the only
-    Focus-eligible row in the picks fixture, so its Focus score is computed against a
-    single-candidate pool: base=1.0, 0 liquidity penalty, EARNINGS_PENALTY_MAX (0.7)
-    earnings penalty from the 2-day-out earnings date -> score = 1 * 1 * 0.3 = 0.30."""
+    """See _picks_body()'s docstring for the full score derivation (pinned at 0.30,
+    verified against a standalone Node extraction of computeFocusScores())."""
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
