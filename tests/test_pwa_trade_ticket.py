@@ -76,11 +76,13 @@ def _launch_server(port: int):
     )
 
 
-def _open_morning_tab(page):
+def _open_morning_tab(page, picks_body=None):
     """Boot the PWA with stubbed CDNs + CSVs, intercept morning_latest.csv and
     picks_latest.csv, open the Morning tab. Route glob form per
     knowledge/investigations/playwright-cloud-session-testing.md ("**/filename.ext",
-    literal slash before the filename — "**domain**filename" silently never matches)."""
+    literal slash before the filename — "**domain**filename" silently never matches).
+    picks_body defaults to _picks_body(); pass an override for tests that need a
+    different picks_latest.csv shape (e.g. an unrecognized list_category)."""
     papaparse_js = (ROOT / "tests" / "fixtures" / "papaparse.min.js").read_text(encoding="utf-8")
     page.route("**/cdn.tailwindcss.com/**",
                lambda r: r.fulfill(body="/* tailwind stub */", content_type="application/javascript"))
@@ -89,7 +91,7 @@ def _open_morning_tab(page):
     page.route("**/sessions/morning_latest.csv",
                lambda r: r.fulfill(body=MORNING_FIXTURE.read_text(encoding="utf-8"), content_type="text/plain"))
     page.route("**/picks_latest.csv",
-               lambda r: r.fulfill(body=_picks_body(), content_type="text/plain"))
+               lambda r: r.fulfill(body=picks_body if picks_body is not None else _picks_body(), content_type="text/plain"))
     page.route("**/snapshots.csv",
                lambda r: r.fulfill(body="date,collected_at,group_type,name,stocks,market_cap,pe,fwd_pe,perf_day,perf_week,perf_month,perf_quarter,perf_half,perf_year,perf_ytd,avg_volume,rel_volume,change\n", content_type="text/plain"))
     page.route("**/deltas.csv",
@@ -224,6 +226,31 @@ def test_pick_reason_line_lists_every_real_category(server):
         page.wait_for_timeout(300)
         html = page.inner_html("#morning-list")
         assert "from Picks · leaders · also accel" in html
+        browser.close()
+
+
+def test_pick_reason_line_surfaces_unrecognized_category(server):
+    """Regression test for a real bug caught in review: ws4PickCategories()'s first draft
+    was `order.filter(c => cats.has(c))`, which silently DROPS any list_category not in the
+    hardcoded 4-category `order` array — a category the selector starts writing in the
+    future (a hypothetical 5th bucket) would vanish from the reason line with no error. AXON
+    here has one row tagged with a made-up category, 'breakout', that will never be in
+    `order`; it must still render (appended after any known categories), never disappear."""
+    from playwright.sync_api import sync_playwright
+    d = datetime.date.today() + datetime.timedelta(days=2)
+    earnings = f"{MONTHS[d.month - 1]} {d.day:02d}/a"
+    header = ("date,list_category,Ticker,Price,ATR,SMA20,SMA50,SMA200,Market Cap,Earnings,"
+              "Avg Volume,atr_ext_50,risk_20ma_pct,risk_50ma_pct,range_atr,grp_sum_mid_rank\n")
+    common = f"610.00,14.00,2.00%,5.00%,10.00%,50,{earnings},5000000,1.0,0.03,0.05,1.0,50"
+    picks_body = header + f"2026-08-08,breakout,AXON,{common}\n"
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _open_morning_tab(page, picks_body=picks_body)
+        page.click("text=▾ Trade ticket >> nth=0")
+        page.wait_for_timeout(300)
+        html = page.inner_html("#morning-list")
+        assert "from Picks · breakout" in html
         browser.close()
 
 

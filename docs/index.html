@@ -4992,9 +4992,16 @@
         if ((row.Ticker || row.ticker || '') === ticker && row.list_category) cats.add(row.list_category);
       });
       // Selector priority order (scripts/collect_picks.py select_groups) — same order
-      // used for the Picks tab's own category chips/sections (CAT_ORDER / catOrder).
+      // used for the Picks tab's own category chips/sections (CAT_ORDER / catOrder). This
+      // is a DISPLAY-ORDER preference only, not a filter: any category outside this list
+      // (a new bucket the selector starts writing that this array hasn't been updated for)
+      // is still appended at the end, never silently dropped — `order.filter()` alone would
+      // have thrown away anything not in the array, which is the exact class of drift bug
+      // this function exists to avoid.
       const order = ['leaders', 'emerging', 'accel', 'rs_new_high'];
-      return order.filter(c => cats.has(c));
+      const known = order.filter(c => cats.has(c));
+      const unknown = [...cats].filter(c => !order.includes(c));
+      return known.concat(unknown);
     }
 
     // Focus score for a single ticket row, computed against the SAME candidate pool the
