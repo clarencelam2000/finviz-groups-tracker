@@ -319,6 +319,27 @@ All four implementation questions are now closed; recorded here so they aren't r
   D1 HTTP API + a GH secret) instead of a `git commit` — paid once, and needed anyway for the
   "I took it" write and push-subscription store.
 
+### 11a. New open items (design-review pass, 2026-08-10)
+
+Surfaced reviewing this PR; not blockers for phase 1 (D1 schema + write path), but must be
+resolved before phase 3 (`advance()` engine) is built — otherwise they get silently assumed away:
+
+- **No reminder/nudge for a stuck `Closing` position.** Today's design sends exactly one push
+  when the exit signal fires, then `advance()` goes inert for that position (§ 4: `Closing` is a
+  terminal no-op like `Closed`). If the user misses that one push, the position sits unmonitored
+  indefinitely while they believe the engine is still managing it — the confirmed-fill model only
+  holds if confirmation actually happens promptly. `exit_signal_date` is already stored, so a
+  reminder job (re-push if `state == Closing` for more than N days) costs nothing schema-wise to
+  add — but needs to be decided and specced (cadence, N) before phase 4 (push notifications) ships.
+- **Undefined feed/catch-up behavior during multi-day `Closing` limbo.** § 2 doesn't say which
+  position states the held-tickers feed query includes. Two open questions this leaves unresolved:
+  (1) does the feed keep appending bars to `ticker_quotes` for a ticker while its position sits in
+  `Closing`, or does it stop — the latter opens a data gap in the backtest substrate right at the
+  trade's most important moment; (2) when the user eventually taps "still holding," does
+  `advance()` catch up over the bars from every skipped day, or jump straight to today's, silently
+  skipping any trim/stop-move that should have fired in between? Needs a decision before § 4/§ 9
+  are implemented.
+
 ## 12. Backtesting (owner Q, 2026-08-10)
 
 D1 supports **both** backtest modes, provided the feed is append-only (§ 5):
