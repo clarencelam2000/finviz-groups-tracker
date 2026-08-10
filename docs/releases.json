@@ -1,6 +1,17 @@
 {
-  "current": "2026.08.09.1",
+  "current": "2026.08.09.2",
   "releases": [
+    {
+      "version": "2026.08.09.2",
+      "date": "2026-08-09",
+      "title": "Trade ticket: real pick reasons + Focus score",
+      "tag": "feature",
+      "tab": "morning",
+      "notes": [
+        "The pick-reason line now lists every category a pick's group actually qualified under today (e.g. Leaders and Accel), read straight from the day's picks — not an approximation.",
+        "The trade ticket now shows the pick's Focus score, computed the same way and against the same pool as the Picks tab's own Focus view, with a note that it's ranked against today's other Focus candidates and isn't part of this ticket's own math."
+      ]
+    },
     {
       "version": "2026.08.09.1",
       "date": "2026-08-09",
