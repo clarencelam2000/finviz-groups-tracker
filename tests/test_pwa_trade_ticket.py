@@ -255,8 +255,13 @@ def test_pick_reason_line_surfaces_unrecognized_category(server):
 
 
 def test_focus_score_shown_in_footnote(server):
-    """See _picks_body()'s docstring for the full score derivation (pinned at 0.30,
-    verified against a standalone Node extraction of computeFocusScores())."""
+    """See _picks_body()'s docstring for the full score derivation (pinned at 0.30 on the
+    app's internal 0-1 scale, verified against a standalone Node extraction of
+    computeFocusScores()). Displayed as a rounded 0-100 integer (Math.round(score * 100))
+    to match every other Focus score display in the app (Picks tab badge, expanded-card
+    debug breakdown, GUIDE glossary's "blended 0-100 quality score" description) — an
+    earlier version of this footnote showed the raw 0-1 decimal ("0.30"), which was the
+    only place in the app using that scale."""
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -265,7 +270,7 @@ def test_focus_score_shown_in_footnote(server):
         page.click("text=▾ Trade ticket >> nth=0")
         page.wait_for_timeout(300)
         html = page.inner_html("#morning-list")
-        assert "Focus score: 0.30" in html
+        assert "Focus score: 30" in html
         assert "pool-relative" in html
         browser.close()
 

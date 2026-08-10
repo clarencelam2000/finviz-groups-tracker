@@ -5234,7 +5234,7 @@
 
           <div class="text-[10.5px] text-slate-500 leading-relaxed">
             <span class="text-slate-400 font-medium">No profit target</span> — exits are managed by the lifecycle rules after entry.
-            ${picksRow ? `<br><span class="text-slate-600">Focus score: ${focusScore !== null ? focusScore.toFixed(2) : 'n/a — not a Focus candidate today'} (pool-relative vs today's other Focus candidates — context only, not part of this ticket's math).</span>` : ''}
+            ${picksRow ? `<br><span class="text-slate-600">Focus score: ${focusScore !== null ? Math.round(focusScore * 100) : 'n/a — not a Focus candidate today'} (pool-relative vs today's other Focus candidates — context only, not part of this ticket's math).</span>` : ''}
           </div>
         </div>`;
     }
