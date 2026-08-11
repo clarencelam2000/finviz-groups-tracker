@@ -168,9 +168,15 @@
             </div>
             <div class="kv"><span>Stop was · opened</span><span class="v num">98.20 · 96.40</span></div>
             <div class="kv"><span>Expected fill <span class="pill p-mut" style="margin-left:4px">modeled</span></span><span class="v num">96.40</span></div>
+            <div class="hr"></div>
+            <div class="kv" style="align-items:center"><span style="color:var(--ink);font-weight:600">Your actual fill</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--accent);border-radius:7px;padding:4px 8px;background:rgba(56,189,248,.08)">
+                <span class="num" style="color:var(--ink);font-weight:700">96.40</span>
+                <span class="small" style="color:var(--accent)">edit</span></span></div>
+            <div class="small" style="color:var(--dim);margin-top:4px">Pre-filled with the modeled price — overwrite if you got a different fill.</div>
             <div class="small" style="color:var(--warn);margin-top:6px">Auto-closes at the modeled price in 3 sessions if not confirmed.</div>
             <div style="display:flex;gap:8px;margin-top:8px">
-              <span class="btn primary" style="flex:1">Confirm fill</span>
+              <span class="btn primary" style="flex:1">Confirm this fill →</span>
               <span class="btn ghost" style="flex:1">Still holding</span>
             </div>
           </div>
@@ -178,7 +184,7 @@
           <div class="cs-item">
             <div style="display:flex;justify-content:space-between;align-items:center">
               <span><span class="tick">SMCI</span> <span class="grp">· exit signalled Aug 4</span></span>
-              <span class="pill p-bad">Hard exit · &lt;50MA</span>
+              <span class="pill p-bad">Closed below 50MA</span>
             </div>
             <div class="kv"><span>Expected fill <span class="pill p-mut" style="margin-left:4px">modeled</span></span><span class="v num">43.10 (close)</span></div>
             <div class="small" style="color:var(--warn);margin-top:6px">Auto-closes in 4 sessions if not confirmed.</div>
@@ -225,9 +231,10 @@
         <li><b>Auto-confirm countdown</b> (review #5) lives right on the card so the "modeled, unconfirmed" fallback is never a surprise — the user sees the clock and can pre-empt it.</li>
         <li><b>Order = urgency</b>, oldest-signalled first (closest to auto-confirming), so the item about to be decided for you sits on top.</li>
       </ul>
-      <div class="q">Open for owner: should the collapsed strip also count recently <i>auto</i>-closed-unconfirmed
-      positions (still correctable) for a few days, or only live <code>Closing</code> ones? Leaning: show
-      auto-closed for 2 sessions with a "modeled — tap to correct" affordance, then drop to history.</div>
+      <div class="q">Owner-decided: the collapsed strip also counts recently <i>auto</i>-closed-unconfirmed
+      positions (still correctable) for <b>3 sessions</b> with a "modeled — tap to correct" affordance,
+      then drops to history. Beyond that window, corrections happen from the closed-position history view
+      (any closed position stays editable — see the append-only <code>exit_corrected</code> event).</div>
     </div>
   </div>
 </section>
