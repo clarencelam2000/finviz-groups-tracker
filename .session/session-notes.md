@@ -6,6 +6,36 @@
 
 ---
 
+## 2026-08-11 — Picks chart height + Morning tab TradingView charts
+
+**Status: safe to close, PR open.** Small self-contained UI request from the owner.
+
+**What landed:**
+- `tradingViewChartHtml(ticker, 560)` — Picks tab's per-pick TradingView embed doubled from
+  280px to 560px tall (both the initial render and the DOM-patch toggle in `__togglePickChart`).
+- Morning tab cards get the same click-to-expand chart affordance as Picks, reusing
+  `tradingViewChartHtml()` verbatim. New `morningChartAffordance(ticker)` +
+  `window.__toggleMorningChart(ticker)` mirror `__togglePickChart`'s DOM-patch pattern (no full
+  `renderMorning()` re-render on toggle). New `state.morningChartOpen` Set persists open/closed
+  chart state across re-renders — keyed by ticker alone (morning rows are one-per-ticker, unlike
+  Picks' `ticker_category` composite key, so no `expandKey` needed).
+- Release surface: `docs/releases.json` (`2026.08.11`, tag `improvement`) + `docs/sw.js`
+  `CACHE` bumped `v61` → `v62`, same PR per the hard rule.
+
+**How it was verified:** `python3 -m pytest tests/ -q` (excluding the documented Playwright
+ignore list) — 632 passed, no regressions; `test_guide_releases.py` (5 passed) confirms the
+release/cache sync. Also ran the *actual* Playwright suite in-sandbox via the documented
+`chromium-1117 → chromium-1194` symlink workaround (see
+`knowledge/investigations/playwright-cloud-session-testing.md`) — `test_pwa_morning.py`,
+`test_pwa_trade_ticket.py`, `test_pwa_picks_chart.py` all pass (18/18) against the changed code.
+Additionally ran an ad hoc script against a live-rendered Morning tab: 5 chart-toggle buttons
+render, clicking one injects a TradingView iframe with `style="height:560px;"`. Symlink removed
+after — session-local only, never committed.
+
+**Next steps:** none — this was a complete, narrow request. No deferred items.
+
+---
+
 ## 2026-08-08 — WS3 Phase A: morning status engine + provisional store (#262)
 
 **Status: safe to close once PR #281 merges.** Senior-eng session driving WS3 forward on the
