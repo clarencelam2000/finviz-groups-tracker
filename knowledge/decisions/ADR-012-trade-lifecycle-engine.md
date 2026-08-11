@@ -1,6 +1,6 @@
 # ADR-012: Trade lifecycle engine — architecture, storage, and the domain invariant
 
-**Date**: 2026-08-06 (reconciled 2026-08-10 with owner decisions of 2026-08-07/08-10)
+**Date**: 2026-08-06 (reconciled 2026-08-10; extended 2026-08-11 with the design-review pass)
 **Status**: Proposed (architecture accepted in principle; per-phase implementation pending owner go-word)
 
 > **2026-08-10 reconciliation.** Folded the owner decisions from `knowledge/cron-lifecycle-ideation-and-alignment.md`
@@ -10,6 +10,16 @@
 > the write path is **ticker-generic** so arbitrary user-entered tickers are a future UI addition,
 > not a migration (Decision 7); `SEVERE_BREAKDOWN_ATR = 3.0`, widen = auto-with-per-position-toggle,
 > breakeven = +1R (design doc § 6/§ 11).
+>
+> **2026-08-11 design-review pass** (this session, PR #295). Added Decisions 8–11: **scale-ins are
+> independent lots** (not average-in); **missed-push safety** via an in-app pull surface + two-tier
+> alerts + auto-confirm; **backtesting demoted to nice-to-have** with only the cheap append-only +
+> full-column *capture* kept as the one-way door; **effective-config `advance()`** for a future
+> per-position/LLM rule door. Also: `hard_exit` split into `close_below_50ma`/`severe_breakdown`;
+> two-close-below-20MA fires on 50MA basis by design; caution re-arms on "still holding"; the two feeds
+> (morning picks vs. held) are kept separate and both freely add-able; retrace-to-MA risk view specced
+> (design doc § 3a, § 5a, § 6–8, § 12–14). Full session narrative:
+> `knowledge/trade-lifecycle-design-review-2026-08-11.md`.
 
 > Companion implementation design: `planning/trade-lifecycle-engine.md`. Owner-intent source of
 > truth: `knowledge/cron-lifecycle-ideation-and-alignment.md` § 6 (the ruleset) and § 7 (storage).
@@ -51,7 +61,9 @@ directly about SQL-vs-NoSQL / "spine and a flexible bag"):
   closed `positions` (outcomes), D1 then supports both trade-outcome expectancy and hypothetical
   rule-variant replay of the pure `advance()` function. It also preserves daily-bar history for
   *off-picks* held names, the one market-data set the committed `data/*.csv` files don't already
-  carry. Tiny (open positions × trading days). See `planning/trade-lifecycle-engine.md` § 5/§ 12.
+  carry. Tiny (open positions × trading days). **Store the full scrape column set**, not just the
+  fields `advance()` reads today — an un-captured bar can never be backfilled and the extra columns are
+  nearly free (Decision 10). See `planning/trade-lifecycle-engine.md` § 5/§ 12.
 
 Rejected: one wide mutable table with no history (loses the audit/replay and makes the scale-out
 trim ledger fragile), and JSON-document-only (loses typed constraints on the fields the engine
@@ -124,6 +136,48 @@ ticker) is a second caller filling the same payload. Because the held-tickers fe
 no new architecture. Provenance is `meta.source = 'picks' | 'manual'`. **Do not** key the create
 path on a picks-row identity — that would turn arbitrary tickers into a migration instead of deferred
 UI work. (Owner "think big", 2026-08-10; needs no storage change — see design doc § 8a.)
+
+### 8. Scale-ins are independent lots, not an average-in (owner ruleset, 2026-08-11)
+
+Each add-on buy is its **own trade** — own entry, own stop, own R, own trim ledger — so **each lot is
+one `positions` row**. We do **not** blend adds into one volume-weighted position; that would erase
+the per-tranche risk the owner actually manages. This makes § 3's frozen-single-entry invariant
+*correct*, not a limitation, and requires **no change to `advance()`** (it already runs per position;
+N lots on one ticker share one daily bar). The only additions are a `meta.group_id` linking lots for
+**display** and a UI aggregation (weighted-avg entry, summed qty, summed heat) that is presentation
+only. Rejected: VWAP/average-in (one averaged stop matching neither tranche). Phase-1 obligation:
+**do not assume one-position-per-ticker**; reserve `meta.group_id`. Tracked as its own issue. (Design
+doc § 3a / § 8b.)
+
+### 9. Missed-push safety + honest record: pull surface, two-tier alerts, auto-confirm
+
+The confirmed-fill model (Decision 6) has a single point of failure — one VAPID push — and a failure
+mode where unconfirmed `Closing` positions rot the expectancy record. Decisions: (a) an **in-app
+"needs your confirmation" pull surface** makes push the nudge and the app the source of truth
+(survives a missed push); (b) **two-tier notifications** (a rare high-salience Tier-1 exit signal vs.
+de-escalated Tier-2 reminders) prevent alert-fatigue from training the user to ignore exit pushes;
+(c) **auto-confirm** after `EXIT_AUTOCONFIRM_SESSIONS` closes a stuck position at the modeled price
+labeled `confirmation_status = 'auto'` — never silently wrong (labeled + correctable). Corrections are
+**append-only events** (`exit_corrected` / `reopened`), never destructive edits. (Design doc § 6–8.)
+
+### 10. Backtesting is a nice-to-have; only the cheap data capture is a one-way door
+
+Backtesting the *feature* is deferred. The two irreversible decisions — the feed is **append-only**
+and stores the **full scrape column set** — are kept regardless, because an un-captured bar can never
+be backfilled and both cost almost nothing on a tiny table. `ticker_quotes` honestly backs
+trade-outcome expectancy and exit-variant replay over trades actually taken; it is **not** a general
+strategy backtester (no counterfactual entries / unentered universe / post-exit bars). Widening the
+feed to un-taken picks is **rejected** (scrape-load explosion); a true strategy backtester, if ever
+wanted, uses a **bulk OHLCV provider (Alpaca) through a pluggable source**, keeping the live engine's
+truth on `ticker_quotes`. (Design doc § 12.)
+
+### 11. The engine door stays open: effective-config `advance()`
+
+`advance()` reads an **effective config** (global constants + per-position `meta` overrides) passed
+in as a parameter, never a hard-coded global lookup. Empty today, but this keeps a per-position rule —
+set in the UI or by a future LLM layer — a data change rather than an engine rewrite. Combined with
+Decisions 7 (ticker-generic write path) and 8 (independent lots), a natural-language position-manager
+is an additive third caller, not a redesign. (Design doc § 14.)
 
 ## Consequences
 
