@@ -462,6 +462,7 @@
       picksBasis: 'last',
       picksExpanded: new Set(), // stable "ticker_category" keys of currently-expanded Picks rows; survives re-renders within a session, cleared on full page reload
       picksChartOpen: new Set(), // stable "ticker_category" keys with the TradingView chart panel open; survives re-renders, same lifecycle as picksExpanded
+      morningChartOpen: new Set(), // tickers with the TradingView chart panel open on the Morning tab; same lifecycle as picksChartOpen (morning rows are one-per-ticker, so ticker alone is a stable key)
       provenanceData: null,
       latestAiDate: null,
       latestSnapshotDate: null,
@@ -4343,7 +4344,7 @@
               ${r.group ? `<a href="${escapeHtml(buildScreenerUrl('ind', slugifyGroup(r.group)))}" target="_blank" rel="noopener noreferrer" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation()">Peers in group ↗</a>` : ''}
               <button id="pick-chart-toggle-${key}" class="pick-chart-toggle text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" data-key="${key}" data-expand-key="${escapeHtml(expandKey)}" data-ticker="${escapeHtml(ticker)}" onclick="event.stopPropagation();__togglePickChart('${key}','${expandKey.replace(/'/g, "\\'")}','${ticker.replace(/'/g, "\\'")}')">${state.picksChartOpen.has(expandKey) ? 'Hide chart ▲' : 'Show chart ▼'}</button>
             </div>
-            <div id="pick-chart-panel-${key}" class="mt-2">${state.picksChartOpen.has(expandKey) ? tradingViewChartHtml(ticker, 280) : ''}</div>
+            <div id="pick-chart-panel-${key}" class="mt-2">${state.picksChartOpen.has(expandKey) ? tradingViewChartHtml(ticker, 560) : ''}</div>
           </div>`;
       }
 
@@ -4505,7 +4506,7 @@
         if (btn) btn.textContent = 'Show chart ▼';
       } else {
         state.picksChartOpen.add(expandKey);
-        panel.innerHTML = tradingViewChartHtml(ticker, 280);
+        panel.innerHTML = tradingViewChartHtml(ticker, 560);
         if (btn) btn.textContent = 'Hide chart ▲';
       }
     };
@@ -4897,27 +4898,68 @@
                      class="mt-2 w-full py-2 rounded-lg text-xs font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400">I took it →</button>`;
       }
 
+      let body;
       switch (r.status) {
         case 'triggered':
-          return _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + atrRow
+          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + atrRow
                + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
+          break;
         case 'gapped_through':
-          return _mKv('Trigger', _mNum(r.trigger)) + _mKv('Opened', `${_mNum(r.open)} · ${_mChange(r.change)} gap`) + atrRow
+          body = _mKv('Trigger', _mNum(r.trigger)) + _mKv('Opened', `${_mNum(r.open)} · ${_mChange(r.change)} gap`) + atrRow
                + _mNote('Entry here has poor R vs the planned stop.')
                + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
+          break;
         case 'failed_breakout':
-          return _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', `${_mNum(r.price)} · below trigger`)
+          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', `${_mNum(r.price)} · below trigger`)
                + _mNote('Broke out and failed. Don\'t chase a re-break blindly.');
+          break;
         case 'setting_up':
-          return _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now)
+          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now)
                + _mNote('Below trigger. Nothing to do yet.');
+          break;
         case 'invalidated':
-          return _mKv('Planned stop (prior low)', _mNum(r.stop)) + _mKv('Now', `${_mNum(r.price)} — below stop`)
+          body = _mKv('Planned stop (prior low)', _mNum(r.stop)) + _mKv('Now', `${_mNum(r.price)} — below stop`)
                + _mNote('Setup dead. Drop from watch.');
+          break;
         default: // no_quote
           return _mNote('Morning feed missed this ticker — shown explicitly, never silently dropped.');
       }
+      return body + morningChartAffordance(r.ticker);
     }
+
+    // Chart toggle + lazy-load panel for a Morning card, reusing the same TradingView
+    // "Advanced Chart" embed and click-to-expand pattern as the Picks tab's
+    // __togglePickChart/state.picksChartOpen (see there for the widget rationale). Morning
+    // rows are one-per-ticker (no list_category dimension), so the ticker alone is a stable
+    // key — no expandKey needed.
+    function morningChartAffordance(ticker) {
+      const isOpen = state.morningChartOpen.has(ticker);
+      const tickerJs = ticker.replace(/'/g, "\\'");
+      return `
+        <div class="mt-2 pt-2 border-t border-slate-700/50">
+          <button id="morning-chart-toggle-${escapeHtml(ticker)}" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation();__toggleMorningChart('${tickerJs}')">${isOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
+          <div id="morning-chart-panel-${escapeHtml(ticker)}" class="mt-2">${isOpen ? tradingViewChartHtml(ticker, 560) : ''}</div>
+        </div>`;
+    }
+
+    // Lazy-load the TradingView chart into a Morning card without a full re-render — mirrors
+    // __togglePickChart's DOM-patch pattern. morningChartOpen persists the open/closed state
+    // across renderMorning() re-renders (tab switches, WS4 ticket toggles).
+    window.__toggleMorningChart = function(ticker) {
+      const panel = document.getElementById('morning-chart-panel-' + ticker);
+      const btn = document.getElementById('morning-chart-toggle-' + ticker);
+      if (!panel) return;
+      const isOpen = state.morningChartOpen.has(ticker);
+      if (isOpen) {
+        state.morningChartOpen.delete(ticker);
+        panel.innerHTML = '';
+        if (btn) btn.textContent = 'Show chart ▼';
+      } else {
+        state.morningChartOpen.add(ticker);
+        panel.innerHTML = tradingViewChartHtml(ticker, 560);
+        if (btn) btn.textContent = 'Hide chart ▲';
+      }
+    };
 
     // ── WS4 Phase B trade ticket (ADR-014) ──────────────────────────────────
     // Expands an actionable morning card (triggered / gapped_through) inline into a full
