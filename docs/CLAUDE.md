@@ -29,6 +29,9 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `ATR_EXT_ACTIONABLE` | `4.0` | ATR-extension emerald band cap; also the Focus hard-DQ line (Phase 3b). |
 | `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start; flags a held position as a trim-10% candidate. |
 | `ATR_FROM_LOD_CLEAN` / `ATR_FROM_LOD_CHASE` | `0.8` / `1.0` | Morning tab (WS3, ADR-013) entry-quality bands on `atr_from_lod` = (price − session low) / ATR, shown only on actionable cards (Triggered / Gapped-through). `<= 0.8` clean entry (emerald "ok to act"), `> 1.0` chasing (red), between = caution (amber). Owner-set 2026-08-08. |
+| `LAUNCH_NEAR_HIGH_PCT` | `8` | Launch-ready chip (Picks tab, Phase 1, `computeLaunchReady()`): `ohMag` (% below 52-week high) `<=` this = "near the high" (little overhead supply). Display-only, no scoring effect. |
+| `LAUNCH_CALM_EXT_MAX` | `3` | Launch-ready chip: `atr_ext_50` `<=` this (and `> 0`) alongside near-high = `Coiled`; `>` this = `Extended`. |
+| `LAUNCH_OVERHEAD_PCT` | `20` | Launch-ready chip: `ohMag >` this = `Overhead` (deep below high, heavy overhead supply). |
 | `ATR_EXT_PENALTY_START` | `2.5` | Focus-score extension penalty ramp start; 0 penalty below this, ramps to `PENALTY_MAX` at `ATR_EXT_ACTIONABLE`. |
 | `PENALTY_MAX` | `0.5` | Max Focus extension-discount fraction (50% haircut at 4×). `score = base × (1 − penalty_fraction)`, always ∈ [0, 1]. |
 | `FOCUS_W_GROUP` | `0.2` | Focus score weight for group sustained-strength component (`grp_sum_mid_rank`). Lowered from `0.4` on 2026-07-16 (`display_methodology.json` v3); freed weight moved to `FOCUS_W_QUIET`. |

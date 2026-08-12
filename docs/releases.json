@@ -1,6 +1,18 @@
 {
-  "current": "2026.08.11",
+  "current": "2026.08.12",
   "releases": [
+    {
+      "version": "2026.08.12",
+      "date": "2026-08-12",
+      "title": "Launch-ready: spot coiled setups at a glance",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "Picks rows now show a Launch-ready chip: green Coiled means the stock is close to its 52-week high without being stretched — the sweet spot.",
+        "Amber Extended means it's near the high but has already run too far; red Overhead means it's still well below the high with a lot of overhead supply to clear.",
+        "Display-only — this chip doesn't change Focus scoring or sort order, it's just a faster read on the chart."
+      ]
+    },
     {
       "version": "2026.08.11",
       "date": "2026-08-11",

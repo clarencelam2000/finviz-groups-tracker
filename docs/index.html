@@ -617,6 +617,15 @@
       rs_new_high: 'bg-purple-900/40 text-purple-400',
     };
 
+    // Launch-ready chip thresholds (display-only, computeLaunchReady() near _pF ~line 3840).
+    // Classifies a pick by overhead supply (% below 52-week high) and short-term extension
+    // (atr_ext_50) — pure display, no effect on Focus scoring/sorting. Calibrated against the
+    // live picks pool on 2026-08-11: dist-below-52wk-high median -14%, p75 -4.8%, p25 -28.6%;
+    // atr_ext_50 median 2.75. With these cutoffs ~12% of the pool lands in 'Coiled'.
+    const LAUNCH_NEAR_HIGH_PCT = 8;   // ohMag <= this = "near the 52-week high" (little overhead supply)
+    const LAUNCH_CALM_EXT_MAX  = 3;   // ext <= this (and > 0) alongside near-high = 'Coiled'; ext > this = 'Extended'
+    const LAUNCH_OVERHEAD_PCT  = 20;  // ohMag > this = 'Overhead' (deep below high, heavy overhead supply)
+
     // ── Guide / Glossary content ───────────────────────────────────────────
     // The metric `oneLiner` strings are copied VERBATIM from the "User one-liner"
     // lines in knowledge/moaty-metrics.md — that file is the single source of
@@ -698,6 +707,9 @@
         { id: 'atr_ext_50', label: 'ATR extension (×50MA)', tabs: ['picks'],
           oneLiner: "How many ATR multiples above its 50-day MA the stock is — the rubber-band stretch: ≤5× is actionable, ≥8× is a trim candidate.",
           detail: '(Price − 50MA_price) / ATR. Finviz SMA50 = % above 50MA; reconstruct 50MA_price = Price / (1 + SMA50/100). Color-banded: emerald ≤5×, amber 5–8×, red ≥8×. Formula from CEO / Ariel Hernandez (Phase 3a).' },
+        { id: 'launch_ready', label: 'Launch-ready', tabs: ['picks'],
+          oneLiner: "Whether a stock is coiled just under its 52-week high (little overhead supply) without being stretched — green Coiled is the sweet spot; amber Extended has run too far; red Overhead has a wall of sellers above.",
+          detail: 'ohMag = % below the 52-week high (from Finviz \'52W High\'); ext = atr_ext_50. Coiled: ohMag ≤ 8% and 0 < ext ≤ 3×. Extended: ohMag ≤ 8% and ext > 3×. Overhead: ohMag > 20%. Otherwise no chip. Display-only — does not feed Focus scoring or sorting (LAUNCH_NEAR_HIGH_PCT / LAUNCH_CALM_EXT_MAX / LAUNCH_OVERHEAD_PCT).' },
         { id: 'risk_20ma_pct', label: 'Risk to 20MA (%)', tabs: ['picks'],
           oneLiner: "What fraction of the current price you'd give back if stopped at the 20-day MA — shown as a % (e.g. 1.1% means a tight $1.82 stop on a $165 stock).",
           detail: '(Price − 20MA_price) / Price. Stored as a fraction (0.0115 = 1.15%); displayed as % in the PWA. Tighter = lower risk per share. The canonical near-term stop (Phase 3a / Phase 3b).' },
@@ -3841,6 +3853,29 @@
       if (!v || v === '-') return NaN;
       return parseFloat(String(v).replace(/,/g, ''));
     }
+
+    // Launch-ready chip (display-only, thresholds defined near CATEGORY_CHIP_CLS ~line 613).
+    // Classifies a pick by overhead supply (distance below 52-week high) and short-term
+    // extension (atr_ext_50). Does NOT feed Focus scoring or sorting anywhere — it's a
+    // pure at-a-glance label on the Picks row. First match wins:
+    //   Coiled   — near the high (little overhead supply) and not yet extended: launch setup.
+    //   Extended — near the high but has already run: chase risk.
+    //   Overhead — far below the high: heavy overhead supply to chew through first.
+    function computeLaunchReady(r) {
+      const ohMag = -_pF(r['52W High']); // % below 52-week high (positive = below); NaN if missing
+      const ext = _pF(r.atr_ext_50);
+      if (isNaN(ohMag)) return null;
+      if (ohMag <= LAUNCH_NEAR_HIGH_PCT && ext > 0 && ext <= LAUNCH_CALM_EXT_MAX) {
+        return { label: 'Coiled', cls: 'bg-emerald-900/40 text-emerald-400' };
+      }
+      if (ohMag <= LAUNCH_NEAR_HIGH_PCT && ext > LAUNCH_CALM_EXT_MAX) {
+        return { label: 'Extended', cls: 'bg-amber-900/40 text-amber-400' };
+      }
+      if (ohMag > LAUNCH_OVERHEAD_PCT) {
+        return { label: 'Overhead', cls: 'bg-rose-900/40 text-rose-400' };
+      }
+      return null;
+    }
     function _pCapB(v) {
       if (!v || v === '-') return NaN;
       const s = String(v).trim();
@@ -4222,6 +4257,14 @@
         ? `<span class="text-[0.55rem] px-1 rounded bg-amber-900/40 text-amber-400 font-bold ml-1" title="Ariel match — soft (near-miss on one or more gates)">~ Ariel</span>`
         : '';
 
+      // Launch-ready chip (display-only) — same visual style as the category chip
+      // (CATEGORY_CHIP_CLS), rendered immediately after it. Shared by All + Focus views
+      // since both call renderPickRow().
+      const launchReady = computeLaunchReady(r);
+      const launchReadyChip = launchReady
+        ? `<span class="text-[0.55rem] px-1 rounded font-bold ml-1 ${launchReady.cls}" title="Launch-ready: overhead supply vs. 52-week high + short-term extension">${launchReady.label}</span>`
+        : '';
+
       // Stable identity for this row, independent of render position — used to persist
       // expand state across re-renders (state.picksExpanded). Unique DOM key adds rowIndex
       // on top, since the same (ticker, category) pair can be rendered into different
@@ -4358,7 +4401,7 @@
       return `<div>
         <div class="flex items-center gap-2 px-3 py-2 ${opts.showGroupSubtitle && r.group ? 'pb-0.5' : 'border-b border-slate-700/40 last:border-0'}" ${rowClick}>
           <div class="w-16 flex-shrink-0">
-            <div class="text-xs font-bold text-white leading-tight">${ticker}${scoreBadge}${earningsRowBadge}${arielRowBadge}</div>
+            <div class="text-xs font-bold text-white leading-tight">${ticker}${scoreBadge}${earningsRowBadge}${arielRowBadge}${launchReadyChip}</div>
             <div class="text-xs text-slate-400 truncate leading-tight">${company}</div>
           </div>
           <div class="w-12 flex-shrink-0 text-right">
