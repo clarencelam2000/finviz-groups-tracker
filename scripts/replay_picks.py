@@ -8,9 +8,11 @@ methodology version — enabling A/B testing across methodology changes.
 
 Mirrors the JS logic in docs/index.html (renderPicks / computeFocusScores). v1 covers
 the original Phase 3b formula; v2 (effective 2026-07-01) adds the Phase 3d Focus
-liquidity gate/penalty and earnings-proximity penalty. Still NOT modeled by any
-version: the opt-in Phase 4 Ariel-match filter (see data/picks/ariel_match_config.json
-— documentation-only, no anti-drift guard, by design).
+liquidity gate/penalty and earnings-proximity penalty; v3 (2026-07-16) rebalances
+Focus score weights; v4 (2026-08-12, Phase 2) adds an overhead-supply penalty based
+on % below the 52-week high. Still NOT modeled by any version: the opt-in Phase 4
+Ariel-match filter (see data/picks/ariel_match_config.json — documentation-only,
+no anti-drift guard, by design).
 
 IMPORTANT caveat for the earnings penalty: docs/index.html always computes
 "days until earnings" relative to the viewer's wall-clock `now` at render time, not
@@ -162,6 +164,26 @@ def earnings_penalty_frac(earnings_value, as_of: dt.date, params: dict) -> float
     return params["max_fraction"] * t
 
 
+def overhead_penalty_frac(w52h_value, params: dict) -> float:
+    """Mirrors JS overheadPenaltyFrac(). '52W High' is a signed % string like '-14.1%';
+    ohMag = -parsed_value = % below the 52-week high. NaN/unparseable -> 0 penalty
+    (same isNaN->0 convention as the extension penalty). Ramps 0 -> max_fraction as
+    ohMag goes ramp_start -> ramp_end, clamped [0, 1]."""
+    if w52h_value is None or str(w52h_value).strip() in ("", "-"):
+        return 0.0
+    try:
+        parsed = float(str(w52h_value).replace("%", ""))
+    except (ValueError, TypeError):
+        return 0.0
+    if pd.isna(parsed):
+        return 0.0
+    oh_mag = -parsed
+    ramp_start = params["ramp_start"]
+    ramp_end = params["ramp_end"]
+    t = (oh_mag - ramp_start) / (ramp_end - ramp_start)
+    return params["max_fraction"] * max(0.0, min(1.0, t))
+
+
 def load_methodology(date: str, override: str = None) -> dict:
     """Return the methodology version entry in effect on `date` (or `override`).
 
@@ -283,10 +305,11 @@ def _replay_focus(df: pd.DataFrame, p: dict, as_of: dt.date) -> pd.DataFrame:
 
     liq_penalty_params = p["focus_score"].get("liquidity_penalty")
     earn_penalty_params = p["focus_score"].get("earnings_penalty")
+    overhead_penalty_params = p["focus_score"].get("overhead_penalty")
 
     def _liq_earn_multiplier(rows: pd.DataFrame) -> pd.Series:
-        """(1 - liqPenaltyFrac) * (1 - earnPenaltyFrac), or 1.0 where the methodology
-        version doesn't model that haircut (v1)."""
+        """(1 - liqPenaltyFrac) * (1 - earnPenaltyFrac) * (1 - overheadPenaltyFrac), or 1.0
+        where the methodology version doesn't model that haircut (v1)."""
         mult = pd.Series(1.0, index=rows.index)
         if liq_penalty_params is not None:
             dol_vol = avg_dollar_volume(rows)
@@ -294,6 +317,10 @@ def _replay_focus(df: pd.DataFrame, p: dict, as_of: dt.date) -> pd.DataFrame:
         if earn_penalty_params is not None and "Earnings" in rows.columns:
             mult *= 1 - rows["Earnings"].map(
                 lambda v: earnings_penalty_frac(v, as_of, earn_penalty_params)
+            )
+        if overhead_penalty_params is not None and "52W High" in rows.columns:
+            mult *= 1 - rows["52W High"].map(
+                lambda v: overhead_penalty_frac(v, overhead_penalty_params)
             )
         return mult
 

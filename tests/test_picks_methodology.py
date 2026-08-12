@@ -55,9 +55,13 @@ class TestDisplayMethodologyStructure:
         dates = [v["effective_date"] for v in self.meth["versions"]]
         assert dates == sorted(dates, reverse=True)
 
-    def test_current_is_v3_effective_2026_07_16(self):
-        assert self.meth["versions"][0]["version"] == "v3"
-        assert self.meth["versions"][0]["effective_date"] == "2026-07-16"
+    def test_current_is_v4_effective_2026_08_12(self):
+        assert self.meth["versions"][0]["version"] == "v4"
+        assert self.meth["versions"][0]["effective_date"] == "2026-08-12"
+
+    def test_v3_still_present_with_original_effective_date(self):
+        v3 = next(v for v in self.meth["versions"] if v["version"] == "v3")
+        assert v3["effective_date"] == "2026-07-16"
 
     def test_v2_still_present_with_original_effective_date(self):
         v2 = next(v for v in self.meth["versions"] if v["version"] == "v2")
@@ -149,6 +153,21 @@ class TestDisplayMethodologySyncWithHtml:
             == ep["post_earnings_carryover_fraction"]
         )
         assert ep["post_earnings_carryover_days"] == 1  # the JS hardcodes daysUntil === -1
+
+    def test_overhead_penalty_ramp_start(self):
+        raw = _extract_constant("OVERHEAD_PENALTY_START", self.html)
+        op = self.p["focus_score"]["overhead_penalty"]
+        assert _parse_js_float(raw) == op["ramp_start"]
+
+    def test_overhead_penalty_ramp_end(self):
+        raw = _extract_constant("OVERHEAD_PENALTY_END", self.html)
+        op = self.p["focus_score"]["overhead_penalty"]
+        assert _parse_js_float(raw) == op["ramp_end"]
+
+    def test_overhead_penalty_max_fraction(self):
+        raw = _extract_constant("OVERHEAD_PENALTY_MAX", self.html)
+        op = self.p["focus_score"]["overhead_penalty"]
+        assert _parse_js_float(raw) == op["max_fraction"]
 
     def test_all_view_category_order(self):
         m = re.search(

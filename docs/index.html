@@ -533,6 +533,11 @@
     // Denominator (1.5) is derived from the two constants — retuning either keeps the ramp correct.
     const ATR_EXT_PENALTY_START = 2.5;  // penalty starts here; no discount below this extension
     const PENALTY_MAX           = 0.5;  // max multiplicative discount (50% haircut at 4× extension)
+    // Overhead-supply penalty (Phase 2): 4th independent Focus haircut, based on % below the
+    // 52-week high (ohMag, same quantity the Phase-1 Launch-ready chip already computes).
+    const OVERHEAD_PENALTY_START = 8;    // ohMag (% below 52wk high) <= this => 0 haircut (near-high free zone; aligns with LAUNCH_NEAR_HIGH_PCT)
+    const OVERHEAD_PENALTY_END   = 30;   // ohMag >= this => full haircut; ramp is linear across START..END. Calibrated to live pool p25 (~-28.6%).
+    const OVERHEAD_PENALTY_MAX   = 0.20; // max fraction shaved off focus_score for deep overhead. Kept below ext(0.5)/earn(0.7) so overhead is a tiebreaker, not a veto (v1 conservative; may raise to 0.30 later).
     // Focus component weights — must sum to 1. Group strength, nearest-MA stop tightness, quiet bar.
     // Lowered FOCUS_W_GROUP 0.4->0.2 (2026-07-16): group/leader strength was overweighted relative
     // to name-specific setup quality; freed weight moved entirely to FOCUS_W_QUIET (0.2->0.4).
@@ -3985,6 +3990,17 @@
       return EARNINGS_PENALTY_MAX * t;
     }
 
+    // Overhead-supply penalty (Phase 2): 0 at/below OVERHEAD_PENALTY_START, ramping to
+    // OVERHEAD_PENALTY_MAX at/above OVERHEAD_PENALTY_END, based on ohMag = % below 52-week
+    // high (same quantity computeLaunchReady() uses). Missing '52W High' (NaN) => 0 penalty,
+    // same convention as the extension penalty's isNaN->0 (no haircut for missing data).
+    function overheadPenaltyFrac(r) {
+      const ohMag = -_pF(r['52W High']);
+      if (isNaN(ohMag)) return 0;
+      const t = (ohMag - OVERHEAD_PENALTY_START) / (OVERHEAD_PENALTY_END - OVERHEAD_PENALTY_START);
+      return OVERHEAD_PENALTY_MAX * Math.max(0, Math.min(1, t));
+    }
+
     // ── Ariel Hernandez swing-trader match (Picks tab, Phase 4) ─────────────────────────────
     // Four independent gates (group leadership, liquidity, daily-move band, growth), combined
     // into an overall 'full' | 'soft' | null tier. See ARIEL_* constants above for the bands.
@@ -4433,11 +4449,12 @@
       </div>`;
     }
 
-    // computeFocusScores(candidates) — cross-sectional scoring for Focus view (3b.2, 3d).
+    // computeFocusScores(candidates) — cross-sectional scoring for Focus view (3b.2, 3d, Phase 2).
     // All three base components use the same inverted min–max ruler; score = base ×
-    // (1−ext_penalty) × (1−liquidity_penalty) × (1−earnings_penalty) — three independent
-    // multiplicative haircuts for three independent risk factors (price-location,
-    // execution/liquidity, event risk), not three more weighted "quality" components.
+    // (1−ext_penalty) × (1−liquidity_penalty) × (1−earnings_penalty) × (1−overhead_penalty) —
+    // four independent multiplicative haircuts for four independent risk factors (price-location
+    // extension, execution/liquidity, event risk, and overhead supply / distance below the
+    // 52-week high), not four more weighted "quality" components.
     function computeFocusScores(candidates) {
       const n = candidates.length;
       if (n === 0) return [];
@@ -4445,9 +4462,10 @@
         const r = candidates[0];
         const liqPenaltyFrac  = liquidityPenaltyFrac(focusDollarVol(r));
         const earnPenaltyFrac = earningsPenaltyFrac(r);
-        const score = 1.0 * (1 - liqPenaltyFrac) * (1 - earnPenaltyFrac);
+        const overheadPf      = overheadPenaltyFrac(r);
+        const score = 1.0 * (1 - liqPenaltyFrac) * (1 - earnPenaltyFrac) * (1 - overheadPf);
         return [{ r, score, base: 1.0, penaltyFrac: 0, liqPenaltyFrac, earnPenaltyFrac,
-                  group_n: 1.0, tight_n: 1.0, quiet_n: 1.0 }];
+                  overheadPenaltyFrac: overheadPf, group_n: 1.0, tight_n: 1.0, quiet_n: 1.0 }];
       }
 
       // Raw component values (lower = better for all three → use inverted normalization)
@@ -4503,10 +4521,12 @@
 
         const liqPenaltyFrac  = liquidityPenaltyFrac(focusDollarVol(r));
         const earnPenaltyFrac = earningsPenaltyFrac(r);
+        const overheadPf      = overheadPenaltyFrac(r);
 
-        const score = base * (1 - penaltyFrac) * (1 - liqPenaltyFrac) * (1 - earnPenaltyFrac);  // always ∈ [0, 1]
+        const score = base * (1 - penaltyFrac) * (1 - liqPenaltyFrac) * (1 - earnPenaltyFrac) * (1 - overheadPf);  // always ∈ [0, 1]
 
         return { r, score, base, penaltyFrac, liqPenaltyFrac, earnPenaltyFrac,
+                 overheadPenaltyFrac: overheadPf,
                  group_n: normGroup[i], tight_n: normTight[i], quiet_n: normQuiet[i] };
       });
     }
