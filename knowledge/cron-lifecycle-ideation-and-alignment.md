@@ -257,3 +257,31 @@ mocks for WS3/WS4/WS5 — open in a browser).
 ### Endorsed without change
 ADR-011 Option C; WS3-before-morning-picks sequencing; D1 spine + JSON bag + event-log shape; keeping
 both GitHub backstops; the profit-floor-not-monotonic-stop invariant (ADR-012 §2).
+
+## 11. Decision update — 2026-08-11 (WS5 design-review pass)
+
+Design review of PR #294 + a UX-backward pass. Full narrative:
+`knowledge/trade-lifecycle-design-review-2026-08-11.md`. Normative spec updated in
+`planning/trade-lifecycle-engine.md` (§§ 3a, 5a, 6, 7, 8, 8b, 12, 13, 14) and ADR-012 (Decisions 8–11).
+
+### Owner decisions locked this session
+
+| Topic | Decision | Notes |
+|---|---|---|
+| Scale-ins / add-on buys | ✅ **Independent lots, not average-in** | Each add = own entry/stop/R/trim (one `positions` row); grouped for display via `meta.group_id` with a share-weighted avg + summed heat (presentation only). No `advance()` change; § 3 frozen-single-entry stays correct. |
+| "Still holding" re-signal | ✅ **Feature, kept** | Daily re-signal on a violated stop is intended; delivered as a **de-escalated Tier-2 reminder**, not a fresh alarm, to avoid alert-fatigue. |
+| Missed-push safety | ✅ **In-app pull surface** | Push = nudge, app = source of truth. Collapsed strip + badge; zero items → zero space. Mock: `planning/mocks/ws5-needs-confirmation-surface.html`. |
+| Auto-confirm stuck `Closing` | ✅ **After 5 sessions**, `confirmation_status='auto'` | Modeled price, labeled + correctable; keeps the expectancy record from rotting without forcing manual entry. |
+| Editable exit fill | ✅ **Confirm opens editable price field** | Pre-filled with modeled price; symmetric with entry's "I took it." |
+| `caution_flag` on "still holding" | ✅ **Re-arm** (`CAUTION_REARM_ON_HOLD=true`) | Two-close counter resets; two-way door, flip freely. |
+| `hard_exit` reason | ✅ **Split** → `close_below_50ma` + `severe_breakdown` | Plus `gap_through_stop` → `gap_down_below_stop`. Record/UI can say *why*. |
+| Two-close-20MA on 50MA basis | ✅ **Fires by design** | A caution has signal even above the 50MA; `Closing`/"still holding" loop absorbs it. Documented, not suppressed. |
+| Full-column quote capture | ✅ **Store the full scrape set** | Not just `advance()`'s 8 fields — the one un-backfillable thing; cheap on a tiny table. Held feed (and morning feed) both. Issue filed. |
+| Two feeds | ✅ **Morning picks feed and held feed are separate; both freely add-able** | User (and later LLM) can add a watch symbol (e.g. AVGO Mon night) or a held position; membership queries independent. |
+| Backtesting | ✅ **Nice-to-have; defer the feature, keep only the cheap capture** | Append-only + full-column are the one-way doors. Not a general strategy backtester. Selection-bias mitigation deferred; Alpaca-via-pluggable-source if ever built. |
+| Effective-config `advance()` | ✅ **Merge global + per-position `meta` overrides, passed in** | Keeps a per-position/LLM rule a data change, not an engine rewrite. |
+| Retrace-to-MA risk view | ✅ **Spec it** (info-only) | Give-back if price retraced to 20/50MA, extension gauge, equity-at-MA. "Unrealized profits belong to the market." From existing fields; no new rule. |
+
+### Filed as tracking issues
+Full-column `ticker_quotes` capture; scale-in independent-lots grouping UI; LLM position-management
+layer (directions catalogue). Retrace-to-MA view rides the position/group-card build phase.

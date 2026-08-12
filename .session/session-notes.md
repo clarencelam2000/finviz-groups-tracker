@@ -657,3 +657,43 @@ Ariel-aware `displayRows`-based pool, and WS4's ticket `ws4FocusScore` which now
 Picks tab's default-settings pool) — worth eventually consolidating into one shared builder
 if a fourth call site shows up, but not done here since the Lookup tab's existing pool choice
 wasn't in scope for this fix and changing it wasn't requested.
+
+---
+
+## 2026-08-11 — WS5 trade-lifecycle design review (PR #294 → PR #295)
+
+**Status: safe to close.** Design-review workstream; all edits committed + pushed to
+`claude/pr294-design-review-mxmtvm`, PR #295 open (ready for review). No code shipped — planning +
+knowledge docs + one mock only.
+
+**What landed:**
+- Reviewed PR #294 (docs-only `closing`-state reconciliation), its design docs, the decisions inside,
+  and did a UX-backward pass. Verdict: #294 is accurate/mergeable; the review surfaced gaps #294
+  didn't cover, which became the edits below.
+- Merged origin/`claude/ws5-gh-264-onboard-om79x9` (PR #294's branch) into the review branch so edits
+  build **on top of** #294's reconciled docs (not the stale default). ⇒ **PR #295 now contains #294's
+  commits.** Owner must decide merge order: merge #294 then #295 (clean), or merge #295 alone (makes
+  #294 redundant). Flagged to owner; not closed unilaterally.
+- `planning/trade-lifecycle-engine.md`: §3a independent-lots scale-in model; §5a two-feeds separation;
+  §5 `confirmation_status` + full-column `ticker_quotes` + `exit_corrected`/`reopened` events; §6
+  new constants (`EXIT_AUTOCONFIRM_SESSIONS=5`, `AUTO_CLOSE_STRIP_SESSIONS=3`, `CAUTION_REARM_ON_HOLD`)
+  + split exit-reason enum; §7 editable fill / caution re-arm / two-close-on-50MA / auto-confirm /
+  append-only correction; §8 two-tier notifications + in-app pull surface; §8b grouped-lot UX; §11a
+  resolved; §12 backtesting demoted to nice-to-have (honest scope); §13 retrace-to-MA risk view; §14
+  effective-config `advance()` for the per-position/LLM door.
+- ADR-012: Decisions 8–11 + full-column note + 2026-08-11 reconciliation header.
+- `knowledge/cron-lifecycle-ideation-and-alignment.md`: §11 owner-decision table (2026-08-11).
+- `knowledge/trade-lifecycle-design-review-2026-08-11.md`: NEW full session narrative.
+- Mock `planning/mocks/ws5-needs-confirmation-surface.html` (in-app confirmation pull surface, editable
+  fill). Artifact: https://claude.ai/code/artifact/2dc19c36-8e5f-4405-b03f-127fc26b7992
+
+**Issues filed:** #297 (full-column capture), #298 (independent-lots grouping UI), #299 (LLM layer
+directions). All under #264 (WS5).
+
+**Next steps:** owner to (1) decide #294/#295 merge order; (2) skim the design-doc edits; (3) WS5
+phase 1 starts by provisioning D1 + honoring the phase-1 obligations (no one-position-per-ticker
+assumption, reserve `meta.group_id`, `confirmation_status` column, full-column append-only capture,
+effective-config `advance()` signature).
+
+**Note:** session-notes commit is on the feature branch — must land on the default branch via a merged
+PR to be visible next session (see branch-commit-discipline § "Session notes MUST land on default").

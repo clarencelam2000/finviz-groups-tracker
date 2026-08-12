@@ -1,0 +1,241 @@
+<title>WS5 — "Needs your confirmation" pull surface</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#0f172a; --panel2:#1e293b; --line:#334155;
+    --ink:#f1f5f9; --mut:#94a3b8; --dim:#64748b;
+    --accent:#38bdf8; --good:#34d399; --warn:#fbbf24; --bad:#f87171; --violet:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,"SF Pro Text",Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 24px 80px}
+  header.page .meta{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+  header.page h1{font-size:26px;margin:6px 0 6px;letter-spacing:-.02em;text-wrap:balance}
+  header.page p{color:var(--mut);max-width:64ch;margin:0 0 8px}
+  .row{display:flex;flex-wrap:wrap;gap:36px;margin-top:28px;align-items:flex-start}
+  .mockcol{flex:0 0 360px}
+  .caption{font-size:11.5px;color:var(--dim);margin:10px 2px 0;text-align:center}
+  .notes{flex:1 1 320px;min-width:280px}
+  .notes h3{margin:0 0 4px;font-size:15px;color:var(--accent)}
+  .notes .ws{font-size:11px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
+  .notes ul{margin:10px 0 0;padding-left:18px;color:var(--mut);font-size:13.5px}
+  .notes li{margin-bottom:8px}
+  .notes b{color:var(--ink);font-weight:600}
+  .q{border-left:3px solid var(--warn);padding:2px 0 2px 10px;margin-top:14px;font-size:13px;color:var(--warn)}
+  /* phone frame */
+  .phone{width:360px;background:var(--panel);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  .phead{padding:12px 16px 8px;border-bottom:1px solid var(--line);background:rgba(15,23,42,.95);position:relative}
+  .phead .t{font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px}
+  .phead .s{font-size:11px;color:var(--mut)}
+  .badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:var(--bad);color:#3b0a0a;font-size:11px;font-weight:800}
+  .body{padding:12px 12px 18px;display:flex;flex-direction:column;gap:10px}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .tick{font-weight:700;font-size:15px;letter-spacing:.02em}
+  .grp{font-size:11px;color:var(--dim)}
+  .num{font-variant-numeric:tabular-nums}
+  .pill{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.05em;padding:2px 8px;border-radius:999px;text-transform:uppercase}
+  .p-good{background:rgba(52,211,153,.15);color:var(--good)}
+  .p-warn{background:rgba(251,191,36,.15);color:var(--warn)}
+  .p-bad{background:rgba(248,113,113,.15);color:var(--bad)}
+  .p-mut{background:rgba(148,163,184,.14);color:var(--mut)}
+  .p-vio{background:rgba(167,139,250,.15);color:var(--violet)}
+  .kv{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mut);margin-top:4px}
+  .kv .v{color:var(--ink);font-weight:600}
+  .stripe{border-left:3px solid var(--line)}
+  .stripe.good{border-left-color:var(--good)} .stripe.warn{border-left-color:var(--warn)}
+  .stripe.bad{border-left-color:var(--bad)} .stripe.mut{border-left-color:var(--dim)}
+  .btn{display:inline-block;text-align:center;font-size:12.5px;font-weight:700;border-radius:8px;padding:8px 12px;border:1px solid var(--line);color:var(--mut)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#082f49}
+  .btn.ghost{background:transparent}
+  .hr{height:1px;background:var(--line);margin:8px 0}
+  .small{font-size:11.5px;color:var(--mut)}
+  .flow{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--dim);flex-wrap:wrap;margin-top:6px}
+  .flow .st{border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+  .flow .on{border-color:var(--bad);color:var(--bad);font-weight:700}
+  /* the confirmation surface */
+  .confirm-strip{border:1px solid rgba(248,113,113,.45);background:linear-gradient(180deg,rgba(248,113,113,.12),rgba(248,113,113,.04));
+    border-radius:12px;overflow:hidden}
+  .cs-head{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;cursor:default}
+  .cs-head .lbl{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;color:var(--bad)}
+  .cs-head .chev{color:var(--bad);font-size:12px}
+  .cs-item{border-top:1px solid rgba(248,113,113,.22);padding:10px 12px}
+  .cs-collapsed-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--mut);padding:0 12px 9px}
+  section.block{margin-top:52px}
+  section.block>h2{font-size:19px;margin:0;letter-spacing:-.01em}
+  section.block>.sub{color:var(--dim);font-size:13px;margin:4px 0 0;max-width:70ch}
+  a{color:var(--accent)}
+  .dimmed{opacity:.5}
+</style>
+
+<div class="wrap">
+<header class="page">
+  <div class="meta">finviz-groups-tracker · design mock · 2026-08-10 · WS5 / #264</div>
+  <h1>The "Needs your confirmation" pull surface</h1>
+  <p>Answering the review's concern #4: the exit-confirmation loop can't depend on a single push
+  landing. This is the in-app backstop — a pull surface that shows every <code>Closing</code> position
+  the moment the user opens the app, so a missed push never leaves a position silently unmanaged.
+  Rendered in the shipping PWA's dark visual language so it drops 1:1 into <code>docs/index.html</code>.
+  Three states, left to right: <b>quiet</b>, <b>collapsed alert</b>, <b>expanded</b>.</p>
+</header>
+
+<div class="row">
+  <!-- STATE A: nothing to confirm -->
+  <div class="mockcol">
+    <div class="phone">
+      <div class="phead">
+        <div class="t">Positions</div>
+        <div class="s">Advanced after close · Wed Aug 6</div>
+      </div>
+      <div class="body">
+        <div class="card stripe good">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span><span class="tick">AXON</span> <span class="grp">· 32 → 26 sh</span></span>
+            <span class="pill p-good">Managing · +3.4R</span>
+          </div>
+          <div class="kv"><span>Active stop · 50MA</span><span class="v num">618.40</span></div>
+          <div class="kv"><span>20MA watch</span><span class="v num" style="color:var(--good)">above · no caution</span></div>
+        </div>
+        <div class="card stripe warn">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span><span class="tick">CLS</span> <span class="grp">· 45 sh</span></span>
+            <span class="pill p-warn">Caution</span>
+          </div>
+          <div class="kv"><span>1st close below 20MA</span><span class="v num">watching next close</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="caption">A · Nothing awaiting you → the strip isn't rendered at all. Zero space cost.</div>
+  </div>
+
+  <!-- STATE B: collapsed alert -->
+  <div class="mockcol">
+    <div class="phone">
+      <div class="phead">
+        <div class="t">Positions <span class="badge">2</span></div>
+        <div class="s">Advanced after close · Wed Aug 6</div>
+      </div>
+      <div class="body">
+        <div class="confirm-strip">
+          <div class="cs-head">
+            <span class="lbl">● Needs your confirmation</span>
+            <span class="chev">2 · show ▾</span>
+          </div>
+          <div class="cs-collapsed-row">
+            <span><b style="color:var(--ink)">VRT</b> stop hit · <b style="color:var(--ink)">SMCI</b> hard exit</span>
+            <span class="num" style="color:var(--dim)">1–2d ago</span>
+          </div>
+        </div>
+        <div class="card stripe good dimmed">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span><span class="tick">AXON</span> <span class="grp">· 32 → 26 sh</span></span>
+            <span class="pill p-good">Managing · +3.4R</span>
+          </div>
+          <div class="kv"><span>Active stop · 50MA</span><span class="v num">618.40</span></div>
+        </div>
+        <div class="card stripe warn dimmed">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span><span class="tick">CLS</span> <span class="grp">· 45 sh</span></span>
+            <span class="pill p-warn">Caution</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="caption">B · Default when items exist: one collapsed strip (~64px) + app badge. Managing
+      cards recede but stay visible. Two taps of vertical budget, no more.</div>
+  </div>
+
+  <!-- STATE C: expanded -->
+  <div class="mockcol">
+    <div class="phone">
+      <div class="phead">
+        <div class="t">Positions <span class="badge">2</span></div>
+        <div class="s">Advanced after close · Wed Aug 6</div>
+      </div>
+      <div class="body">
+        <div class="confirm-strip">
+          <div class="cs-head">
+            <span class="lbl">● Needs your confirmation</span>
+            <span class="chev">hide ▴</span>
+          </div>
+
+          <div class="cs-item">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">VRT</span> <span class="grp">· exit signalled Aug 5</span></span>
+              <span class="pill p-bad">Stop hit · gap</span>
+            </div>
+            <div class="flow">
+              <span class="st">Open</span>→<span class="st">Managing</span>→<span class="st on">Closing</span>→<span class="st">Closed</span>
+            </div>
+            <div class="kv"><span>Stop was · opened</span><span class="v num">98.20 · 96.40</span></div>
+            <div class="kv"><span>Expected fill <span class="pill p-mut" style="margin-left:4px">modeled</span></span><span class="v num">96.40</span></div>
+            <div class="hr"></div>
+            <div class="kv" style="align-items:center"><span style="color:var(--ink);font-weight:600">Your actual fill</span>
+              <span style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--accent);border-radius:7px;padding:4px 8px;background:rgba(56,189,248,.08)">
+                <span class="num" style="color:var(--ink);font-weight:700">96.40</span>
+                <span class="small" style="color:var(--accent)">edit</span></span></div>
+            <div class="small" style="color:var(--dim);margin-top:4px">Pre-filled with the modeled price — overwrite if you got a different fill.</div>
+            <div class="small" style="color:var(--warn);margin-top:6px">Auto-closes at the modeled price in 3 sessions if not confirmed.</div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <span class="btn primary" style="flex:1">Confirm this fill →</span>
+              <span class="btn ghost" style="flex:1">Still holding</span>
+            </div>
+          </div>
+
+          <div class="cs-item">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">SMCI</span> <span class="grp">· exit signalled Aug 4</span></span>
+              <span class="pill p-bad">Closed below 50MA</span>
+            </div>
+            <div class="kv"><span>Expected fill <span class="pill p-mut" style="margin-left:4px">modeled</span></span><span class="v num">43.10 (close)</span></div>
+            <div class="small" style="color:var(--warn);margin-top:6px">Auto-closes in 4 sessions if not confirmed.</div>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <span class="btn primary" style="flex:1">Confirm fill</span>
+              <span class="btn ghost" style="flex:1">Still holding</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card stripe good dimmed">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span><span class="tick">AXON</span> <span class="grp">· 32 → 26 sh</span></span>
+            <span class="pill p-good">Managing · +3.4R</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="caption">C · Expanded on tap: each Closing position with its modeled fill + the two
+      actions + the auto-confirm countdown (review #5). Managing list continues below.</div>
+  </div>
+</div>
+
+<section class="block">
+  <h2>Why this shape</h2>
+  <p class="sub">The surface is the same <code>Closing</code>-state cards from the existing WS5 mock —
+  just <b>hoisted to the top and grouped</b> instead of sitting inline in date order. Nothing new to
+  render; a re-sort of what the position list already contains.</p>
+  <div class="row">
+    <div class="notes">
+      <div class="ws">Space budget (the real constraint)</div>
+      <ul>
+        <li><b>Zero items → zero pixels.</b> The strip is conditional (<code>WHERE state='closing'</code> is empty → not rendered). It never taxes the common case.</li>
+        <li><b>Collapsed is the default</b> when items exist: a single ~64px strip + a header badge count. It costs about the height of one caution line, not a full card per item.</li>
+        <li><b>Expanded is opt-in</b> (tap to open) and is exactly the exit-signal cards you already designed — so the "full card each" cost is paid only when the user chose to act on them.</li>
+        <li><b>The app-icon / header badge</b> is the real backstop: it survives a missed push and is visible before any scroll. PWA Badging API where supported; header count always.</li>
+      </ul>
+    </div>
+    <div class="notes">
+      <div class="ws">Behavior</div>
+      <ul>
+        <li><b>Push is the nudge; this is the source of truth.</b> If the one exit push is missed (iOS not installed-to-home, DND, offline), the item still surfaces here the next time the app opens — which a close-watching swing trader does daily.</li>
+        <li><b>Confirm fill</b> → enter actual price → <code>Closed</code> (writes <code>exit_price</code>, <code>confirmation_status='confirmed'</code>). <b>Still holding</b> → back to <code>Managing</code>.</li>
+        <li><b>Auto-confirm countdown</b> (review #5) lives right on the card so the "modeled, unconfirmed" fallback is never a surprise — the user sees the clock and can pre-empt it.</li>
+        <li><b>Order = urgency</b>, oldest-signalled first (closest to auto-confirming), so the item about to be decided for you sits on top.</li>
+      </ul>
+      <div class="q">Owner-decided: the collapsed strip also counts recently <i>auto</i>-closed-unconfirmed
+      positions (still correctable) for <b>3 sessions</b> with a "modeled — tap to correct" affordance,
+      then drops to history. Beyond that window, corrections happen from the closed-position history view
+      (any closed position stays editable — see the append-only <code>exit_corrected</code> event).</div>
+    </div>
+  </div>
+</section>
+</div>
