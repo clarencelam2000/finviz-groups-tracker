@@ -38,6 +38,14 @@ Design: ADR-014 · roadmap § WS4 · mock `planning/mocks/ws4-trade-ticket.html`
 
 Full plan: `planning/stock-picks-from-leading-groups.md` · ADR-007 (selector) · ADR-008 (architecture)
 
+| ID | Task | Files | Est | Status |
+|----|------|-------|-----|--------|
+| OVERHEAD-1 | ~~**Launch-ready overhead chip (Phase 1)**~~ | `docs/index.html`, `knowledge/moaty-metrics.md`, release triplet | S | ✅ **Done 2026-08-12, PR #303 merged.** Display-only Coiled/Extended/Overhead chip per Picks row via `computeLaunchReady()`; `LAUNCH_NEAR_HIGH_PCT/_CALM_EXT_MAX/_OVERHEAD_PCT` from `52W High` + `atr_ext_50`. |
+| OVERHEAD-2 | **Focus overhead penalty (Phase 2)** | `docs/index.html`, `scripts/replay_picks.py`, `data/picks/display_methodology.json`, `tests/test_picks_methodology.py`, `tests/test_replay_picks.py`, `docs/CLAUDE.md`, release triplet | M | 🟡 **In review.** `score *= (1 − overheadPen)`, `overheadPen = 0.20 × clamp((ohMag−8)/(30−8),0,1)`. Mirrored JS/Python/JSON (methodology v4). **Process note:** Phase 2 was first pushed onto the already-merged #303 branch (stranded); re-based onto latest default + new PR. |
+| OVERHEAD-3 | **Raise `OVERHEAD_PENALTY_MAX` 0.20 → 0.30** | `docs/index.html`, `data/picks/display_methodology.json` (new version), guard tests, release triplet | XS | 🔴 Backlog. Deferred deliberately — ship the conservative 0.20 tiebreaker, observe the Focus reshuffle over a few sessions, then decide. Bump is a one-liner + methodology version + anti-drift test update. |
+| OVERHEAD-4 | **Surface overhead signal in Lookup tab** | `docs/index.html`, release triplet | S | 🔴 Backlog — **GH #304.** Reuse `computeLaunchReady()`; display-only. |
+| OVERHEAD-5 | **Surface overhead signal in Morning tab** | `docs/index.html` (+ possibly morning store/join) | M | 🔴 Backlog — **GH #305.** Open question: whether `52W High`/`atr_ext_50` reach the morning store or need the existing `picks_latest` join. |
+
 | # | Task | File(s) | Effort | Notes |
 |---|------|---------|--------|-------|
 | PICKS-FIX-A | **🔴 Picks tickers single-letter — fix parser** (#252) | `scripts/probe_picks.py`, `tests/test_probe_picks.py` | S | **In progress.** PR #248's `find("a")` grabs the avatar anchor, not the ticker. Read ticker from canonical `quote.ashx?t=SYMBOL` href instead of positional anchor text; fall back to anchor text then cell text. Add fixtures for avatar-as-`<a>` (the real prod shape) + avatar-as-`<span>` (old fixture). |

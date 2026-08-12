@@ -6,6 +6,24 @@
 
 ---
 
+## 2026-08-12 — Overhead-supply signal (Picks chip + Focus penalty)
+
+**Status: Phase 2 in review (new PR after a stranded-commit fix); Phase 1 merged.** Owner-driven feature: integrate overhead supply (trapped sellers above price) into Picks/Focus.
+
+**Design (agreed with owner over several rounds):** Overhead supply ≈ distance below 52-week high (`52W High` column, signed %). Separate axis from short-term froth (`atr_ext_50`). The product thesis is the **intersection**: "near the high but not vertical." An early "headroom" framing was scrapped (owner caught a sign error — more distance below high = *more* overhead = worse, not better).
+
+**What landed:**
+- **Phase 1 (PR #303, MERGED):** display-only Launch-ready chip per Picks row — `computeLaunchReady()`, Coiled / Extended / Overhead, `LAUNCH_*` constants. Owner confirmed the chips render.
+- **Phase 2 (new PR, in review):** Focus-score overhead penalty `score *= (1 − overheadPen)`, `overheadPen = 0.20 × clamp((ohMag−8)/(30−8),0,1)`. Mirrored across the triplicated contract — `docs/index.html` (both n=1 and main paths), `scripts/replay_picks.py`, `display_methodology.json` v4 — anti-drift guard updated. Cap held at conservative 0.20 (tiebreaker, not veto); raising to 0.30 is deferred (OVERHEAD-3).
+
+**Process failure + fix (important):** Phase 2 was pushed onto the #303 branch **after** #303 was already merged → the commit was stranded (feature branch has no path into default). Root cause: did not re-fetch default before starting Phase 2, and treated session-notes/SPRINT tracking as optional. Corrected: rebased Phase 2 onto latest default, opened a new PR. **Two new hard rules written into root `CLAUDE.md`:** (1) sync/fetch before *every* new work phase and confirm the target PR is still open before pushing follow-ups; (2) session-notes + SPRINT + issue tracking are mandatory inside the PR — never ask, never defer.
+
+**Deferred (all tracked):** OVERHEAD-3 (0.20→0.30 bump), Lookup surfacing (GH #304 / OVERHEAD-4), Morning surfacing (GH #305 / OVERHEAD-5).
+
+**Next:** get the Phase 2 PR merged; watch the Focus reshuffle for a few sessions before the 0.30 bump.
+
+---
+
 ## 2026-08-11 — Picks chart height + Morning tab TradingView charts
 
 **Status: safe to close, PR open.** Small self-contained UI request from the owner.
