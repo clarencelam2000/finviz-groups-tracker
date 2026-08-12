@@ -323,7 +323,9 @@ full pipeline description.
 
 | Parameter | Default | What it controls |
 |-----------|---------|-----------------|
-| `MORNING_BATCH_SIZE` | `50` | Max tickers per `t=`-filtered screener URL fetch (URL-length safety); ~225 tickers/day makes batching mandatory. Each batch is paginated internally with `&r=` same as `probe_picks`. |
+| `MORNING_FOCUS_TOP_N` | `100` | Issue #293 scrape-universe cap: the morning run scrapes only the Focus view's top-N tickers by `focus_score` (reconstructed via `replay_picks.replay(date, "focus")`), not the full picks list (75–375 names/day). Best-first, so a partial scrape keeps the strongest names. Raise/lower to trade coverage for request cost. |
+| `MORNING_FOCUS_SCORE_FLOOR` | `0.3` | Drop Focus candidates below this `focus_score` even when under the cap, so thin days self-trim instead of padding down to low-conviction setups. With N=100 the sample universe becomes min 22 / median 95 / max 100 names/day. |
+| `MORNING_BATCH_SIZE` | `50` | Max tickers per `t=`-filtered screener URL fetch (URL-length safety). Each batch paginates internally with `&r=` like `probe_picks`. **Keep off a multiple of `PAGE_SIZE` (20):** a multiple-of-20 batch ends on a full page and forces a wasted empty-probe goto, so 50 (=20+20+10) is more request-efficient than 40 or 60 — batch 50 = 6 gotos for ~100 tickers vs batch 60 = 7. |
 | `MAX_STALE_SESSIONS` | `5` | Max trading sessions `picks_latest.csv` may lag behind today before `collect_morning.py` refuses to write (exits 1 loud). |
 | `MORNING_STORE` | `data/picks/sessions/morning.csv` | Append-only provisional history, keyed `(date, ticker)`, last-write-wins (same convention as `picks.csv`). |
 | `MORNING_LATEST` | `data/picks/sessions/morning_latest.csv` | Max-date slice of `MORNING_STORE` — the PWA fetch target (Phase C). |

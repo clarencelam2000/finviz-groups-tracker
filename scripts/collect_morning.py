@@ -18,8 +18,11 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+import pandas as pd
+
 sys.path.insert(0, str(Path(__file__).parent))
 import probe_picks  # noqa: E402  (reuse _parse_table, PAGE_SIZE, SCREENER_TABLE_SELECTOR)
+import replay_picks  # noqa: E402  (reuse the server-side Focus reconstruction — issue #293)
 import session_config  # noqa: E402
 from collect import NYSE_HOLIDAYS, _is_trading_day  # noqa: E402  (reuse holiday table only — NOT trading_date's rollback)
 from pick_status import compute_pick_status, compute_atr_from_lod, ACTIONABLE_STATUSES  # noqa: E402
@@ -49,11 +52,37 @@ STORE_COLUMNS = [
     "status", "atr_from_lod",
 ]
 
-# URL-length safety: batch the ~225 unique tickers/day into chunks of <= 50 per
-# `t=` screener URL (ADR-013 Decision 2 — batching is mandatory, not optional).
+# URL-length safety: batch the scrape universe into chunks of <= 50 per `t=` screener
+# URL (ADR-013 Decision 2 — batching is mandatory, not optional). Batching guarantees
+# coverage regardless of size: every ticker lands in exactly one batch and is requested,
+# so batch size only affects request *count*, never which names are fetched.
+#
+# WHY 50 (and NOT a multiple of PAGE_SIZE like 40/60): fetch_ticker_quotes paginates each
+# batch with &r= until it sees a short page (< probe_picks.PAGE_SIZE == 20). A batch whose
+# size is an exact multiple of 20 ends on a *full* 20-row page, so the loop can't tell it's
+# done and issues one extra empty probe page — a wasted goto per full batch. 50 ends on a
+# partial 10-row page (50 = 20+20+10), so it stops cleanly with no wasted probe. Empirically
+# (issue #293, ~100 tickers/capped day) batch 50 = 6 gotos vs batch 60 = 7 — i.e. moving to
+# 60 would *increase* Finviz requests, not cut them. Keep this at 50 unless you raise it all
+# the way toward the batch = universe size (fewest batches), which trades URL length for it.
 # Configurable constant — see README.md § Configurable parameters and
 # scripts/CLAUDE.md § WS3 morning status for the other two required mentions.
 MORNING_BATCH_SIZE = 50
+
+# Scrape-universe narrowing (issue #293). picks_latest.csv carries the full daily picks
+# list (observed 75–375 tickers/day) — too large to scrape efficiently and too large for a
+# trader to act on. Instead of the full list, the morning run scrapes only the Focus view's
+# top-N by focus_score, reconstructed server-side via replay_picks.replay(date, "focus").
+#
+# MORNING_FOCUS_TOP_N: hard cap on names scraped, taken best-first by focus_score. 100 fills
+# a full strong list on rich days (cap binds ~17/31 sample days) without an unusable count.
+# MORNING_FOCUS_SCORE_FLOOR: drop anything below this focus_score even when under the cap, so
+# thin days self-trim instead of padding the list down to near-zero-conviction setups. At 0.3
+# the sample universe becomes min 22 / median 95 / max 100 names/day. Both are display/scope
+# knobs, not part of any settled artifact — safe to retune. 3-places documented per repo rule
+# (in-code here + README § Configurable parameters + scripts/CLAUDE.md § WS3 morning status).
+MORNING_FOCUS_TOP_N = 100
+MORNING_FOCUS_SCORE_FLOOR = 0.3
 
 # How stale picks_latest.csv is allowed to be (in trading sessions) before the
 # morning run refuses to tag setups against it (ADR-013 Decision 4 stale-input guard).
@@ -114,7 +143,14 @@ def fetch_ticker_quotes(page, tickers: list, config: dict) -> list:
         while True:
             url = build_ticker_url(config, batch, offset=offset)
             page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            page.wait_for_selector(probe_picks.SCREENER_TABLE_SELECTOR, timeout=30_000)
+            try:
+                page.wait_for_selector(probe_picks.SCREENER_TABLE_SELECTOR, timeout=30_000)
+            except Exception:
+                # An out-of-range/empty result page may not render the table shell.
+                # Mirror probe_picks._scrape_group: fall through to parse (0 rows ->
+                # break) rather than letting the exception crash the whole run and
+                # drop every *later* batch's names. "No names lost" protection.
+                pass
             html = page.content()
             _hdrs, rows = probe_picks._parse_table(html)
             if not rows:
@@ -144,6 +180,25 @@ def _to_float(x):
         return float(s)
     except ValueError:
         return None
+
+
+def select_focus_universe(focus_df, top_n=MORNING_FOCUS_TOP_N,
+                          floor=MORNING_FOCUS_SCORE_FLOOR) -> list:
+    """Return the ordered ticker list to scrape from a replay Focus view (issue #293).
+
+    `focus_df` is the DataFrame from `replay_picks.replay(date, view="focus")` (already
+    sorted focus_score desc), or any object with `ticker` and `focus_score` columns.
+    Keeps rows with `focus_score >= floor`, then takes the top `top_n` by score. Returns
+    a list of tickers in best-first order so a partial/failed scrape captures the strongest
+    names first. Empty input (or all rows below the floor) -> []. PURE — no I/O.
+    """
+    if focus_df is None or len(focus_df) == 0 or "ticker" not in focus_df.columns:
+        return []
+    df = focus_df.copy()
+    df["_score"] = pd.to_numeric(df["focus_score"], errors="coerce")
+    df = df[df["_score"] >= floor]
+    df = df.sort_values("_score", ascending=False, kind="stable").head(top_n)
+    return [t for t in df["ticker"].tolist() if t]
 
 
 def load_pick_levels(picks_latest) -> list:
@@ -364,8 +419,33 @@ def main() -> None:
               f"date {picks_max_date}) — refusing to write.", file=sys.stderr)
         sys.exit(1)
 
+    # Narrow the scrape universe to the Focus view's top-N (issue #293). Reconstruct
+    # the Focus view server-side for picks_max_date and keep only its top-N tickers
+    # (>= floor). The Focus set is a subset of picks_latest's tickers by construction
+    # (replay reads the same date's rows through the base + DQ filter), so reordering
+    # pick_levels to Focus order also intersects — trigger/stop/atr still come from
+    # picks_latest. replay failure is a LOUD exit (never silently scrape the full list).
+    try:
+        focus_df = replay_picks.replay(date=picks_max_date, view="focus")
+    except Exception as exc:
+        print(f"replay_picks.replay failed for {picks_max_date}: {exc} — refusing to "
+              f"fall back to the full picks list.", file=sys.stderr)
+        sys.exit(1)
+
+    focus_tickers = select_focus_universe(focus_df)
+    levels_by_ticker = {lvl["ticker"]: lvl for lvl in pick_levels}
+    pick_levels = [levels_by_ticker[t] for t in focus_tickers if t in levels_by_ticker]
+
+    if not pick_levels:
+        print(f"No Focus candidates at/above focus_score {MORNING_FOCUS_SCORE_FLOOR} "
+              f"for {picks_max_date} — nothing to tag. Exiting 0.")
+        sys.exit(0)
+
     config = json.loads(CONFIG_PATH.read_text())
     tickers = [lvl["ticker"] for lvl in pick_levels if lvl["ticker"]]
+
+    print(f"Focus universe: {len(tickers)} tickers (top {MORNING_FOCUS_TOP_N}, "
+          f"floor {MORNING_FOCUS_SCORE_FLOOR}) from picks {picks_max_date}.")
 
     if args.dry_run:
         print(f"[dry-run] {len(tickers)} tickers to fetch, "

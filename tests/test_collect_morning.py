@@ -153,6 +153,66 @@ def test_fetch_ticker_quotes_small_list_single_batch():
 
 
 # ---------------------------------------------------------------------------
+# select_focus_universe (issue #293)
+# ---------------------------------------------------------------------------
+
+
+def _focus_df(pairs):
+    """pairs: list of (ticker, focus_score) -> DataFrame like replay(view='focus')."""
+    import pandas as pd
+    return pd.DataFrame(pairs, columns=["ticker", "focus_score"])
+
+
+def test_select_focus_universe_top_n_cap():
+    df = _focus_df([(f"T{i}", 0.9 - i * 0.001) for i in range(150)])
+    out = cm.select_focus_universe(df, top_n=100, floor=0.0)
+    assert len(out) == 100
+    assert out[0] == "T0"  # best-first
+    assert out[-1] == "T99"
+
+
+def test_select_focus_universe_floor_trims_below_cap():
+    # 40 strong (>=0.3) + 60 weak (<0.3): floor keeps only the 40, cap never binds.
+    strong = [(f"S{i}", 0.5) for i in range(40)]
+    weak = [(f"W{i}", 0.1) for i in range(60)]
+    out = cm.select_focus_universe(_focus_df(strong + weak), top_n=100, floor=0.3)
+    assert len(out) == 40
+    assert all(t.startswith("S") for t in out)
+
+
+def test_select_focus_universe_floor_and_cap_together():
+    # 120 rows all >= floor: cap binds at top_n, floor is a no-op.
+    df = _focus_df([(f"T{i}", 0.9 - i * 0.004) for i in range(120)])  # min score ~0.42
+    out = cm.select_focus_universe(df, top_n=100, floor=0.3)
+    assert len(out) == 100
+
+
+def test_select_focus_universe_ordering_best_first():
+    df = _focus_df([("LOW", 0.31), ("HIGH", 0.9), ("MID", 0.5)])
+    out = cm.select_focus_universe(df, top_n=100, floor=0.3)
+    assert out == ["HIGH", "MID", "LOW"]
+
+
+def test_select_focus_universe_empty_and_all_below_floor():
+    assert cm.select_focus_universe(_focus_df([])) == []
+    below = _focus_df([("A", 0.1), ("B", 0.29)])
+    assert cm.select_focus_universe(below, top_n=100, floor=0.3) == []
+
+
+def test_select_focus_universe_nan_score_dropped():
+    import pandas as pd
+    df = pd.DataFrame([("A", "0.5"), ("B", ""), ("C", "0.4")], columns=["ticker", "focus_score"])
+    out = cm.select_focus_universe(df, top_n=100, floor=0.3)
+    assert out == ["A", "C"]  # B (unparseable score) dropped by the floor
+
+
+def test_select_focus_universe_uses_module_defaults():
+    # Defaults wire through to MORNING_FOCUS_TOP_N / MORNING_FOCUS_SCORE_FLOOR.
+    df = _focus_df([(f"T{i}", 0.5) for i in range(cm.MORNING_FOCUS_TOP_N + 25)])
+    assert len(cm.select_focus_universe(df)) == cm.MORNING_FOCUS_TOP_N
+
+
+# ---------------------------------------------------------------------------
 # load_pick_levels
 # ---------------------------------------------------------------------------
 
