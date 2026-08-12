@@ -1,7 +1,15 @@
 # ADR-012: Trade lifecycle engine — architecture, storage, and the domain invariant
 
-**Date**: 2026-08-06
+**Date**: 2026-08-06 (reconciled 2026-08-10 with owner decisions of 2026-08-07/08-10)
 **Status**: Proposed (architecture accepted in principle; per-phase implementation pending owner go-word)
+
+> **2026-08-10 reconciliation.** Folded the owner decisions from `knowledge/cron-lifecycle-ideation-and-alignment.md`
+> § 10 and the 2026-08-10 owner Q&A into this ADR and `planning/trade-lifecycle-engine.md`: the
+> **`closing` state** (exit awaits the user's confirmed fill, symmetric with entry — Decision 6 below);
+> the **held-tickers feed is append-only** and doubles as a **backtest substrate** (Decision 1);
+> the write path is **ticker-generic** so arbitrary user-entered tickers are a future UI addition,
+> not a migration (Decision 7); `SEVERE_BREAKDOWN_ATR = 3.0`, widen = auto-with-per-position-toggle,
+> breakeven = +1R (design doc § 6/§ 11).
 
 > Companion implementation design: `planning/trade-lifecycle-engine.md`. Owner-intent source of
 > truth: `knowledge/cron-lifecycle-ideation-and-alignment.md` § 6 (the ruleset) and § 7 (storage).
@@ -35,11 +43,28 @@ directly about SQL-vs-NoSQL / "spine and a flexible bag"):
   on, plus a `meta` JSON column (SQLite JSON functions) for notes/tags/UI-state/fields not worth a
   migration.
 - `position_events` — append-only ledger (`entered | stop_moved | partial_exit | caution |
-  closed | note`) giving audit trail, replay, and new event types with no schema change.
+  exit_signal | closed | note`) giving audit trail, replay, and new event types with no schema change.
+- `ticker_quotes` — **append-only** daily-bar feed for held tickers, keyed `(ticker, trade_date)`,
+  **no `user_id`** (a daily bar is public market data; only the *selection* of which symbols to fetch
+  derives from private positions, at query time). Append-only, **not** latest-bar-only (owner Q,
+  2026-08-10): it doubles as a **backtest substrate** — with `position_events` (what happened) and
+  closed `positions` (outcomes), D1 then supports both trade-outcome expectancy and hypothetical
+  rule-variant replay of the pure `advance()` function. It also preserves daily-bar history for
+  *off-picks* held names, the one market-data set the committed `data/*.csv` files don't already
+  carry. Tiny (open positions × trading days). See `planning/trade-lifecycle-engine.md` § 5/§ 12.
 
 Rejected: one wide mutable table with no history (loses the audit/replay and makes the scale-out
 trim ledger fragile), and JSON-document-only (loses typed constraints on the fields the engine
-queries every day).
+queries every day). Also rejected: a **latest-bar-only** quote feed (would forfeit the backtest
+substrate for zero storage saving) and a **committed-CSV** quote feed (its only consumer is the
+D1-resident Worker engine, for which reading a Git CSV is the awkward path, and the CSV split would
+force a cross-store join on every advance).
+
+**Accepted consequence of a D1 (not CSV) feed:** the scraper runs in GitHub Actions (Cloudflare
+blocks headless Chromium on our cloud IPs), so writing to D1 needs an **authenticated ingest path**
+(a Worker endpoint or the D1 HTTP API + a GH secret) rather than a `git commit`. This cost is paid
+**once** and is needed regardless — the "I took it" write path (phase 1) and the push-subscription
+store (phase 4) require the same authenticated Worker→D1 surface.
 
 ### 2. The domain invariant: a ratcheting **profit floor**, not a monotonic stop
 
@@ -77,6 +102,28 @@ The owner raised row-level-security and one-way-door concerns. Decisions:
 Stop-hit and earnings-approach alerts delivered via VAPID web-push (same CF account already does
 this). Constraint recorded: **iOS PWA push requires the app installed to the home screen
 (iOS 16.4+)** — the UX must nudge install or some users silently get nothing.
+
+### 6. Exits are user-confirmed, not auto-closed: the `closing` state
+
+Symmetric with entry. Entry freezes the user's *actual* fill (not the computed trigger); an exit
+must likewise be the user's *actual* fill (not the modeled stop/close). The engine runs **after** the
+close, so a detected exit is a **signal**, and the real-world execution is next session's open at
+earliest. An exit check therefore moves the position to **`Closing`** — modeled price recorded as
+*expected*, an `exit_signal` event emitted, a push sent — and the user confirms the real fill
+(→ `Closed`, writing `exit_price`) or taps "still holding" (→ back to `Managing`, a discretionary
+override). This resolves both staff findings on #264 (asymmetric fill-truth; signal-close vs
+execution-close) and is required for the honest R-multiple / expectancy record. `advance()` never
+writes `exit_price`; only the user's confirmation does. (Owner decision, alignment § 10.)
+
+### 7. The position is the root entity; the write path is ticker-generic
+
+The phase-1 "I took it" write path accepts `{ticker, entry_price, initial_stop, stop_basis, qty}` —
+the WS4 picks ticket is one caller; a future manual-entry form (open a position on **any** typed
+ticker) is a second caller filling the same payload. Because the held-tickers feed is driven by the
+`positions` table (Decision 3), not the picks list, an arbitrary ticker is fetched and advanced with
+no new architecture. Provenance is `meta.source = 'picks' | 'manual'`. **Do not** key the create
+path on a picks-row identity — that would turn arbitrary tickers into a migration instead of deferred
+UI work. (Owner "think big", 2026-08-10; needs no storage change — see design doc § 8a.)
 
 ## Consequences
 
