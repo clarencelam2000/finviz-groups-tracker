@@ -140,6 +140,39 @@ def test_fetch_ticker_quotes_batches_at_50():
     assert len(t_lists) == 3
 
 
+class _RaisingPage(_FakePage):
+    """_FakePage whose wait_for_selector raises for any batch whose t= list contains
+    `raise_on_ticker` — simulates a Cloudflare/timeout stall on one batch."""
+
+    def __init__(self, rows_for_ticker, raise_on_ticker):
+        super().__init__(rows_for_ticker)
+        self._raise_on = raise_on_ticker
+
+    def wait_for_selector(self, selector, timeout=None):
+        if not self.urls:
+            return
+        import urllib.parse
+        qs = urllib.parse.parse_qs(urllib.parse.urlparse(self.urls[-1]).query)
+        if self._raise_on in qs.get("t", [""])[0].split(","):
+            raise TimeoutError("simulated wait_for_selector timeout")
+
+
+def test_fetch_ticker_quotes_survives_wait_for_selector_timeout():
+    # A timeout on one batch must NOT propagate and abort the run — later batches'
+    # names must still be fetched ("no names lost"). Pre-fix this raised.
+    tickers = [f"T{i}" for i in range(60)]  # 2 batches at MORNING_BATCH_SIZE=50: [50,10]
+    rows_for_ticker = {
+        t: {"t": t, "pc": "1", "o": "1", "h": "1", "l": "1", "p": "1", "c": "0%", "atr": "1", "v": "1"}
+        for t in tickers
+    }
+    # T0 lives in the first batch; make that batch's wait_for_selector raise.
+    page = _RaisingPage(rows_for_ticker, raise_on_ticker="T0")
+    quotes = cm.fetch_ticker_quotes(page, tickers, MORNING_CONFIG)  # must not raise
+    got = {q["Ticker"] for q in quotes}
+    # Second batch (T50..T59) is untouched by the raise and must be present.
+    assert {"T50", "T59"} <= got
+
+
 def test_fetch_ticker_quotes_small_list_single_batch():
     tickers = ["AAPL", "MSFT"]
     rows_for_ticker = {
@@ -204,6 +237,25 @@ def test_select_focus_universe_nan_score_dropped():
     df = pd.DataFrame([("A", "0.5"), ("B", ""), ("C", "0.4")], columns=["ticker", "focus_score"])
     out = cm.select_focus_universe(df, top_n=100, floor=0.3)
     assert out == ["A", "C"]  # B (unparseable score) dropped by the floor
+
+
+def test_select_focus_universe_dedupes_ticker():
+    # replay/picks rows are keyed (date, list_category, ticker): the same ticker can
+    # appear more than once (multi-bucket tag). It must occupy exactly one output slot,
+    # keeping its highest-scoring copy — not eat two slots of the cap.
+    df = _focus_df([("DUP", 0.4), ("A", 0.9), ("DUP", 0.6), ("B", 0.5)])
+    out = cm.select_focus_universe(df, top_n=100, floor=0.3)
+    assert out.count("DUP") == 1
+    assert out == ["A", "DUP", "B"]  # DUP ranked by its 0.6 copy, not 0.4
+
+
+def test_select_focus_universe_dedupe_yields_full_top_n_unique():
+    # 120 rows but only 100 distinct tickers (20 dupes): cap must yield 100 UNIQUE.
+    rows = [(f"T{i}", 0.9 - i * 0.001) for i in range(100)]
+    rows += [(f"T{i}", 0.5) for i in range(20)]  # duplicate the first 20 tickers
+    out = cm.select_focus_universe(_focus_df(rows), top_n=100, floor=0.0)
+    assert len(out) == 100
+    assert len(set(out)) == 100
 
 
 def test_select_focus_universe_uses_module_defaults():

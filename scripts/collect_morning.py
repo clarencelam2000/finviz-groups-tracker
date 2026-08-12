@@ -145,12 +145,17 @@ def fetch_ticker_quotes(page, tickers: list, config: dict) -> list:
             page.goto(url, wait_until="domcontentloaded", timeout=30_000)
             try:
                 page.wait_for_selector(probe_picks.SCREENER_TABLE_SELECTOR, timeout=30_000)
-            except Exception:
+            except Exception as exc:
                 # An out-of-range/empty result page may not render the table shell.
                 # Mirror probe_picks._scrape_group: fall through to parse (0 rows ->
                 # break) rather than letting the exception crash the whole run and
                 # drop every *later* batch's names. "No names lost" protection.
-                pass
+                # Log it (like probe_picks' WARNING) so a Cloudflare block / network
+                # stall on a batch is distinguishable in CI logs from a genuinely
+                # empty page — batch[0]..batch[-1] identifies which chunk stalled.
+                print(f"  WARNING: '{probe_picks.SCREENER_TABLE_SELECTOR}' not found "
+                      f"after 30s for batch {batch[0]}..{batch[-1]} (r={offset}): {exc}",
+                      file=sys.stderr)
             html = page.content()
             _hdrs, rows = probe_picks._parse_table(html)
             if not rows:
@@ -197,7 +202,13 @@ def select_focus_universe(focus_df, top_n=MORNING_FOCUS_TOP_N,
     df = focus_df.copy()
     df["_score"] = pd.to_numeric(df["focus_score"], errors="coerce")
     df = df[df["_score"] >= floor]
-    df = df.sort_values("_score", ascending=False, kind="stable").head(top_n)
+    # Dedupe by ticker BEFORE capping: replay/picks rows are keyed
+    # (date, list_category, ticker), so a ticker tagged under multiple buckets
+    # appears multiple times (same score). Without this, one ticker eats >1 of the
+    # top_n slots — shrinking unique coverage below top_n and double-listing it in
+    # the scrape. keep="first" after the desc sort retains its highest-scoring copy.
+    df = df.sort_values("_score", ascending=False, kind="stable")
+    df = df.drop_duplicates(subset="ticker", keep="first").head(top_n)
     return [t for t in df["ticker"].tolist() if t]
 
 
