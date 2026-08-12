@@ -266,6 +266,23 @@ All derived metrics live in `data/*/deltas.csv` and are produced by
 - **User one-liner:** "How many ATR multiples above its 50-day MA the stock is — the rubber-band
   stretch: ≤5× is actionable, ≥8× is a trim candidate."
 
+## launch_ready (launch-ready chip — picks pipeline, display-only)
+- **Source:** `computeLaunchReady()` in `docs/index.html` (pure display, no scoring impact).
+  `ohMag = -_pF(r['52W High'])` (% below the 52-week high; Finviz `52W High` is a signed %
+  distance, so negating it gives a positive "magnitude below high"). `ext = _pF(r.atr_ext_50)`.
+- **PWA thresholds:** `LAUNCH_NEAR_HIGH_PCT = 8`, `LAUNCH_CALM_EXT_MAX = 3`,
+  `LAUNCH_OVERHEAD_PCT = 20` in `docs/index.html`. Coiled: `ohMag <= 8` and `0 < ext <= 3`.
+  Extended: `ohMag <= 8` and `ext > 3`. Overhead: `ohMag > 20`. Otherwise no chip. NaN `ohMag`
+  (missing `52W High`) → no chip. Calibrated to the live picks pool on 2026-08-11
+  (dist-below-52wk-high median -14%, p75 -4.8%, p25 -28.6%; atr_ext_50 median 2.75); ~12% of
+  the pool lands in 'Coiled'.
+- **Signals:** overhead supply (how much stock is sitting above the current price waiting to be
+  sold as it recovers) vs. short-term extension. A stock near its high with low extension has
+  cleared that supply and hasn't yet run — the "launch-ready" setup.
+- **User one-liner:** "Whether a stock is coiled just under its 52-week high (little overhead
+  supply) without being stretched — green Coiled is the sweet spot; amber Extended has run too
+  far; red Overhead has a wall of sellers above."
+
 ## risk_20ma_pct (risk to 20MA — picks pipeline, Phase 3a)
 - **Source:** `compute_metrics_row` (`scripts/picks_metrics.py`). `(Price − sma20_price) / Price`
   where `sma20_price = Price / (1 + SMA20/100)`. Stored as a raw fraction (0.0115 = 1.15%).
