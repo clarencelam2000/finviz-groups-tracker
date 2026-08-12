@@ -144,6 +144,21 @@ Failed-breakout / Invalidated / No-quote) at ~10:05 ET.
   exactly like `probe_picks._scrape_group`. `load_pick_levels` / `build_status_rows` are pure and
   fully unit-tested in cloud; `fetch_ticker_quotes` itself is only exercised via fixtures (Phase
   A) since Cloudflare blocks it from a cloud dev session — live wiring is Phase B.
+  - **Scrape-universe narrowing (issue #293):** `main()` does NOT scrape all of
+    `picks_latest.csv` (75–375 tickers/day — too large to scrape or act on). It reconstructs
+    the Focus view server-side via `replay_picks.replay(picks_max_date, "focus")` and scrapes
+    only `select_focus_universe()`'s output: the top `MORNING_FOCUS_TOP_N` (100) tickers by
+    `focus_score`, keeping only those `>= MORNING_FOCUS_SCORE_FLOOR` (0.3). The floor lets thin
+    days self-trim (sample: min 22 / median 95 / max 100 names/day) instead of padding down to
+    low-conviction setups. The Focus set is a subset of `picks_latest`'s tickers by construction,
+    so trigger/stop/atr still come from `picks_latest`; `pick_levels` is reordered best-first so a
+    partial scrape keeps the strongest names. A `replay` failure is a **loud `exit(1)`** — never a
+    silent fall-back to the full list. Both constants are 3-places documented (in-code + README §
+    Configurable parameters + here). Note `MORNING_BATCH_SIZE` stays **50, deliberately off a
+    multiple of `PAGE_SIZE`=20**: a multiple-of-20 batch (40/60) ends on a full page and forces a
+    wasted empty-probe goto, so 50 is *more* request-efficient (batch 50 = 6 gotos/~100 tickers vs
+    batch 60 = 7). `fetch_ticker_quotes` wraps `wait_for_selector` in try/except (mirroring
+    `probe_picks`) so an out-of-range empty page can't crash the run and drop later batches.
   - **Store:** `data/picks/sessions/morning.csv` (append-only, keyed `(date, ticker)`,
     last-write-wins, `collected_at` not part of the key — same convention as `picks.csv`) +
     `data/picks/sessions/morning_latest.csv` (max-date slice, the PWA fetch target). Committed
