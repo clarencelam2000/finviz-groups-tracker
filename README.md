@@ -361,6 +361,9 @@ These constants control when visual indicators appear or change state. All are n
 | `ATR_EXT_ACTIONABLE` | `4.0` | ATR-extension emerald band cap (<4× = actionable / entry-zone). Also the Focus hard-DQ line (Phase 3b). |
 | `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start (≥8× = trim-10% candidate for held positions). Amber band is 4–8×. |
 | `ATR_FROM_LOD_CLEAN` / `ATR_FROM_LOD_CHASE` | `0.8` / `1.0` | Morning tab (WS3) entry-quality bands on `atr_from_lod` = (price − session low) / ATR, actionable cards only. `≤0.8` clean entry, `>1.0` chasing, between = caution. Also in `docs/CLAUDE.md` threshold table. |
+| `LAUNCH_NEAR_HIGH_PCT` | `8` | Launch-ready chip (Picks tab, Phase 1): `ohMag` (% below 52-week high) at or under this counts as "near the high" (little overhead supply). Also in `docs/CLAUDE.md` threshold table. |
+| `LAUNCH_CALM_EXT_MAX` | `3` | Launch-ready chip: `atr_ext_50` at or under this (and `> 0`), combined with near-high, classifies the pick as `Coiled`; above this = `Extended`. Also in `docs/CLAUDE.md` threshold table. |
+| `LAUNCH_OVERHEAD_PCT` | `20` | Launch-ready chip: `ohMag` above this classifies the pick as `Overhead` (deep below high, heavy overhead supply). Also in `docs/CLAUDE.md` threshold table. |
 | `ATR_EXT_PENALTY_START` | `2.5` | ATR-extension at which the Focus-score extension penalty begins ramping. Zero penalty below this; full `PENALTY_MAX` at `ATR_EXT_ACTIONABLE` (4×). |
 | `PENALTY_MAX` | `0.5` | Maximum Focus-score extension discount fraction (50% haircut at 5×). `score = base × (1 − penalty_fraction)`, always ∈ [0, 1]. |
 | `FOCUS_W_GROUP` | `0.2` | Focus score weight for the sustained group-strength component (`grp_sum_mid_rank` inverted min-max). Lowered from `0.4` on 2026-07-16. |
