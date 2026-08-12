@@ -168,7 +168,15 @@ def overhead_penalty_frac(w52h_value, params: dict) -> float:
     """Mirrors JS overheadPenaltyFrac(). '52W High' is a signed % string like '-14.1%';
     ohMag = -parsed_value = % below the 52-week high. NaN/unparseable -> 0 penalty
     (same isNaN->0 convention as the extension penalty). Ramps 0 -> max_fraction as
-    ohMag goes ramp_start -> ramp_end, clamped [0, 1]."""
+    ohMag goes ramp_start -> ramp_end, clamped [0, 1].
+
+    NOTE: '52W High' is usually <= 0 (price at/below its 52wk high), but Finviz data can
+    lag and briefly report a *positive* value when a stock has already broken to a new
+    high before the stored 52W High catches up (observed in production, not hypothetical).
+    That makes ohMag negative, which the final max(0.0, ...) clamp already resolves to a
+    0 penalty -- same as an ordinary near-high row, which is the correct read: a stock
+    already above its old high has no overhead supply. Do not special-case this upstream;
+    the existing clamp is the intended handling."""
     if w52h_value is None or str(w52h_value).strip() in ("", "-"):
         return 0.0
     try:

@@ -6,6 +6,44 @@
 
 ---
 
+## 2026-08-12 — PR #306 review follow-up: overhead-penalty test coverage + stale-52W-High handling
+
+**Status: safe to close, pushed to PR #306's branch.** Addressed review feedback on the Phase 2
+overhead-supply penalty (see prior entry below) before merge.
+
+**What landed:**
+- **Test coverage gap closed.** `overhead_penalty_frac()` in `scripts/replay_picks.py` had no
+  direct unit tests (unlike its siblings `liquidity_penalty_frac`/`earnings_penalty_frac`, which
+  each have ramp-boundary/midpoint/NaN tests) and no fixture exercised `_replay_focus`'s v4 branch
+  end-to-end (both existing fixtures predate the 2026-08-12 v4 effective date and lack a `52W High`
+  column). Added `TestOverheadPenaltyFrac` (ramp start/end/midpoint, dash/None/NaN) and a new
+  `tests/fixtures/replay_picks_v4_fixture.csv` + `TestReplayV4Fixture` driving the full pipeline.
+- **Owner-flagged edge case: Finviz can report a positive '52W High'** (data lag — price already
+  broke to a new high before Finviz's stored 52-week high catches up; owner has observed this
+  live). Checked both P1 (`computeLaunchReady`, PR #303) and P2 (this PR's overhead penalty): the
+  math in both was **already graceful** — `ohMag = -parse('52W High')` goes negative in that case,
+  and both the chip's `ohMag <= LAUNCH_NEAR_HIGH_PCT` checks and the penalty's
+  `Math.max(0, Math.min(1, t))` / Python `max(0.0, min(1.0, t))` clamp already floor that to
+  "near-high, 0 penalty" — the semantically correct read (a stock above its old high has no
+  overhead supply). No functional fix needed. What *was* wrong: the methodology JSON's note
+  claimed `52W High` is "always <= 0", which is inaccurate and could mislead a future edit into
+  breaking the clamp. Corrected that note plus added explicit comments at both clamp sites
+  (`docs/index.html` computeLaunchReady + overheadPenaltyFrac, `replay_picks.py`
+  overhead_penalty_frac docstring) documenting this is intentional handling, not incidental.
+  Added `test_positive_value_from_stale_finviz_data_is_zero_not_negative` +
+  `test_deeply_positive_value_still_zero_penalty` (pure-function) and
+  `test_stale_finviz_high_treated_as_near_high_not_penalized` (fixture, STALEHIGH ticker) to lock
+  this in as regression coverage.
+- 659/659 non-Playwright tests pass (648 baseline + 11 new).
+
+**Not done (scoped out):** no new Playwright test added for `computeLaunchReady`'s positive-value
+case — P1 has no existing Playwright/JS-level test coverage at all (chip rendering was verified
+manually per PR #303), and the math needed no fix, only a doc correction, so this was judged
+lower-value than the P2 fixture/unit tests. Flagging here in case a future session wants to close
+that pre-existing gap.
+
+---
+
 ## 2026-08-12 — Overhead-supply signal (Picks chip + Focus penalty)
 
 **Status: Phase 2 in review (new PR after a stranded-commit fix); Phase 1 merged.** Owner-driven feature: integrate overhead supply (trapped sellers above price) into Picks/Focus.

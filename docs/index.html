@@ -3866,6 +3866,12 @@
     //   Coiled   — near the high (little overhead supply) and not yet extended: launch setup.
     //   Extended — near the high but has already run: chase risk.
     //   Overhead — far below the high: heavy overhead supply to chew through first.
+    // NOTE: '52W High' is usually <= 0 (price at/below its 52wk high), but Finviz data can lag
+    // and briefly report a *positive* value once a stock has already broken to a new high
+    // before the stored 52W High catches up (observed in production, not hypothetical). That
+    // makes ohMag negative here, which every `ohMag <= LAUNCH_NEAR_HIGH_PCT` check below already
+    // treats as "near/at the high" — the correct read, since a stock already above its old high
+    // has no overhead supply. No special-casing needed; the comparisons below are the handling.
     function computeLaunchReady(r) {
       const ohMag = -_pF(r['52W High']); // % below 52-week high (positive = below); NaN if missing
       const ext = _pF(r.atr_ext_50);
@@ -3994,6 +4000,10 @@
     // OVERHEAD_PENALTY_MAX at/above OVERHEAD_PENALTY_END, based on ohMag = % below 52-week
     // high (same quantity computeLaunchReady() uses). Missing '52W High' (NaN) => 0 penalty,
     // same convention as the extension penalty's isNaN->0 (no haircut for missing data).
+    // A stale/lagging Finviz '52W High' can also occasionally read positive (see the NOTE
+    // above computeLaunchReady()) -> ohMag goes negative -> t goes negative -> the
+    // Math.max(0, ...) clamp below already floors that to a 0 penalty, same as a row that's
+    // exactly at its high. That clamp is the intended handling, not just overflow protection.
     function overheadPenaltyFrac(r) {
       const ohMag = -_pF(r['52W High']);
       if (isNaN(ohMag)) return 0;
