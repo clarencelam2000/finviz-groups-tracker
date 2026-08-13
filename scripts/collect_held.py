@@ -107,6 +107,11 @@ def build_quote_payload(quotes: list, trade_date: str, collected_at: str) -> dic
 def _authed_request(url: str, token: str, method: str = "GET", body: bytes = None):
     req = urllib.request.Request(url, data=body, method=method)
     req.add_header("Authorization", f"Bearer {token}")
+    # Cloudflare's Bot Fight Mode blocks the default "Python-urllib/x.y" User-Agent with a
+    # generic 403 (error code 1010) on workers.dev zones, before the request ever reaches the
+    # Worker's own auth code — verified live 2026-08-13. A non-generic UA (anything not matching
+    # python-urllib/python-requests/curl/scrapy signatures) clears it.
+    req.add_header("User-Agent", "finviz-groups-tracker-held-feed/1.0")
     if body is not None:
         req.add_header("Content-Type", "application/json")
     return urllib.request.urlopen(req, timeout=30)

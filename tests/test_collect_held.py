@@ -96,6 +96,25 @@ def test_empty_input_returns_empty_quotes_list():
     }
 
 
+def test_authed_request_sets_non_generic_user_agent(monkeypatch):
+    # Cloudflare's Bot Fight Mode 403s the default "Python-urllib/x.y" User-Agent on
+    # workers.dev zones before the request reaches the Worker's own auth code (verified
+    # live 2026-08-13) — regression guard for that outage.
+    captured = {}
+
+    def fake_urlopen(req, timeout=None):
+        captured["req"] = req
+        return None
+
+    monkeypatch.setattr(ch.urllib.request, "urlopen", fake_urlopen)
+    ch._authed_request("https://example.com/held-tickers", "tok")
+
+    ua = captured["req"].get_header("User-agent")
+    assert ua is not None
+    assert "python-urllib" not in ua.lower()
+    assert "python-requests" not in ua.lower()
+
+
 def test_payload_shape_matches_worker_expectation():
     payload = ch.build_quote_payload([_row(), _row(ticker="MSFT")], "2026-08-13", "2026-08-13T21:05:00Z")
     assert isinstance(payload["quotes"], list)
