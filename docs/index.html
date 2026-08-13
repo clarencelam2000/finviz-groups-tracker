@@ -5577,6 +5577,10 @@
         // Keep the existing `taken:` marker driving card ✓ state (additive, Decision 5) —
         // it is now only ever set after a real 201 from the worker.
         if (r) { try { localStorage.setItem(morningTakenKey(r.date, ticker), 'true'); } catch (e) {} }
+        // Invalidate the Positions cache so the just-logged lot shows up next time the tab
+        // renders (otherwise a session that already loaded Positions would show stale data
+        // missing this new position until sign-out/in).
+        state.positionsData = null;
         delete state.ws5Card[ticker];
         renderMorning();
       } catch (e) {
