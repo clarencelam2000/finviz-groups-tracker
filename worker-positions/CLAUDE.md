@@ -17,7 +17,8 @@ GitHub-Actions held feed. See README § Auth — the Cloudflare-Access-vs-bearer
 1. ✅ D1 schema + ticker-generic "I took it" write path (`src/positions.js`, `/positions`).
 2. ✅ Held-tickers feed → `ticker_quotes` (`src/quotes.js`, `/held-tickers`, `/ingest/quotes`;
    GH-Actions `scripts/collect_held.py` + `worker-cron` `held` job at 17:30 ET).
-3. 🟡 **`advance()` daily engine** — **3a (the pure engine) is `src/advance.js`**; **3b (wiring) is
+3. 🟡 **`advance()` daily engine** — **3a (pure engine) = `src/advance.js`**; **3b-i (wiring) =
+   `src/sweep.js` + `POST /advance`**, done; **3b-ii (owner transition routes + `autoConfirm`) is
    next** (see below).
 4. ⬜ Push notifications (VAPID; reuse the sibling `distil` worker's web-push + `push_subscriptions`).
 
@@ -53,17 +54,56 @@ Config constants (`ENGINE_CONFIG`) are triple-documented: in-code comments here,
 Configurable parameters › Engine constants table, and this file. To change a default, edit
 `ENGINE_CONFIG` — nothing reads the raw values directly.
 
-## Phase 3b (next PR) — the wiring, deliberately NOT in 3a
+## The wiring: `src/sweep.js` (phase 3b-i)
 
-The pure engine has no caller yet. 3b adds: load a position + its trailing `ticker_quotes` bars,
-call `advance()`, persist the new spine state + append the emitted events, enforce `last_advanced_date`
-idempotency at the DB layer, a service-token `/advance` route (or an ingest-triggered sweep), and the
-daily trigger after the held ingest lands. It's gated on a few accumulated bars for a live dry-run
-anyway, so shipping the exhaustively-tested pure heart first is the de-risking move. Tracked: SPRINT
-WS5-3b.
+`sweep()` is the engine's only caller. It is a **catch-up fold**: per position, load every
+`ticker_quotes` bar with `trade_date > max(last_advanced_date, entry_date)` and fold `advance()`
+over them in order. That one mechanism gives same-day idempotency, missed-day self-heal, and
+backfill over bars captured before the engine had a caller.
+
+Four things to internalize before editing the wiring:
+
+- **Two rules live here, not in the design doc** (lead decisions, 2026-08-13, not yet owner-ratified).
+  (1) A position is **never advanced on its own entry-day bar** — the bound is strictly `>`
+  `entry_date`, because that day's `low` is largely pre-purchase and would fire a false `stop_hit`
+  on the day of entry. (2) **Persistence is gated on `last_advanced_date` moving**, not on "were
+  there events" — a stale bar emits a `note` without stamping the date, so it never leaves the query
+  window; the weaker gate re-appends that note on every sweep, forever. Both are pinned by tests;
+  don't "simplify" either away.
+- **`meta` is a JSON string in D1, an object to the engine.** `loadAdvanceablePositions()` parses it
+  at the load boundary. Skip that and `effectiveConfig()` silently sees no overrides and
+  `meta.widen_enabled=false` stops working — a bug with no exception to catch it.
+- **Idempotency is enforced in SQL, not just by the caller.** `persistAdvance()` emits ONE
+  `db.batch` (a single transaction): guarded `INSERT … SELECT … WHERE EXISTS` event rows **first**,
+  then the compare-and-set `UPDATE`. The order is load-bearing — update-first would invalidate the
+  guard and silently drop every event in the same batch. `IS`, not `=`, because the expected value
+  is NULL on a position's first advance.
+- **The UPDATE is deliberately narrow.** It never writes `meta`, `exit_price`, `closed_at`, or
+  `confirmation_status` — those belong to the user-driven transitions. Widening that column list is
+  how a sweep would come to clobber a field the user owns.
+
+`POST /advance` is dual-auth on one route: the service token (the held-feed job) gets **counts
+only**; the owner bearer additionally gets per-position `results`. Trigger is
+`scripts/collect_held.py` immediately after a successful `/ingest/quotes` — dependency-gated, no new
+cron trigger, no new secret.
+
+## Phase 3b-ii (next PR)
+
+The owner transition routes — `confirm-exit`, `still-holding`, `correct-exit`, `reopen` — over the
+already-written pure functions in `advance.js`, plus `autoConfirm()` wired into the sweep (it needs
+a trading-session count between `exit_signal_date` and today; the distinct `trade_date`s in
+`ticker_quotes` are the natural session calendar). **Ordered after 3b-i on purpose:** `autoConfirm`
+without a confirm route means every exit silently auto-closes at `EXIT_AUTOCONFIRM_SESSIONS` with no
+way for the owner to intervene. Tracked: SPRINT WS5-3b-ii.
 
 ## Tests
 
 `npm test` (vitest, no network). `test/advance.test.js` is the engine's spec-lock — every design-§9
-rule has a fixture, plus randomized property tests for the invariants above. Any engine change must
-land its test in the same commit.
+rule has a fixture, plus randomized property tests for the invariants above. `test/sweep.test.js`
+covers the wiring. Any engine or wiring change must land its test in the same commit.
+
+`test/helpers/d1.js` shims the D1 surface over **Node 22's built-in `node:sqlite`** and applies the
+**real migration files** — so the tests run actual SQL and break on schema drift. Two gotchas:
+`node:sqlite` must be reached via `createRequire`, because the pinned vite doesn't know the builtin
+and tries to resolve it as a package named `sqlite`; and the worker-positions CI jobs pin
+`node-version: '22'` for this reason while `worker`/`worker-cron` stay on 20.

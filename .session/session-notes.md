@@ -1030,3 +1030,78 @@ effective-config `advance()` signature).
 
 **Note:** session-notes commit is on the feature branch — must land on the default branch via a merged
 PR to be visible next session (see branch-commit-discipline § "Session notes MUST land on default").
+
+---
+
+## 2026-08-13 — WS5 phase 3b-i: giving `advance()` a caller (D1 persistence + `/advance` + trigger)
+
+**Status: safe to close** once this PR merges. 122 vitest + 670 pytest green.
+
+### What landed
+
+`worker-positions/src/sweep.js` — the wiring layer phase 3a deliberately left out. `sweep()` is a
+**catch-up fold**, not a single-day advance: per position it loads every `ticker_quotes` bar with
+`trade_date > max(last_advanced_date, entry_date)` and folds the pure `advance()` over them in order.
+One mechanism covers same-day idempotency, missed-day self-heal, and backfill over bars the held feed
+captured while the engine had no caller — which is why there was no reason to wait for accumulated
+bars before building this.
+
+Persistence is one `db.batch` (a single transaction) doing guarded `INSERT … SELECT … WHERE EXISTS`
+event rows **first**, then a compare-and-set `UPDATE` on `last_advanced_date`. Order is load-bearing:
+update-first invalidates the guard and silently drops every event in the same batch. Uses `IS` not
+`=` because the expected value is NULL on a first advance. I prototyped this SQL against real SQLite
+before specifying it rather than reasoning it through on paper.
+
+`POST /advance` is dual-auth on one route — service token gets **counts only**, owner bearer also
+gets per-position `results`. Trigger is `scripts/collect_held.py` POSTing `/advance` right after a
+successful `/ingest/quotes`: dependency-gated by construction, **no new cron trigger and no new
+secret**, which also keeps us clear of the Cloudflare 5-trigger account limit that cost a week of
+picks data in #252. `--no-advance` is the bars-only escape hatch.
+
+### Two rules I added that are NOT in the design doc (need owner ratification — SPRINT WS5-3b-OWNER)
+
+1. **Never advance on the entry-day bar** (bound is strictly `> entry_date`). That day's `low` is
+   largely pre-purchase, so advancing on it risks a false `stop_hit` on the day of entry. Cost: a
+   same-day collapse through the stop isn't seen until the next bar. Given the feed is EOD-only,
+   that seemed clearly right, but it is my call, not the doc's.
+2. **Persist only when `last_advanced_date` moves**, not when "there were events." This was a real
+   bug I caught reviewing the subagent's output — it had used the weaker gate. A stale bar emits a
+   `note` but deliberately does not stamp the date, so it never leaves the query window; the weaker
+   gate re-appends that note every sweep, and since earlier stale dates also stay in the window the
+   duplication compounds across a run of stale sessions. Reproduced it with a test (6 events → 8
+   after two extra no-op sweeps) before fixing. Staleness now reports via the sweep's `stale` counter
+   → `/advance` response → CI log, which is the right channel for a daily-repeating condition; the
+   append-only ledger is not.
+
+Also widened what `POSITIONS_INGEST_TOKEN` can do (it can now trigger the sweep) and rewrote
+`auth.js`'s least-privilege paragraph to be honest about it. Bounding argument: the outcome is a pure
+function of bars already in D1, the caller can't steer it, and `results` is stripped for service
+callers. If the owner dislikes it, a third `POSITIONS_ENGINE_TOKEN` is one secret + one function.
+
+### Two things fixed in passing
+
+- **`worker-positions` had no PR-time CI job at all.** Its tests only ran in `deploy-workers.yml`
+  *after* merge to default — so phase 3a's 99 tests never gated their own PR. Added
+  `worker-positions-test` to `tests.yml`.
+- **Replaced the hand-rolled in-memory D1 mock with real SQLite** (`node:sqlite`, built into Node 22,
+  zero new dependencies) running the *actual* migration files. The old regex-sniffing mock could not
+  validate SQL or detect schema drift, and 3b needed the trickiest SQL in the repo. Gotcha for next
+  time: `node:sqlite` must be reached via `createRequire` — the pinned vite doesn't know the builtin
+  and tries to resolve it as a package called `sqlite`. Costs a Node 20→22 pin on the
+  worker-positions jobs only.
+
+### Next: WS5-3b-ii
+
+Owner exit-transition routes (`confirm-exit` with an editable fill, `still-holding`, `correct-exit`,
+`reopen`) over the pure functions that already exist in `advance.js`, then `autoConfirm()` wired into
+the sweep. **I split 3b deliberately so this comes second:** shipping `autoConfirm` before a confirm
+route means every exit auto-closes at `EXIT_AUTOCONFIRM_SESSIONS` with no way for the owner to
+intervene. Until 3b-ii lands an exit parks in `closing` indefinitely, which is safe — `closing` is in
+`HELD_STATES`, so bars keep accruing and no history is lost.
+
+Live verification is still pending real accumulated bars. Once a few sessions of held bars exist, run
+`POST /advance?dry_run=1` with the owner bearer to inspect the full `results` before letting a real
+sweep write anything.
+
+**Note:** this session-notes commit is on the feature branch — it must land on default via a merged
+PR to be visible next session (branch-commit-discipline § "Session notes MUST land on default").
