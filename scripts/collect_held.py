@@ -20,6 +20,12 @@ GitHub Actions secrets by the repo owner (out of band; not touched by this scrip
 Must run on GitHub Actions (Azure IPs) — Cloudflare blocks headless Chromium scraping
 Finviz from Google Cloud IPs, same constraint as collect.py/collect_picks.py/collect_morning.py
 (see root CLAUDE.md § Playwright notes).
+
+WS5 phase 3b: immediately after a successful `post_quotes()` call, this script also POSTs
+to the Worker's `/advance` endpoint to trigger a sweep of the daily trade-lifecycle engine
+over the bars just ingested. Dependency-gated (fires right after fresh bars land), not a
+separate cron. Same service token, no new env vars. Pass `--no-advance` to ingest bars
+without triggering the sweep (a bars-only backfill escape hatch).
 """
 
 import json
@@ -43,6 +49,7 @@ from collect_morning import (  # noqa: E402  (reuse the shared scrape mechanism 
 
 HELD_TICKERS_PATH = "/held-tickers"
 INGEST_QUOTES_PATH = "/ingest/quotes"
+ADVANCE_PATH = "/advance"
 
 # Finviz label -> ticker_quotes/ingest payload field. "Ticker" is handled separately
 # (used as the row key + skip guard, not a `raw`-adjacent numeric). Kept as a module
@@ -164,6 +171,42 @@ def post_quotes(worker_url: str, token: str, payload: dict) -> int:
     return data.get("written", 0)
 
 
+def trigger_advance(worker_url: str, token: str) -> "dict | None":
+    """POST {worker_url}/advance -> counts dict, e.g. {"dry_run": false, "positions": 3,
+    "advanced": 3, "signalled": 1, "unchanged": 0, "stale": 0}. A service-token caller gets
+    counts only, no per-position detail — don't expect more than that here.
+
+    Unlike post_quotes/fetch_held_tickers, failure here does NOT sys.exit — it prints a loud
+    stderr error and returns None, leaving the exit-code decision to the caller. Rationale: by
+    the time this runs, this run's bars are ALREADY committed to D1 by post_quotes(); the
+    engine sweep is a catch-up fold over whatever bars exist, so a failed sweep today is
+    loud-but-recoverable — tomorrow's sweep advances through today's bars anyway. It must never
+    be treated as a reason to lose (or retry-and-duplicate) the ingest that already succeeded.
+    """
+    url = worker_url.rstrip("/") + ADVANCE_PATH
+    # Empty JSON object body, not None: the route is a real POST match on the Worker side, but
+    # it does not parse a request body for this endpoint — `{}` is the conventional "POST with
+    # no meaningful payload" shape rather than a bodyless POST that changes the request's headers.
+    body = b"{}"
+    try:
+        with _authed_request(url, token, method="POST", body=body) as resp:
+            status = resp.status
+            data = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
+        print(f"POST {ADVANCE_PATH} failed: HTTP {exc.code} {exc.reason} {detail}", file=sys.stderr)
+        return None
+    except Exception as exc:
+        print(f"POST {ADVANCE_PATH} failed: {exc}", file=sys.stderr)
+        return None
+
+    if status != 200:
+        print(f"POST {ADVANCE_PATH} returned HTTP {status}", file=sys.stderr)
+        return None
+
+    return data
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -177,6 +220,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true",
                          help="Scrape + map + print row counts; do not POST to the ingest endpoint.")
+    parser.add_argument("--no-advance", action="store_true",
+                         help="Ingest bars but skip the post-ingest engine sweep (POST /advance). "
+                              "Escape hatch for a bars-only backfill run.")
     args = parser.parse_args()
 
     et = pytz.timezone("America/New_York")
@@ -252,6 +298,25 @@ def main() -> None:
 
     written = post_quotes(worker_url, token, payload)
     print(f"Wrote {written} row(s) to D1 ticker_quotes for {trade_date}.")
+
+    if args.no_advance:
+        print("Skipping engine sweep (--no-advance).")
+        return
+
+    result = trigger_advance(worker_url, token)
+    if result is None:
+        # Bars are already safely in D1 (post_quotes succeeded above) — this is a loud
+        # notification, not data loss. Exit 1 so GitHub Actions emails about it; tomorrow's
+        # sweep will fold through today's bars regardless.
+        print("Engine sweep failed to run — bars ARE safely stored in D1; "
+              "the next scheduled sweep will catch up. Not retrying here.", file=sys.stderr)
+        sys.exit(1)
+
+    print(
+        f"Engine sweep: {result.get('positions', '?')} position(s) considered, "
+        f"{result.get('advanced', '?')} advanced, {result.get('signalled', '?')} exit signal(s), "
+        f"{result.get('stale', '?')} stale."
+    )
 
 
 if __name__ == "__main__":
