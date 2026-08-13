@@ -6,6 +6,59 @@
 
 ---
 
+## 2026-08-13 — WS5 phase 1 backend: D1 + finviz-positions worker (LIVE) (#264/#309)
+
+**Status: safe to close for the backend slice; PWA integration is the next slice (#309, WS5-1-PWA).**
+Senior-eng session picking up WS5 (#264). Design was already complete/merged (ADR-012 +
+`planning/trade-lifecycle-engine.md`, PR #294→#295); nothing left to design for phase 1.
+
+**The one real decision — auth — went against the owner's first instinct, with evidence.** Owner
+initially said "Cloudflare Access." Investigation found: (1) Access isn't enabled on the account
+(first-time enable is a dashboard action + permanent team-domain choice); (2) the PWA is a
+**cross-origin** GitHub-Pages page (`clarencelam2000.github.io`) calling workers on
+`*.salmonbaby8.workers.dev`, so an Access cookie is third-party → browser-blocked; (3) the sibling
+`distil` worker on this same account already proves worker-native auth (session cookie **+** a
+`Authorization: Bearer` path) and has full VAPID web-push → D1 `push_subscriptions` (the phase-4
+reference). Recommended **worker-native HMAC Bearer** instead — meets the real security goal (no
+world-readable secret in the public page; token minted from a login passphrase, lives only in the
+owner's browser). **Owner agreed**, conditional on not blocking a future Access migration — honored
+by putting all auth behind the single swap-seam `worker-positions/src/auth.js`. (Noted for the record:
+if the PWA ever moves to Cloudflare Pages, Access flips to the better choice — first-party cookie +
+native Pages protection.)
+
+**Owner also cleared me to provision/deploy on the shared CF account** (`CLOUDFLARE_API_TOKEN`/
+`CLOUDFLARE_ACCOUNT_ID` are in the env; create-only, no deletes; "CEO shouldn't deploy CF"). So
+phase 1 shipped **live**, not "built + owner deploys."
+
+**What landed (this PR, #309):**
+- **D1 `finviz-positions`** provisioned (`0e59c0fb-cac6-48ee-b90d-60ca89b3bb90`, ENAM, same account
+  as `distil`). `worker-positions/migrations/0001_init.sql` applied: `positions` spine +
+  append-only `position_events`. `ticker_quotes` **intentionally deferred to phase 2** so it lands
+  full-width per #297 (nothing to lose — phase 1 writes no bars).
+- **New worker `finviz-positions`** deployed `https://finviz-positions.salmonbaby8.workers.dev`
+  (kept separate from public `finviz-ticker-lookup`). Routes: `GET /health`, `POST /auth/login`
+  (passphrase→Bearer), ticker-generic independent-lot `POST /positions` (§3a/§8a; long-only R>0
+  validation; each "I took it" = new lot, no `(user,ticker)` uniqueness), user-scoped
+  `GET /positions`. CORS pinned to the PWA origin (Bearer header, no cookie → no Allow-Credentials).
+  App-layer `user_id` isolation from day one (D1 has no RLS).
+- Secrets set out-of-band (`POSITIONS_SESSION_SECRET` random; `POSITIONS_AUTH_PASSPHRASE` interim
+  strong-random — **owner to pick the real one; I rotate via one API call**, tracked WS5-1-PASS).
+- 28 vitest tests (auth mint/verify/expiry/tamper, validation, routing/CORS/401, isolation, lots).
+  **Live end-to-end smoke passed** (health/401/login/wrong-pass/create-201-with-CORS/400/list);
+  test rows deleted after (store back to 0/0).
+- `deploy-workers.yml` gets a 3rd job `deploy-positions` (+ `worker-positions/**` path). CLAUDE.md
+  § Automation + Repository-structure updated. Phase-1 issue **#309** opened + linked under #264;
+  SPRINT WS5 block added.
+
+**Next steps:** WS5-1-PWA (#309) — PWA login + real "I took it" POST (migrate the `taken:` marker) +
+minimal frozen-positions read-back + release triplet + Playwright. Then owner rotates the passphrase
+(WS5-1-PASS). Then phase 2 (held feed / #297), phase 3 (`advance()` engine), phase 4 (VAPID, reuse distil).
+
+**Note:** this session-notes commit must land on default via a merged PR to be visible next session
+(branch-commit-discipline § "Session notes MUST land on default").
+
+---
+
 ## 2026-08-13 — #259 token-read-scope verification closed
 
 **Status: safe to close.** Follow-up to the 2026-08-07 WS1 picks-gate entry, which flagged

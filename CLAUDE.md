@@ -265,9 +265,17 @@ All Playwright-in-cloud work should first read
 - Trigger: `workflow_dispatch` also available for manual runs.
 - On failure: GitHub emails automatically. `collect.py` itself retries each fetch 3x with backoff (30s/60s/120s); there is **no workflow-level job retry** — a job that fails after script retries stays failed until the next scheduled trigger.
 - **Worker auto-deploy: `.github/workflows/deploy-workers.yml`** — triggers on push to the
-  default branch when `worker/**` or `worker-cron/**` change. Runs `build:taxonomy` + tests
-  before deploying; two independent jobs (one per worker). Also triggerable manually via
-  `workflow_dispatch`. **No manual `npm run deploy` needed after merging worker changes.**
+  default branch when `worker/**`, `worker-cron/**`, or `worker-positions/**` change. Runs
+  `build:taxonomy` (ticker-lookup only) + tests before deploying; three independent jobs (one per
+  worker). Also triggerable manually via `workflow_dispatch`. **No manual `npm run deploy` needed
+  after merging worker changes.**
+  - **`worker-positions/` (WS5, D1-backed `finviz-positions`)** is the private trade-lifecycle
+    store — authenticated "I took it" write path (phase 1). Auth is a worker-native HMAC **bearer
+    token** (NOT Cloudflare Access — the PWA is a cross-origin GitHub-Pages page, so an Access
+    cookie would be third-party; the swap seam is `worker-positions/src/auth.js` if the PWA ever
+    moves to Cloudflare Pages). Secrets (`POSITIONS_SESSION_SECRET`, `POSITIONS_AUTH_PASSPHRASE`)
+    and the D1 schema are provisioned out-of-band and are **not** touched by `wrangler deploy`. See
+    `worker-positions/README.md` and `knowledge/decisions/ADR-012-trade-lifecycle-engine.md`.
   - If the `Build taxonomy` step fails in CI: it is a **data validation error**, not a code
     error. An entry in `data/etf_overrides.csv` references a Finviz group name that doesn't
     exist in the snapshot CSVs. Fix: correct the name in `etf_overrides.csv` and re-push.
@@ -333,6 +341,8 @@ committed file is the durable record.
 | `scripts/` | Data collection and processing scripts. See `scripts/CLAUDE.md` for Picks pipeline and AI-capture detail. |
 | `dashboard/` | Streamlit dashboard |
 | `worker/` | Cloudflare Worker (ticker lookup + cache ops) — see `worker/README.md` and `worker/CLAUDE.md` (ETF override layer, ADR-009). |
+| `worker-positions/` | Cloudflare Worker + D1 `finviz-positions` — WS5 private trade-lifecycle store (authenticated "I took it" write path; phase 1). See `worker-positions/README.md`. |
+| `worker-cron/` | Cloudflare Worker — single-trigger cron dispatcher (ADR-010). See `worker-cron/README.md`. |
 | `docs/` | PWA (GitHub Pages) — `index.html`, `sw.js`, `manifest.json`. See `docs/CLAUDE.md` for display-threshold constants, release process, and PWA-specific testing. |
 | `data/` | Append-only CSVs (sectors, industries) |
 | `planning/` | Implementation plans and feature designs |

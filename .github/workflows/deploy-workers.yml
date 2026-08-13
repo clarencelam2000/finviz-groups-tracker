@@ -8,6 +8,7 @@ on:
     paths:
       - 'worker/**'
       - 'worker-cron/**'
+      - 'worker-positions/**'
       - '.github/workflows/deploy-workers.yml'
   workflow_dispatch:
 
@@ -67,4 +68,30 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run deploy
+
+  deploy-positions:
+    name: Deploy finviz-positions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: worker-positions/package-lock.json
+      - name: Install dependencies
+        working-directory: worker-positions
+        run: npm ci
+      - name: Run tests
+        working-directory: worker-positions
+        run: npm test
+      - name: Deploy
+        working-directory: worker-positions
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        # Secrets (POSITIONS_SESSION_SECRET, POSITIONS_AUTH_PASSPHRASE) and the D1 schema are
+        # provisioned out-of-band and are NOT touched by `wrangler deploy`. See worker-positions/README.md.
         run: npm run deploy
