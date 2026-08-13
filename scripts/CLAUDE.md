@@ -175,6 +175,59 @@ Failed-breakout / Invalidated / No-quote) at ~10:05 ET.
   - **`--dry-run`:** scrapes + parses + prints row counts, skips `write_store()`. This is Phase
     B's `collect_morning.yml` first-slice hook (`workflow_dispatch` dry run before cron enable).
 
+## WS5 held-tickers feed (`collect_held.py`)
+
+**WS5 phase 2** (`planning/trade-lifecycle-engine.md` §5/§5a/§10/§11, ADR-012; issues #312,
+#297). Settled-EOD quote feed for the **held** set — the union of open/managing/closing
+`positions` — as distinct from WS3's morning picks/watch feed above (different membership,
+different store, see §5a "Two separate feeds"). Required reading before touching this file:
+the planning doc sections cited above, plus ADR-012 §10 Phasing / §11 Decisions resolved
+("Ticker-quote store = D1, append-only").
+
+- **Reuses `collect_morning.py`'s scrape mechanism verbatim** — `fetch_ticker_quotes(page,
+  tickers, config, block="held")` and `build_ticker_url(config, tickers, offset, block="held")`
+  are the exact same shared functions WS3 calls with `block="morning"`; this script imports
+  them rather than reimplementing scraping. `held` is a distinct block in
+  `data/picks/screener_config.json` — the full 84-column scrape (empty `base_filters`,
+  `t=`-filtered), not WS3's narrow 9-column block.
+- **D1-write-not-git-commit, the defining difference from every other collector in this repo.**
+  `collect_held.py` never touches the working tree — it POSTs to the `finviz-positions`
+  Worker's authenticated `/ingest/quotes` endpoint (Bearer auth), which writes to D1's
+  `ticker_quotes` table (append-only, one row per `(ticker, trade_date)` — see planning doc §5).
+  There is no `write_store()` / `MORNING_STORE` analog here and nothing for `write_store()`'s
+  `session_config.assert_provisional` guard to apply to. `collect_held.yml` correspondingly has
+  no `git commit`/`git push` step and no `finviz-data-commit` concurrency group.
+- **Two required env vars** (GitHub Actions secrets, set out of band — not touched by
+  `wrangler deploy`): `POSITIONS_WORKER_URL` (base URL of the `finviz-positions` Worker) and
+  `POSITIONS_INGEST_TOKEN` (Bearer token for both `GET /held-tickers` and
+  `POST /ingest/quotes`). Either missing → `sys.exit(1)` loud (misconfiguration, never a silent
+  no-op). 3-places documented: in-code module docstring + README § Configurable parameters +
+  here.
+- **Held-set source:** `GET {POSITIONS_WORKER_URL}/held-tickers` → `{"tickers": [...]}`, the
+  live union of open/managing/closing positions from the Worker's own D1 `positions` table —
+  never derived from `picks_latest.csv` or any repo file (§5a: "held feed never depends on the
+  picks list"). An empty held set is a normal, expected `sys.exit(0)` ("nothing to fetch"), not
+  an error — most days early in WS5's life will have zero open positions.
+- **`build_quote_payload(quotes, trade_date, collected_at)`** is the pure, unit-tested core
+  (`tests/test_collect_held.py`) — maps each scraped Finviz row to the ingest payload's typed
+  fields (`prev_close`, `open`, `high`, `low`, `close`, `change_pct`, `atr`, `volume`, all via
+  `collect_morning._to_float`) **plus a `raw` key carrying the entire original 84-column row
+  dict verbatim** (#297 — no scraped column is ever dropped, even though only a handful feed
+  typed fields today). `days_to_earnings` is left `None` in phase 2; phase 3 derives it from
+  `raw["Earnings"]`.
+- **Empty-scrape guard:** if the held set was non-empty but the scrape returns 0 rows (the
+  Cloudflare-block signature — every page 200s with an empty table), the script refuses to POST
+  and exits 1 loud, mirroring `collect_picks.py`'s empty-scrape guard in spirit (simpler here —
+  there's no local file whose prior-run data could be silently evicted).
+- **Non-trading-day guard** reuses `NYSE_HOLIDAYS`/`_is_trading_day` from `collect.py`, same
+  as `collect_morning.py` — settled EOD feed, so a closed day exits 0 with no rollback (unlike
+  `collect.py`'s `trading_date()`).
+- **Scheduler:** the Cloudflare `finviz-cron-dispatcher`'s `held` job (`worker-cron/src/routing.js`
+  `JOB_SCHEDULE`), 17:30 ET Mon–Fri, ungated (same shape as `collect_morning` — the held set
+  comes from a live Worker query, nothing to dependency-gate on). Dispatches
+  `.github/workflows/collect_held.yml`. See root `CLAUDE.md` § Automation.
+- **`--dry-run`:** scrapes + maps + prints row counts, skips the POST.
+
 ## AI capture constants (`scripts/generate_ai.py`)
 
 > Added in Phase 1 of the AI capture plan (ADR-006). Document changes to these in all three
