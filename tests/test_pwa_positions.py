@@ -278,3 +278,54 @@ def test_cancel_reverts_to_button(server):
         assert "I took it →" in html
         assert capture == [], "Cancel must never POST"
         browser.close()
+
+
+def test_confirm_double_submit_guard_posts_once(server):
+    # Regression for the submitting-guard fix (PR #311 review): two confirms fired in the same
+    # JS tick (a double-tap) must create only ONE position. The guard is synchronous — the first
+    # call sets card.submitting before its await, so the second returns immediately.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        capture = []
+        _mock_worker(page, capture=capture)
+        _boot(page, signed_in=True)
+        page.click("[data-tab='morning']")
+        page.wait_for_timeout(500)
+
+        page.click("text=I took it → >> nth=0")
+        page.wait_for_timeout(300)
+        assert "Confirm — log it" in page.inner_html("#morning-list")
+
+        # Fire confirm twice synchronously — simulates a double-tap before the first resolves.
+        page.evaluate("() => { window.ws5ConfirmTakeIt('AXON'); window.ws5ConfirmTakeIt('AXON'); }")
+        page.wait_for_timeout(500)
+
+        assert len(capture) == 1, f"double-submit guard failed: {len(capture)} POSTs"
+        assert "✓ Logged" in page.inner_html("#morning-list")
+        browser.close()
+
+
+def test_positions_load_error_shows_retry(server):
+    # Regression for the positionsError fix (PR #311 review): a non-401 GET failure must show
+    # an explicit error + retry, NOT the "no open positions" empty state.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        page.route("**/auth/login", lambda r: r.fulfill(
+            status=200, body=json.dumps({"token": FAKE_TOKEN}), content_type="application/json"))
+        page.route("**/positions**", lambda r: r.fulfill(
+            status=500, body=json.dumps({"error": "boom"}), content_type="application/json"))
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(600)
+
+        html = page.inner_html("#positions-content")
+        assert "Couldn't load positions" in html
+        assert "Try again" in html
+        assert "No open positions" not in html, "a fetch error must not read as an empty portfolio"
+        browser.close()
