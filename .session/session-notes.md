@@ -6,6 +6,27 @@
 
 ---
 
+## 2026-08-13 — #259 token-read-scope verification closed
+
+**Status: safe to close.** Follow-up to the 2026-08-07 WS1 picks-gate entry, which flagged
+"token read-scope risk is mitigated by setup docs, not proven live" as the one thing that
+session couldn't verify from a sandboxed dev environment. Owner asked for a quick verify of
+both #259 review findings; checked live `GET /last` on the deployed worker.
+
+**Confirmed live (2026-08-12 ET):**
+- `picks_gate_check`: `{"outcome":"dispatch","reason":"eod_run_success"}` at 21:05 UTC, fired
+  within one tick of `collect_eod`'s 21:00 UTC dispatch — `GITHUB_DISPATCH_TOKEN` successfully
+  read `collect.yml/runs` (no `github_401`/`github_403`). Token-read-scope question from the
+  2026-08-07 entry is settled: the PAT's grant covers both the dispatch POST and the runs GET.
+- `findEodRun`'s disambiguation also confirmed against real traffic: `collect_preclose` (19:50
+  UTC) and `collect_eod` (21:00 UTC) both dispatched today, and the gate matched the EOD run
+  specifically (not the earlier pre-close run) before dispatching `picks`.
+
+No code change needed — both #259 review findings are implemented and working in prod. This
+entry just closes the verification loop the 2026-08-07 entry left open.
+
+---
+
 ## 2026-08-12 — PR #306 review follow-up: overhead-penalty test coverage + stale-52W-High handling
 
 **Status: safe to close, pushed to PR #306's branch.** Addressed review feedback on the Phase 2
