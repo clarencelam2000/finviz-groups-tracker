@@ -54,10 +54,14 @@ export const ENGINE_CONFIG = Object.freeze({
 
 // Canonical exit-reason enum (§6). hard_exit is split into close_below_50ma (slow bleed) and
 // severe_breakdown (one-day crash) so the honest record can say WHY. Earnings is NOT an exit reason.
+// close_below_20ma is the HARD_EXIT_BASIS="20ma" override's immediate single-close counterpart to
+// close_below_50ma — distinct from two_close_below_20ma, the stateful two-consecutive-closes rule
+// in section (c) below, so the record never claims two closes happened when only one did.
 export const EXIT_REASONS = Object.freeze([
   "stop_hit",
   "gap_down_below_stop",
   "close_below_50ma",
+  "close_below_20ma",
   "severe_breakdown",
   "two_close_below_20ma",
   "manual_close",
@@ -179,7 +183,7 @@ export function advance(pos, bar, cfg = ENGINE_CONFIG) {
   // (b) Hard exit — two DISTINCT reasons, reported separately (§6 split of the old bundled hard_exit).
   const hardBasisLevel = cfg.HARD_EXIT_BASIS === "20ma" ? bar.sma20 : bar.sma50;
   if (isNum(hardBasisLevel) && bar.close < hardBasisLevel) {
-    const reason = cfg.HARD_EXIT_BASIS === "20ma" ? "two_close_below_20ma" : "close_below_50ma";
+    const reason = cfg.HARD_EXIT_BASIS === "20ma" ? "close_below_20ma" : "close_below_50ma";
     return signalExit(next, bar, bar.close, reason);
   }
   if (severeBreakdown(bar, cfg)) {
@@ -192,7 +196,8 @@ export function advance(pos, bar, cfg = ENGINE_CONFIG) {
   // (default TWO_CLOSE_EXIT=2) is exactly count 0→1 (caution) then 1→2 (exit).
   if (isNum(bar.sma20) && bar.close < bar.sma20) {
     const count = (next.caution_flag || 0) + 1;
-    if (count >= (cfg.TWO_CLOSE_EXIT || 2)) {
+    const twoCloseExit = isNum(cfg.TWO_CLOSE_EXIT) ? cfg.TWO_CLOSE_EXIT : 2;
+    if (count >= twoCloseExit) {
       return signalExit(next, bar, bar.close, "two_close_below_20ma");
     }
     next.caution_flag = count; // 1st close below → caution; keep advancing the stop/trim this bar.
@@ -413,7 +418,15 @@ export function normalizeBar(row) {
     sma20: recoverMaLevel(close, pctFromRaw(raw, "SMA20")),
     sma50: recoverMaLevel(close, pctFromRaw(raw, "SMA50")),
     sma200: recoverMaLevel(close, pctFromRaw(raw, "SMA200")),
-    days_to_earnings: typedEarnings !== null ? typedEarnings : parseEarningsToDays(raw["Earnings"], row.trade_date),
+    // row.trade_date is required here (not just passed through): without it, parseEarningsToDays
+    // would fall back to its own `new Date()` default and normalizeBar would no longer be a pure
+    // function of the row (module header, line 5-7).
+    days_to_earnings:
+      typedEarnings !== null
+        ? typedEarnings
+        : row.trade_date
+          ? parseEarningsToDays(raw["Earnings"], row.trade_date)
+          : null,
   };
 }
 
