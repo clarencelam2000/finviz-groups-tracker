@@ -1,68 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { handleRequest } from "../src/index.js";
 import { mintToken } from "../src/auth.js";
-
-// Minimal in-memory D1 mock: enough for insertPosition (batch of 2 INSERTs) and listPositions
-// (SELECT ... WHERE user_id = ? [AND state = ?] ORDER BY opened_at DESC).
-function makeDb() {
-  const positions = [];
-  const events = [];
-  const quotes = new Map(); // ticker_quotes: `${ticker}|${trade_date}` -> row
-  function prepare(sql) {
-    return {
-      sql,
-      _binds: [],
-      bind(...args) {
-        this._binds = args;
-        return this;
-      },
-      async all() {
-        // held-tickers query: SELECT DISTINCT ticker FROM positions WHERE state IN (...)
-        if (/SELECT DISTINCT ticker/.test(sql)) {
-          const states = this._binds;
-          const set = [...new Set(positions.filter((p) => states.includes(p.state)).map((p) => p.ticker))].sort();
-          return { results: set.map((t) => ({ ticker: t })) };
-        }
-        // list query: first bind is user_id; optional second is state
-        const userId = this._binds[0];
-        const state = /AND state = \?/.test(sql) ? this._binds[1] : null;
-        let rows = positions.filter((p) => p.user_id === userId && (state == null || p.state === state));
-        rows = rows.slice().sort((a, b) => (a.opened_at < b.opened_at ? 1 : -1));
-        return { results: rows };
-      },
-      async run() {
-        _apply(sql, this._binds);
-        return { success: true };
-      },
-    };
-  }
-  function _apply(sql, binds) {
-    if (sql.includes("INSERT INTO positions")) {
-      const cols = sql.match(/\(([^)]+)\) VALUES/)[1].split(",").map((s) => s.trim());
-      const row = {};
-      cols.forEach((c, i) => (row[c] = binds[i]));
-      positions.push(row);
-    } else if (sql.includes("INSERT INTO position_events")) {
-      events.push({ trade_id: binds[0], user_id: binds[1], ts: binds[2], trade_date: binds[3], event_type: "entered", payload: binds[4] });
-    } else if (sql.includes("INSERT INTO ticker_quotes")) {
-      const cols = sql.match(/\(([^)]+)\) VALUES/)[1].split(",").map((s) => s.trim());
-      const row = {};
-      cols.forEach((c, i) => (row[c] = binds[i]));
-      quotes.set(`${row.ticker}|${row.trade_date}`, row); // upsert (ON CONFLICT DO UPDATE)
-    }
-  }
-  return {
-    prepare,
-    async batch(stmts) {
-      for (const s of stmts) _apply(s.sql, s._binds);
-      return stmts.map(() => ({ success: true }));
-    },
-    _positions: positions,
-    _events: events,
-    _quotes: quotes,
-    _seedPosition: (p) => positions.push(p),
-  };
-}
+import { makeD1 } from "./helpers/d1.js";
 
 const SECRET = "test-secret-abc123-abc123-abc123";
 const PASSPHRASE = "correct horse";
@@ -74,7 +13,7 @@ beforeEach(() => {
     POSITIONS_AUTH_PASSPHRASE: PASSPHRASE,
     POSITIONS_INGEST_TOKEN: INGEST_TOKEN,
     ALLOWED_ORIGINS: "https://clarencelam2000.github.io,http://localhost:8000",
-    POSITIONS_DB: makeDb(),
+    POSITIONS_DB: makeD1(),
   };
 });
 
@@ -138,8 +77,8 @@ describe("create + list", () => {
     const { position } = await res.json();
     expect(position.ticker).toBe("NVDA");
     expect(position.state).toBe("open");
-    expect(env.POSITIONS_DB._events.length).toBe(1);
-    expect(env.POSITIONS_DB._events[0].event_type).toBe("entered");
+    expect(env.POSITIONS_DB._events().length).toBe(1);
+    expect(env.POSITIONS_DB._events()[0].event_type).toBe("entered");
 
     const list = await handleRequest(req("/positions", { token }), env);
     const { positions } = await list.json();
@@ -152,8 +91,9 @@ describe("create + list", () => {
     const body = { ticker: "AXON", entry_price: 50, initial_stop: 47, qty: 3 };
     await handleRequest(req("/positions", { method: "POST", token, body }), env);
     await handleRequest(req("/positions", { method: "POST", token, body }), env);
-    expect(env.POSITIONS_DB._positions).toHaveLength(2);
-    expect(env.POSITIONS_DB._positions[0].trade_id).not.toBe(env.POSITIONS_DB._positions[1].trade_id);
+    expect(env.POSITIONS_DB._positions()).toHaveLength(2);
+    const rows = env.POSITIONS_DB._positions();
+    expect(rows[0].trade_id).not.toBe(rows[1].trade_id);
   });
 
   it("rejects an invalid payload with 400", async () => {
@@ -200,7 +140,8 @@ describe("WS5 phase 2 — held-tickers feed machine routes", () => {
     const res = await handleRequest(ingestReq("/ingest/quotes", { method: "POST", body }), env);
     expect(res.status).toBe(200);
     expect((await res.json()).written).toBe(1);
-    expect(env.POSITIONS_DB._quotes.get("AAPL|2026-08-13").close).toBe(231.5);
+    const q = env.POSITIONS_DB._quotes().find((r) => r.ticker === "AAPL" && r.trade_date === "2026-08-13");
+    expect(q.close).toBe(231.5);
   });
 
   it("POST /ingest/quotes 400s a malformed batch", async () => {
