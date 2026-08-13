@@ -6,6 +6,36 @@
 
 ---
 
+## 2026-08-13 — collect_held.yml first-run failure: Cloudflare Bot Fight Mode, not missing secrets (#312)
+
+**Status: safe to close once this PR merges.** Owner reported the first manual `collect_held.yml`
+dispatch failing and suspected missing GitHub Actions secrets. Investigated via the workflow logs.
+
+**Root cause:** NOT a secrets problem — both `POSITIONS_WORKER_URL` and `POSITIONS_INGEST_TOKEN`
+were confirmed present in the run's env (non-empty, masked `***`). The actual failure was `GET
+/held-tickers failed: HTTP 403 Forbidden`. Live-verified (via curl against
+`https://finviz-positions.salmonbaby8.workers.dev`) that this 403 comes from **Cloudflare's Bot
+Fight Mode on the `workers.dev` zone**, not from `worker-positions/src/auth.js` — the app's own
+auth code always returns a JSON `{"error":"unauthorized"}` 401, never a bare 403. Requests sent
+with the default `Python-urllib/x.y` User-Agent get Cloudflare error 1010 ("browser signature
+banned") even hitting the *unauthenticated* `/health` route; a non-generic User-Agent clears it
+immediately. `collect_held.py` was the only script in the repo calling a Cloudflare Worker via raw
+`urllib.request` (the ticker-lookup worker is called from the browser/PWA, not GH Actions), so this
+UA-based block had never been hit before.
+
+**Fix (this PR):** `scripts/collect_held.py`'s `_authed_request()` now sets `User-Agent:
+finviz-groups-tracker-held-feed/1.0`. Added `test_authed_request_sets_non_generic_user_agent` to
+`tests/test_collect_held.py` (monkeypatches `urlopen`, asserts the header) as a regression guard.
+Full suite green (667 non-Playwright + this new one).
+
+**Not done in this session:** re-running `collect_held.yml` live to confirm the fix end-to-end —
+worth a manual dispatch on the next trading day now that the code is merged. WS5-2's go-live
+checklist (`session-notes.md` 2026-08-13 WS5-phase-2 entry) is otherwise unchanged.
+
+**Next steps:** owner re-dispatches `collect_held.yml` (or waits for the 17:30 ET cron) to confirm
+green; if it still fails, check next for a live/`held` position actually existing (empty held set
+is a normal `exit(0)`, not a signal either way here since this run failed before reaching that check).
+
 ## 2026-08-13 — WS5 phase 3a: pure `advance()` daily engine (#264, SPRINT WS5-3a)
 
 **Status: safe to close once the PR merges.** Senior-eng session building the heart of the
