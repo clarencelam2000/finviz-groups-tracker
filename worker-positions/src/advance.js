@@ -377,6 +377,8 @@ export function correctExit(pos, { exit_price, trade_date }) {
 
 // Reopen a wrongly-closed trade (§7): Closed → Managing, emits reopened. Clears the exit fields so
 // advance() resumes cleanly from the next bar; the original closed/exit events stay in the ledger.
+// caution_flag is also reset (mirrors stillHolding's re-arm) so the two-close-below-20MA rule
+// requires two fresh closes post-reopen instead of reusing the stale pre-reopen counter.
 export function reopen(pos, { trade_date } = {}) {
   const next = {
     ...pos,
@@ -387,6 +389,7 @@ export function reopen(pos, { trade_date } = {}) {
     exit_signal_date: null,
     exit_reason: null,
     confirmation_status: "unconfirmed",
+    caution_flag: 0,
   };
   return {
     position: next,

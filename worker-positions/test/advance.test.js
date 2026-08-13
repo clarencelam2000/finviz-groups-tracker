@@ -305,6 +305,11 @@ describe("confirmExit / stillHolding / autoConfirm / correctExit / reopen", () =
     expect(r.position.exit_reason).toBe(null);
     expect(r.events[0].event_type).toBe("reopened");
   });
+  it("reopen resets caution_flag so two-close-below-20MA needs two fresh closes", () => {
+    const closed = pos({ state: "closed", exit_price: 88, exit_reason: "two_close_below_20ma", caution_flag: 2 });
+    const r = reopen(closed);
+    expect(r.position.caution_flag).toBe(0);
+  });
 });
 
 // ── Property tests over random bar sequences (§9 invariants) ──────────────────────────
