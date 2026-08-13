@@ -45,6 +45,9 @@ const WORKFLOWS = {
   // WS3 Phase B (ADR-013 Decision 6): ungated, dispatched directly by
   // scheduled() like `collect` — ADR-013 morning status workflow.
   morning: { url: `${REPO_WORKFLOWS_URL}/collect_morning.yml/dispatches` },
+  // WS5 phase 2 (planning/trade-lifecycle-engine.md §5/§5a/§10/§11): ungated, same
+  // dispatch shape as `morning` — held-tickers EOD quote feed, writes to D1 (not git).
+  held: { url: `${REPO_WORKFLOWS_URL}/collect_held.yml/dispatches` },
 };
 
 function jsonResponse(obj, status = 200) {

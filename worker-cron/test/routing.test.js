@@ -149,6 +149,28 @@ describe('jobsInWindow — pure, no "already dispatched" awareness', () => {
     expect(jobsInWindow(saturday)).toEqual([]);
     expect(jobsInWindow(sunday)).toEqual([]);
   });
+
+  it('returns picks AND held at 17:30 ET (picks\' wide gate window still open, held\'s own window just opened)', () => {
+    const etNow = { hour: 17, minute: 30, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(etNow)).toEqual(['picks', 'held']);
+  });
+
+  it('closes held\'s window at 18:00 ET (target 17:30 + 30 min)', () => {
+    const etNow = { hour: 18, minute: 0, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(etNow)).toEqual(['picks']);
+  });
+
+  it('does not fire held on a weekend even at 17:30 local time', () => {
+    const saturday = { hour: 17, minute: 30, weekday: 6, dateStr: '2026-07-18' };
+    const sunday = { hour: 17, minute: 30, weekday: 7, dateStr: '2026-07-19' };
+    expect(jobsInWindow(saturday)).toEqual([]);
+    expect(jobsInWindow(sunday)).toEqual([]);
+  });
+
+  it('held is ungated (no `gated` flag), unlike picks', () => {
+    const job = JOB_SCHEDULE.find((j) => j.name === 'held');
+    expect(job.gated).toBeUndefined();
+  });
 });
 
 describe('jobsForTick — self-healing dispatch (staff amendment on #258)', () => {
@@ -199,5 +221,20 @@ describe('jobsForTick — self-healing dispatch (staff amendment on #258)', () =
   it('does not re-dispatch collect_morning already recorded as dispatched today', () => {
     const etNow = { hour: 9, minute: 45, weekday: 3, dateStr: '2026-07-15' };
     expect(jobsForTick(etNow, { collect_morning: '2026-07-15' })).toEqual([]);
+  });
+
+  it('dispatches held at 17:30 ET when not yet dispatched today (picks\' own wide gate window is also open and undispatched)', () => {
+    const etNow = { hour: 17, minute: 30, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsForTick(etNow, {})).toEqual(['picks', 'held']);
+  });
+
+  it('self-heals a delayed held tick (17:45 ET, 15 min late, still inside window)', () => {
+    const etNow = { hour: 17, minute: 45, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsForTick(etNow, { picks: '2026-07-15' })).toEqual(['held']);
+  });
+
+  it('does not re-dispatch held already recorded as dispatched today', () => {
+    const etNow = { hour: 17, minute: 30, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsForTick(etNow, { held: '2026-07-15', picks: '2026-07-15' })).toEqual([]);
   });
 });
