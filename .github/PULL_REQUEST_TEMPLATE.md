@@ -2,7 +2,7 @@
 Keep sections that don't apply, but mark them "N/A — <why>" instead of deleting.
 An explicit N/A tells the reviewer you considered it; a missing section doesn't.
 
-Title: prefix with feat:/fix:/docs:/chore:/test:/refactor:/data:/ops:/spike:/process:
+Title: prefix with feat:/fix:/docs:/design:/chore:/test:/refactor:/data:/ops:/spike:/process:
 (same table as commit prefixes — see .claude/rules/branch-commit-discipline.md).
 Append a phase in parens if relevant, e.g. "feat: ... (Phase 3d)".
 -->

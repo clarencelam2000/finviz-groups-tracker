@@ -139,6 +139,7 @@ Each commit is one logical, self-contained change. A reader must understand what
 | `feat:` | New functionality |
 | `fix:` | Bug correction |
 | `docs:` | Documentation only |
+| `design:` | Design docs / ADRs proposing or recording a design (architecture, UX, data-model decisions) — use instead of `docs:` when the doc's purpose is the design itself, not just documenting existing behavior |
 | `chore:` | Housekeeping (gitignore, deps, session notes) |
 | `test:` | Tests only, no logic change |
 | `refactor:` | Code restructure, no behavior change |
@@ -156,7 +157,9 @@ as a parenthetical suffix, not a competing prefix — it shouldn't fight `feat:`
 first-token slot: `feat: Focus liquidity floor + earnings-risk penalty (Phase 3d)`.
 
 Standalone strategy/direction docs (no code shipping) belong in `planning/` or
-`knowledge/decisions/` as an ADR, not a tagged PR — a PR tag implies something shipped as code.
+`knowledge/decisions/` as an ADR — tag these `design:`, not `docs:`, since the doc's purpose is
+the design itself, not documenting existing behavior. Use `docs:` for changes that document
+already-shipped code (README updates, CLAUDE.md edits, docstrings).
 
 **Imperative mood** — write the summary as a command, not a description:
 - `add rank_day metric to delta schema` ✓
