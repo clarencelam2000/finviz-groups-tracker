@@ -264,6 +264,35 @@ describe('scheduled handler — single-tick routing (ADR-010)', () => {
     await worker.scheduled({ scheduledTime: new Date('2026-07-15T14:20:00Z').getTime() }, makeEnv(kv), {}); // 10:20 ET, still in window
     expect(global.fetch).not.toHaveBeenCalled();
   });
+
+  it('dispatches held at 17:30 ET and records it under its own KV key, ungated (no gate GET)', async () => {
+    mockFetch(204);
+    const kv = makeKV();
+    // 2026-07-15T21:30:00Z = 17:30 EDT, a Wednesday.
+    await worker.scheduled({ scheduledTime: new Date('2026-07-15T21:30:00Z').getTime() }, makeEnv(kv), {});
+    const postCalls = global.fetch.mock.calls.filter(([, opts]) => opts && opts.method === 'POST');
+    const heldCall = postCalls.find(([url]) => url.includes('/collect_held.yml/'));
+    expect(heldCall).toBeTruthy();
+    const stored = JSON.parse(kv._store.get('last_dispatch_held'));
+    expect(stored.ok).toBe(true);
+    expect(stored.job).toBe('held');
+    expect(stored.workflow).toBe('held');
+    expect(stored.etDate).toBe('2026-07-15');
+  });
+
+  it('does not re-dispatch held once already recorded as dispatched today', async () => {
+    mockFetchRouter({ runs: [{ created_at: '2026-07-15T21:00:03Z', status: 'completed', conclusion: 'success' }] });
+    const kv = makeKV({
+      last_dispatch_held: JSON.stringify({ ok: true, etDate: '2026-07-15' }),
+      last_dispatch_collect_eod: JSON.stringify({ ok: true, etDate: '2026-07-15', ts: '2026-07-15T21:00:00.000Z' }),
+      last_dispatch_picks: JSON.stringify({ ok: true, etDate: '2026-07-15' }),
+    });
+    // 17:45 ET, inside held's window — but picks is already dispatched too, so
+    // nothing should fire for either job.
+    await worker.scheduled({ scheduledTime: new Date('2026-07-15T21:45:00Z').getTime() }, makeEnv(kv), {});
+    const postCalls = global.fetch.mock.calls.filter(([, opts]) => opts && opts.method === 'POST');
+    expect(postCalls.some(([url]) => url.includes('/collect_held.yml/'))).toBe(false);
+  });
 });
 
 describe('picks dependency gate (#259)', () => {
@@ -360,7 +389,7 @@ describe('picks dependency gate (#259)', () => {
 describe('JOB_SCHEDULE wiring', () => {
   it('every job in the schedule has a corresponding workflow url in the dispatcher', () => {
     // Indirect check: dispatching each job name must not throw on an unknown workflow.
-    expect(JOB_SCHEDULE.map((j) => j.workflow).every((w) => ['collect', 'picks', 'morning'].includes(w))).toBe(true);
+    expect(JOB_SCHEDULE.map((j) => j.workflow).every((w) => ['collect', 'picks', 'morning', 'held'].includes(w))).toBe(true);
   });
 });
 

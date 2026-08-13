@@ -8,11 +8,16 @@ private financial-data write path must never share an origin or auth surface wit
 
 ## Phase status
 
-This is **phase 1** of the four-phase WS5 plan (ADR-012 §10):
+This is **phase 1** of the four-phase WS5 plan (ADR-012 §10), with **phase 2 in progress**:
 
 1. ✅ **D1 schema + authenticated, ticker-generic "I took it" write path** (this worker) — positions
    spine + first `entered` event, plus a read-back list.
-2. ⬜ Held-tickers feed (daily quote job → `ticker_quotes`, full column set, issue #297).
+2. 🟡 **Held-tickers feed (daily quote job → `ticker_quotes`, full column set, issue #297)** —
+   in progress. `GET /held-tickers` and `POST /ingest/quotes` have landed on this worker; the
+   GitHub Actions side (`scripts/collect_held.py`, `.github/workflows/collect_held.yml`) and the
+   `worker-cron` `held` scheduled job are wired up alongside them. Not yet exercised against a
+   live D1 instance / real held positions — treat as unverified end-to-end until a real run
+   confirms it.
 3. ⬜ `advance()` daily engine + tests.
 4. ⬜ Push notifications (VAPID; the sibling `distil` worker's web-push code is the reference).
 
@@ -27,6 +32,16 @@ by design (each phase is independently useful).
 | `POST` | `/auth/login` | passphrase in body | exchange the login passphrase for a bearer token |
 | `POST` | `/positions` | Bearer | create a position (one **lot**) + its `entered` event — the ticker-generic "I took it" write path (§ 8a) |
 | `GET` | `/positions?state=` | Bearer | list the caller's positions, newest first (optional state filter) |
+| `GET` | `/held-tickers` | Service token | WS5 phase 2: the union of open/managing/closing tickers the held feed must scrape (`{ tickers: [...] }`) |
+| `POST` | `/ingest/quotes` | Service token | WS5 phase 2: append-only batch write of a day's scraped bars into `ticker_quotes` (`{ trade_date, collected_at, quotes:[...] }` → `{ written }`) |
+
+**Two auth paths, one seam.** The interactive `Bearer` rows above are the owner's HMAC login token
+(`authenticate()`); the two WS5-phase-2 machine rows use a **separate service token**
+(`authenticateService()`, secret `POSITIONS_INGEST_TOKEN`) held only by the GitHub-Actions held-feed
+job. The service token can read the held set and append market bars but **cannot** read, create, or
+mutate positions — and the owner token cannot satisfy the service routes. Both live behind
+`src/auth.js` (§ Auth). Market data (`ticker_quotes`) carries **no `user_id`** — it is public bars;
+only the *selection* of tickers to fetch derives from private positions, at query time.
 
 `POST /positions` body: `{ ticker, entry_price, initial_stop, qty, stop_basis?, meta?, days_to_earnings? }`.
 `stop_basis` ∈ `prior_day_low | todays_low | 20ma | 50ma | manual` (default `manual`).
@@ -60,6 +75,7 @@ token is minted server-side from a login passphrase and lives only in the owner'
 | `src/auth.js` | `TOKEN_TTL_SECONDS` | `2592000` (30 d) | bearer-token lifetime before re-login |
 | secret | `POSITIONS_SESSION_SECRET` | — | HMAC key signing bearer tokens (rotating it invalidates all tokens) |
 | secret | `POSITIONS_AUTH_PASSPHRASE` | — | the owner's login passphrase (user = 1) |
+| secret | `POSITIONS_INGEST_TOKEN` | — | WS5 phase 2 machine token for the GH-Actions held feed (`/held-tickers`, `/ingest/quotes`); also a GitHub Actions secret. Least-privilege, distinct from the owner passphrase. |
 
 ## One-time setup (already done in prod; documented for reproducibility)
 

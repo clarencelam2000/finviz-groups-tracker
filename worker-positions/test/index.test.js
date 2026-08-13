@@ -7,6 +7,7 @@ import { mintToken } from "../src/auth.js";
 function makeDb() {
   const positions = [];
   const events = [];
+  const quotes = new Map(); // ticker_quotes: `${ticker}|${trade_date}` -> row
   function prepare(sql) {
     return {
       sql,
@@ -16,6 +17,12 @@ function makeDb() {
         return this;
       },
       async all() {
+        // held-tickers query: SELECT DISTINCT ticker FROM positions WHERE state IN (...)
+        if (/SELECT DISTINCT ticker/.test(sql)) {
+          const states = this._binds;
+          const set = [...new Set(positions.filter((p) => states.includes(p.state)).map((p) => p.ticker))].sort();
+          return { results: set.map((t) => ({ ticker: t })) };
+        }
         // list query: first bind is user_id; optional second is state
         const userId = this._binds[0];
         const state = /AND state = \?/.test(sql) ? this._binds[1] : null;
@@ -37,6 +44,11 @@ function makeDb() {
       positions.push(row);
     } else if (sql.includes("INSERT INTO position_events")) {
       events.push({ trade_id: binds[0], user_id: binds[1], ts: binds[2], trade_date: binds[3], event_type: "entered", payload: binds[4] });
+    } else if (sql.includes("INSERT INTO ticker_quotes")) {
+      const cols = sql.match(/\(([^)]+)\) VALUES/)[1].split(",").map((s) => s.trim());
+      const row = {};
+      cols.forEach((c, i) => (row[c] = binds[i]));
+      quotes.set(`${row.ticker}|${row.trade_date}`, row); // upsert (ON CONFLICT DO UPDATE)
     }
   }
   return {
@@ -47,16 +59,20 @@ function makeDb() {
     },
     _positions: positions,
     _events: events,
+    _quotes: quotes,
+    _seedPosition: (p) => positions.push(p),
   };
 }
 
 const SECRET = "test-secret-abc123-abc123-abc123";
 const PASSPHRASE = "correct horse";
+const INGEST_TOKEN = "ingest-token-super-secret-0123456789";
 let env;
 beforeEach(() => {
   env = {
     POSITIONS_SESSION_SECRET: SECRET,
     POSITIONS_AUTH_PASSPHRASE: PASSPHRASE,
+    POSITIONS_INGEST_TOKEN: INGEST_TOKEN,
     ALLOWED_ORIGINS: "https://clarencelam2000.github.io,http://localhost:8000",
     POSITIONS_DB: makeDb(),
   };
@@ -152,5 +168,66 @@ describe("create + list", () => {
     await handleRequest(req("/positions", { method: "POST", token: tokenOwner, body: { ticker: "AAPL", entry_price: 100, initial_stop: 95, qty: 1 } }), env);
     const otherList = await handleRequest(req("/positions", { token: tokenOther }), env);
     expect((await otherList.json()).positions).toHaveLength(0);
+  });
+});
+
+describe("WS5 phase 2 — held-tickers feed machine routes", () => {
+  const ingestReq = (path, { method = "GET", body } = {}) => {
+    const headers = { authorization: `Bearer ${INGEST_TOKEN}` };
+    if (body !== undefined) headers["content-type"] = "application/json";
+    return new Request(`https://finviz-positions.workers.dev${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  };
+
+  it("GET /held-tickers returns the union of open/managing/closing tickers", async () => {
+    env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "open", user_id: "owner" });
+    env.POSITIONS_DB._seedPosition({ ticker: "MSFT", state: "closing", user_id: "owner" });
+    env.POSITIONS_DB._seedPosition({ ticker: "TSLA", state: "watching", user_id: "owner" });
+    const res = await handleRequest(ingestReq("/held-tickers"), env);
+    expect(res.status).toBe(200);
+    expect((await res.json()).tickers).toEqual(["AAPL", "MSFT"]);
+  });
+
+  it("POST /ingest/quotes writes append-only bars and reports the count", async () => {
+    const body = {
+      trade_date: "2026-08-13",
+      collected_at: "2026-08-13T21:05:00Z",
+      quotes: [{ ticker: "AAPL", close: 231.5, raw: { Ticker: "AAPL", SMA50: "3.2%" } }],
+    };
+    const res = await handleRequest(ingestReq("/ingest/quotes", { method: "POST", body }), env);
+    expect(res.status).toBe(200);
+    expect((await res.json()).written).toBe(1);
+    expect(env.POSITIONS_DB._quotes.get("AAPL|2026-08-13").close).toBe(231.5);
+  });
+
+  it("POST /ingest/quotes 400s a malformed batch", async () => {
+    const res = await handleRequest(ingestReq("/ingest/quotes", { method: "POST", body: { trade_date: "bad", quotes: [] } }), env);
+    expect(res.status).toBe(400);
+  });
+
+  // ── Cross-auth isolation: the two auth paths cannot substitute for each other ──────────────────
+  it("machine routes reject a valid OWNER bearer token (not a service token)", async () => {
+    const ownerToken = await mintToken(env, "owner");
+    const withOwner = (path, method = "GET", body) =>
+      new Request(`https://x${path}`, {
+        method,
+        headers: { authorization: `Bearer ${ownerToken}`, ...(body !== undefined ? { "content-type": "application/json" } : {}) },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+    expect((await handleRequest(withOwner("/held-tickers"), env)).status).toBe(401);
+    expect((await handleRequest(withOwner("/ingest/quotes", "POST", { trade_date: "2026-08-13", collected_at: "t", quotes: [{ ticker: "AAPL" }] }), env)).status).toBe(401);
+  });
+
+  it("owner routes reject the INGEST token (cannot read/create positions)", async () => {
+    expect((await handleRequest(ingestReq("/positions"), env)).status).toBe(401);
+    expect((await handleRequest(ingestReq("/positions", { method: "POST", body: { ticker: "AAPL", entry_price: 100, initial_stop: 95, qty: 1 } }), env)).status).toBe(401);
+  });
+
+  it("machine routes 401 when the ingest token is wrong", async () => {
+    const bad = new Request("https://x/held-tickers", { headers: { authorization: "Bearer wrong" } });
+    expect((await handleRequest(bad, env)).status).toBe(401);
   });
 });

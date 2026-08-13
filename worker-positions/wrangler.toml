@@ -6,10 +6,16 @@
 #
 # Before first deploy (all one-time; no redeploy needed to change secrets later):
 #   1. D1 binding below is already wired to the provisioned db (id from `wrangler d1 create`).
-#   2. Set the two secrets (NOT in this file):
+#   2. Set the secrets (NOT in this file):
 #        wrangler secret put POSITIONS_SESSION_SECRET   # random 32+ byte string; signs bearer tokens
 #        wrangler secret put POSITIONS_AUTH_PASSPHRASE   # the owner's login passphrase (user = 1)
-#   Apply the schema: wrangler d1 execute finviz-positions --remote --file migrations/0001_init.sql
+#        wrangler secret put POSITIONS_INGEST_TOKEN      # WS5 phase 2: machine token for the GH-Actions
+#                                                        #   held-tickers feed (also a GH Actions secret).
+#                                                        #   Distinct from the owner passphrase; least-
+#                                                        #   privilege (read held set + append bars only).
+#   Apply the schema (both migrations, in order):
+#        wrangler d1 execute finviz-positions --remote --file migrations/0001_init.sql
+#        wrangler d1 execute finviz-positions --remote --file migrations/0002_ticker_quotes.sql  # phase 2
 name = "finviz-positions"
 main = "src/index.js"
 compatibility_date = "2024-09-23"

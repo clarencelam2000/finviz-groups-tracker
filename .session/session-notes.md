@@ -6,6 +6,59 @@
 
 ---
 
+## 2026-08-13 — WS5 phase 2: held-tickers feed → ticker_quotes (D1) (#312, PR #313)
+
+**Status: safe to close once PR #313 merges — but the feed is NOT live yet (go-live needs the owner
++ lead; see below).** Senior-eng session driving WS5 phase 2. Lead owned the schema + the security
+boundary (auth path) and wrote those + their tests by hand; delegated the mechanical scraper/ops/docs
+plumbing to a Sonnet subagent against a locked spec, then reviewed every line before commit.
+
+**The one open decision (flagged in #312) — GH-Actions→D1 ingest auth — decided with owner sign-off:**
+a **service-token worker ingest endpoint** on `finviz-positions`, NOT a Cloudflare API token in
+GitHub. Rationale: keeps the powerful account token out of CI; the CI secret is least-privilege
+(read held set + append bars only, cannot touch private positions); append-only/validation invariants
+live in one place. Implemented as a **second auth path** `authenticateService()` on the existing
+`src/auth.js` swap-seam, gated by a new `POSITIONS_INGEST_TOKEN` — distinct from the owner HMAC
+bearer. Cross-auth isolation is test-covered (owner token rejected on machine routes and vice-versa).
+
+**What landed (PR #313, branch `claude/ws5-phase2-held-feed-gez3ja`, 4 commits):**
+- **`worker-positions/migrations/0002_ticker_quotes.sql`** — append-only `ticker_quotes(ticker,
+  trade_date, prev_close/open/high/low/close/change_pct/atr/volume, days_to_earnings, raw,
+  collected_at)`, PK `(ticker, trade_date)`. **Design refinement (owner-flagged):** #297's "full
+  column set" implemented as typed engine columns + a **`raw` JSON** holding the complete 84-col
+  scrape verbatim — zero data loss, robust to Finviz label renames. No `user_id` (public market
+  data). Same-day upsert = last-write-wins; append across days. Verified via sqlite.
+- **`worker-positions/src/quotes.js`** — pure `validateIngestBatch` + `ingestQuotes` (chunked batch
+  upsert) + `heldTickers` (DISTINCT open/managing/closing). **`src/auth.js`** `authenticateService`.
+  **`src/index.js`** `GET /held-tickers` + `POST /ingest/quotes`. 55 vitest (was 28).
+- **`scripts/collect_held.py`** — reuses `collect_morning.fetch_ticker_quotes` via a new `block=`
+  param + new **`held`** screener block (full 84 cols, empty `base_filters` so no held ticker is
+  filtered out). Queries worker for held set → scrapes settled EOD → POSTs. **Writes to D1 over HTTP,
+  not git** (no commit step, no `finviz-data-commit` group). `build_quote_payload` pure/unit-tested
+  (`tests/test_collect_held.py`, 7, no Playwright import → off the ignore list). Empty-scrape +
+  env-misconfig guards fail loud.
+- **`.github/workflows/collect_held.yml`** (`workflow_dispatch` + `dry_run`; needs `POSITIONS_WORKER_URL`
+  / `POSITIONS_INGEST_TOKEN` secrets) + **worker-cron `held` job** 17:30 ET Mon–Fri, ungated (92
+  vitest, was 83). Docs 3-places (root CLAUDE.md, README, scripts/CLAUDE.md, worker-positions README).
+- Full suite green: 666 pytest / 92 worker-cron / 55 worker-positions.
+
+**GO-LIVE checklist (owner + lead, not done in this session — the feed is dormant until all done):**
+1. Owner: mint `POSITIONS_INGEST_TOKEN` (or lead generates a random one on the owner's go).
+2. Set it on the worker (`wrangler secret put`) **and** as a GitHub Actions secret; set
+   `POSITIONS_WORKER_URL` as an Actions secret.
+3. Apply `migrations/0002_ticker_quotes.sql` to the `finviz-positions` D1 (one-time, out of band).
+4. Merge #313 (auto-deploys `worker-positions` + `worker-cron` via `deploy-workers.yml`).
+5. Run one `collect_held.yml` **dry-run** on a trading day (Azure IPs) to confirm the held-set query
+   + scrape work end-to-end, then a real run. Nothing is exercised against live D1 yet.
+
+**Next steps:** go-live (above), then **WS5 phase 3** `advance()` engine (consumes `ticker_quotes`;
+needs a few days of accumulated bars to test meaningfully, so switching this on soon is the gate).
+`days_to_earnings` left null in phase 2 (raw `Earnings` preserved) — phase 3 derives it.
+
+**Note:** this session-notes commit must land on default via #313 merging to be visible next session.
+
+---
+
 ## 2026-08-13 — WS5 phase 1 PWA: login + real "I took it" + Positions tab (#309)
 
 **Status: safe to close once the PR merges.** Second slice of WS5 phase 1 (backend merged in #310

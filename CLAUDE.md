@@ -212,7 +212,11 @@ All Playwright-in-cloud work should first read
     at 15:50 ET (pre-close snapshot, shifted from legacy `:48`), `collect_eod` at 17:00 ET (EOD
     post-close snapshot, shifted from legacy `:01`), `picks` — also targets 17:00 ET, the same as
     `collect_eod`, not a fixed margin after it. The EOD collect run captures the day's final
-    closing data.
+    closing data. `held` at 17:30 ET (WS5 phase 2 held-tickers quote feed, ungated — dispatches
+    `collect_held.yml`, KV key `last_dispatch_held`; unlike every other job above,
+    `collect_held.yml` writes to D1 via an authenticated HTTP POST to the `finviz-positions`
+    Worker, **not** to git — no repo commit, no `finviz-data-commit` concurrency group. See
+    `scripts/CLAUDE.md` § WS5 held-tickers feed and `planning/trade-lifecycle-engine.md` §5/§5a).
   - **Session dimension (WS2, ADR-011 Option C):** `scripts/session_config.py` is the single
     source of truth for the "session" concept referenced above. The `eod` session is exactly
     this existing settled pipeline — `collect_eod`'s output files stay byte-identical, no

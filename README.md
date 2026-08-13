@@ -330,6 +330,19 @@ full pipeline description.
 | `MORNING_STORE` | `data/picks/sessions/morning.csv` | Append-only provisional history, keyed `(date, ticker)`, last-write-wins (same convention as `picks.csv`). |
 | `MORNING_LATEST` | `data/picks/sessions/morning_latest.csv` | Max-date slice of `MORNING_STORE` — the PWA fetch target (Phase C). |
 
+### WS5 held-tickers feed (`scripts/collect_held.py`)
+
+Settled-EOD quote feed for the *held* set (union of open/managing/closing positions,
+`planning/trade-lifecycle-engine.md` §5/§5a). Shares `fetch_ticker_quotes`/`build_ticker_url`
+with `collect_morning.py` (`block="held"`); see `scripts/CLAUDE.md` § WS5 held-tickers feed
+for the full pipeline description. Unlike every other collector in this table, it writes to
+**D1 over HTTP, not to a repo CSV** — there is no store path to configure here.
+
+| Parameter | Default | What it controls |
+|-----------|---------|-----------------|
+| `POSITIONS_WORKER_URL` (env) | unset, required | Base URL of the `finviz-positions` Worker. Read from `GET {URL}/held-tickers` and posted to at `POST {URL}/ingest/quotes`. Set as a GitHub Actions secret; missing → `sys.exit(1)` loud. |
+| `POSITIONS_INGEST_TOKEN` (env) | unset, required | Bearer token authenticating both calls above (`worker-positions/src/auth.js`). Set as a GitHub Actions secret; missing → `sys.exit(1)` loud. |
+
 ### Picks alpha scoreboard (`scripts/evaluate_picks.py`)
 
 | Parameter | Default | What it controls |

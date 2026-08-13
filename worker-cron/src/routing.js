@@ -152,6 +152,21 @@ export const JOB_SCHEDULE = [
     // mechanism, not a second one-off — see PR #269).
     gated: true,
   },
+  {
+    name: 'held',
+    workflow: 'held',
+    weekdays: [1, 2, 3, 4, 5], // Mon-Fri
+    hour: 17,
+    minute: 30,
+    windowMinutes: DISPATCH_WINDOW_MINUTES,
+    // WS5 phase 2 (planning/trade-lifecycle-engine.md §5/§5a/§10/§11): ungated, like
+    // collect_morning — the held set comes from a live query against the
+    // finviz-positions Worker's own D1 `positions` table (open/managing/closing
+    // union), independent of collect.yml/compute_deltas.py, so there is nothing to
+    // dependency-gate on. 17:30 ET (30 min after collect_eod's 17:00 target) gives
+    // the settled EOD close a beat to land before the held feed scrapes it, without
+    // actually depending on collect.yml's run outcome the way `picks` does.
+  },
 ];
 
 function isWithinWindow(job, etNow) {
