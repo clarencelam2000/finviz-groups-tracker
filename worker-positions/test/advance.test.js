@@ -16,7 +16,7 @@ import {
   ENGINE_CONFIG,
 } from "../src/advance.js";
 
-// ── Fixtures ──────────────────────────────────────────────────────────────────────────────────
+// ── Fixtures ──────────────────────────────────────────────────────────────────────────
 // Base position: entry 100, initial stop 90 → R = 10. Fresh (open, no advance yet).
 function pos(overrides = {}) {
   return {
@@ -40,7 +40,7 @@ function bar(overrides = {}) {
 }
 const types = (r) => r.events.map((e) => e.event_type);
 
-// ── Pure helpers ────────────────────────────────────────────────────────────────────────────
+// ── Pure helpers ──────────────────────────────────────────────────────────
 describe("pure helpers", () => {
   it("rMultiple = (price − entry)/R; NaN when R ≤ 0", () => {
     expect(rMultiple(pos(), 110)).toBeCloseTo(1.0);
@@ -72,7 +72,7 @@ describe("pure helpers", () => {
   });
 });
 
-// ── effectiveConfig (§14) ─────────────────────────────────────────────────────────────────────
+// ── effectiveConfig (§14) ────────────────────────────────────────────────────
 describe("effectiveConfig", () => {
   it("no overrides → equals the globals", () => {
     expect(effectiveConfig(pos())).toEqual(ENGINE_CONFIG);
@@ -85,7 +85,7 @@ describe("effectiveConfig", () => {
   });
 });
 
-// ── Exit checks (ordered; each SIGNALS → Closing, never Closed) ────────────────────────────────
+// ── Exit checks (ordered; each SIGNALS → Closing, never Closed) ────────────────────────
 describe("advance — exit signals land in Closing (never Closed)", () => {
   it("(a) stop hit → Closing at the stop level", () => {
     const r = advance(pos(), bar({ low: 89, open: 95 }));
@@ -114,6 +114,12 @@ describe("advance — exit signals land in Closing (never Closed)", () => {
     const r = advance(pos({ caution_flag: 1 }), bar({ close: 99, sma20: 100, sma50: 95, low: 95, prev_close: 100 }));
     expect(r.position.exit_reason).toBe("two_close_below_20ma");
   });
+  it("(b) HARD_EXIT_BASIS='20ma' override → close_below_20ma on the FIRST close, not two_close_below_20ma", () => {
+    const cfg = effectiveConfig(pos({ meta: { config: { HARD_EXIT_BASIS: "20ma" } } }));
+    const r = advance(pos({ meta: { config: { HARD_EXIT_BASIS: "20ma" } } }), bar({ close: 99, sma20: 100, sma50: 95, low: 98, prev_close: 100 }), cfg);
+    expect(r.position.exit_reason).toBe("close_below_20ma");
+    expect(r.position.caution_flag).toBe(0); // the stateful two-close counter never ran — this branch returns first
+  });
   it("exit-before-advance: no trim/stop_moved event on the bar that signals an exit", () => {
     // Stop hit AND extended enough to trim — the exit must return first, emitting only exit_signal.
     const r = advance(pos(), bar({ low: 89, close: 120, sma50: 95, atr: 3 }));
@@ -121,7 +127,7 @@ describe("advance — exit signals land in Closing (never Closed)", () => {
   });
 });
 
-// ── Two-close soft exit: caution counter, reset, and the deliberate 50MA-basis case ─────────────
+// ── Two-close soft exit: caution counter, reset, and the deliberate 50MA-basis case ───────────
 describe("advance — two-close-below-20MA state", () => {
   it("first close below 20MA → caution (no exit), still advances the stop", () => {
     const r = advance(pos(), bar({ close: 99, sma20: 100, sma50: 95, low: 98, prev_close: 100 }));
@@ -139,9 +145,17 @@ describe("advance — two-close-below-20MA state", () => {
     const r = advance(p, bar({ close: 98, sma20: 100, sma50: 95, low: 97, prev_close: 98 }));
     expect(r.position.exit_reason).toBe("two_close_below_20ma");
   });
+  it("TWO_CLOSE_EXIT=0 override exits on the FIRST close below 20MA (falsy-zero must not fall back to the default 2)", () => {
+    const p = pos({ meta: { config: { TWO_CLOSE_EXIT: 0 } } });
+    const cfg = effectiveConfig(p);
+    expect(cfg.TWO_CLOSE_EXIT).toBe(0);
+    const r = advance(p, bar({ close: 99, sma20: 100, sma50: 95, low: 98, prev_close: 100 }), cfg);
+    expect(r.position.state).toBe("closing");
+    expect(r.position.exit_reason).toBe("two_close_below_20ma");
+  });
 });
 
-// ── Stop advancement: breakeven floor, widen, within-basis ratchet ──────────────────────────────
+// ── Stop advancement: breakeven floor, widen, within-basis ratchet ──────────────────────
 describe("advance — stop advancement", () => {
   it("profit_floor ratchets to entry at +1R (BREAKEVEN_R)", () => {
     const r = advance(pos(), bar({ close: 110, sma20: 101, sma50: 95, low: 108 }));
@@ -169,7 +183,7 @@ describe("advance — stop advancement", () => {
   });
 });
 
-// ── Scale-out trims (ATR extension from 50MA) ──────────────────────────────────────────────────
+// ── Scale-out trims (ATR extension from 50MA) ────────────────────────────────
 describe("advance — trims", () => {
   it("trims 10% of remaining at the first whole ATR level (7)", () => {
     const r = advance(pos(), bar({ close: 116, sma50: 95, atr: 3, sma20: 100, low: 114 })); // ext = 7.0
@@ -195,7 +209,7 @@ describe("advance — trims", () => {
   });
 });
 
-// ── Earnings guardrail: flag only ───────────────────────────────────────────────────────────────
+// ── Earnings guardrail: flag only ──────────────────────────────────────────
 describe("advance — earnings guardrail", () => {
   it("flags (never exits) when days_to_earnings ≤ warn threshold; refreshes from the bar", () => {
     const r = advance(pos(), bar({ days_to_earnings: 3 }));
@@ -210,7 +224,7 @@ describe("advance — earnings guardrail", () => {
   });
 });
 
-// ── Lifecycle / idempotency / stale ────────────────────────────────────────────────────────────
+// ── Lifecycle / idempotency / stale ──────────────────────────────────────────
 describe("advance — lifecycle and guards", () => {
   it("Open → Managing on the first surviving advance", () => {
     const r = advance(pos(), bar());
@@ -237,7 +251,7 @@ describe("advance — lifecycle and guards", () => {
   });
 });
 
-// ── User-driven transitions ─────────────────────────────────────────────────────────────────────
+// ── User-driven transitions ──────────────────────────────────────────────────
 describe("confirmExit / stillHolding / autoConfirm / correctExit / reopen", () => {
   const closing = () =>
     pos({ state: "closing", expected_exit_price: 90, exit_signal_date: "2026-08-05", exit_reason: "stop_hit", caution_flag: 1 });
@@ -293,7 +307,7 @@ describe("confirmExit / stillHolding / autoConfirm / correctExit / reopen", () =
   });
 });
 
-// ── Property tests over random bar sequences (§9 invariants) ────────────────────────────────────
+// ── Property tests over random bar sequences (§9 invariants) ──────────────────────────
 describe("advance — invariants over random bar sequences", () => {
   // Small deterministic LCG so the sequence is reproducible without a dependency.
   function makeRng(seed) {
@@ -333,7 +347,7 @@ describe("advance — invariants over random bar sequences", () => {
   });
 });
 
-// ── Earnings parsing / wiring ────────────────────────────────────────────────────────────────
+// ── Earnings parsing / wiring ────────────────────────────────────────────
 describe("parseEarningsToDays / normalizeBar earnings", () => {
   it("counts calendar days ahead of asOf", () => {
     expect(parseEarningsToDays("Aug 20", "2026-08-13")).toBe(7);
@@ -367,5 +381,11 @@ describe("parseEarningsToDays / normalizeBar earnings", () => {
       raw: JSON.stringify({ Earnings: "Aug 20" }),
     });
     expect(b.days_to_earnings).toBe(3);
+  });
+  it("normalizeBar stays pure when trade_date is missing: days_to_earnings is null, never wall-clock-derived", () => {
+    const b = normalizeBar({
+      trade_date: null, close: 105, raw: JSON.stringify({ Earnings: "Aug 20" }),
+    });
+    expect(b.days_to_earnings).toBe(null);
   });
 });

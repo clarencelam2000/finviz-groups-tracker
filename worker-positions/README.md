@@ -99,15 +99,15 @@ edit `ENGINE_CONFIG` (each has an in-code comment) — no other engine code refe
 | `TRIM_START_ATR` | `7` | First whole ATR-extension-from-50MA level that triggers a scale-out trim. |
 | `TRIM_PCT` | `0.10` | Fraction of **remaining** qty trimmed at each newly-crossed whole ATR level (asymptotic — never trims a lot to zero). Idempotent + catch-up-correct via the `highest_trim_atr` ledger. |
 | `TWO_CLOSE_EXIT` | `2` | Consecutive closes below the 20MA that force a winner's soft exit (`caution_flag` counts them). |
-| `HARD_EXIT_BASIS` | `50ma` | Close below this MA is an immediate hard exit (`close_below_50ma`). `20ma` \| `50ma`. |
+| `HARD_EXIT_BASIS` | `50ma` | Close below this MA is an immediate hard exit — `close_below_50ma` (default) or `close_below_20ma` (per-position `20ma` override), reported distinct from `two_close_below_20ma`'s stateful two-consecutive-close rule so an immediate single-close exit is never mislabeled as two closes. `20ma` \| `50ma`. |
 | `SEVERE_BREAKDOWN_ATR` | `3.0` | Single-day `prev_close→close` drop (in ATRs) counting as a one-day crash (`severe_breakdown`). `Infinity` disables it (rely on the 50MA hard-exit alone). |
 | `EARNINGS_WARN_SESSIONS` | `10` | Days-to-earnings at/under which the guardrail **flags** (never auto-exits). Reuses the Focus `EARNINGS_CAUTION_DAYS`. |
 | `EXIT_AUTOCONFIRM_SESSIONS` | `5` | Sessions a position may sit in `Closing` before `autoConfirm()` closes it at `expected_exit_price` with `confirmation_status='auto'`. |
 | `CAUTION_REARM_ON_HOLD` | `true` | On "still holding", reset `caution_flag` so the two-close rule re-arms (needs two fresh closes) instead of re-signalling on the next single close. |
 
 Exit reasons are a canonical enum (`EXIT_REASONS`): `stop_hit`, `gap_down_below_stop`,
-`close_below_50ma`, `severe_breakdown`, `two_close_below_20ma`, `manual_close`. Earnings is **not** an
-exit reason — it only flags.
+`close_below_50ma`, `close_below_20ma`, `severe_breakdown`, `two_close_below_20ma`, `manual_close`.
+Earnings is **not** an exit reason — it only flags.
 
 ## One-time setup (already done in prod; documented for reproducibility)
 
