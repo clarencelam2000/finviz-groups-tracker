@@ -1,6 +1,18 @@
 {
-  "current": "2026.08.12.2",
+  "current": "2026.08.13",
   "releases": [
+    {
+      "version": "2026.08.13",
+      "date": "2026-08-13",
+      "title": "Log & track your trades",
+      "tag": "feature",
+      "tab": "positions",
+      "notes": [
+        "Morning tab's 'I took it' now logs a real position (entry, stop, size) once you sign in — no more just a checkmark.",
+        "New Positions tab shows your open positions, read-only for now: daily stop management & alerts arrive with the lifecycle engine.",
+        "Sign in once on the Positions tab; it syncs across sessions."
+      ]
+    },
     {
       "version": "2026.08.12.2",
       "date": "2026-08-12",
