@@ -93,6 +93,7 @@
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="lookup">Lookup</button>
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="picks">Picks</button>
     <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="morning">Morning</button>
+    <button class="tab-btn flex-1 py-2.5 text-slate-400" data-tab="positions">Positions</button>
   </nav>
 
   <main>
@@ -315,6 +316,13 @@
       <div id="morning-list" class="space-y-2"></div>
     </section>
 
+    <!-- WS5 phase 1 (#309) Positions tab: read-only view over the finviz-positions worker
+         (D1-backed trade lifecycle store). Sign-in card when signed out; open-positions list
+         when signed in. Rendered by renderPositions(). -->
+    <section id="tab-positions" class="px-3 pt-3 pb-24 hidden">
+      <div id="positions-content"></div>
+    </section>
+
   </main>
 
   <!-- First-run intro carousel overlay (z-50 sits above the hub at z-40) -->
@@ -390,6 +398,11 @@
     // from the settled EOD picks file — a 10:05 ET snapshot, never mixed into picks_latest.csv.
     const MORNING_URL   = `${BASE}/picks/sessions/morning_latest.csv`;
     const WORKER_URL = 'https://finviz-ticker-lookup.salmonbaby8.workers.dev';
+    // WS5 phase 1 (#309): finviz-positions worker (D1-backed trade lifecycle store, auth
+    // via bearer token — see worker-positions/README.md). Endpoint + localStorage key, not
+    // tunables, so a one-line comment is sufficient (no README/CLAUDE.md table entry).
+    const POSITIONS_API = 'https://finviz-positions.salmonbaby8.workers.dev';
+    const POS_TOKEN_KEY = 'fv_pos_token';
 
     // localStorage keys for Lookup tab persistence (Ideas 5+7, planning/lookup-search-enhancements.md).
     // fvg_lookup_recent: [{type:'group'|'ticker', name, groupKey?}] newest-first, max RECENT_MAX; pinned items exempt.
@@ -445,6 +458,21 @@
       // priceOverride is a string (raw input value) so an in-progress edit ("61" typed toward
       // "612.4") never gets coerced/clobbered by a re-render; NaN/'' falls back to r.price.
       morningTicket: {},
+      // WS5 phase 1 (#309) — per-ticker ephemeral UI state for the "I took it" -> real
+      // POST /positions write flow. Survives renderMorning() re-renders the same way
+      // morningTicket does (module-level, not rebuilt each render). Shape:
+      // { mode: 'note'|'confirm', text?, msg?, payload?, display?, error? }. Absent = idle
+      // (plain button). Cleared on Cancel or a successful POST.
+      ws5Card: {},
+      // WS5 Positions tab (read-only, phase 1): null = not yet fetched this session (or
+      // signed out); [] = signed in with zero open positions; array = open positions from
+      // GET /positions?state=open. Reset to null on sign-in/sign-out so a switch always
+      // re-fetches fresh state.
+      positionsData: null,
+      // true when the last posLoadPositions() fetch failed for a reason other than 401
+      // (network error, 5xx) — distinguishes "fetch failed" from "genuinely zero positions"
+      // so renderPositions doesn't show the empty-state copy for a real outage.
+      positionsError: false,
       // 'all' | 'focus'; persists across tab navigation within a session (A4 REVERSED
       // 2026-06-30 — VP call, see PICKS-STATE-PERSIST in SPRINT.md and the note in
       // planning/stock-picks-from-leading-groups.md). Previously reset to 'all' on every
@@ -4873,6 +4901,7 @@
       if (state.tab === 'lookup')   { renderLookup(); renderLookupChips(); }
       if (state.tab === 'picks')    renderPicks();
       if (state.tab === 'morning')  renderMorning();
+      if (state.tab === 'positions') renderPositions();
 
       if (state.restoreScrollOnRender) {
         state.restoreScrollOnRender = false;
@@ -4928,10 +4957,9 @@
       try { return localStorage.getItem(morningTakenKey(date, ticker)) === 'true'; }
       catch (e) { return false; }
     }
-    window.__morningTookIt = function (date, ticker) {
-      try { localStorage.setItem(morningTakenKey(date, ticker), 'true'); } catch (e) {}
-      renderMorning();
-    };
+    // (window.__morningTookIt was removed in WS5 phase 1 (#309): "I took it" now creates a
+    //  real authenticated position via window.ws5TakeIt, and the `taken:` marker is written
+    //  only after a confirmed 201 — see morningCardBody's CTA and ws5ConfirmTakeIt.)
 
     function _mNum(raw, dp = 2) {
       const v = parseFloat(raw);
@@ -4960,15 +4988,20 @@
         ? `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">ATR from LoD</span><span class="${atr.cls} font-medium tabular-nums">${atr.text}</span></div>`
         : '';
 
+      // WS5 phase 1 (#309): the CTA now has four states — taken (real position logged),
+      // confirm (payload built, awaiting Confirm/Cancel), note (sign-in prompt or a
+      // validation/submit error under the button), or the plain idle button. The `taken:`
+      // marker is only ever set after a real 201 from POST /positions now (ws5ConfirmTakeIt
+      // below) — see ws5CardHtml for the confirm/note markup.
       let cta = '';
       if (meta.actionable) {
-        cta = isMorningTaken(r.date, r.ticker)
-          ? `<div class="mt-2 pt-2 border-t border-slate-700">
-               <div class="text-center text-xs font-semibold text-emerald-400">✓ Taken</div>
-               <div class="text-center text-[11px] text-slate-500 mt-0.5">Position tracking arrives with the lifecycle engine.</div>
-             </div>`
-          : `<button onclick="__morningTookIt('${r.date}','${r.ticker}')"
-                     class="mt-2 w-full py-2 rounded-lg text-xs font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400">I took it →</button>`;
+        if (isMorningTaken(r.date, r.ticker)) {
+          cta = `<div class="mt-2 pt-2 border-t border-slate-700">
+               <div class="text-center text-xs font-semibold text-emerald-400">✓ Logged · <a href="#" onclick="switchTab('positions');return false;" class="underline">view in Positions ›</a></div>
+             </div>`;
+        } else {
+          cta = ws5CardHtml(r);
+        }
       }
 
       let body;
@@ -5352,6 +5385,342 @@
             ${picksRow ? `<br><span class="text-slate-600">Focus score: ${focusScore !== null ? Math.round(focusScore * 100) : 'n/a — not a Focus candidate today'} (pool-relative vs today's other Focus candidates — context only, not part of this ticket's math).</span>` : ''}
           </div>
         </div>`;
+    }
+
+    // ── WS5 phase 1 (#309): positions auth client + "I took it" write flow ──────────────
+    // Backend: finviz-positions worker (D1-backed, phase 1 read/write). See
+    // worker-positions/README.md for the API contract this section calls.
+
+    function posGetToken() {
+      try { return localStorage.getItem(POS_TOKEN_KEY); } catch (e) { return null; }
+    }
+    function posSetToken(t) {
+      try { localStorage.setItem(POS_TOKEN_KEY, t); } catch (e) {}
+    }
+    function posClearToken() {
+      try { localStorage.removeItem(POS_TOKEN_KEY); } catch (e) {}
+    }
+    function posIsSignedIn() { return !!posGetToken(); }
+
+    async function posLogin(passphrase) {
+      try {
+        const resp = await fetch(`${POSITIONS_API}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ passphrase }),
+        });
+        if (!resp.ok) return false;
+        const data = await resp.json();
+        if (!data || !data.token) return false;
+        posSetToken(data.token);
+        return true;
+      } catch (e) { return false; }
+    }
+
+    // Thin authenticated fetch wrapper. Throws { unauth: true } on a 401 (after clearing
+    // the stored token) so callers can route back to the sign-in note in one place, rather
+    // than every call site re-checking resp.status.
+    async function posApi(path, opts = {}) {
+      const token = posGetToken();
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const resp = await fetch(`${POSITIONS_API}${path}`, {
+        method: opts.method || 'GET',
+        headers,
+        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      });
+      if (resp.status === 401) {
+        posClearToken();
+        throw { unauth: true };
+      }
+      if (!resp.ok) throw new Error(`posApi ${path} failed: ${resp.status}`);
+      return resp.json();
+    }
+
+    // Ticket stop-basis key -> worker stop_basis enum. These DIFFER (ticket keys are
+    // ws4StopLevels' internal keys; the worker enum is its own contract) — see
+    // worker-positions/README.md. Unmapped keys fall back to 'manual'.
+    const POS_STOP_BASIS_ENUM = { prior_low: 'prior_day_low', today_low: 'todays_low', '20ma': '20ma', '50ma': '50ma' };
+    function posStopBasisEnum(tsKey) { return POS_STOP_BASIS_ENUM[tsKey] || 'manual'; }
+
+    // Worker stop_basis enum -> human label, for the read-only Positions tab cards.
+    const POS_STOP_BASIS_LABEL = { prior_day_low: 'Prior low', todays_low: 'Today low', '20ma': '20MA', '50ma': '50MA', manual: 'Manual' };
+
+    // Builds the POST /positions payload from the ticket's CURRENT state — same math as
+    // ws4Recompute/ws4TicketHtml — even if the ticket is collapsed (falls back to the
+    // snapshot price, prior_low stop, ws4RiskDefault()). Returns { ok:false, error } if the
+    // inputs don't support a sane trade (no price/stop, or stop already through entry).
+    function ws5BuildPayload(ticker) {
+      const r = (state.morningData || []).find(x => x.ticker === ticker);
+      if (!r) return { ok: false, error: "Open the trade ticket and set your fill + stop first" };
+      const ts = ws4GetTicket(ticker);
+      const picksRow = ws4FindPicksRow(ticker);
+      const dm = picksRow ? deriveRiskMetrics(picksRow) : null;
+
+      const entry_price = ws4PriceForCalc(r, ts);
+      const stops = ws4StopLevels(r, dm);
+      const sel = stops[ts.stopBasis] || stops.prior_low;
+      const initial_stop = sel.value;
+      const riskShare = (!isNaN(entry_price) && !isNaN(initial_stop)) ? entry_price - initial_stop : NaN;
+
+      if (isNaN(entry_price) || isNaN(initial_stop) || initial_stop >= entry_price || !(riskShare > 0)) {
+        return { ok: false, error: "Open the trade ticket and set your fill + stop first" };
+      }
+      const qty = Math.floor(ws4RiskDefault() / riskShare);
+      if (isNaN(qty) || qty < 1) {
+        return { ok: false, error: "Open the trade ticket and set your fill + stop first" };
+      }
+
+      let days_to_earnings = null;
+      if (picksRow) {
+        const info = parseEarningsInfo(picksRow['Earnings']);
+        if (info && info.daysUntil != null && info.daysUntil >= 0) days_to_earnings = info.daysUntil;
+      }
+
+      return {
+        ok: true,
+        payload: {
+          ticker: ticker.toUpperCase(),
+          entry_price,
+          initial_stop,
+          qty,
+          stop_basis: posStopBasisEnum(ts.stopBasis),
+          meta: { source: 'picks' },
+          days_to_earnings,
+        },
+        display: { basisLabel: sel.label, riskTotal: riskShare * qty },
+      };
+    }
+
+    // Renders the CTA for one actionable morning card: idle button, sign-in/error note
+    // under the button, or the inline confirm step — driven by state.ws5Card[ticker].
+    function ws5CardHtml(r) {
+      const ticker = r.ticker;
+      const card = state.ws5Card[ticker];
+      if (card && card.mode === 'confirm') return ws5ConfirmHtml(ticker, card);
+      const note = (card && card.mode === 'note') ? ws5NoteHtml(card) : '';
+      return `<button onclick="ws5TakeIt('${ticker}')"
+                 class="mt-2 w-full py-2 rounded-lg text-xs font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400">I took it →</button>${note}`;
+    }
+
+    function ws5NoteHtml(card) {
+      if (card.text === 'signin') {
+        return `<div class="text-center text-[11px] text-amber-400 mt-1.5">
+                   <a href="#" onclick="switchTab('positions');return false;" class="underline">Sign in on the Positions tab to log trades →</a>
+                 </div>`;
+      }
+      return `<div class="text-center text-[11px] text-red-400 mt-1.5">${escapeHtml(card.msg || "Couldn't log — try again")}</div>`;
+    }
+
+    // Copy tone deliberately reads as a deliberate/freezing action (ADR §3) — this locks in
+    // the entry, not a soft "are you sure".
+    function ws5ConfirmHtml(ticker, card) {
+      const p = card.payload;
+      const risk = card.display ? card.display.riskTotal : (p.entry_price - p.initial_stop) * p.qty;
+      const basisLabel = card.display ? card.display.basisLabel : (POS_STOP_BASIS_LABEL[p.stop_basis] || p.stop_basis);
+      const errRow = card.error ? `<div class="text-center text-[11px] text-red-400 mb-1.5">${escapeHtml(card.error)}</div>` : '';
+      // While a POST is in flight, drop the Confirm/Cancel buttons entirely — this is what
+      // prevents both a double-tap double-submit and a Cancel racing an already-sent request
+      // (see ws5ConfirmTakeIt/ws5CancelTakeIt's `card.submitting` guards).
+      const actions = card.submitting
+        ? `<div class="mt-2 text-center text-xs text-slate-400">Logging…</div>`
+        : `<div class="mt-2 flex gap-2">
+            <button onclick="ws5ConfirmTakeIt('${ticker}')" class="flex-1 py-2 rounded-lg text-xs font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400">Confirm — log it</button>
+            <button onclick="ws5CancelTakeIt('${ticker}')" class="flex-1 py-2 rounded-lg text-xs font-semibold bg-slate-700 text-slate-300 hover:bg-slate-600">Cancel</button>
+          </div>`;
+      return `
+        <div class="mt-2 pt-2 border-t border-slate-700">
+          ${errRow}
+          <div class="text-xs text-slate-300 text-center">
+            Log ${escapeHtml(ticker)}: entry $${p.entry_price.toFixed(2)} · stop $${p.initial_stop.toFixed(2)} (${escapeHtml(basisLabel)}) · ${p.qty} sh · risk $${Math.round(risk)}
+          </div>
+          ${actions}
+        </div>`;
+    }
+
+    window.ws5TakeIt = function (ticker) {
+      if (!posIsSignedIn()) {
+        state.ws5Card[ticker] = { mode: 'note', text: 'signin' };
+        renderMorning();
+        return;
+      }
+      const built = ws5BuildPayload(ticker);
+      if (!built.ok) {
+        state.ws5Card[ticker] = { mode: 'note', text: 'error', msg: built.error };
+        renderMorning();
+        return;
+      }
+      state.ws5Card[ticker] = { mode: 'confirm', payload: built.payload, display: built.display };
+      renderMorning();
+    };
+
+    window.ws5CancelTakeIt = function (ticker) {
+      const card = state.ws5Card[ticker];
+      // A Confirm POST is in flight for this card — ws5ConfirmHtml already hid the Cancel
+      // button in this state, but guard here too since this is a global window function.
+      // Bailing out (instead of deleting the card) means ws5ConfirmTakeIt's resolution is
+      // still the one source of truth for the outcome, so the UI never shows "cancelled"
+      // for a request that actually went on to create a real position.
+      if (card && card.submitting) return;
+      delete state.ws5Card[ticker];
+      renderMorning();
+    };
+
+    window.ws5ConfirmTakeIt = async function (ticker) {
+      const card = state.ws5Card[ticker];
+      if (!card || card.mode !== 'confirm' || card.submitting) return;
+      card.submitting = true;
+      renderMorning();
+      const r = (state.morningData || []).find(x => x.ticker === ticker);
+      try {
+        await posApi('/positions', { method: 'POST', body: card.payload });
+        // Keep the existing `taken:` marker driving card ✓ state (additive, Decision 5) —
+        // it is now only ever set after a real 201 from the worker.
+        if (r) { try { localStorage.setItem(morningTakenKey(r.date, ticker), 'true'); } catch (e) {} }
+        // Invalidate the Positions cache so the just-logged lot shows up next time the tab
+        // renders (otherwise a session that already loaded Positions would show stale data
+        // missing this new position until sign-out/in).
+        state.positionsData = null;
+        delete state.ws5Card[ticker];
+        renderMorning();
+      } catch (e) {
+        if (e && e.unauth) {
+          state.ws5Card[ticker] = { mode: 'note', text: 'signin' };
+        } else {
+          state.ws5Card[ticker] = { mode: 'confirm', payload: card.payload, display: card.display, error: "Couldn't log — try again" };
+        }
+        renderMorning();
+      }
+    };
+
+    // ── WS5 Positions tab (read-only, phase 1) ──────────────────────────────────────────
+
+    window.posDoLogin = async function () {
+      const input = document.getElementById('pos-passphrase');
+      const errEl = document.getElementById('pos-login-error');
+      const pass = input ? input.value : '';
+      if (errEl) errEl.textContent = '';
+      const ok = await posLogin(pass);
+      if (ok) {
+        state.positionsData = null;
+        renderPositions();
+      } else if (errEl) {
+        errEl.textContent = 'Wrong passphrase';
+      }
+    };
+
+    window.posSignOut = function () {
+      posClearToken();
+      state.positionsData = null;
+      state.positionsError = false;
+      renderPositions();
+    };
+
+    window.posRetryLoad = function () {
+      state.positionsError = false;
+      state.positionsData = null;
+      renderPositions();
+    };
+
+    async function posLoadPositions() {
+      state.positionsError = false;
+      try {
+        const data = await posApi('/positions?state=open', { method: 'GET' });
+        state.positionsData = (data && data.positions) || [];
+      } catch (e) {
+        if (e && e.unauth) {
+          // A 401 already cleared the token (posApi) — reset to null so the signed-out
+          // branch renders and a future sign-in re-fetches fresh.
+          state.positionsData = null;
+        } else {
+          // Network error or non-401 API failure — keep positionsData null so
+          // renderPositions shows an explicit error, not the "no open positions" empty
+          // state (those two cases are not the same and shouldn't look the same).
+          state.positionsData = null;
+          state.positionsError = true;
+        }
+      }
+      if (state.tab === 'positions') renderPositions();
+    }
+
+    // One open-position card. `current_stop`/`remaining_qty` fall back to `initial_stop`/
+    // `initial_qty` (worker-positions' POSITION_COLS field names) — phase 1 has no stop
+    // management yet, so they're always equal today, but the read prefers the "current"
+    // fields so this doesn't silently go stale once phase 3 ships stop/partial-exit
+    // management.
+    function posCardHtml(p) {
+      const ticker = escapeHtml(p.ticker || '');
+      const source = escapeHtml((p.meta && p.meta.source) || p.source || 'manual');
+      const entryDate = escapeHtml(p.entry_date || p.created_at || '');
+      const entry = parseFloat(p.entry_price);
+      const stop = parseFloat(p.current_stop != null ? p.current_stop : p.initial_stop);
+      const qty = parseFloat(p.remaining_qty != null ? p.remaining_qty : p.initial_qty);
+      const basisLabel = POS_STOP_BASIS_LABEL[p.stop_basis] || p.stop_basis || 'Manual';
+      const riskShare = (!isNaN(entry) && !isNaN(stop)) ? entry - stop : NaN;
+      const openRisk = (!isNaN(riskShare) && !isNaN(qty)) ? riskShare * qty : NaN;
+      return `
+        <div class="bg-slate-800 border border-slate-700 rounded-lg px-3.5 py-3">
+          <div class="flex justify-between items-center">
+            <span><span class="font-bold text-sm tracking-wide">${ticker}</span> <span class="text-xs text-slate-500">· ${source} · ${entryDate}</span></span>
+          </div>
+          ${_mKv('Entry', '$' + (isNaN(entry) ? '—' : entry.toFixed(2)))}
+          ${_mKv('Stop', '$' + (isNaN(stop) ? '—' : stop.toFixed(2)) + ' (' + escapeHtml(basisLabel) + ')')}
+          ${_mKv('Risk/sh', isNaN(riskShare) ? '—' : '$' + riskShare.toFixed(2))}
+          ${_mKv('Qty', isNaN(qty) ? '—' : String(qty))}
+          ${_mKv('Open risk', isNaN(openRisk) ? '—' : '$' + openRisk.toFixed(2))}
+        </div>`;
+    }
+
+    function renderPositions() {
+      const el = document.getElementById('positions-content');
+      if (!el) return;
+
+      if (!posIsSignedIn()) {
+        el.innerHTML = `
+          <div class="flex flex-col items-center text-center py-10 px-4">
+            <div class="text-base font-semibold text-slate-100">Track your positions</div>
+            <div class="text-xs text-slate-400 mt-2 max-w-xs">Log a trade from the Morning tab's "I took it" and manage it here. Sign in to sync.</div>
+            <input id="pos-passphrase" type="password" placeholder="Passphrase"
+                   class="mt-4 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-full max-w-xs text-center" />
+            <button onclick="posDoLogin()" class="mt-3 w-full max-w-xs py-2 rounded-lg text-xs font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400">Sign in</button>
+            <div id="pos-login-error" class="text-xs text-red-400 mt-2"></div>
+          </div>`;
+        return;
+      }
+
+      if (state.positionsData === null && state.positionsError) {
+        // A real fetch failure (network/5xx) — distinct from "signed in with zero open
+        // positions" so it isn't mistaken for that empty state.
+        el.innerHTML = `
+          <div class="flex flex-col items-center text-center py-10 px-4">
+            <p class="text-slate-400 text-sm">Couldn't load positions — check your connection.</p>
+            <button onclick="posRetryLoad()" class="mt-3 text-xs text-sky-400 underline">Try again</button>
+          </div>`;
+        return;
+      }
+
+      if (state.positionsData === null) {
+        el.innerHTML = `<p class="text-slate-400 text-sm text-center py-8">Loading positions…</p>`;
+        posLoadPositions();
+        return;
+      }
+
+      const header = `
+        <div class="flex justify-between items-center mb-2">
+          <div class="text-sm font-semibold text-slate-100">Open positions</div>
+          <button onclick="posSignOut()" class="text-xs text-slate-400 hover:text-slate-200 underline">Sign out</button>
+        </div>
+        <div class="text-[11px] text-amber-400 bg-amber-500/10 border border-dashed border-amber-500/40 rounded-lg px-3 py-2 mb-3">
+          Phase 1: these are the trades you've logged. Daily stop management &amp; alerts arrive with the lifecycle engine.
+        </div>`;
+
+      const rows = state.positionsData || [];
+      if (rows.length === 0) {
+        el.innerHTML = header + `<p class="text-slate-400 text-sm text-center py-8">No open positions yet — log one from the Morning tab.</p>`;
+        return;
+      }
+
+      el.innerHTML = header + `<div class="space-y-2">${rows.map(posCardHtml).join('')}</div>`;
     }
 
     function renderMorning() {

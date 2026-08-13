@@ -6,6 +6,56 @@
 
 ---
 
+## 2026-08-13 — WS5 phase 1 PWA: login + real "I took it" + Positions tab (#309)
+
+**Status: safe to close once the PR merges.** Second slice of WS5 phase 1 (backend merged in #310
+earlier this session). Delegated the mechanical PWA build to a Sonnet subagent against a
+lead-authored spec (`scratchpad/ws5-pwa-spec.md` — UX/copy/flow locked by the lead); lead reviewed
+the full diff, fixed the fallout, and ran all Playwright himself.
+
+**What landed (all in this PR, on `claude/ws5-phase1-pwa`):**
+- **"I took it" now writes a real position.** Signed out → inline "Sign in on the Positions tab"
+  note (no write). Signed in → inline **confirm** step showing entry/stop/qty/risk captured from
+  the trade ticket's current state (`ws5BuildPayload` reuses `ws4PriceForCalc`/`ws4StopLevels`/
+  `ws4RiskDefault`) → `POST /positions`. The `taken:` localStorage marker is kept but now written
+  only after a confirmed 201 (drives the "✓ Logged · view in Positions" card state).
+- **New read-only Positions tab** (`renderPositions`): passphrase sign-in card (`posLogin` →
+  `POST /auth/login` → bearer token in `localStorage.fv_pos_token`) → open-positions list from
+  `GET /positions?state=open`. Frozen entries only + honest "daily management & alerts arrive with
+  the lifecycle engine" banner (no engine/feed yet). Registered in the tab bar + `VALID_TAB_IDS`.
+- Auth client (`posGetToken/posSetToken/posClearToken/posIsSignedIn/posLogin/posApi`, 401 clears
+  token + throws `{unauth}`); `POSITIONS_API`/`POS_TOKEN_KEY` constants; stop-basis key→enum map
+  (ticket keys `prior_low/today_low` ≠ worker enum `prior_day_low/todays_low` — mapped in
+  `posStopBasisEnum`). Dead `window.__morningTookIt` removed (superseded by `ws5TakeIt`).
+- Release triplet: `docs/releases.json` `2026.08.13` (feature, tab positions) + `current` bumped;
+  `docs/sw.js` CACHE `finviz-v64`→`v65`. `docs/CLAUDE.md` Morning-tab section rewritten + new
+  Positions-tab section.
+- Tests: new `tests/test_pwa_positions.py` (6 Playwright — signed-out gate, sign-in success/wrong-
+  pass, confirm+POST payload assertion, cancel; added to `tests.yml --ignore`).
+  `tests/test_pwa_morning.py` take-it test rewritten to the new sign-in gate (old ✓-Taken
+  placeholder assertion superseded). `positions` added to `VALID_TAB_IDS` in `test_pwa_intro.py`.
+
+**Two debugging notes worth keeping (both test-harness, not product bugs):**
+1. The worker-call mocks must route on **path** (`**/auth/login`, `**/positions**`), not
+   `**/finviz-positions.*/…` — a `host.*`-style glob doesn't reliably match the multi-label
+   workers.dev host (the exact `/auth/login` suffix silently never matched; the trailing-`**`
+   positions one did).
+2. The PWA tests stub Tailwind as **empty CSS**, so `.hidden` doesn't hide other tabs — all tab
+   sections stack and the full-width sign-in button collapses tiny + far down the page, where a
+   Playwright pointer-`click` misses it (0 handler fires) even though the DOM element is fine. Fix:
+   `locator.dispatch_event("click")` for that button — it exercises the real `onclick → posDoLogin`
+   wiring without depending on layout. **Not a production bug** (real Tailwind hides other tabs).
+
+**Verification:** 24 Playwright (positions+morning+trade_ticket+intro) via the chromium-1194→1117
+symlink harness; 656 non-Playwright (CI ignore list). `node --check` on the extracted script;
+release triplet consistent (`test_guide_releases.py`).
+
+**Next steps:** WS5 phase 2 (held-tickers feed → full-column `ticker_quotes`, #297) then phase 3
+(`advance()` engine) then phase 4 (VAPID push, reuse `distil`). Passphrase already rotated to the
+owner's `CF_FV_PASSKEY` (verified live) — WS5-1-PASS done.
+
+---
+
 ## 2026-08-13 — WS5 phase 1 backend: D1 + finviz-positions worker (LIVE) (#264/#309)
 
 **Status: safe to close for the backend slice; PWA integration is the next slice (#309, WS5-1-PWA).**

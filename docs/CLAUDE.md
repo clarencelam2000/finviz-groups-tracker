@@ -75,9 +75,22 @@ the empty state — a 404 is expected, never an error.
   deliberately different from the engine's evaluation precedence (`pick_status.STATUS_PRECEDENCE`).
 - **`atr_from_lod` and the "I took it" button render only on actionable states** (Triggered /
   Gapped-through), gated by `MORNING_STATUS_META[*].actionable`.
-- **"I took it" is a localStorage marker, not a position engine** (Decision 5). Key shape
-  **`taken:<date>:<ticker>`**, value `"true"`. WS5 phase 1 migrates these (`window.__morningTookIt`
-  writes them). Documented here so WS5 can find the key.
+- **"I took it" creates a real position (WS5 phase 1, #309).** It is login-gated: signed out, the
+  tap shows a "Sign in on the Positions tab" note (no write); signed in, it opens an inline confirm
+  (entry/stop/qty captured from the trade ticket's current state via `ws5BuildPayload`) → `POST
+  /positions` to the `finviz-positions` worker (`POSITIONS_API`). The old `taken:<date>:<ticker>`
+  localStorage marker is **kept, additively** — it still drives the card's "✓ Logged" state, but is
+  now written only after a confirmed 201 (see `ws5ConfirmTakeIt`). `window.__morningTookIt` was
+  removed; the writer is now `window.ws5TakeIt` → `ws5ConfirmTakeIt`.
+
+## Positions tab (WS5 phase 1, #309)
+
+Read-only. Signed out → a passphrase sign-in card (`posLogin` → `POST /auth/login` → bearer token in
+`localStorage['fv_pos_token']`). Signed in → `GET /positions?state=open` renders frozen open-position
+cards (entry/stop/risk/qty). No stop management or alerts yet — that is phase 3 (`advance()` engine)
+and phase 4 (VAPID push). Auth is a worker-native bearer token (not Cloudflare Access — the PWA is a
+cross-origin GitHub-Pages page); the whole auth surface is the swap seam `worker-positions/src/auth.js`.
+See `worker-positions/README.md` and ADR-012 for the backend contract.
 
 ## Cutting a release ("What's New") — 3 steps, always together
 

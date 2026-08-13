@@ -34,7 +34,8 @@ jobs:
             --ignore=tests/test_pwa_lookup_signal.py \
             --ignore=tests/test_pwa_ai_group_chips.py \
             --ignore=tests/test_pwa_morning.py \
-            --ignore=tests/test_pwa_trade_ticket.py
+            --ignore=tests/test_pwa_trade_ticket.py \
+            --ignore=tests/test_pwa_positions.py
       - name: Run eval_ai guards on captured outputs (if any)
         run: python scripts/eval_ai.py --all
 

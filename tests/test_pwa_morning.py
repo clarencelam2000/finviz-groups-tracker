@@ -9,7 +9,9 @@ Covered:
   2. Provisional banner + "not settled" chrome is present (ADR-011, non-negotiable).
   3. ATR-from-LoD band labels render only on actionable states, with correct color words.
   4. "I took it" CTA appears only on actionable states (Triggered / Gapped-through).
-  5. Tapping "I took it" flips that card to "✓ Taken" (localStorage marker, Decision 5).
+  5. Signed out, tapping "I took it" routes to sign-in (WS5 phase 1 #309 — it now creates a
+     real authenticated position, not the old localStorage-only marker; signed-in path in
+     tests/test_pwa_positions.py).
   6. Empty store → empty-state copy, no crash (covers pre-first-run / non-trading day).
 
 Run with Playwright installed:
@@ -138,7 +140,11 @@ def test_i_took_it_only_on_actionable(server):
         browser.close()
 
 
-def test_i_took_it_marks_taken(server):
+def test_i_took_it_requires_signin_when_signed_out(server):
+    # WS5 phase 1 (#309) superseded the old localStorage-only "✓ Taken" marker: "I took it"
+    # now creates a real, authenticated position. Signed out, tapping it must NOT write a
+    # marker — it routes the user to sign in. The signed-in confirm+POST path is covered in
+    # tests/test_pwa_positions.py (which mocks the worker). Here we only assert the gate.
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -147,11 +153,11 @@ def test_i_took_it_marks_taken(server):
         page.click("text=I took it →")
         page.wait_for_timeout(300)
         html = page.inner_html("#morning-list")
-        assert "✓ Taken" in html
-        assert html.count("I took it") == 1, "one actionable card should flip to Taken"
-        # The localStorage marker uses the documented key shape (Decision 5).
+        assert "Sign in on the Positions tab to log trades" in html, "signed-out tap should show the sign-in note"
+        assert "✓ Taken" not in html, "no marker flip when signed out"
+        # No localStorage marker is written without a real (signed-in) log.
         val = page.evaluate("() => localStorage.getItem('taken:2026-08-07:AXON')")
-        assert val == "true", f"expected taken marker, got {val!r}"
+        assert val is None, f"expected no taken marker when signed out, got {val!r}"
         browser.close()
 
 
