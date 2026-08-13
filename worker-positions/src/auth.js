@@ -104,14 +104,20 @@ export async function authenticate(request, env, now = Date.now()) {
 // SECOND auth path on the same seam, for the GitHub-Actions held-tickers job (issue #312). It is
 // deliberately DISTINCT from the interactive owner bearer above:
 //   * different secret  — POSITIONS_INGEST_TOKEN (a long random string), not the owner passphrase.
-//   * different power    — a caller holding this token may ONLY read the held-ticker set and append
-//                          market-data bars; it can NEVER read, create, or mutate the owner's
-//                          private positions (those routes call authenticate(), which this token
-//                          cannot satisfy — it is not a valid HMAC-signed user token).
-// Least-privilege: if the CI secret leaks, the blast radius is "someone can write junk market bars
-// or learn which symbols are held", NOT "someone can see/alter the owner's trades". A dropped-in
-// Cloudflare Access migration (see top of file) would leave this path untouched — machine-to-machine
-// auth is orthogonal to the human login seam.
+//   * different power    — a caller holding this token may read the held-ticker set, append
+//                          market-data bars, and (WS5 phase 3b) TRIGGER the deterministic daily
+//                          `advance()` engine sweep over bars already stored in D1 (`POST
+//                          /advance`) — but it can NEVER read, create, or mutate the owner's
+//                          private positions directly (those routes call authenticate(), which
+//                          this token cannot satisfy — it is not a valid HMAC-signed user token).
+// Least-privilege, including the phase-3b widening: the sweep's outcome is a PURE function of bars
+// already sitting in D1 (advance.js has no branch a caller can steer) — a service-token caller
+// cannot choose the outcome, set arbitrary position state, or read the per-position detail back
+// (the /advance route strips `results` for a service caller and returns counts only; see
+// src/index.js). So if the CI secret leaks, the blast radius stays "write junk market bars, learn
+// which symbols are held, or kick off a sweep whose result they can't inspect in detail" — never
+// "read or steer the owner's trades". A dropped-in Cloudflare Access migration (see top of file)
+// would leave this path untouched — machine-to-machine auth is orthogonal to the human login seam.
 //
 // The token rides in the same Authorization: Bearer header for transport simplicity; there is no
 // ambiguity because service routes call authenticateService() and user routes call authenticate(),
