@@ -96,25 +96,28 @@ SCREENER_BASE = "https://finviz.com/screener.ashx"
 # ---------------------------------------------------------------------------
 
 
-def build_ticker_url(config: dict, tickers: list, offset: int = 1) -> str:
-    """Build a `t=`-filtered screener URL from the `morning` config block.
+def build_ticker_url(config: dict, tickers: list, offset: int = 1, block: str = "morning") -> str:
+    """Build a `t=`-filtered screener URL from a named config block.
 
-    offset is the &r= pagination parameter (1-based; page 2 = r=21, ...), same
-    convention as probe_picks._build_url. No &f= is emitted when base_filters is
-    empty (ADR-013: morning wants exactly the given tickers, no cap/volume filters).
+    `block` selects which block of screener_config.json to render — "morning" (WS3,
+    9 narrow status columns) or "held" (WS5 phase 2, the full 84-column scrape,
+    issue #297). Both are `t=`-filtered with empty base_filters so exactly the given
+    tickers return, regardless of cap/volume/52w-high status. offset is the &r=
+    pagination parameter (1-based; page 2 = r=21, ...), same convention as
+    probe_picks._build_url. No &f= is emitted when base_filters is empty.
     """
-    morning = config["morning"]
-    col_ids = ",".join(str(c["id"]) for c in morning["columns"])
+    cfg = config[block]
+    col_ids = ",".join(str(c["id"]) for c in cfg["columns"])
     t_str = ",".join(tickers)
     url = (
         f"{SCREENER_BASE}"
-        f"?v={morning['v']}"
+        f"?v={cfg['v']}"
         f"&t={t_str}"
     )
-    if morning["base_filters"]:
-        f_str = ",".join(morning["base_filters"])
+    if cfg["base_filters"]:
+        f_str = ",".join(cfg["base_filters"])
         url += f"&f={f_str}"
-    url += f"&ft={morning['ft']}" f"&c={col_ids}" f"&r={offset}"
+    url += f"&ft={cfg['ft']}" f"&c={col_ids}" f"&r={offset}"
     return url
 
 
@@ -123,25 +126,27 @@ def _batched(items: list, size: int) -> list:
     return [items[i:i + size] for i in range(0, len(items), size)]
 
 
-def fetch_ticker_quotes(page, tickers: list, config: dict) -> list:
-    """Fetch quote rows for `tickers` via the morning screener config, batched.
+def fetch_ticker_quotes(page, tickers: list, config: dict, block: str = "morning") -> list:
+    """Fetch quote rows for `tickers` via a named screener config block, batched.
 
     Chunks `tickers` into MORNING_BATCH_SIZE-sized batches, and within each batch
     paginates with &r= (probe_picks.PAGE_SIZE=20 rows/page) exactly mirroring
-    probe_picks._scrape_group's loop. Returns a flat list of row dicts keyed by
-    the scraped Finviz labels (Ticker, Prev Close, Open, High, Low, Price, Change,
-    ATR, Volume).
+    probe_picks._scrape_group's loop. Returns a flat list of row dicts keyed by the
+    scraped Finviz labels — for `block="morning"` that is the 9 status columns
+    (Ticker, Prev Close, Open, High, Low, Price, Change, ATR, Volume); for
+    `block="held"` (WS5 phase 2) it is the full 84-column scrape (#297).
 
     Shared component (ADR-013 Decision 2): WS3b and WS5's held-tickers feed call
-    this verbatim. NOT exercised against live Finviz in Phase A — only via fixtures
-    in tests, since Cloudflare blocks this from a cloud dev session. `page` is a
-    Playwright Page (or, in tests, a stub exposing .goto/.wait_for_selector/.content).
+    this — WS3 with the default `block="morning"`, WS5 with `block="held"`. NOT
+    exercised against live Finviz in Phase A — only via fixtures in tests, since
+    Cloudflare blocks this from a cloud dev session. `page` is a Playwright Page
+    (or, in tests, a stub exposing .goto/.wait_for_selector/.content).
     """
     all_rows: list = []
     for batch in _batched(tickers, MORNING_BATCH_SIZE):
         offset = 1
         while True:
-            url = build_ticker_url(config, batch, offset=offset)
+            url = build_ticker_url(config, batch, offset=offset, block=block)
             page.goto(url, wait_until="domcontentloaded", timeout=30_000)
             try:
                 page.wait_for_selector(probe_picks.SCREENER_TABLE_SELECTOR, timeout=30_000)
