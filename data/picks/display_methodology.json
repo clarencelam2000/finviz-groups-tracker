@@ -1,6 +1,134 @@
 {
-  "current": "v3",
+  "current": "v4",
   "versions": [
+    {
+      "version": "v4",
+      "effective_date": "2026-08-12",
+      "description": "Adds a 4th independent Focus-score multiplicative haircut: an overhead-supply penalty based on % below the 52-week high (ohMag). START=8 (0 penalty at/below this), END=30 (full penalty at/above this), MAX=0.20 (max haircut, kept below extension(0.5)/earnings(0.7) so overhead acts as a tiebreaker, not a veto). All v3 params (weights, extension/liquidity/earnings penalties, base filter, sorts, atr_bands) are unchanged and repeated here for a self-contained entry.",
+      "params": {
+        "base_filter": {
+          "min_market_cap_b": 5,
+          "note": "'Market Cap' column in picks.csv stores raw Finviz strings (e.g. '345.79B', '456M', '1.2T') — parse with a _parse_cap_b equivalent (strip B/M/T/K suffix, multiply by 1000/1/0.001/0.000001) before comparing to this float threshold. Row is excluded if parsed billions <= 5.",
+          "ma_positioning": {
+            "logic": "any",
+            "conditions": [
+              "SMA50 > 0",
+              "SMA200 > 0",
+              "SMA50 > SMA20"
+            ],
+            "columns": ["SMA50", "SMA200", "SMA20"],
+            "note": "SMA* columns are % distance from MA (e.g. 5.2 = price is 5.2% above that MA), stored as strings that may or may not include a '%' suffix (e.g. '8.33%' or '8.33') — strip '%' before parsing. SMA50 > SMA20 in % terms is equivalent to 20MA price > 50MA price (classic uptrend). A row passes if ANY condition holds. All three NaN = fails."
+          }
+        },
+        "all_view_sort": {
+          "primary": "list_category",
+          "category_order": ["leaders", "emerging", "accel", "rs_new_high"],
+          "secondary": "group",
+          "secondary_note": "Column name in picks.csv is 'group' (part of PICKS_LEAD_COLS). Within each category, groups appear alphabetically.",
+          "tertiary": {
+            "col": "atr_ext_50",
+            "direction": "asc",
+            "note": "Least-extended first within each group."
+          }
+        },
+        "focus_dq": {
+          "atr": {
+            "col": "atr_ext_50",
+            "min_exclusive": 0,
+            "max_inclusive": 4.0,
+            "note": "atr_ext_50 <= 0 means price is at or below the 50MA (not actionable). > ATR_EXT_ACTIONABLE means over-extended. Both are hard disqualifications."
+          },
+          "liquidity": {
+            "col": "avg_dollar_volume",
+            "formula": "Price * Avg Volume (both parsed from picks.csv Finviz-format strings; 'Avg Volume' uses K/M/B/T suffixes, not the market-cap suffix scale)",
+            "min_inclusive": 30000000,
+            "note": "Added in Phase 3d (FOCUS_MIN_DOLLAR_VOL). NaN in either input -> excluded. isFocusEligible() in docs/index.html requires BOTH this gate AND the atr gate above; a row failing either is not a Focus candidate."
+          }
+        },
+        "focus_score": {
+          "formula": "focus_score = base * (1 - extPenaltyFrac) * (1 - liqPenaltyFrac) * (1 - earnPenaltyFrac) * (1 - overheadPenaltyFrac)",
+          "base_formula": "FOCUS_W_GROUP * normGroup + FOCUS_W_TIGHT * normTight + FOCUS_W_QUIET * normQuiet",
+          "weights": {
+            "group": 0.2,
+            "tight": 0.4,
+            "quiet": 0.4
+          },
+          "components": {
+            "group": {
+              "col": "grp_sum_mid_rank",
+              "direction": "lower_is_better",
+              "note": "Sum of rank_month + rank_quarter + rank_half for the selecting group. Lower = stronger group."
+            },
+            "tight": {
+              "cols": ["risk_20ma_pct", "risk_50ma_pct"],
+              "selection": "min of positive values only",
+              "direction": "lower_is_better",
+              "note": "Nearest MA stop below the price. risk_50ma_pct is always positive for Focus members (price > 50MA is the DQ gate). risk_20ma_pct only qualifies if > 0 (20MA is below price). Takes the smaller of the two qualifying values. If both are NaN or non-positive → NaN (treated as 0.5 by normalization)."
+            },
+            "quiet": {
+              "col": "range_atr",
+              "direction": "lower_is_better",
+              "note": "Today's high-low range divided by ATR. Narrower = more orderly day."
+            }
+          },
+          "normalization": {
+            "method": "inverted_minmax",
+            "fallback_method": "rank_percentile",
+            "fallback_threshold_col": "FOCUS_MIN_POOL",
+            "fallback_threshold": 5,
+            "all_equal_default": 0.5,
+            "nan_default": 0.5,
+            "n1_default": 1.0,
+            "note": "Inverted: lower raw value → higher normalized score (1.0 = best). When pool < 5, rank-based percentile replaces min–max to avoid jumpy scores. All-equal in a component → everyone gets 0.5. NaN → 0.5 (neutral contribution). n=1 candidate → JS short-circuits and assigns score 1.0 before normalization runs (no penalties applied)."
+          },
+          "extension_penalty": {
+            "col": "atr_ext_50",
+            "ramp_start": 2.5,
+            "ramp_end": 4.0,
+            "max_fraction": 0.5,
+            "formula": "extPenaltyT = clamp((atr_ext - 2.5) / (4.0 - 2.5), 0, 1); extPenaltyFrac = 0.5 * extPenaltyT",
+            "note": "0 penalty below 2.5×. Ramps linearly to 50% haircut at 4.0× (ATR_EXT_ACTIONABLE)."
+          },
+          "liquidity_penalty": {
+            "col": "avg_dollar_volume",
+            "ramp_start": 60000000,
+            "floor": 30000000,
+            "max_fraction": 0.3,
+            "formula": "liqPenaltyT = clamp((60_000_000 - dolVol) / (60_000_000 - 30_000_000), 0, 1); liqPenaltyFrac = 0.3 * liqPenaltyT",
+            "note": "Added in Phase 3d (LIQUIDITY_PENALTY_START / LIQUIDITY_PENALTY_MAX). 0 penalty at/above $60M avg $ volume; ramps to 30% haircut right above the $30M floor (below which the row is excluded entirely by focus_dq.liquidity, not penalized). NaN dollar volume -> 0 penalty in the raw formula, but is unreachable for actual Focus candidates since focus_dq.liquidity already excludes NaN."
+          },
+          "earnings_penalty": {
+            "caution_days": 10,
+            "imminent_days": 3,
+            "max_fraction": 0.7,
+            "post_earnings_carryover_days": 1,
+            "post_earnings_carryover_fraction": 0.25,
+            "formula": "d = daysUntil(Earnings column, as_of); if d == -1: 0.7 * 0.25; elif d < -1 or d >= 10: 0; elif d <= 3: 0.7 (flat max); else: 0.7 * (10 - d) / (10 - 3)",
+            "note": "Added in Phase 3d (EARNINGS_IMMINENT_DAYS / EARNINGS_CAUTION_DAYS / EARNINGS_PENALTY_MAX / POST_EARNINGS_PENALTY_FRAC). Parses the Finviz 'Earnings' column ('Mon DD' + optional /a after-close or /b before-open suffix; no year given, inferred from the reference date, rolling forward a year if >180 days in the past). CRITICAL for replay: docs/index.html always computes daysUntil relative to the VIEWER'S WALL-CLOCK 'now' at render time -- it is NOT a pure function of the stored row. scripts/replay_picks.py instead uses the replay --date as the 'as_of' reference, which reproduces what a viewer would have seen live on that date, not what re-running the parser today would produce for a past date. This is a deliberate, documented divergence, not a bug."
+          },
+          "overhead_penalty": {
+            "col": "52W High",
+            "ramp_start": 8,
+            "ramp_end": 30,
+            "max_fraction": 0.20,
+            "formula": "ohMag = -parse('52W High'); overheadPenaltyT = clamp((ohMag - 8) / (30 - 8), 0, 1); overheadPenaltyFrac = 0.20 * overheadPenaltyT",
+            "note": "Added Phase 2 (OVERHEAD_PENALTY_START / OVERHEAD_PENALTY_END / OVERHEAD_PENALTY_MAX). '52W High' is a signed % string like '-14.1%' (distance from the 52-week high, usually <= 0); ohMag = -parsed value = % below the 52-week high (positive). Finviz data can occasionally lag and report a positive '52W High' when a stock has already broken to a new high before the stored high catches up -- ohMag then goes negative, which the formula's clamp(...,0,1) already floors to 0 penalty, same as an ordinary near-high row; no special-casing needed (same graceful handling in the Phase-1 Launch-ready chip's ohMag <= LAUNCH_NEAR_HIGH_PCT checks). NaN/unparseable -> 0 penalty (isNaN->0, same convention as extension_penalty). 0 penalty at/below 8% below the high (near-high free zone, aligned with the Phase-1 Launch-ready chip's LAUNCH_NEAR_HIGH_PCT); ramps linearly to a 20% haircut at/above 30% below the high (calibrated to the live pool's ~p25 ohMag, ~28.6%). Deliberately kept below the extension(50%) and earnings(70%) penalty ceilings so overhead supply is a tiebreaker among Focus candidates, not a veto (v1 conservative; may raise MAX to 0.30 later)."
+          }
+        },
+        "focus_sort": {
+          "col": "focus_score",
+          "direction": "desc"
+        },
+        "atr_bands": {
+          "emerald_max": 4.0,
+          "amber_max": 8.0,
+          "note": "Display-only color bands on atr_ext_50. Emerald = actionable zone (< 4.0×); amber = caution (4.0–8.0×); red = trim candidate (≥ 8.0×). NOTE: the Guide tooltip in docs/index.html (near line 526) incorrectly says 'emerald ≤5×' — the actual code cutoff is 4.0× (ATR_EXT_ACTIONABLE). Do not 'fix' this JSON to say 5.0; the code is the source of truth. Fix the guide text separately."
+        }
+      },
+      "known_gaps": {
+        "note": "Adds the overhead-supply penalty only; no other component of the formula changed. Still NOT modeled here: the opt-in Phase 4 Ariel-match filter (versioned separately in data/picks/ariel_match_config.json, no anti-drift guard by design). Also see the earnings_penalty note above re: the wall-clock-vs-replay-date divergence -- that is a permanent, structural limitation of replaying a 'now'-relative formula, not something a future version can fully close without changing the live formula itself to be date-relative."
+      }
+    },
     {
       "version": "v3",
       "effective_date": "2026-07-16",

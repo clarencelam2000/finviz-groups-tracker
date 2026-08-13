@@ -49,6 +49,9 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `LIQUIDITY_PENALTY_MAX` | `0.3` | Focus scoring: max multiplicative score haircut for a Focus candidate near the liquidity floor. |
 | `EARNINGS_PENALTY_MAX` | `0.7` | Focus scoring: max multiplicative score haircut for earnings within `EARNINGS_IMMINENT_DAYS`; ramps in from 0 at `EARNINGS_CAUTION_DAYS`. |
 | `POST_EARNINGS_PENALTY_FRAC` | `0.25` | Focus scoring: one-day carry-over penalty (this fraction of `EARNINGS_PENALTY_MAX`) for a stock that reported exactly 1 day ago; 2+ days past is fully decayed to 0. |
+| `OVERHEAD_PENALTY_START` | `8` | Focus scoring (Phase 2): `ohMag` (% below 52-week high) at/below this gets 0 overhead-supply penalty. Aligns with `LAUNCH_NEAR_HIGH_PCT`'s near-high free zone. |
+| `OVERHEAD_PENALTY_END` | `30` | Focus scoring: `ohMag` at/above this gets the full `OVERHEAD_PENALTY_MAX` haircut; ramp is linear between START and END. Calibrated to the live pool's ~p25 `ohMag` (~28.6%). |
+| `OVERHEAD_PENALTY_MAX` | `0.20` | Focus scoring: max multiplicative score haircut for deep overhead supply (far below 52wk high). Kept below the extension (`0.5`) and earnings (`0.7`) penalty ceilings so overhead acts as a tiebreaker, not a veto. |
 | `ARIEL_GROUP_TOP_N_FULL` | `40` | Ariel match (Phase 4): group must rank in the top N industries by `rank_month + rank_quarter` ascending sum to fully qualify. Computed from `state.data.industries.delta` (all ~144 industries), not limited to groups picks.csv has stock rows for. |
 | `ARIEL_GROUP_TOP_N_SOFT` | `50` | Ariel match: soft-qualify extension for ranks 41–50 (near-miss on the group gate). |
 | `ARIEL_DOLLAR_VOL_MIN` | `100_000_000` | Ariel match: hard floor on avg $ volume (Price × Avg Volume, same formula as `FOCUS_MIN_DOLLAR_VOL`); no soft band — a liquidity floor, not a strength signal. |

@@ -1,6 +1,17 @@
 {
-  "current": "2026.08.12",
+  "current": "2026.08.12.2",
   "releases": [
+    {
+      "version": "2026.08.12.2",
+      "date": "2026-08-12",
+      "title": "Focus now accounts for overhead supply",
+      "tag": "improvement",
+      "tab": "picks",
+      "notes": [
+        "Focus ranking now nudges down stocks that are buried far below their 52-week high, since trapped sellers overhead tend to cap rallies.",
+        "Names still near their 52-week high are unaffected — this is a small tiebreaker, not a hard cutoff."
+      ]
+    },
     {
       "version": "2026.08.12",
       "date": "2026-08-12",
