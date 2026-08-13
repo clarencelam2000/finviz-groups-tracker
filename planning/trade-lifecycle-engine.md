@@ -296,10 +296,14 @@ can opt a single position out of the 20MA→50MA widen without a code change. **
 — the floor ratchets to entry at exactly +1R (owner-confirmed, not a price-buffer variant).
 
 **Exit reasons (canonical enum).** `stop_hit`, `gap_down_below_stop`, `close_below_50ma`,
-`severe_breakdown`, `two_close_below_20ma`, `manual_close`. The old bundled `hard_exit` is **split**
-into `close_below_50ma` (slow bleed under the 50MA) and `severe_breakdown` (≥ `SEVERE_BREAKDOWN_ATR`
-one-day drop) so the honest record and the UI can say *why* (owner, 2026-08-11). Earnings is **not**
-an exit reason — it only flags/pushes; the user decides.
+`close_below_20ma`, `severe_breakdown`, `two_close_below_20ma`, `manual_close`. The old bundled
+`hard_exit` is **split** into `close_below_50ma` (slow bleed under the 50MA) and `severe_breakdown`
+(≥ `SEVERE_BREAKDOWN_ATR` one-day drop) so the honest record and the UI can say *why* (owner,
+2026-08-11). `close_below_20ma` is the `HARD_EXIT_BASIS="20ma"` per-position override's immediate
+single-close counterpart to `close_below_50ma` — kept distinct from `two_close_below_20ma` (§4c's
+stateful two-consecutive-close rule) so the record never claims two closes happened when the
+override fired on the first one. Earnings is **not** an exit reason — it only flags/pushes; the
+user decides.
 
 ## 7. Edge cases (each gets a test)
 
