@@ -42,6 +42,30 @@ exhaustively testable with synthetic bars now; live advancement is gated on a fe
   the SMA gotcha + `effectiveConfig` door); README § Configurable parameters › Engine constants
   table + phase status; root CLAUDE.md repo-structure pointer; SPRINT WS5-3 split into 3a✅/3b🔴.
 
+**Low-confidence / open design questions (surface to owner; none block 3a merge):**
+1. **`EARNINGS_WARN_SESSIONS = 10`** — I used one warn band (reused Focus `EARNINGS_CAUTION_DAYS`).
+   Owner may want the flag only at the tighter imminent band (≤3). One-constant change.
+2. **Widen is recomputed each bar, not latching.** I followed §4's pseudocode literally
+   (`basis = sma50 > entry ? 50ma : 20ma`, recomputed daily), so if the 50MA later falls back below
+   entry the basis flips BACK to 20MA. The design *prose* calls it a "one-time widen." In practice
+   `close_below_50ma` usually fires first so it rarely bites, and the floor invariant keeps it safe —
+   but latching-vs-recomputed is a real semantic choice the owner should confirm for 3b. If latching
+   is wanted, it's a small change (once `trail_basis==50ma`, never revert).
+3. **`caution_flag` is used as an integer COUNTER** (0,1,2…), not the strict boolean the 0001 schema
+   comment implies. Compatible for default `TWO_CLOSE_EXIT=2` (only ever 0/1 pre-exit); only visible
+   if someone overrides `TWO_CLOSE_EXIT>2`. In-code documented; flag if the schema comment should update.
+4. **Reason attribution depends on trail basis:** `close_below_50ma` mostly manifests *before* the
+   trail has widened to 50MA (once on 50MA basis, a sub-50MA close usually trips the stop-hit first).
+   Correct per spec, but subtle — confirm it matches the owner's mental model of "why did it exit."
+
+**3b implementation gotchas (for whoever wires it — not bugs, instructions):**
+- Parse `meta` from its D1 JSON **string** to an object before calling `advance()` (as
+  `listPositions` does via `safeParse`) — else `meta.widen_enabled`/`meta.config` are silently ignored.
+- `autoConfirm`'s `sessionsInClosing` and any earnings "sessions" must count **trading sessions**
+  (reuse `find_trading_date_back`-style logic), not calendar days.
+- The transitions return a `trade_date` passthrough; 3b stamps real `ts`/`trade_date` on events and
+  owns DB-layer idempotency (don't double-apply a transition).
+
 **Next steps — WS5-3b (tracked SPRINT):** the wiring — load position + trailing `ticker_quotes`
 bars → `advance()` → persist spine + append `position_events` → DB-layer `last_advanced_date`
 idempotency; service-token `/advance` route (or ingest-triggered sweep) + daily trigger after the
