@@ -18,11 +18,19 @@ This is **phase 1** of the four-phase WS5 plan (ADR-012 §10), with **phase 2 in
    `worker-cron` `held` scheduled job are wired up alongside them. Not yet exercised against a
    live D1 instance / real held positions — treat as unverified end-to-end until a real run
    confirms it.
-3. ⬜ `advance()` daily engine + tests.
+3. 🟡 **`advance()` daily engine + tests** — in progress. **Phase 3a (this slice): the pure engine
+   `src/advance.js`** — `advance(pos, bar, cfg)` plus the user-driven transitions
+   (`confirmExit`/`stillHolding`/`autoConfirm`/`correctExit`/`reopen`), the §6 config constants with
+   per-position `effectiveConfig` merge, and the `normalizeBar` bar-loader (recovers SMA **levels**
+   from Finviz's %-distance columns — see migration 0002). No D1 reads/writes, no endpoint, no cron
+   yet. **Phase 3b (next): the wiring** — load a position + its trailing bars from `ticker_quotes`,
+   persist the new state + append events, `last_advanced_date` idempotency, a service-token
+   `/advance` route, and the daily trigger after the held ingest.
 4. ⬜ Push notifications (VAPID; the sibling `distil` worker's web-push code is the reference).
 
-Phase 1 has **no engine and no feed** — a created position is a frozen record until phase 3. That is
-by design (each phase is independently useful).
+Phase 1 has **no engine and no feed** — a created position is a frozen record until the phase-3b
+wiring lands. That is by design (each phase is independently useful); the phase-3a engine is a pure,
+exhaustively-tested function whose only caller (the daily job) arrives in 3b.
 
 ## Endpoints
 
@@ -76,6 +84,30 @@ token is minted server-side from a login passphrase and lives only in the owner'
 | secret | `POSITIONS_SESSION_SECRET` | — | HMAC key signing bearer tokens (rotating it invalidates all tokens) |
 | secret | `POSITIONS_AUTH_PASSPHRASE` | — | the owner's login passphrase (user = 1) |
 | secret | `POSITIONS_INGEST_TOKEN` | — | WS5 phase 2 machine token for the GH-Actions held feed (`/held-tickers`, `/ingest/quotes`); also a GitHub Actions secret. Least-privilege, distinct from the owner passphrase. |
+
+### Engine constants (`src/advance.js` `ENGINE_CONFIG`, design §6)
+
+These are the phase-3 daily-engine tunables. Each is a per-position override candidate: `advance()`
+reads an **effective config** = these globals merged with a position's `meta.config` overrides
+(design §14), so a per-position rule is a data change, not a code change. To change a global default,
+edit `ENGINE_CONFIG` (each has an in-code comment) — no other engine code references the raw values.
+
+| Name | Default | Controls |
+|---|---|---|
+| `BREAKEVEN_R` | `1.0` | R-multiple at which `profit_floor` ratchets up to entry (breakeven). The floor is the only monotonic quantity; `current_stop` is not (the widen lowers it on purpose). |
+| `WIDEN_TRAIL_BASIS` | `true` | Widen the trail 20MA→50MA once the 50MA rises above entry. Per-position opt-out via `meta.widen_enabled=false`. |
+| `TRIM_START_ATR` | `7` | First whole ATR-extension-from-50MA level that triggers a scale-out trim. |
+| `TRIM_PCT` | `0.10` | Fraction of **remaining** qty trimmed at each newly-crossed whole ATR level (asymptotic — never trims a lot to zero). Idempotent + catch-up-correct via the `highest_trim_atr` ledger. |
+| `TWO_CLOSE_EXIT` | `2` | Consecutive closes below the 20MA that force a winner's soft exit (`caution_flag` counts them). |
+| `HARD_EXIT_BASIS` | `50ma` | Close below this MA is an immediate hard exit — `close_below_50ma` (default) or `close_below_20ma` (per-position `20ma` override), reported distinct from `two_close_below_20ma`'s stateful two-consecutive-close rule so an immediate single-close exit is never mislabeled as two closes. `20ma` \| `50ma`. |
+| `SEVERE_BREAKDOWN_ATR` | `3.0` | Single-day `prev_close→close` drop (in ATRs) counting as a one-day crash (`severe_breakdown`). `Infinity` disables it (rely on the 50MA hard-exit alone). |
+| `EARNINGS_WARN_SESSIONS` | `10` | Days-to-earnings at/under which the guardrail **flags** (never auto-exits). Reuses the Focus `EARNINGS_CAUTION_DAYS`. |
+| `EXIT_AUTOCONFIRM_SESSIONS` | `5` | Sessions a position may sit in `Closing` before `autoConfirm()` closes it at `expected_exit_price` with `confirmation_status='auto'`. |
+| `CAUTION_REARM_ON_HOLD` | `true` | On "still holding", reset `caution_flag` so the two-close rule re-arms (needs two fresh closes) instead of re-signalling on the next single close. |
+
+Exit reasons are a canonical enum (`EXIT_REASONS`): `stop_hit`, `gap_down_below_stop`,
+`close_below_50ma`, `close_below_20ma`, `severe_breakdown`, `two_close_below_20ma`, `manual_close`.
+Earnings is **not** an exit reason — it only flags.
 
 ## One-time setup (already done in prod; documented for reproducibility)
 

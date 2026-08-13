@@ -345,7 +345,7 @@ committed file is the durable record.
 | `scripts/` | Data collection and processing scripts. See `scripts/CLAUDE.md` for Picks pipeline and AI-capture detail. |
 | `dashboard/` | Streamlit dashboard |
 | `worker/` | Cloudflare Worker (ticker lookup + cache ops) — see `worker/README.md` and `worker/CLAUDE.md` (ETF override layer, ADR-009). |
-| `worker-positions/` | Cloudflare Worker + D1 `finviz-positions` — WS5 private trade-lifecycle store (authenticated "I took it" write path; phase 1). See `worker-positions/README.md`. |
+| `worker-positions/` | Cloudflare Worker + D1 `finviz-positions` — WS5 private trade-lifecycle store: positions spine + held-tickers quote feed + the pure `advance()` daily engine (`src/advance.js`, phase 3a). See `worker-positions/README.md` and `worker-positions/CLAUDE.md` (engine architecture + `ENGINE_CONFIG` constants). |
 | `worker-cron/` | Cloudflare Worker — single-trigger cron dispatcher (ADR-010). See `worker-cron/README.md`. |
 | `docs/` | PWA (GitHub Pages) — `index.html`, `sw.js`, `manifest.json`. See `docs/CLAUDE.md` for display-threshold constants, release process, and PWA-specific testing. |
 | `data/` | Append-only CSVs (sectors, industries) |

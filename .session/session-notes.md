@@ -36,6 +36,74 @@ checklist (`session-notes.md` 2026-08-13 WS5-phase-2 entry) is otherwise unchang
 green; if it still fails, check next for a live/`held` position actually existing (empty held set
 is a normal `exit(0)`, not a signal either way here since this run failed before reaching that check).
 
+## 2026-08-13 — WS5 phase 3a: pure `advance()` daily engine (#264, SPRINT WS5-3a)
+
+**Status: safe to close once the PR merges.** Senior-eng session building the heart of the
+trade-lifecycle engine. Lead wrote the engine + the taste-critical semantics tests by hand
+(exit ordering, exit-signal→Closing symmetry, invariants); delegated ONLY the mechanical Finviz
+"Earnings"→days parser port + its tests to a Sonnet subagent against a locked spec, reviewed every
+line. Full suite green: **99 worker-positions vitest** (was 55; +44 in `advance.test.js`).
+
+**Scope call (senior-eng): split phase 3 into 3a (pure engine, this PR) and 3b (D1 wiring, next).**
+Mirrors the WS3 Phase A/B split. The pure function is the entire risk/taste surface and is
+exhaustively testable with synthetic bars now; live advancement is gated on a few accumulated
+`ticker_quotes` bars anyway, so wiring it live buys nothing today. 3a de-risks; 3b is mechanical.
+
+**What landed (this PR, branch `claude/ws5-phase3-advance-engine-5yy5qn`):**
+- **`worker-positions/src/advance.js`** — pure `advance(pos, bar, cfg) → {position, events, stale?}`
+  implementing design §4 verbatim: exit-before-advance ordered checks (stop-hit incl. honest
+  gap-down at the open; `close_below_50ma`; `severe_breakdown` ≥3 ATR one-day drop; stateful
+  two-close-below-20MA), each **signalling → `closing`** (modeled price as *expected* fill, never
+  straight to `closed`); then profit-floor ratchet (+1R), 20MA→50MA widen (per-position
+  `meta.widen_enabled`), within-basis ratchet-up-only, ATR-extension trims with the
+  `highest_trim_atr` ledger (idempotent + catch-up), earnings flag. Plus the user-driven
+  transitions `confirmExit`/`stillHolding`/`autoConfirm`/`correctExit`/`reopen`, `effectiveConfig`
+  (globals + `meta.config` overrides, §14 door), `ENGINE_CONFIG` (§6 constants), and `normalizeBar`.
+- **The one non-obvious transform, isolated:** Finviz SMA20/50/200 are **%-distance, not levels**
+  (migration 0002). `normalizeBar` recovers levels via `close/(1+pct/100)` in exactly one place; the
+  engine body only ever sees levels. `days_to_earnings` derives from `raw["Earnings"]` via
+  `parseEarningsToDays` (UTC-pure on the bar's `trade_date`, roll-forward year inference; calendar
+  days as a conservative proxy for sessions), preferring a typed column if the feed derives one later.
+- **Invariants property-tested** over 40 random 60-bar sequences: `profit_floor` monotonic
+  non-decreasing; `current_stop >= profit_floor` always; `remaining_qty` non-increasing and > 0.
+  Idempotency via `last_advanced_date` guard (also what stops the caution counter double-incrementing
+  on a same-day re-run); stale/missing bar → flag + note, no advance.
+- **Docs (3-places rule):** in-code comments; new `worker-positions/CLAUDE.md` (engine architecture +
+  the SMA gotcha + `effectiveConfig` door); README § Configurable parameters › Engine constants
+  table + phase status; root CLAUDE.md repo-structure pointer; SPRINT WS5-3 split into 3a✅/3b🔴.
+
+**Low-confidence / open design questions (surface to owner; none block 3a merge):**
+1. **`EARNINGS_WARN_SESSIONS = 10`** — I used one warn band (reused Focus `EARNINGS_CAUTION_DAYS`).
+   Owner may want the flag only at the tighter imminent band (≤3). One-constant change.
+2. **Widen is recomputed each bar, not latching.** I followed §4's pseudocode literally
+   (`basis = sma50 > entry ? 50ma : 20ma`, recomputed daily), so if the 50MA later falls back below
+   entry the basis flips BACK to 20MA. The design *prose* calls it a "one-time widen." In practice
+   `close_below_50ma` usually fires first so it rarely bites, and the floor invariant keeps it safe —
+   but latching-vs-recomputed is a real semantic choice the owner should confirm for 3b. If latching
+   is wanted, it's a small change (once `trail_basis==50ma`, never revert).
+3. **`caution_flag` is used as an integer COUNTER** (0,1,2…), not the strict boolean the 0001 schema
+   comment implies. Compatible for default `TWO_CLOSE_EXIT=2` (only ever 0/1 pre-exit); only visible
+   if someone overrides `TWO_CLOSE_EXIT>2`. In-code documented; flag if the schema comment should update.
+4. **Reason attribution depends on trail basis:** `close_below_50ma` mostly manifests *before* the
+   trail has widened to 50MA (once on 50MA basis, a sub-50MA close usually trips the stop-hit first).
+   Correct per spec, but subtle — confirm it matches the owner's mental model of "why did it exit."
+
+**3b implementation gotchas (for whoever wires it — not bugs, instructions):**
+- Parse `meta` from its D1 JSON **string** to an object before calling `advance()` (as
+  `listPositions` does via `safeParse`) — else `meta.widen_enabled`/`meta.config` are silently ignored.
+- `autoConfirm`'s `sessionsInClosing` and any earnings "sessions" must count **trading sessions**
+  (reuse `find_trading_date_back`-style logic), not calendar days.
+- The transitions return a `trade_date` passthrough; 3b stamps real `ts`/`trade_date` on events and
+  owns DB-layer idempotency (don't double-apply a transition).
+
+**Next steps — WS5-3b (tracked SPRINT):** the wiring — load position + trailing `ticker_quotes`
+bars → `advance()` → persist spine + append `position_events` → DB-layer `last_advanced_date`
+idempotency; service-token `/advance` route (or ingest-triggered sweep) + daily trigger after the
+held ingest. Then phase 4 (VAPID + the two-tier/confirmation-strip surfaces). Owner gate: a few
+days of real held bars must accumulate before a 3b live dry-run is meaningful.
+
+**Note:** this session-notes commit must land on default via a merged PR to be visible next session.
+
 ---
 
 ## 2026-08-13 — WS5 phase 2: held-tickers feed → ticker_quotes (D1) (#312, PR #313)
