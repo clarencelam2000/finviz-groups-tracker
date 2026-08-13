@@ -469,6 +469,10 @@
       // GET /positions?state=open. Reset to null on sign-in/sign-out so a switch always
       // re-fetches fresh state.
       positionsData: null,
+      // true when the last posLoadPositions() fetch failed for a reason other than 401
+      // (network error, 5xx) — distinguishes "fetch failed" from "genuinely zero positions"
+      // so renderPositions doesn't show the empty-state copy for a real outage.
+      positionsError: false,
       // 'all' | 'focus'; persists across tab navigation within a session (A4 REVERSED
       // 2026-06-30 — VP call, see PICKS-STATE-PERSIST in SPRINT.md and the note in
       // planning/stock-picks-from-leading-groups.md). Previously reset to 'all' on every
@@ -5515,16 +5519,22 @@
       const risk = card.display ? card.display.riskTotal : (p.entry_price - p.initial_stop) * p.qty;
       const basisLabel = card.display ? card.display.basisLabel : (POS_STOP_BASIS_LABEL[p.stop_basis] || p.stop_basis);
       const errRow = card.error ? `<div class="text-center text-[11px] text-red-400 mb-1.5">${escapeHtml(card.error)}</div>` : '';
+      // While a POST is in flight, drop the Confirm/Cancel buttons entirely — this is what
+      // prevents both a double-tap double-submit and a Cancel racing an already-sent request
+      // (see ws5ConfirmTakeIt/ws5CancelTakeIt's `card.submitting` guards).
+      const actions = card.submitting
+        ? `<div class="mt-2 text-center text-xs text-slate-400">Logging…</div>`
+        : `<div class="mt-2 flex gap-2">
+            <button onclick="ws5ConfirmTakeIt('${ticker}')" class="flex-1 py-2 rounded-lg text-xs font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400">Confirm — log it</button>
+            <button onclick="ws5CancelTakeIt('${ticker}')" class="flex-1 py-2 rounded-lg text-xs font-semibold bg-slate-700 text-slate-300 hover:bg-slate-600">Cancel</button>
+          </div>`;
       return `
         <div class="mt-2 pt-2 border-t border-slate-700">
           ${errRow}
           <div class="text-xs text-slate-300 text-center">
             Log ${escapeHtml(ticker)}: entry $${p.entry_price.toFixed(2)} · stop $${p.initial_stop.toFixed(2)} (${escapeHtml(basisLabel)}) · ${p.qty} sh · risk $${Math.round(risk)}
           </div>
-          <div class="mt-2 flex gap-2">
-            <button onclick="ws5ConfirmTakeIt('${ticker}')" class="flex-1 py-2 rounded-lg text-xs font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400">Confirm — log it</button>
-            <button onclick="ws5CancelTakeIt('${ticker}')" class="flex-1 py-2 rounded-lg text-xs font-semibold bg-slate-700 text-slate-300 hover:bg-slate-600">Cancel</button>
-          </div>
+          ${actions}
         </div>`;
     }
 
@@ -5545,13 +5555,22 @@
     };
 
     window.ws5CancelTakeIt = function (ticker) {
+      const card = state.ws5Card[ticker];
+      // A Confirm POST is in flight for this card — ws5ConfirmHtml already hid the Cancel
+      // button in this state, but guard here too since this is a global window function.
+      // Bailing out (instead of deleting the card) means ws5ConfirmTakeIt's resolution is
+      // still the one source of truth for the outcome, so the UI never shows "cancelled"
+      // for a request that actually went on to create a real position.
+      if (card && card.submitting) return;
       delete state.ws5Card[ticker];
       renderMorning();
     };
 
     window.ws5ConfirmTakeIt = async function (ticker) {
       const card = state.ws5Card[ticker];
-      if (!card || card.mode !== 'confirm') return;
+      if (!card || card.mode !== 'confirm' || card.submitting) return;
+      card.submitting = true;
+      renderMorning();
       const r = (state.morningData || []).find(x => x.ticker === ticker);
       try {
         await posApi('/positions', { method: 'POST', body: card.payload });
@@ -5589,33 +5608,49 @@
     window.posSignOut = function () {
       posClearToken();
       state.positionsData = null;
+      state.positionsError = false;
+      renderPositions();
+    };
+
+    window.posRetryLoad = function () {
+      state.positionsError = false;
+      state.positionsData = null;
       renderPositions();
     };
 
     async function posLoadPositions() {
+      state.positionsError = false;
       try {
         const data = await posApi('/positions?state=open', { method: 'GET' });
         state.positionsData = (data && data.positions) || [];
       } catch (e) {
-        // A 401 already cleared the token (posApi) — reset to null so the signed-out
-        // branch renders and a future sign-in re-fetches fresh. Any other failure just
-        // shows an empty list rather than crashing the tab.
-        state.positionsData = (e && e.unauth) ? null : [];
+        if (e && e.unauth) {
+          // A 401 already cleared the token (posApi) — reset to null so the signed-out
+          // branch renders and a future sign-in re-fetches fresh.
+          state.positionsData = null;
+        } else {
+          // Network error or non-401 API failure — keep positionsData null so
+          // renderPositions shows an explicit error, not the "no open positions" empty
+          // state (those two cases are not the same and shouldn't look the same).
+          state.positionsData = null;
+          state.positionsError = true;
+        }
       }
       if (state.tab === 'positions') renderPositions();
     }
 
     // One open-position card. `current_stop`/`remaining_qty` fall back to `initial_stop`/
-    // `qty` — phase 1 has no stop management yet, so they're always equal today, but the
-    // read prefers the "current" fields so this doesn't silently go stale once phase 3
-    // ships stop/partial-exit management.
+    // `initial_qty` (worker-positions' POSITION_COLS field names) — phase 1 has no stop
+    // management yet, so they're always equal today, but the read prefers the "current"
+    // fields so this doesn't silently go stale once phase 3 ships stop/partial-exit
+    // management.
     function posCardHtml(p) {
       const ticker = escapeHtml(p.ticker || '');
       const source = escapeHtml((p.meta && p.meta.source) || p.source || 'manual');
       const entryDate = escapeHtml(p.entry_date || p.created_at || '');
       const entry = parseFloat(p.entry_price);
       const stop = parseFloat(p.current_stop != null ? p.current_stop : p.initial_stop);
-      const qty = parseFloat(p.remaining_qty != null ? p.remaining_qty : p.qty);
+      const qty = parseFloat(p.remaining_qty != null ? p.remaining_qty : p.initial_qty);
       const basisLabel = POS_STOP_BASIS_LABEL[p.stop_basis] || p.stop_basis || 'Manual';
       const riskShare = (!isNaN(entry) && !isNaN(stop)) ? entry - stop : NaN;
       const openRisk = (!isNaN(riskShare) && !isNaN(qty)) ? riskShare * qty : NaN;
@@ -5645,6 +5680,17 @@
                    class="mt-4 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-100 w-full max-w-xs text-center" />
             <button onclick="posDoLogin()" class="mt-3 w-full max-w-xs py-2 rounded-lg text-xs font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400">Sign in</button>
             <div id="pos-login-error" class="text-xs text-red-400 mt-2"></div>
+          </div>`;
+        return;
+      }
+
+      if (state.positionsData === null && state.positionsError) {
+        // A real fetch failure (network/5xx) — distinct from "signed in with zero open
+        // positions" so it isn't mistaken for that empty state.
+        el.innerHTML = `
+          <div class="flex flex-col items-center text-center py-10 px-4">
+            <p class="text-slate-400 text-sm">Couldn't load positions — check your connection.</p>
+            <button onclick="posRetryLoad()" class="mt-3 text-xs text-sky-400 underline">Try again</button>
           </div>`;
         return;
       }
