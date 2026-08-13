@@ -1,0 +1,26 @@
+# Cloudflare Worker config for finviz-positions (WS5 trade-lifecycle store).
+#
+# This Worker owns the PRIVATE, authenticated position data (Cloudflare D1: finviz-positions).
+# It is deliberately SEPARATE from finviz-ticker-lookup (public, unauthenticated cache API) so the
+# private financial-data write path never shares an origin/auth surface with the public cache.
+#
+# Before first deploy (all one-time; no redeploy needed to change secrets later):
+#   1. D1 binding below is already wired to the provisioned db (id from `wrangler d1 create`).
+#   2. Set the two secrets (NOT in this file):
+#        wrangler secret put POSITIONS_SESSION_SECRET   # random 32+ byte string; signs bearer tokens
+#        wrangler secret put POSITIONS_AUTH_PASSPHRASE   # the owner's login passphrase (user = 1)
+#   Apply the schema: wrangler d1 execute finviz-positions --remote --file migrations/0001_init.sql
+name = "finviz-positions"
+main = "src/index.js"
+compatibility_date = "2024-09-23"
+
+[vars]
+# Comma-separated exact origins allowed to call this Worker (CORS). The PWA's GitHub-Pages origin
+# plus localhost dev origins used for Playwright/manual testing. Auth is a bearer token (header),
+# not a cookie, so we pin the exact origin and never send Allow-Credentials.
+ALLOWED_ORIGINS = "https://clarencelam2000.github.io,http://localhost:8000,http://127.0.0.1:8000"
+
+[[d1_databases]]
+binding = "POSITIONS_DB"
+database_name = "finviz-positions"
+database_id = "0e59c0fb-cac6-48ee-b90d-60ca89b3bb90"

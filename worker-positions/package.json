@@ -1,0 +1,18 @@
+{
+  "name": "finviz-positions",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Cloudflare Worker + D1: WS5 trade-lifecycle positions store (authenticated 'I took it' write path)",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "migrate": "wrangler d1 execute finviz-positions --remote --file migrations/0001_init.sql"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.8",
+    "wrangler": "^3.99.0"
+  }
+}
