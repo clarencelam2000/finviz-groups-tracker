@@ -19,6 +19,19 @@ Design: ADR-014 · roadmap § WS4 · mock `planning/mocks/ws4-trade-ticket.html`
 | WS4-C | **Pre-close (15:50) ticket rendering** | `docs/index.html` | S | Same component keyed on `session=pre_close`. **Blocked-by #268 (WS3b)** — `pre_close` session store not yet populated. |
 | WS4-RT | **Revisit with real-time quotes (Alpaca)** (#287) | — | — | Parked. Replace snapshot-read price with a live feed; keep manual override as fallback. Not scheduled. |
 
+#### Trade Lifecycle (WS5 — position engine + D1)
+
+Design: ADR-012 · `planning/trade-lifecycle-engine.md` · roadmap § WS5 · epic #264. Owner decisions 2026-08-13: worker-native Bearer auth (not CF Access), dedicated `finviz-positions` worker, provision/deploy on the shared CF account.
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| WS5-1-BE | ~~**Phase 1 backend: D1 + auth + "I took it" write path**~~ | `worker-positions/**`, `.github/workflows/deploy-workers.yml`, `CLAUDE.md` | L | ✅ **Done & LIVE 2026-08-13 (#309).** D1 `finviz-positions` provisioned + `migrations/0001_init.sql` applied (`positions` spine + append-only `position_events`; `ticker_quotes` deferred to phase 2 for full-width per #297). Worker deployed `finviz-positions.salmonbaby8.workers.dev`: `POST /auth/login`, ticker-generic independent-lot `POST /positions` (long-only R>0 validation, §3a/§8a), user-scoped `GET /positions`, `/health`. HMAC Bearer auth in the single swap-seam `src/auth.js` (Access-ready). Secrets set out-of-band; 28 vitest tests; live e2e smoke passed; test rows cleaned. |
+| WS5-1-PWA | **Phase 1 PWA: login + real "I took it" + positions read-back** | `docs/index.html`, `docs/sw.js`, `docs/releases.json`, `tests/test_pwa_*` | M | 🔴 Next slice (#309). Login (passphrase→token→localStorage); replace WS3 `taken:` marker with `POST /positions` (migrate marker, offline fallback); minimal frozen-positions surface (full card is phase 3); release triplet + Playwright + `tests.yml --ignore`. Lead owns taste. |
+| WS5-1-PASS | **Rotate `POSITIONS_AUTH_PASSPHRASE` to owner's chosen value** | — (CF secret) | XS | 🔴 Interim strong-random is set now; one API call to rotate once owner picks a passphrase. |
+| WS5-2 | **Held-tickers feed → `ticker_quotes`** (#297) | `worker-positions/**`, feed job | L | 🔴 Phase 2. Full-column append-only per #297; reuse WS3 `fetch_ticker_quotes`; authenticated GH-Actions→D1 ingest path. |
+| WS5-3 | **`advance()` daily engine + tests** | `worker-positions/**` | XL | 🔴 Phase 3. Pure `(pos, bar, effective_config)`; profit-floor invariant, 20→50 widen, two-close exit, trim ledger, `Closing` state. Full test plan in design §9. |
+| WS5-4 | **Push notifications (VAPID)** | `worker-positions/**` | L | 🔴 Phase 4. Reuse the sibling `distil` worker's web-push + `push_subscriptions` D1 pattern. Two-tier alerts + in-app confirmation pull surface (mock `planning/mocks/ws5-needs-confirmation-surface.html`). |
+
 #### Data Pipeline
 
 | # | Task | File(s) | Effort | Notes |
