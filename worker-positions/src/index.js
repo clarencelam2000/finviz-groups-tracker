@@ -3,8 +3,9 @@
 // and a read-back list. No engine (phase 3), no held-tickers feed (phase 2), no push (phase 4).
 // Design: planning/trade-lifecycle-engine.md; ADR-012. Auth seam: src/auth.js (see README § Auth).
 
-import { authenticate, login } from "./auth.js";
+import { authenticate, authenticateService, login } from "./auth.js";
 import { validateCreatePayload, buildPositionRow, insertPosition, listPositions } from "./positions.js";
+import { validateIngestBatch, ingestQuotes, heldTickers } from "./quotes.js";
 
 // ── CORS ──────────────────────────────────────────────────────────────────────────────────────
 // The PWA is a cross-origin GitHub-Pages page, so every response needs CORS headers scoped to the
@@ -69,7 +70,40 @@ export async function handleRequest(request, env) {
     return json({ token }, 200, request, env);
   }
 
-  // Everything below requires a valid bearer token.
+  // ── Machine (service-token) routes — WS5 phase 2 held-tickers feed (issue #312) ────────────────
+  // Gated by authenticateService() (POSITIONS_INGEST_TOKEN), a path DISTINCT from the owner bearer
+  // below: it can read the held set + append market bars, never touch private positions. See auth.js.
+  if (pathname === "/held-tickers" && method === "GET") {
+    if (!authenticateService(request, env)) return json({ error: "unauthorized" }, 401, request, env);
+    let tickers;
+    try {
+      tickers = await heldTickers(env.POSITIONS_DB);
+    } catch (e) {
+      return json({ error: "read failed" }, 500, request, env);
+    }
+    return json({ tickers }, 200, request, env);
+  }
+
+  if (pathname === "/ingest/quotes" && method === "POST") {
+    if (!authenticateService(request, env)) return json({ error: "unauthorized" }, 401, request, env);
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: "invalid JSON" }, 400, request, env);
+    }
+    const v = validateIngestBatch(body);
+    if (!v.ok) return json({ error: v.error }, 400, request, env);
+    let written;
+    try {
+      written = await ingestQuotes(env.POSITIONS_DB, v.value);
+    } catch (e) {
+      return json({ error: "write failed" }, 500, request, env);
+    }
+    return json({ written, trade_date: v.value.trade_date }, 200, request, env);
+  }
+
+  // Everything below requires a valid owner bearer token (interactive human auth).
   const auth = await authenticate(request, env);
   if (!auth) return json({ error: "unauthorized" }, 401, request, env);
 

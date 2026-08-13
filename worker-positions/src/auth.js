@@ -100,6 +100,36 @@ export async function authenticate(request, env, now = Date.now()) {
   return { user_id: payload.uid };
 }
 
+// ── Machine (service) auth — WS5 phase 2 held-tickers ingest ────────────────────────────────────
+// SECOND auth path on the same seam, for the GitHub-Actions held-tickers job (issue #312). It is
+// deliberately DISTINCT from the interactive owner bearer above:
+//   * different secret  — POSITIONS_INGEST_TOKEN (a long random string), not the owner passphrase.
+//   * different power    — a caller holding this token may ONLY read the held-ticker set and append
+//                          market-data bars; it can NEVER read, create, or mutate the owner's
+//                          private positions (those routes call authenticate(), which this token
+//                          cannot satisfy — it is not a valid HMAC-signed user token).
+// Least-privilege: if the CI secret leaks, the blast radius is "someone can write junk market bars
+// or learn which symbols are held", NOT "someone can see/alter the owner's trades". A dropped-in
+// Cloudflare Access migration (see top of file) would leave this path untouched — machine-to-machine
+// auth is orthogonal to the human login seam.
+//
+// The token rides in the same Authorization: Bearer header for transport simplicity; there is no
+// ambiguity because service routes call authenticateService() and user routes call authenticate(),
+// and neither token can pass the other's check (static-secret compare vs HMAC-signature verify).
+export function authenticateService(request, env) {
+  const secret = env.POSITIONS_INGEST_TOKEN;
+  if (!secret) return false; // fail closed: no secret configured => no machine writes accepted.
+  const header = request.headers.get("authorization") || "";
+  const m = header.match(/^Bearer\s+(.+)$/i);
+  if (!m) return false;
+  const given = enc.encode(m[1].trim());
+  const expected = enc.encode(secret);
+  // Length check first is safe (the token is a high-entropy secret; its length is not sensitive) and
+  // lets timingSafeEqual assume equal lengths.
+  if (given.length !== expected.length) return false;
+  return timingSafeEqual(given, expected);
+}
+
 // Exchange the login passphrase for a token. Constant-time compare; generic failure (no oracle).
 export async function login(env, passphrase, now = Date.now()) {
   const expected = env.POSITIONS_AUTH_PASSPHRASE;
