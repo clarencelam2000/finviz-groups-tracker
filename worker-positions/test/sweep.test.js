@@ -1,0 +1,384 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import { makeD1 } from "./helpers/d1.js";
+import { handleRequest } from "../src/index.js";
+import { mintToken } from "../src/auth.js";
+import {
+  sweep,
+  barWindowStart,
+  advanceThroughBars,
+  loadAdvanceablePositions,
+  loadBarsAfter,
+  persistAdvance,
+  SWEEP_CONFIG,
+} from "../src/sweep.js";
+
+// ── Fixture helpers ──────────────────────────────────────────────────────────────────────────
+
+// Inverse of advance.js's recoverMaLevel(close, pct) = close / (1 + pct/100). Given the LEVEL we
+// actually want an MA to sit at, back-compute the %-distance string Finviz would have reported —
+// so fixtures read as "sma20 sits at 95" rather than an opaque "-4.7619%" nobody can sanity-check.
+function pctForLevel(close, level) {
+  return `${((close / level - 1) * 100).toFixed(6)}%`;
+}
+
+// Build a raw ticker_quotes row (the shape loadBarsAfter() hands to normalizeBar()). sma20/sma50
+// are LEVELS in the test's terms; this helper converts them to the %-distance strings the real
+// column stores, via pctForLevel above.
+function quoteRow({ ticker = "AAPL", trade_date, close, sma20, sma50, low, high, open, prev_close, atr = 2, daysToEarnings = null }) {
+  const raw = { Ticker: ticker };
+  if (sma20 != null && close != null) raw.SMA20 = pctForLevel(close, sma20);
+  if (sma50 != null && close != null) raw.SMA50 = pctForLevel(close, sma50);
+  return {
+    ticker,
+    trade_date,
+    prev_close: prev_close ?? close,
+    open: open ?? close,
+    high: high ?? close,
+    low: low ?? close,
+    close,
+    change_pct: null,
+    atr,
+    volume: 1000000,
+    days_to_earnings: daysToEarnings,
+    raw: JSON.stringify(raw),
+    collected_at: `${trade_date}T21:00:00Z`,
+  };
+}
+
+// Add `n` calendar days to a 'YYYY-MM-DD' string (UTC, no trading-calendar awareness needed —
+// sweep.js only ever compares trade_date strings lexicographically, never counts sessions).
+function addDays(dateStr, n) {
+  const dt = new Date(`${dateStr}T00:00:00Z`);
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
+}
+
+// A fresh "just entered" position row, mirroring buildPositionRow()'s initial-state convention
+// (src/positions.js): entry 100, initial_stop 90 → R = 10. profit_floor == current_stop ==
+// initial_stop, trail_basis 20ma, state 'open'.
+function seedPos(db, overrides = {}) {
+  return db._seedPosition({
+    ticker: "AAPL",
+    user_id: "owner",
+    state: "open",
+    entry_date: "2026-08-01",
+    entry_price: 100,
+    initial_stop: 90,
+    stop_basis: "manual",
+    initial_qty: 100,
+    profit_floor: 90,
+    current_stop: 90,
+    trail_basis: "20ma",
+    remaining_qty: 100,
+    meta: "{}",
+    ...overrides,
+  });
+}
+
+let db;
+beforeEach(() => {
+  db = makeD1();
+});
+
+// ── barWindowStart (pure) ────────────────────────────────────────────────────────────────────
+describe("barWindowStart", () => {
+  it("is the lexicographic max of last_advanced_date and entry_date", () => {
+    expect(barWindowStart({ entry_date: "2026-08-01", last_advanced_date: "2026-08-05" })).toBe("2026-08-05");
+    expect(barWindowStart({ entry_date: "2026-08-05", last_advanced_date: "2026-08-01" })).toBe("2026-08-05");
+    expect(barWindowStart({ entry_date: "2026-08-05", last_advanced_date: null })).toBe("2026-08-05");
+  });
+  it("returns null only when BOTH dates are absent", () => {
+    expect(barWindowStart({ entry_date: null, last_advanced_date: null })).toBe(null);
+  });
+});
+
+// ── 1. Happy path: managing position + 3 consecutive bars ──────────────────────────────────────
+describe("sweep — happy path", () => {
+  it("advances through all 3 bars; last_advanced_date lands on the last bar; events carry per-bar dates", async () => {
+    seedPos(db, { state: "managing", last_advanced_date: null });
+    db._seedQuote(quoteRow({ trade_date: "2026-08-02", close: 101, sma20: 95, sma50: 80, low: 99 }));
+    db._seedQuote(quoteRow({ trade_date: "2026-08-03", close: 103, sma20: 97, sma50: 80, low: 101, prev_close: 101 }));
+    db._seedQuote(quoteRow({ trade_date: "2026-08-04", close: 105, sma20: 99, sma50: 80, low: 103, prev_close: 103 }));
+
+    const result = await sweep(db);
+    expect(result.positions).toBe(1);
+    expect(result.advanced).toBe(1);
+    expect(result.unchanged).toBe(0);
+
+    const [row] = db._positions();
+    expect(row.last_advanced_date).toBe("2026-08-04");
+    expect(row.state).toBe("managing");
+
+    const events = db._events();
+    // At least one stop_moved per bar (20MA ratchets each day) — every event's trade_date must be
+    // one of the 3 bar dates, and all 3 dates must be represented (nothing skipped or misdated).
+    const dates = new Set(events.map((e) => e.trade_date));
+    expect(dates).toEqual(new Set(["2026-08-02", "2026-08-03", "2026-08-04"]));
+  });
+});
+
+// ── 2. open -> managing on first advance ────────────────────────────────────────────────────────
+describe("sweep — state transitions", () => {
+  it("open -> managing on first advance", async () => {
+    seedPos(db, { state: "open" });
+    db._seedQuote(quoteRow({ trade_date: "2026-08-02", close: 101, sma20: 95, sma50: 80, low: 99 }));
+    await sweep(db);
+    expect(db._positions()[0].state).toBe("managing");
+  });
+});
+
+// ── 3. Entry-day bar is NOT advanced ────────────────────────────────────────────────────────────
+describe("sweep — entry-day exclusion (wiring-layer rule)", () => {
+  it("a bar dated == entry_date is not advanced (barWindowStart is exclusive)", async () => {
+    seedPos(db, { entry_date: "2026-08-01" });
+    db._seedQuote(quoteRow({ trade_date: "2026-08-01", close: 50, sma20: 95, sma50: 80, low: 1 })); // would stop-hit if read
+    const result = await sweep(db);
+    expect(result.results[0].bars_advanced).toBe(0);
+    const [row] = db._positions();
+    expect(row.last_advanced_date).toBe(null);
+    expect(row.state).toBe("open");
+  });
+});
+
+// ── 4. Bars strictly before entry_date are ignored ──────────────────────────────────────────────
+describe("sweep — pre-entry bars ignored", () => {
+  it("a bar dated before entry_date is never loaded", async () => {
+    seedPos(db, { entry_date: "2026-08-05" });
+    db._seedQuote(quoteRow({ trade_date: "2026-08-01", close: 50, sma20: 95, sma50: 80, low: 1 }));
+    const result = await sweep(db);
+    expect(result.results[0].bars_advanced).toBe(0);
+    expect(db._positions()[0].last_advanced_date).toBe(null);
+  });
+});
+
+// ── 5. Idempotency: running sweep() twice over the same data is a no-op the 2nd time ────────────
+describe("sweep — idempotency", () => {
+  it("a second sweep with no new bars changes nothing", async () => {
+    seedPos(db, { state: "managing" });
+    db._seedQuote(quoteRow({ trade_date: "2026-08-02", close: 101, sma20: 95, sma50: 80, low: 99 }));
+    await sweep(db);
+    const afterFirst = db._positions()[0];
+    const eventsAfterFirst = db._events().length;
+
+    await sweep(db); // second run: no new bars past last_advanced_date
+    expect(db._positions()[0]).toEqual(afterFirst);
+    expect(db._events().length).toBe(eventsAfterFirst);
+  });
+});
+
+// ── 6. Exit signal mid-sequence: the fold breaks, no event carries a later bar's date ───────────
+describe("sweep — exit signal breaks the fold", () => {
+  it("stop_hit on bar 3 of 4: closing, exit_signal_date/last_advanced_date == bar 3, bar 4 never touched", async () => {
+    seedPos(db, { state: "managing" });
+    // bar1: sma20=95 -> current_stop ratchets 90->95 (no exit; low 99 > 90 pre-bar stop)
+    db._seedQuote(quoteRow({ trade_date: "2026-08-02", close: 101, sma20: 95, sma50: 80, low: 99 }));
+    // bar2: sma20=97 -> current_stop ratchets 95->97 (low 101 > 95)
+    db._seedQuote(quoteRow({ trade_date: "2026-08-03", close: 103, sma20: 97, sma50: 80, low: 101, prev_close: 101 }));
+    // bar3: low 95 <= current_stop 97, open 98 >= 97 (not a gap) -> stop_hit at 97
+    db._seedQuote(quoteRow({ trade_date: "2026-08-04", close: 98, sma20: 97, sma50: 80, low: 95, open: 98, prev_close: 103 }));
+    // bar4: would be a no-op even if read — must NOT appear in the ledger at all
+    db._seedQuote(quoteRow({ trade_date: "2026-08-05", close: 200, sma20: 97, sma50: 80, low: 199, prev_close: 98 }));
+
+    await sweep(db);
+    const [row] = db._positions();
+    expect(row.state).toBe("closing");
+    expect(row.exit_reason).toBe("stop_hit");
+    expect(row.exit_signal_date).toBe("2026-08-04");
+    expect(row.last_advanced_date).toBe("2026-08-04");
+    expect(row.expected_exit_price).toBeCloseTo(97, 4); // recovered from a rounded %-distance string
+
+    const dates = db._events().map((e) => e.trade_date);
+    expect(dates).not.toContain("2026-08-05");
+  });
+});
+
+// ── 7. closing / closed positions are not picked up by the sweep at all ─────────────────────────
+describe("sweep — advanceable-states scoping", () => {
+  it("closing and closed positions are excluded entirely", async () => {
+    seedPos(db, { ticker: "CLOSING1", state: "closing", last_advanced_date: "2026-08-01" });
+    seedPos(db, { ticker: "CLOSED1", state: "closed", last_advanced_date: "2026-08-01" });
+    db._seedQuote(quoteRow({ ticker: "CLOSING1", trade_date: "2026-08-02", close: 101, sma20: 95, sma50: 80, low: 99 }));
+    db._seedQuote(quoteRow({ ticker: "CLOSED1", trade_date: "2026-08-02", close: 101, sma20: 95, sma50: 80, low: 99 }));
+
+    const result = await sweep(db);
+    expect(result.positions).toBe(0);
+    expect(result.results).toEqual([]);
+    // untouched — no advance means no last_advanced_date change
+    for (const row of db._positions()) expect(row.last_advanced_date).toBe("2026-08-01");
+  });
+});
+
+// ── 8. A stale bar mid-sequence emits a note, does not stamp the date, next good bar still works ─
+describe("sweep — stale bar handling", () => {
+  it("null-close bar mid-sequence: note event, no date stamp; the following good bar still advances", async () => {
+    seedPos(db, { state: "managing" });
+    db._seedQuote(quoteRow({ trade_date: "2026-08-02", close: 101, sma20: 95, sma50: 80, low: 99 }));
+    db._seedQuote(quoteRow({ trade_date: "2026-08-03", close: null, sma20: null, sma50: null, low: null })); // stale
+    db._seedQuote(quoteRow({ trade_date: "2026-08-04", close: 103, sma20: 97, sma50: 80, low: 101, prev_close: 101 }));
+
+    const result = await sweep(db);
+    expect(result.stale).toBe(1);
+    const [row] = db._positions();
+    expect(row.last_advanced_date).toBe("2026-08-04"); // stale bar never stamped, good bars did
+    const events = db._events();
+    const staleNote = events.find((e) => e.trade_date === "2026-08-03");
+    expect(staleNote).toBeTruthy();
+    expect(staleNote.event_type).toBe("note");
+    expect(JSON.parse(staleNote.payload).stale).toBe(true);
+  });
+
+  // Regression (lead, 2026-08-13): a stale bar deliberately does NOT stamp last_advanced_date, so
+  // it stays inside the query window on every subsequent sweep. If a sweep persisted purely on
+  // "there were events", a TRAILING stale bar would re-append its note event every single day,
+  // forever — and because every earlier stale date also stays in the window, the duplication grows
+  // quadratically over a run of stale sessions (a delisted ticker, or a scrape returning no close).
+  // The append-only ledger has no dedupe, so the fix is at the persistence gate: only write when
+  // last_advanced_date actually MOVED. Staleness is still surfaced — via the sweep's `stale` count,
+  // which the /advance response returns and the CI job logs — just not into the permanent ledger.
+  it("a trailing stale bar does not re-append its note on every later sweep", async () => {
+    seedPos(db, { state: "managing" });
+    db._seedQuote(quoteRow({ trade_date: "2026-08-02", close: 101, sma20: 95, sma50: 80, low: 99 }));
+    db._seedQuote(quoteRow({ trade_date: "2026-08-03", close: null, sma20: null, sma50: null, low: null }));
+
+    await sweep(db);
+    const afterFirst = db._events().length;
+    const r2 = await sweep(db);
+    await sweep(db);
+
+    // The stale bar is still seen and still counted every sweep — that is the alert channel.
+    expect(r2.stale).toBe(1);
+    // But the ledger must not grow: no new rows from re-observing the same stale bar.
+    expect(db._events().length).toBe(afterFirst);
+  });
+});
+
+// ── 9. MAX_CATCHUP_BARS caps one sweep; a second sweep continues and finishes ────────────────────
+describe("sweep — MAX_CATCHUP_BARS cap and continuation", () => {
+  it("caps bars_advanced at MAX_CATCHUP_BARS; the next sweep picks up where it left off", async () => {
+    seedPos(db, { state: "managing" });
+    const TOTAL = SWEEP_CONFIG.MAX_CATCHUP_BARS + 5;
+    // Flat, benign bars — price/MA levels never move, so nothing ever exits or trims across all 35.
+    for (let i = 1; i <= TOTAL; i++) {
+      db._seedQuote(quoteRow({ trade_date: addDays("2026-08-01", i), close: 101, sma20: 95, sma50: 80, low: 99, prev_close: 101 }));
+    }
+
+    const first = await sweep(db);
+    expect(first.results[0].bars_advanced).toBe(SWEEP_CONFIG.MAX_CATCHUP_BARS);
+    const afterFirst = db._positions()[0].last_advanced_date;
+    expect(afterFirst).toBe(addDays("2026-08-01", SWEEP_CONFIG.MAX_CATCHUP_BARS));
+
+    const second = await sweep(db);
+    expect(second.results[0].bars_advanced).toBe(5); // the remaining bars
+    expect(db._positions()[0].last_advanced_date).toBe(addDays("2026-08-01", TOTAL));
+  });
+});
+
+// ── 10. meta stored as a JSON string is parsed; widen_enabled:false actually suppresses the widen ─
+describe("sweep — meta JSON parsing feeds effectiveConfig/widen correctly", () => {
+  it("widen_enabled:false keeps 20ma even when sma50 > entry; a true sibling widens to 50ma", async () => {
+    seedPos(db, { ticker: "WIDENOFF", state: "managing", meta: JSON.stringify({ widen_enabled: false }) });
+    seedPos(db, { ticker: "WIDENON", state: "managing", meta: JSON.stringify({ widen_enabled: true }) });
+    // sma50 (105) > entry_price (100) is the widen trigger; sma20 (100) is lower still.
+    db._seedQuote(quoteRow({ ticker: "WIDENOFF", trade_date: "2026-08-02", close: 112, sma20: 100, sma50: 105, low: 110 }));
+    db._seedQuote(quoteRow({ ticker: "WIDENON", trade_date: "2026-08-02", close: 112, sma20: 100, sma50: 105, low: 110 }));
+
+    await sweep(db);
+    const rows = Object.fromEntries(db._positions().map((r) => [r.ticker, r]));
+    expect(rows.WIDENOFF.trail_basis).toBe("20ma");
+    expect(rows.WIDENON.trail_basis).toBe("50ma");
+  });
+});
+
+// ── 11. dry_run computes the same shape but writes nothing ───────────────────────────────────────
+describe("sweep — dry_run", () => {
+  it("dry_run:true returns computed counts/results but persists no row or event changes", async () => {
+    seedPos(db, { state: "managing" });
+    db._seedQuote(quoteRow({ trade_date: "2026-08-02", close: 101, sma20: 95, sma50: 80, low: 99 }));
+    const before = db._positions()[0];
+    const eventsBefore = db._events().length;
+
+    const result = await sweep(db, { dry_run: true });
+    expect(result.dry_run).toBe(true);
+    expect(result.advanced).toBe(1); // computed as if it would apply
+
+    expect(db._positions()[0]).toEqual(before); // untouched
+    expect(db._events().length).toBe(eventsBefore); // untouched
+  });
+});
+
+// ── 12. CAS: a concurrent writer invalidates a stale expectedLastAdvancedDate ────────────────────
+describe("persistAdvance — compare-and-set", () => {
+  it("a stale expectedLastAdvancedDate applies nothing (lost race)", async () => {
+    const seeded = seedPos(db, { state: "managing", last_advanced_date: null });
+    // Simulate a concurrent writer advancing the position between our load and our persist.
+    await db.prepare("UPDATE positions SET last_advanced_date = ? WHERE trade_id = ?").bind("2026-08-09", seeded.trade_id).run();
+    const before = db._positions()[0];
+
+    const outcome = await persistAdvance(db, {
+      trade_id: seeded.trade_id,
+      user_id: "owner",
+      expectedLastAdvancedDate: null, // stale — the row is now "2026-08-09"
+      position: { ...before, state: "managing", current_stop: 999, last_advanced_date: "2026-08-10" },
+      events: [{ event_type: "note", trade_date: "2026-08-10", payload: { would_be: "dropped" } }],
+      now_iso: "2026-08-10T00:00:00Z",
+    });
+
+    expect(outcome.applied).toBe(false);
+    expect(outcome.eventsWritten).toBe(0);
+    expect(db._positions()[0]).toEqual(before); // row untouched by the failed CAS
+    expect(db._events()).toEqual([]);
+  });
+});
+
+// ── 13. /advance route: dual auth + response shaping ──────────────────────────────────────────
+describe("POST /advance route", () => {
+  const SECRET = "test-secret-abc123-abc123-abc123";
+  const PASSPHRASE = "correct horse";
+  const INGEST_TOKEN = "ingest-token-super-secret-0123456789";
+  let env;
+  beforeEach(() => {
+    env = {
+      POSITIONS_SESSION_SECRET: SECRET,
+      POSITIONS_AUTH_PASSPHRASE: PASSPHRASE,
+      POSITIONS_INGEST_TOKEN: INGEST_TOKEN,
+      ALLOWED_ORIGINS: "https://clarencelam2000.github.io,http://localhost:8000",
+      POSITIONS_DB: db,
+    };
+    seedPos(db, { state: "managing" });
+    db._seedQuote(quoteRow({ trade_date: "2026-08-02", close: 101, sma20: 95, sma50: 80, low: 99 }));
+  });
+
+  function advReq({ token, dry_run } = {}) {
+    const headers = {};
+    if (token) headers.authorization = `Bearer ${token}`;
+    const qs = dry_run ? "?dry_run=1" : "";
+    return new Request(`https://x/advance${qs}`, { method: "POST", headers });
+  }
+
+  it("service token -> 200 with counts only, no results key", async () => {
+    const res = await handleRequest(advReq({ token: INGEST_TOKEN }), env);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.advanced).toBe(1);
+    expect("results" in body).toBe(false);
+  });
+
+  it("owner bearer -> 200 with results included", async () => {
+    const token = await mintToken(env, "owner");
+    const res = await handleRequest(advReq({ token }), env);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(Array.isArray(body.results)).toBe(true);
+    expect(body.results[0].ticker).toBe("AAPL");
+  });
+
+  it("no token -> 401", async () => {
+    const res = await handleRequest(advReq({}), env);
+    expect(res.status).toBe(401);
+  });
+
+  it("garbage token -> 401", async () => {
+    const res = await handleRequest(advReq({ token: "not-a-real-token" }), env);
+    expect(res.status).toBe(401);
+  });
+});

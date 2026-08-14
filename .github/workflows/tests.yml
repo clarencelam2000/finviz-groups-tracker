@@ -68,3 +68,22 @@ jobs:
       - name: Run worker-cron tests
         working-directory: worker-cron
         run: npm test
+
+  worker-positions-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      # Node 22, not the 20 used by the other worker-* jobs: the WS5 phase-3b test harness
+      # (test/helpers/d1.js) uses Node 22's built-in `node:sqlite` to run the REAL D1 migrations
+      # against an in-memory DB, instead of a hand-rolled SQL mock. This job didn't exist before
+      # phase 3b — worker-positions previously had no PR-time test job at all.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install worker-positions dependencies
+        working-directory: worker-positions
+        run: npm ci
+      - name: Run worker-positions tests
+        working-directory: worker-positions
+        run: npm test

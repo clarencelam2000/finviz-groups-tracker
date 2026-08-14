@@ -18,19 +18,50 @@ This is **phase 1** of the four-phase WS5 plan (ADR-012 §10), with **phase 2 in
    `worker-cron` `held` scheduled job are wired up alongside them. Not yet exercised against a
    live D1 instance / real held positions — treat as unverified end-to-end until a real run
    confirms it.
-3. 🟡 **`advance()` daily engine + tests** — in progress. **Phase 3a (this slice): the pure engine
-   `src/advance.js`** — `advance(pos, bar, cfg)` plus the user-driven transitions
-   (`confirmExit`/`stillHolding`/`autoConfirm`/`correctExit`/`reopen`), the §6 config constants with
-   per-position `effectiveConfig` merge, and the `normalizeBar` bar-loader (recovers SMA **levels**
-   from Finviz's %-distance columns — see migration 0002). No D1 reads/writes, no endpoint, no cron
-   yet. **Phase 3b (next): the wiring** — load a position + its trailing bars from `ticker_quotes`,
-   persist the new state + append events, `last_advanced_date` idempotency, a service-token
-   `/advance` route, and the daily trigger after the held ingest.
+3. 🟡 **`advance()` daily engine + tests** — in progress.
+   - ✅ **3a — the pure engine `src/advance.js`**: `advance(pos, bar, cfg)` plus the user-driven
+     transitions (`confirmExit`/`stillHolding`/`autoConfirm`/`correctExit`/`reopen`), the §6 config
+     constants with per-position `effectiveConfig` merge, and the `normalizeBar` bar-loader
+     (recovers SMA **levels** from Finviz's %-distance columns — see migration 0002). Pure: no D1,
+     no network, no clock.
+   - ✅ **3b-i — the wiring `src/sweep.js`**: loads each advanceable position + its trailing
+     `ticker_quotes` bars, folds `advance()` over them, and persists the new spine state + appended
+     `position_events` under a DB-layer compare-and-set on `last_advanced_date`. Exposed as
+     `POST /advance`; triggered by `scripts/collect_held.py` immediately after a successful
+     `/ingest/quotes`.
+   - ⬜ **3b-ii — the owner transition routes** (`confirm-exit`, `still-holding`, `correct-exit`,
+     `reopen`) + `autoConfirm()` wired into the sweep. Deliberately ordered AFTER 3b-i: shipping
+     `autoConfirm` first would mean every exit signal auto-closes at `EXIT_AUTOCONFIRM_SESSIONS`
+     with no endpoint for the owner to confirm or reject it.
 4. ⬜ Push notifications (VAPID; the sibling `distil` worker's web-push code is the reference).
 
-Phase 1 has **no engine and no feed** — a created position is a frozen record until the phase-3b
-wiring lands. That is by design (each phase is independently useful); the phase-3a engine is a pure,
-exhaustively-tested function whose only caller (the daily job) arrives in 3b.
+Until 3b-ii lands, an exit signal parks the position in `closing` and stays there — nothing
+auto-closes, and the position keeps accruing bars (`closing` is in `HELD_STATES`), so no history is
+lost while the confirmation surface is being built.
+
+### How the sweep runs (3b-i)
+
+`sweep()` is a **catch-up fold**, not a single-day advance: for each position it loads every bar with
+`trade_date > max(last_advanced_date, entry_date)` and folds `advance()` over them in order. One
+mechanism therefore covers same-day idempotency, a missed feed day, and a deliberate backfill over
+bars captured before the engine had a caller.
+
+Two rules the wiring layer adds on top of the pure engine, neither of which is in the design doc:
+
+- **A position is never advanced on its own entry-day bar** (the window bound is strictly `>`
+  `entry_date`). That day's `low` is largely *pre-purchase* — advancing on it risks firing a false
+  `stop_hit` on the very day the user bought. Lead decision, 2026-08-13.
+- **Persistence is gated on `last_advanced_date` actually moving**, not on "were there events".
+  A stale bar emits a `note` but deliberately does not stamp the date, so it stays inside the query
+  window forever; persisting on events alone would re-append that note every sweep, compounding
+  across a run of stale sessions. Staleness is reported through the sweep's `stale` counter (which
+  `/advance` returns and the held-feed job logs) — the append-only ledger is the wrong channel for a
+  condition that repeats daily.
+
+**No new cron trigger and no new secret.** The sweep fires from `collect_held.py` right after the
+day's bars land, reusing `POSITIONS_WORKER_URL` / `POSITIONS_INGEST_TOKEN`. That is dependency-gated
+by construction (the engine runs exactly when fresh bars exist) and keeps us clear of the Cloudflare
+5-cron-trigger account limit that already cost us a week of picks data (issue #252).
 
 ## Endpoints
 
@@ -42,12 +73,20 @@ exhaustively-tested function whose only caller (the daily job) arrives in 3b.
 | `GET` | `/positions?state=` | Bearer | list the caller's positions, newest first (optional state filter) |
 | `GET` | `/held-tickers` | Service token | WS5 phase 2: the union of open/managing/closing tickers the held feed must scrape (`{ tickers: [...] }`) |
 | `POST` | `/ingest/quotes` | Service token | WS5 phase 2: append-only batch write of a day's scraped bars into `ticker_quotes` (`{ trade_date, collected_at, quotes:[...] }` → `{ written }`) |
+| `POST` | `/advance?dry_run=1` | Service token **or** Bearer | WS5 phase 3b: run the daily engine sweep over stored bars. Service caller gets **counts only**; the owner bearer additionally gets per-position `results`. |
 
 **Two auth paths, one seam.** The interactive `Bearer` rows above are the owner's HMAC login token
-(`authenticate()`); the two WS5-phase-2 machine rows use a **separate service token**
-(`authenticateService()`, secret `POSITIONS_INGEST_TOKEN`) held only by the GitHub-Actions held-feed
-job. The service token can read the held set and append market bars but **cannot** read, create, or
-mutate positions — and the owner token cannot satisfy the service routes. Both live behind
+(`authenticate()`); the machine rows use a **separate service token** (`authenticateService()`,
+secret `POSITIONS_INGEST_TOKEN`) held only by the GitHub-Actions held-feed job. The service token can
+read the held set, append market bars, and **trigger** the engine sweep — but it **cannot** read,
+create, or mutate positions directly, and the owner token cannot satisfy the service routes.
+
+On the phase-3b widening: letting a CI-held token kick off `/advance` is a real (if small) increase
+in its blast radius, accepted on these grounds — the sweep's outcome is a pure function of bars
+already in D1, so the caller cannot steer it; it cannot set arbitrary position state; and `results`
+is stripped from a service caller's response, so it learns counts, never which positions moved. If
+that trade stops looking right, the fix is a third `POSITIONS_ENGINE_TOKEN` + an `authenticateEngine`
+beside the existing two in `src/auth.js` — one secret and one function, no schema or caller change. Both live behind
 `src/auth.js` (§ Auth). Market data (`ticker_quotes`) carries **no `user_id`** — it is public bars;
 only the *selection* of tickers to fetch derives from private positions, at query time.
 
@@ -105,6 +144,16 @@ edit `ENGINE_CONFIG` (each has an in-code comment) — no other engine code refe
 | `EXIT_AUTOCONFIRM_SESSIONS` | `5` | Sessions a position may sit in `Closing` before `autoConfirm()` closes it at `expected_exit_price` with `confirmation_status='auto'`. |
 | `CAUTION_REARM_ON_HOLD` | `true` | On "still holding", reset `caution_flag` so the two-close rule re-arms (needs two fresh closes) instead of re-signalling on the next single close. |
 
+### Sweep constants (`src/sweep.js` `SWEEP_CONFIG`, WS5 phase 3b)
+
+Wiring-layer tunables, distinct from the engine constants above: these govern how bars are *fed to*
+`advance()`, not what it decides.
+
+| Name | Default | Controls |
+|---|---|---|
+| `MAX_CATCHUP_BARS` | `30` | Most bars ONE position may advance through in a single `sweep()` call. The sweep is a catch-up fold, so a long feed outage could otherwise replay months of history in one Worker request. The cap bounds work per invocation; `last_advanced_date` lands where the cap stopped and the next sweep continues from there. Raise only for a deliberate one-off backfill, then lower it back. |
+| `ADVANCEABLE_STATES` | `["open","managing"]` | Which positions the sweep loads. `closing` (awaiting the user's confirmed fill) and `closed` are excluded — `advance()` no-ops on both anyway, so including them would only mean loading bars to throw away. |
+
 Exit reasons are a canonical enum (`EXIT_REASONS`): `stop_hit`, `gap_down_below_stop`,
 `close_below_50ma`, `close_below_20ma`, `severe_breakdown`, `two_close_below_20ma`, `manual_close`.
 Earnings is **not** an exit reason — it only flags.
@@ -127,5 +176,14 @@ Auto-deploy: `.github/workflows/deploy-workers.yml` (job `deploy-positions`) on 
 
 `npm test` (vitest): `test/auth.test.js` (token mint/verify/expiry/tamper, login),
 `test/positions.test.js` (validation edge cases, row init invariants),
-`test/index.test.js` (routing, CORS, 401 gating, create+list, independent lots, user isolation).
-No network — a small in-memory D1 mock drives the router tests.
+`test/index.test.js` (routing, CORS, 401 gating, create+list, independent lots, user isolation),
+`test/advance.test.js` (the engine's spec-lock — every design-§9 rule plus randomized property
+tests), `test/sweep.test.js` (catch-up fold, entry-day exclusion, idempotency, CAS races, stale-bar
+handling, dry run, `/advance` response shaping).
+
+No network. `test/helpers/d1.js` shims the D1 surface over **Node 22's built-in `node:sqlite`**
+(zero dependencies) and applies the **real migration files**, so the tests exercise actual SQL and
+break immediately on schema drift — the previous hand-rolled regex mock could do neither. That is
+why the worker-positions CI jobs pin `node-version: '22'` while `worker`/`worker-cron` stay on 20.
+`npm test` runs on every PR via the `worker-positions-test` job in `.github/workflows/tests.yml`
+(added in phase 3b — before that, these tests only ran post-merge in `deploy-workers.yml`).

@@ -115,6 +115,66 @@ def test_authed_request_sets_non_generic_user_agent(monkeypatch):
     assert "python-requests" not in ua.lower()
 
 
+def test_trigger_advance_returns_counts_on_200(monkeypatch):
+    import io
+    import json as jsonlib
+
+    captured = {}
+    body = jsonlib.dumps(
+        {"dry_run": False, "positions": 3, "advanced": 3, "signalled": 1, "unchanged": 0, "stale": 0}
+    ).encode("utf-8")
+
+    class FakeResp(io.BytesIO):
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        captured["req"] = req
+        return FakeResp(body)
+
+    monkeypatch.setattr(ch.urllib.request, "urlopen", fake_urlopen)
+    result = ch.trigger_advance("https://example.com", "tok")
+
+    assert result == {
+        "dry_run": False, "positions": 3, "advanced": 3, "signalled": 1, "unchanged": 0, "stale": 0,
+    }
+    req = captured["req"]
+    assert req.full_url == "https://example.com/advance"
+    assert req.get_method() == "POST"
+    assert req.get_header("Authorization") == "Bearer tok"
+    ua = req.get_header("User-agent")
+    assert ua is not None
+    assert "python-urllib" not in ua.lower()
+    assert "python-requests" not in ua.lower()
+
+
+def test_trigger_advance_returns_none_on_http_error(monkeypatch):
+    import io
+
+    def fake_urlopen(req, timeout=None):
+        raise ch.urllib.error.HTTPError(
+            req.full_url, 500, "Internal Server Error", hdrs=None, fp=io.BytesIO(b"boom")
+        )
+
+    monkeypatch.setattr(ch.urllib.request, "urlopen", fake_urlopen)
+    result = ch.trigger_advance("https://example.com", "tok")
+    assert result is None
+
+
+def test_trigger_advance_returns_none_on_generic_exception(monkeypatch):
+    def fake_urlopen(req, timeout=None):
+        raise ConnectionError("network is unreachable")
+
+    monkeypatch.setattr(ch.urllib.request, "urlopen", fake_urlopen)
+    result = ch.trigger_advance("https://example.com", "tok")
+    assert result is None
+
+
 def test_payload_shape_matches_worker_expectation():
     payload = ch.build_quote_payload([_row(), _row(ticker="MSFT")], "2026-08-13", "2026-08-13T21:05:00Z")
     assert isinstance(payload["quotes"], list)

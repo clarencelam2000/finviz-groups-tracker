@@ -6,6 +6,7 @@
 import { authenticate, authenticateService, login } from "./auth.js";
 import { validateCreatePayload, buildPositionRow, insertPosition, listPositions } from "./positions.js";
 import { validateIngestBatch, ingestQuotes, heldTickers } from "./quotes.js";
+import { sweep } from "./sweep.js";
 
 // ── CORS ──────────────────────────────────────────────────────────────────────────────────────
 // The PWA is a cross-origin GitHub-Pages page, so every response needs CORS headers scoped to the
@@ -101,6 +102,41 @@ export async function handleRequest(request, env) {
       return json({ error: "write failed" }, 500, request, env);
     }
     return json({ written, trade_date: v.value.trade_date }, 200, request, env);
+  }
+
+  // ── /advance — WS5 phase 3b daily-engine sweep (SPRINT WS5-3b) ─────────────────────────────────
+  // Dual auth, ONE route: either the service token (the GitHub-Actions cron caller, once the daily
+  // trigger lands) or the owner bearer (so the owner can also fire a sweep manually / for a live
+  // dry-run from the PWA) may call this. Must sit HERE — in the machine-routes block, BEFORE the
+  // owner-only gate below — because that gate 401s any request lacking an owner bearer token, which
+  // would make this route unreachable for a service-token caller if it were placed after.
+  if (pathname === "/advance" && method === "POST") {
+    const service = authenticateService(request, env);
+    const owner = service ? null : await authenticate(request, env); // skip the second auth check once service already passed
+    if (!service && !owner) return json({ error: "unauthorized" }, 401, request, env);
+
+    const dry_run = url.searchParams.get("dry_run") === "1";
+    let result;
+    try {
+      result = await sweep(env.POSITIONS_DB, { dry_run });
+    } catch (e) {
+      // Match the existing error-handling style exactly: never leak exception text to the caller.
+      return json({ error: "advance failed" }, 500, request, env);
+    }
+
+    // RESPONSE SHAPING (security): a SERVICE-token caller gets COUNTS ONLY — `results` is
+    // stripped. The service token is held by GitHub Actions (a CI secret, not the owner's private
+    // credential), and `results` carries per-position trade_ids/tickers/states — private position
+    // data the least-privilege machine path must not be able to read back, even though it's now
+    // allowed to TRIGGER the computation that produces it (see auth.js's authenticateService
+    // comment for the updated blast-radius argument). Counts are enough for the CI job to log and
+    // alarm on ("advanced 4, signalled 1") without exposing what those 4 positions actually are.
+    // Only the owner's own bearer token gets the full object, `results` included.
+    if (!owner) {
+      const { results, ...counts } = result;
+      return json(counts, 200, request, env);
+    }
+    return json(result, 200, request, env);
   }
 
   // Everything below requires a valid owner bearer token (interactive human auth).

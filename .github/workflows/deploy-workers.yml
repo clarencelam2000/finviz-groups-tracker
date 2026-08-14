@@ -76,9 +76,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
+      # Node 22, unlike the worker/worker-cron jobs above (still 20): worker-positions' test
+      # harness (test/helpers/d1.js, WS5 phase 3b) uses Node 22's built-in `node:sqlite` to run
+      # the real migrations against an in-memory DB for `npm test` below.
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: worker-positions/package-lock.json
       - name: Install dependencies
