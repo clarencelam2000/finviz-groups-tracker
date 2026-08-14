@@ -10,6 +10,9 @@ import {
   loadBarsAfter,
   persistAdvance,
   SWEEP_CONFIG,
+  sessionsSince,
+  distinctTradeDates,
+  loadClosingPositions,
 } from "../src/sweep.js";
 
 // ── Fixture helpers ──────────────────────────────────────────────────────────────────────────
@@ -380,5 +383,120 @@ describe("POST /advance route", () => {
   it("garbage token -> 401", async () => {
     const res = await handleRequest(advReq({ token: "not-a-real-token" }), env);
     expect(res.status).toBe(401);
+  });
+});
+
+// ── Auto-confirm pass (WS5 phase 3b-ii) ────────────────────────────────────────────────────────
+
+describe("sessionsSince — pure session counter", () => {
+  const cal = ["2026-02-09", "2026-02-10", "2026-02-11", "2026-02-12", "2026-02-13"];
+  it("counts only sessions strictly after the signal date", () => {
+    expect(sessionsSince(cal, "2026-02-10")).toBe(3); // 11,12,13
+  });
+  it("is 0 on the signal date itself with no later sessions", () => {
+    expect(sessionsSince(["2026-02-10"], "2026-02-10")).toBe(0);
+  });
+  it("returns 0 for a missing signal date", () => {
+    expect(sessionsSince(cal, null)).toBe(0);
+  });
+});
+
+describe("sweep — auto-confirm of stuck closing positions", () => {
+  // A closing position awaiting confirmation, signalled on `signalDate`.
+  function seedClosingPos(db, partial = {}) {
+    return db._seedPosition({
+      ticker: "VRT",
+      state: "closing",
+      entry_date: "2026-01-02",
+      entry_price: 100,
+      initial_stop: 90,
+      profit_floor: 90,
+      current_stop: 96,
+      remaining_qty: 100,
+      expected_exit_price: 96,
+      exit_signal_date: "2026-02-10",
+      exit_reason: "stop_hit",
+      last_advanced_date: "2026-02-10",
+      ...partial,
+    });
+  }
+  // Seed a bare calendar of sessions (any ticker; the calendar is global).
+  function seedCalendar(db, dates, ticker = "SPY") {
+    for (const d of dates) db._seedQuote({ ticker, trade_date: d, close: 100 });
+  }
+
+  const NOW = new Date("2026-02-18T22:00:00Z");
+
+  it("auto-closes at expected_exit_price after EXIT_AUTOCONFIRM_SESSIONS sessions", async () => {
+    const db = makeD1();
+    const p = seedClosingPos(db);
+    seedCalendar(db, ["2026-02-11", "2026-02-12", "2026-02-13", "2026-02-16", "2026-02-17"]); // 5 > signal
+    const out = await sweep(db, { now: NOW });
+    expect(out.auto_confirmed).toBe(1);
+
+    const row = db._positions().find((r) => r.trade_id === p.trade_id);
+    expect(row.state).toBe("closed");
+    expect(row.exit_price).toBe(96); // frozen expected price, not re-derived
+    expect(row.confirmation_status).toBe("auto");
+    const closed = db._events().find((e) => e.event_type === "closed");
+    expect(JSON.parse(closed.payload).confirmation_status).toBe("auto");
+    // engine columns untouched by the auto-confirm write path
+    expect(row.current_stop).toBe(96);
+  });
+
+  it("leaves a position parked when fewer than EXIT_AUTOCONFIRM_SESSIONS have elapsed", async () => {
+    const db = makeD1();
+    const p = seedClosingPos(db);
+    seedCalendar(db, ["2026-02-11", "2026-02-12", "2026-02-13", "2026-02-16"]); // 4 < 5
+    const out = await sweep(db, { now: NOW });
+    expect(out.auto_confirmed).toBe(0);
+    expect(db._positions().find((r) => r.trade_id === p.trade_id).state).toBe("closing");
+  });
+
+  it("dry_run reports the auto-close without writing", async () => {
+    const db = makeD1();
+    const p = seedClosingPos(db);
+    seedCalendar(db, ["2026-02-11", "2026-02-12", "2026-02-13", "2026-02-16", "2026-02-17"]);
+    const out = await sweep(db, { now: NOW, dry_run: true });
+    expect(out.auto_confirmed).toBe(1);
+    expect(db._positions().find((r) => r.trade_id === p.trade_id).state).toBe("closing"); // unchanged
+    expect(db._events().length).toBe(0);
+  });
+
+  it("honors a per-position EXIT_AUTOCONFIRM_SESSIONS override in meta.config", async () => {
+    const db = makeD1();
+    const p = seedClosingPos(db, { meta: JSON.stringify({ config: { EXIT_AUTOCONFIRM_SESSIONS: 2 } }) });
+    seedCalendar(db, ["2026-02-11", "2026-02-12"]); // 2 sessions
+    const out = await sweep(db, { now: NOW });
+    expect(out.auto_confirmed).toBe(1);
+    expect(db._positions().find((r) => r.trade_id === p.trade_id).state).toBe("closed");
+  });
+
+  it("uses the GLOBAL session calendar (a gap in the position's own ticker doesn't understate it)", async () => {
+    const db = makeD1();
+    const p = seedClosingPos(db, { ticker: "VRT" });
+    // No VRT quotes at all — the sessions come entirely from other held names.
+    seedCalendar(db, ["2026-02-11", "2026-02-12", "2026-02-13", "2026-02-16", "2026-02-17"], "AAPL");
+    const out = await sweep(db, { now: NOW });
+    expect(out.auto_confirmed).toBe(1);
+    expect(db._positions().find((r) => r.trade_id === p.trade_id).state).toBe("closed");
+  });
+
+  it("loadClosingPositions parses meta and excludes non-closing states", async () => {
+    const db = makeD1();
+    seedClosingPos(db, { trade_id: "c1", meta: JSON.stringify({ config: { EXIT_AUTOCONFIRM_SESSIONS: 3 } }) });
+    db._seedPosition({ trade_id: "m1", state: "managing" });
+    db._seedPosition({ trade_id: "x1", state: "closed" });
+    const rows = await loadClosingPositions(db);
+    expect(rows.map((r) => r.trade_id)).toEqual(["c1"]);
+    expect(rows[0].meta.config.EXIT_AUTOCONFIRM_SESSIONS).toBe(3);
+  });
+
+  it("distinctTradeDates returns the ascending union across tickers", async () => {
+    const db = makeD1();
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-02-12", close: 1 });
+    db._seedQuote({ ticker: "VRT", trade_date: "2026-02-12", close: 1 }); // same date, dedup
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-02-11", close: 1 });
+    expect(await distinctTradeDates(db)).toEqual(["2026-02-11", "2026-02-12"]);
   });
 });
