@@ -473,6 +473,17 @@
       // (network error, 5xx) — distinguishes "fetch failed" from "genuinely zero positions"
       // so renderPositions doesn't show the empty-state copy for a real outage.
       positionsError: false,
+      // WS5 §8a — manual "log a position on any ticker" form on the Positions tab.
+      // Survives renderPositions() re-renders (module-level, not rebuilt each render), same
+      // convention as morningTicket/ws5Card. `confirm` mirrors ws5Card's freeze-confirm step
+      // ({payload, display}); `resolved` caches the async lookupTicker() result for the
+      // ticker's inline company-name line ({company_name, finviz_sector} or {error:true}).
+      // See manualEntryDefault() for the canonical empty shape (reused on close/submit).
+      manualEntry: {
+        open: false, ticker: '', entry: '', stopMode: 'price', stopPrice: '', stopPct: '',
+        sizeMode: 'risk', risk: '', qty: '', entryDate: '', earningsDays: '',
+        resolved: null, confirm: null, submitting: false, error: '',
+      },
       // 'all' | 'focus'; persists across tab navigation within a session (A4 REVERSED
       // 2026-06-30 — VP call, see PICKS-STATE-PERSIST in SPRINT.md and the note in
       // planning/stock-picks-from-leading-groups.md). Previously reset to 'all' on every
@@ -3662,6 +3673,10 @@
             ${classificationLine}
             ${links}
             ${chartPanel}
+            <div class="mt-2">
+              <button onclick="manualOpenFromLookup('${escapeHtml(data.symbol)}')"
+                class="text-xs px-2 py-1 rounded bg-sky-500/10 text-sky-400 border border-sky-500/30 hover:bg-sky-500/20">Open a position on ${escapeHtml(data.symbol)} →</button>
+            </div>
           </div>
         </div>`;
 
@@ -5691,16 +5706,18 @@
       if (state.positionsData === null && state.positionsError) {
         // A real fetch failure (network/5xx) — distinct from "signed in with zero open
         // positions" so it isn't mistaken for that empty state.
-        el.innerHTML = `
+        el.innerHTML = manualEntryHtml() + `
           <div class="flex flex-col items-center text-center py-10 px-4">
             <p class="text-slate-400 text-sm">Couldn't load positions — check your connection.</p>
             <button onclick="posRetryLoad()" class="mt-3 text-xs text-sky-400 underline">Try again</button>
           </div>`;
+        manualRecompute();
         return;
       }
 
       if (state.positionsData === null) {
-        el.innerHTML = `<p class="text-slate-400 text-sm text-center py-8">Loading positions…</p>`;
+        el.innerHTML = manualEntryHtml() + `<p class="text-slate-400 text-sm text-center py-8">Loading positions…</p>`;
+        manualRecompute();
         posLoadPositions();
         return;
       }
@@ -5716,11 +5733,380 @@
 
       const rows = state.positionsData || [];
       if (rows.length === 0) {
-        el.innerHTML = header + `<p class="text-slate-400 text-sm text-center py-8">No open positions yet — log one from the Morning tab.</p>`;
+        el.innerHTML = manualEntryHtml() + header + `<p class="text-slate-400 text-sm text-center py-8">No open positions yet — log one from the Morning tab.</p>`;
+        manualRecompute();
         return;
       }
 
-      el.innerHTML = header + `<div class="space-y-2">${rows.map(posCardHtml).join('')}</div>`;
+      el.innerHTML = manualEntryHtml() + header + `<div class="space-y-2">${rows.map(posCardHtml).join('')}</div>`;
+      manualRecompute();
+    }
+
+    // ── WS5 §8a — manual "log a position on any ticker" form ────────────────────────────
+    // Collapsed-by-default expander at the top of the Positions tab content, signed-in only.
+    // Reuses the ws4Ticket markup vocabulary (slate-900/slate-800 insets, sky-500 buttons,
+    // segmented toggles, tabular-nums) and mirrors the ws5Card freeze-confirm pattern, but is
+    // a fully standalone payload builder — it does NOT touch ws5BuildPayload (that stays
+    // coupled to the morning-card trade-ticket flow, ADR-014).
+
+    function manualEntryDefault() {
+      return {
+        open: false, ticker: '', entry: '', stopMode: 'price', stopPrice: '', stopPct: '',
+        sizeMode: 'risk', risk: '', qty: '', entryDate: '', earningsDays: '',
+        resolved: null, confirm: null, submitting: false, error: '',
+      };
+    }
+
+    // Debounce state for the ticker-resolve lookup. Module-level (not on `state`) — same
+    // convention as the intro carousel's `_debounce` — since it's a transient timer handle,
+    // not data the render functions read. `_manualLookupSeq` guards against a race where an
+    // earlier keystroke's lookupTicker() resolves after a later one (only the latest applies).
+    let _manualLookupTimer = null;
+    let _manualLookupSeq = 0;
+
+    function manualResolveLineHtml() {
+      const r = state.manualEntry.resolved;
+      if (!r) return '';
+      if (r.error) return `<div class="text-[11px] text-slate-500 mt-1">symbol not recognized — you can still log it</div>`;
+      return `<div class="text-[11px] text-emerald-400 mt-1">✓ ${escapeHtml(r.company_name || '')}${r.finviz_sector ? ' · ' + escapeHtml(r.finviz_sector) : ''}</div>`;
+    }
+
+    async function manualResolveTicker(sym, seq) {
+      let resolved;
+      try {
+        const data = await lookupTicker(sym);
+        resolved = (!data || data.error) ? { error: true } : { company_name: data.company_name, finviz_sector: data.finviz_sector };
+      } catch (e) {
+        resolved = { error: true };
+      }
+      if (seq !== _manualLookupSeq) return; // superseded by a newer keystroke — drop it
+      state.manualEntry.resolved = resolved;
+      const el = document.getElementById('manual-resolve');
+      if (el) el.innerHTML = manualResolveLineHtml();
+    }
+
+    window.manualTickerInput = function (el) {
+      const up = (el.value || '').toUpperCase();
+      el.value = up;
+      state.manualEntry.ticker = up;
+      state.manualEntry.resolved = null;
+      const resolveEl = document.getElementById('manual-resolve');
+      if (resolveEl) resolveEl.innerHTML = '';
+      clearTimeout(_manualLookupTimer);
+      const seq = ++_manualLookupSeq;
+      if (!up) return;
+      _manualLookupTimer = setTimeout(() => manualResolveTicker(up, seq), 400);
+    };
+
+    // Generic field setter for every plain input (entry/stopPrice/stopPct/risk/qty/
+    // entryDate/earningsDays) — patches the readout spans in place (manualRecompute) rather
+    // than a full renderPositions(), so typing never loses focus (same discipline as
+    // ws4Recompute).
+    window.manualFieldInput = function (field, value) {
+      state.manualEntry[field] = value;
+      manualRecompute();
+    };
+
+    // A click, so a full re-render (and the resulting blur) is fine here — unlike the plain
+    // text/number inputs above.
+    window.manualSetStopMode = function (mode) {
+      state.manualEntry.stopMode = mode;
+      renderPositions();
+    };
+    window.manualSetSizeMode = function (mode) {
+      state.manualEntry.sizeMode = mode;
+      renderPositions();
+    };
+
+    function manualComputeStop(m, entry) {
+      if (m.stopMode === 'price') return parseFloat(m.stopPrice);
+      const pct = parseFloat(m.stopPct);
+      return (!isNaN(entry) && !isNaN(pct)) ? entry * (1 - pct / 100) : NaN;
+    }
+
+    // Recomputes "Risk / share" and "→ Position" off the current field values and patches
+    // the spans by id. No-ops harmlessly when the form isn't mounted (getElementById → null),
+    // so this is safe to call unconditionally after every renderPositions().
+    function manualRecompute() {
+      const m = state.manualEntry;
+      if (!m.open || m.confirm) return;
+      const entry = parseFloat(m.entry);
+      const stop = manualComputeStop(m, entry);
+      const riskShare = (!isNaN(entry) && !isNaN(stop)) ? entry - stop : NaN;
+      const pctRisk = (!isNaN(riskShare) && entry > 0) ? (riskShare / entry * 100) : NaN;
+
+      let qty;
+      if (m.sizeMode === 'risk') {
+        const risk = parseFloat(m.risk);
+        qty = (!isNaN(risk) && riskShare > 0) ? Math.floor(risk / riskShare) : NaN;
+      } else {
+        qty = parseFloat(m.qty);
+      }
+      const positionDollars = (!isNaN(qty) && !isNaN(entry)) ? qty * entry : NaN;
+
+      const rsEl = document.getElementById('manual-riskshare');
+      if (rsEl) rsEl.textContent = !isNaN(riskShare)
+        ? '$' + riskShare.toFixed(2) + ' · ' + (isNaN(pctRisk) ? '—' : pctRisk.toFixed(1) + '%') : '—';
+
+      const posEl = document.getElementById('manual-position');
+      if (posEl) posEl.textContent = (!isNaN(qty) && !isNaN(positionDollars))
+        ? qty + ' sh · $' + positionDollars.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—';
+    }
+
+    function manualErrorText(err) {
+      if (err === 'signin') return 'Session expired — sign in above to continue.';
+      return err;
+    }
+
+    // Standalone payload builder (WS5 §8a) — deliberately separate from ws5BuildPayload,
+    // which reads the morning-card trade ticket's state, not this form's. Validates entry>0,
+    // stop>0, stop<entry, and a resulting qty>=1, mirroring ws5BuildPayload's guard style.
+    function manualBuildPayload() {
+      const m = state.manualEntry;
+      const ticker = (m.ticker || '').trim().toUpperCase();
+      if (!ticker) return { ok: false, error: 'Enter a ticker' };
+
+      const entry = parseFloat(m.entry);
+      if (isNaN(entry) || entry <= 0) return { ok: false, error: 'Enter a valid entry fill' };
+
+      const stop = manualComputeStop(m, entry);
+      if (isNaN(stop) || stop <= 0) return { ok: false, error: 'Enter a valid stop' };
+      if (stop >= entry) return { ok: false, error: 'Stop must be below entry' };
+      const riskShare = entry - stop;
+
+      let qty;
+      if (m.sizeMode === 'risk') {
+        const risk = parseFloat(m.risk);
+        if (isNaN(risk) || risk <= 0) return { ok: false, error: 'Enter your risk $ for this trade' };
+        qty = Math.floor(risk / riskShare);
+      } else {
+        qty = Math.floor(parseFloat(m.qty));
+      }
+      if (isNaN(qty) || qty < 1) {
+        return { ok: false, error: 'Position size rounds to 0 shares — increase risk or lower the stop distance' };
+      }
+
+      const earningsNum = (m.earningsDays !== '' && m.earningsDays != null) ? Number(m.earningsDays) : null;
+      const payload = {
+        ticker, entry_price: entry, initial_stop: stop, qty,
+        stop_basis: 'manual',
+        meta: { source: 'manual' },
+        days_to_earnings: (earningsNum != null && !isNaN(earningsNum)) ? earningsNum : null,
+      };
+      if (m.entryDate) payload.entry_date = m.entryDate;
+
+      return { ok: true, payload, display: { riskTotal: riskShare * qty } };
+    }
+
+    window.manualOpenForm = function () {
+      state.manualEntry.open = true;
+      renderPositions();
+    };
+    window.manualCloseForm = function () {
+      state.manualEntry = manualEntryDefault();
+      renderPositions();
+    };
+
+    window.manualTakeIt = function () {
+      if (!posIsSignedIn()) {
+        state.manualEntry.error = 'signin';
+        renderPositions();
+        return;
+      }
+      const built = manualBuildPayload();
+      if (!built.ok) {
+        state.manualEntry.error = built.error;
+        renderPositions();
+        return;
+      }
+      state.manualEntry.error = '';
+      state.manualEntry.confirm = { payload: built.payload, display: built.display };
+      renderPositions();
+    };
+
+    window.manualCancelConfirm = function () {
+      // Same submitting-guard rationale as ws5CancelTakeIt: a Confirm POST already in flight
+      // must resolve on its own terms, not be raced by a Cancel.
+      if (state.manualEntry.submitting) return;
+      state.manualEntry.confirm = null;
+      state.manualEntry.error = '';
+      renderPositions();
+    };
+
+    window.manualConfirmSubmit = async function () {
+      const m = state.manualEntry;
+      if (!m.confirm || m.submitting) return;
+      m.submitting = true;
+      renderPositions();
+      try {
+        await posApi('/positions', { method: 'POST', body: m.confirm.payload });
+        // Invalidate the positions cache so the new lot shows up immediately, same as
+        // ws5ConfirmTakeIt.
+        state.positionsData = null;
+        state.manualEntry = manualEntryDefault();
+        renderPositions();
+      } catch (e) {
+        state.manualEntry.submitting = false;
+        if (e && e.unauth) {
+          state.manualEntry.confirm = null;
+          state.manualEntry.error = 'signin';
+        } else {
+          state.manualEntry.error = "Couldn't log — try again";
+        }
+        renderPositions();
+      }
+    };
+
+    // Lookup tab → Positions tab redirect (WS5 §8a Feature 2): prefills ticker + resolved
+    // company/sector from the already-fetched lookup data (no extra lookupTicker() call).
+    window.manualOpenFromLookup = function (sym) {
+      const data = state.lookup && state.lookup.data;
+      state.manualEntry = manualEntryDefault();
+      state.manualEntry.open = true;
+      state.manualEntry.ticker = (sym || '').toUpperCase();
+      if (data) {
+        state.manualEntry.resolved = { company_name: data.company_name, finviz_sector: data.finviz_sector };
+      }
+      switchTab('positions');
+    };
+
+    function manualEntryHtml() {
+      const m = state.manualEntry;
+      if (!m.open) {
+        return `<button onclick="manualOpenForm()"
+          class="w-full mb-3 py-2.5 rounded-lg text-xs font-semibold text-slate-400 border border-dashed border-slate-600 hover:border-slate-500 hover:text-slate-300">
+          ＋ Log a position manually</button>`;
+      }
+      if (m.confirm) return manualConfirmHtml();
+      return manualFormHtml();
+    }
+
+    function manualConfirmHtml() {
+      const m = state.manualEntry;
+      const p = m.confirm.payload;
+      const risk = m.confirm.display.riskTotal;
+      const errRow = m.error ? `<div class="text-center text-[11px] text-red-400 mb-1.5">${escapeHtml(manualErrorText(m.error))}</div>` : '';
+      const actions = m.submitting
+        ? `<div class="mt-2 text-center text-xs text-slate-400">Logging…</div>`
+        : `<div class="mt-2 flex gap-2">
+            <button onclick="manualConfirmSubmit()" class="flex-1 py-2 rounded-lg text-xs font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400">Confirm — log it</button>
+            <button onclick="manualCancelConfirm()" class="flex-1 py-2 rounded-lg text-xs font-semibold bg-slate-700 text-slate-300 hover:bg-slate-600">Cancel</button>
+          </div>`;
+      return `
+        <div class="mb-3 bg-slate-900/60 border border-sky-900/50 rounded-lg px-3 py-3">
+          ${errRow}
+          <div class="text-xs text-slate-300 text-center">
+            Log ${escapeHtml(p.ticker)}: entry $${p.entry_price.toFixed(2)} · stop $${p.initial_stop.toFixed(2)} (Manual) · ${p.qty} sh · risk $${Math.round(risk)}
+          </div>
+          ${actions}
+        </div>`;
+    }
+
+    function manualFormHtml() {
+      const m = state.manualEntry;
+
+      const stopSeg = [['price', 'Price'], ['pct', '% below']].map(([k, label]) => {
+        const on = m.stopMode === k;
+        return `<button onclick="manualSetStopMode('${k}')"
+            class="flex-1 text-center px-2 py-1.5 text-[11px] border-r border-slate-700 last:border-r-0
+              ${on ? 'bg-sky-500/20 text-sky-400 font-semibold' : 'text-slate-400 hover:bg-slate-700/50'}">${label}</button>`;
+      }).join('');
+      const sizeSeg = [['risk', 'Risk $'], ['shares', 'Shares']].map(([k, label]) => {
+        const on = m.sizeMode === k;
+        return `<button onclick="manualSetSizeMode('${k}')"
+            class="flex-1 text-center px-2 py-1.5 text-[11px] border-r border-slate-700 last:border-r-0
+              ${on ? 'bg-sky-500/20 text-sky-400 font-semibold' : 'text-slate-400 hover:bg-slate-700/50'}">${label}</button>`;
+      }).join('');
+
+      const stopField = m.stopMode === 'price'
+        ? `<div class="flex justify-between items-center text-xs mt-1.5">
+            <span class="text-slate-400">Stop price</span>
+            <input id="manual-stopprice" type="number" step="0.01" value="${escapeHtml(m.stopPrice)}"
+              oninput="manualFieldInput('stopPrice', this.value)"
+              class="bg-slate-900 border border-sky-500 rounded px-1.5 py-0.5 w-20 text-right text-slate-100 font-semibold tabular-nums text-xs" /></div>`
+        : `<div class="flex justify-between items-center text-xs mt-1.5">
+            <span class="text-slate-400">Stop % below entry</span>
+            <input id="manual-stoppct" type="number" step="0.1" value="${escapeHtml(m.stopPct)}"
+              oninput="manualFieldInput('stopPct', this.value)"
+              class="bg-slate-900 border border-sky-500 rounded px-1.5 py-0.5 w-16 text-right text-slate-100 font-semibold tabular-nums text-xs" /></div>`;
+
+      const sizeField = m.sizeMode === 'risk'
+        ? `<div class="flex justify-between items-center text-xs mt-1">
+            <span class="text-slate-400">My risk this trade</span>
+            <input id="manual-risk" type="number" step="1" value="${escapeHtml(m.risk || ws4RiskDefault())}"
+              oninput="manualFieldInput('risk', this.value)"
+              class="bg-slate-900 border border-sky-500 rounded px-1.5 py-0.5 w-16 text-right text-slate-100 font-semibold tabular-nums text-xs" /></div>`
+        : `<div class="flex justify-between items-center text-xs mt-1">
+            <span class="text-slate-400">Shares</span>
+            <input id="manual-qty" type="number" step="1" value="${escapeHtml(m.qty)}"
+              oninput="manualFieldInput('qty', this.value)"
+              class="bg-slate-900 border border-sky-500 rounded px-1.5 py-0.5 w-16 text-right text-slate-100 font-semibold tabular-nums text-xs" /></div>`;
+
+      const errRow = m.error ? `<div class="text-center text-[11px] text-red-400 mb-1.5">${escapeHtml(manualErrorText(m.error))}</div>` : '';
+
+      return `
+        <div class="mb-3 bg-slate-900/60 border border-sky-900/50 rounded-lg px-3 py-3 space-y-2.5">
+          <div class="flex justify-between items-center">
+            <div class="text-xs font-semibold text-slate-300">Log a position manually</div>
+            <button onclick="manualCloseForm()" class="text-[11px] text-slate-500 hover:text-slate-300">Cancel</button>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center text-xs">
+              <span class="text-slate-400">Ticker</span>
+              <input id="manual-ticker" type="text" value="${escapeHtml(m.ticker)}" placeholder="AAPL"
+                oninput="manualTickerInput(this)"
+                class="bg-slate-900 border border-sky-500 rounded px-1.5 py-0.5 w-24 text-left text-slate-100 font-semibold text-xs uppercase tracking-wide" />
+            </div>
+            <div id="manual-resolve">${manualResolveLineHtml()}</div>
+          </div>
+
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-slate-400">Entry fill</span>
+            <input id="manual-entry" type="number" step="0.01" value="${escapeHtml(m.entry)}"
+              oninput="manualFieldInput('entry', this.value)"
+              class="bg-slate-900 border border-sky-500 rounded px-1.5 py-0.5 w-20 text-right text-slate-100 font-semibold tabular-nums text-xs" />
+          </div>
+
+          <div class="bg-slate-900/40 rounded-lg px-3 py-2.5">
+            <div class="text-xs font-semibold text-slate-300 mb-1.5">Stop as</div>
+            <div class="flex border border-slate-700 rounded-md overflow-hidden">${stopSeg}</div>
+            ${stopField}
+            <div class="flex justify-between text-xs mt-2"><span class="text-slate-400">Risk / share</span><span id="manual-riskshare" class="text-slate-200 font-medium tabular-nums">—</span></div>
+          </div>
+
+          <div class="bg-slate-900/40 rounded-lg px-3 py-2.5">
+            <div class="text-xs font-semibold text-slate-300 mb-1.5">Size by</div>
+            <div class="flex border border-slate-700 rounded-md overflow-hidden">${sizeSeg}</div>
+            ${sizeField}
+            <div class="flex justify-between text-xs mt-2"><span class="text-slate-400">→ Position</span><span id="manual-position" class="text-slate-200 font-medium tabular-nums">—</span></div>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center text-xs">
+              <span class="text-slate-400">Entry date <span class="text-slate-600">(optional · backdate)</span></span>
+              <input id="manual-entrydate" type="date" value="${escapeHtml(m.entryDate)}"
+                oninput="manualFieldInput('entryDate', this.value)"
+                class="bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5 text-slate-100 text-xs" />
+            </div>
+            <div class="text-[10.5px] text-slate-500 mt-1">Backdated entries are managed forward from the next bar, not replayed.</div>
+          </div>
+
+          <div class="flex justify-between items-center text-xs">
+            <span class="text-slate-400">Earnings in <span class="text-slate-600">(optional)</span></span>
+            <span class="flex items-center gap-1">
+              <input id="manual-earningsdays" type="number" step="1" min="0" value="${escapeHtml(m.earningsDays)}"
+                oninput="manualFieldInput('earningsDays', this.value)"
+                class="bg-slate-900 border border-slate-600 rounded px-1.5 py-0.5 w-12 text-right text-slate-100 text-xs" />
+              <span class="text-slate-500">days</span>
+            </span>
+          </div>
+
+          <div class="text-[10.5px] text-slate-500">Stop bases (20MA/50MA) unlock after the feed lands its first bar for this ticker.</div>
+
+          ${errRow}
+          <button onclick="manualTakeIt()" class="w-full py-2 rounded-lg text-xs font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400">I took it →</button>
+        </div>`;
     }
 
     function renderMorning() {

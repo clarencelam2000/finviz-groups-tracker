@@ -1,6 +1,18 @@
 {
-  "current": "2026.08.13",
+  "current": "2026.08.14",
   "releases": [
+    {
+      "version": "2026.08.14",
+      "date": "2026-08-14",
+      "title": "Log a position on any ticker",
+      "tag": "feature",
+      "tab": "positions",
+      "notes": [
+        "New \"+ Log a position manually\" form on the Positions tab — enter any ticker, your entry, and a stop (price or % below), and it sizes the trade by risk $ or shares.",
+        "Optional backdate and days-to-earnings fields for trades you're logging after the fact.",
+        "From the Lookup tab, tap \"Open a position on {ticker} →\" to jump straight into the form pre-filled."
+      ]
+    },
     {
       "version": "2026.08.13",
       "date": "2026-08-13",
