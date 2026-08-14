@@ -14,7 +14,9 @@ GitHub-Actions held feed. See README § Auth — the Cloudflare-Access-vs-bearer
 
 ## Phase status (ADR-012 §10)
 
-1. ✅ D1 schema + ticker-generic "I took it" write path (`src/positions.js`, `/positions`).
+1. ✅ D1 schema + ticker-generic "I took it" write path (`src/positions.js`, `/positions`). The
+   create path takes an optional `entry_date` (§ 8a manual/backdated entry) — `opened_at` always
+   stays the real creation time regardless.
 2. ✅ Held-tickers feed → `ticker_quotes` (`src/quotes.js`, `/held-tickers`, `/ingest/quotes`;
    GH-Actions `scripts/collect_held.py` + `worker-cron` `held` job at 17:30 ET).
 3. ✅ **`advance()` daily engine** — **3a (pure engine) = `src/advance.js`**; **3b-i (wiring) =

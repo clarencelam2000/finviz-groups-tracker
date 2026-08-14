@@ -121,8 +121,12 @@ beside the existing two in `src/auth.js` — one secret and one function, no sch
 `src/auth.js` (§ Auth). Market data (`ticker_quotes`) carries **no `user_id`** — it is public bars;
 only the *selection* of tickers to fetch derives from private positions, at query time.
 
-`POST /positions` body: `{ ticker, entry_price, initial_stop, qty, stop_basis?, meta?, days_to_earnings? }`.
+`POST /positions` body: `{ ticker, entry_price, initial_stop, qty, stop_basis?, meta?, days_to_earnings?, entry_date? }`.
 `stop_basis` ∈ `prior_day_low | todays_low | 20ma | 50ma | manual` (default `manual`).
+`entry_date` (optional, § 8a manual entry) is `YYYY-MM-DD`, must be ≤ today's ET date, and defaults
+to today when omitted. It lets the owner log a trade taken on an earlier date; `opened_at` (the real
+creation timestamp) is never backdated, and a backdate does not replay the engine — `advance()` still
+only runs forward from the next fed bar.
 Validation rejects `initial_stop >= entry_price` (long-only: R = entry − stop must be > 0).
 Each call creates an **independent lot** — "I took it" twice on one ticker makes two rows on purpose
 (§ 3a scale-ins); there is deliberately no `(user_id, ticker)` uniqueness assumption.
