@@ -6,6 +6,48 @@
 
 ---
 
+## 2026-08-14 — WS5-3b-ii: owner exit-transition routes + autoConfirm in the sweep
+
+**Status: safe to close once this PR merges.** Shipped the owner-facing half of the daily engine.
+
+**What landed** (branch `claude/ws5-trade-lifecycle-wiring-6t4sej`, all in `worker-positions/`):
+- New `src/transitions.js` — owner-bearer `POST /positions/<trade_id>/{confirm-exit,still-holding,
+  correct-exit,reopen}` over the pure fns already in `advance.js`. `applyTransition()` does load
+  (user-scoped) → state precondition → pure fn → `persistTransition()`. Routes matched by an
+  anchored regex in `index.js`, placed below the owner-auth gate (service token gets no say over a
+  human's exit fill), and it can't shadow the exact `/positions` routes.
+- `persistTransition()` is the deliberate **mirror** of the sweep's `persistAdvance()`: writes
+  exactly the user-owned columns the sweep's UPDATE refuses to (`state`, exit-signal fields,
+  `exit_price`, `closed_at`, `confirmation_status`, `caution_flag`), none of the engine columns.
+  CAS version column is **`state`** (double-submit → second no-ops); same events-first/UPDATE-last
+  batch order.
+- `autoConfirm()` folded into `sweep()` after the advance loop, over the `closing` population the
+  advance loop excludes. Closes anything past `EXIT_AUTOCONFIRM_SESSIONS` at the signal-frozen
+  `expected_exit_price`, `confirmation_status='auto'`. New `auto_confirmed` count; `dry_run` writes
+  nothing. Session clock = **global** `DISTINCT trade_date` calendar (`sessionsSince` +
+  `distinctTradeDates`), strictly after `exit_signal_date`.
+- Tests: new `test/transitions.test.js` (23) + auto-confirm/`sessionsSince` block in
+  `test/sweep.test.js`. **155 vitest total (was 122, +33), all green.** No pytest/PWA touched.
+- Docs: README (phase status ✅ 3b-ii, endpoint table, 3b-ii section, Tests), `worker-positions/
+  CLAUDE.md` (transitions section, 3 gotchas), design §7 auto-confirm impl note, SPRINT WS5-3b-ii ✅.
+
+**Two gotchas worth remembering:** (1) the pure transition fns return `trade_date` as a *sibling*
+of `events`, NOT stamped per-event (unlike `advanceThroughBars`'s fold) — the wiring must stamp
+each event before persist or the NOT-NULL `position_events.trade_date` throws. (2) `persistTransition`
+guards on `state = ?` (NOT NULL → plain `=`), unlike persistAdvance's nullable `last_advanced_date
+IS ?`.
+
+**Owner decision flagged (non-blocking, SPRINT WS5-3b-OWNER item 4):** autoConfirm's session clock
+uses the **global** held-ticker calendar, not the position's own ticker — robust to a one-symbol
+feed gap. Reasonable reading of design §7's "natural session calendar"; flag if per-ticker is wanted.
+
+**Next (phase 4 / a PWA task):** wire the PWA "needs your confirmation" strip + editable
+Confirm-fill/Still-holding actions to these routes, and VAPID two-tier push. The routes exist and
+are tested; nothing in the PWA calls them yet. **Still gated:** live e2e needs a few sessions of
+real held bars — first safe check is an owner-bearer `POST /advance?dry_run=1`.
+
+---
+
 ## 2026-08-13 — collect_held.yml first-run failure: Cloudflare Bot Fight Mode, not missing secrets (#312)
 
 **Status: safe to close once this PR merges.** Owner reported the first manual `collect_held.yml`
