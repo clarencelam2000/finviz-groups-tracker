@@ -6,6 +6,56 @@
 
 ---
 
+## 2026-08-14 — WS5 §8a: manual "any ticker" position entry (#264, PR #320)
+
+**Status: safe to close once PR #320 merges.** Senior-eng + product session driving epic #264 §8a —
+letting the owner open a position on any typed ticker, not just a surfaced pick. Lead owned the design
++ taste + review; delegated both boots-on-ground builds to Sonnet subagents against locked specs and
+reviewed every line. Design review artifact ("Manual Position Entry", 3 options A/B/C) → owner picked
+**Option B** (guided ticket).
+
+**Design decisions locked with owner:**
+- **Placement:** top of the Positions tab (already the authed surface; no new-tab/anti-drift churn).
+- **Payload:** identical to the picks path + `meta.source='manual'`, `stop_basis='manual'`. `posCardHtml`
+  already renders `source`/manual-basis → zero list changes.
+- **Bidirectional sizing** (size by risk $ ↔ by shares), **stop as price ↔ %-below-entry**, optional
+  earnings-days, inline `lookupTicker` company resolve as a fat-finger guard (non-blocking — a symbol
+  the lookup worker doesn't cover can still be logged; lead call, flag if owner wants a hard block).
+- **Optional backdated `entry_date`** for historical trades — the one thing crossing into backend.
+
+**What landed (PR #320, branch `claude/any-ticker-entry-form-guwbl2`, 3 commits):**
+- **Backend** (`worker-positions/src/positions.js`): `POST /positions` accepts optional `entry_date`
+  (YYYY-MM-DD, ≤ today ET, **real-calendar round-trip validated** — lead caught that the subagent's
+  regex-only check let `2026-02-30`/`2026-13-01` through into the NOT-NULL `trade_date` events ledger).
+  `buildPositionRow` uses it else stamps today; `opened_at` stays real-now. Engine advances forward —
+  a backdate is a label, not a replay. 162 vitest (positions.test.js 8→14).
+- **PWA** (`docs/index.html`): collapsed "＋ Log a position manually" expander in `renderPositions()`
+  (signed-in only). Standalone `manualBuildPayload()` (NOT `ws5BuildPayload`, which stays morning-
+  coupled). `manualRecompute()` id-patches the risk/position readouts on `oninput` (focus-preserving,
+  mirrors `ws4Recompute`); toggles full-re-render (click, blur ok). `manualOpenFromLookup()` prefills
+  from already-fetched lookup data + `switchTab('positions')`. Release triplet `2026.08.14` /
+  sw.js v65→v66. New `tests/test_pwa_manual_entry.py` (8, added to `tests.yml --ignore`).
+- **Verified end-to-end by the lead** via the chromium-1117→1194 symlink harness: `test_pwa_manual_entry`
+  + `test_pwa_positions` = **16/16 pass** (after the lead's ticker-left-align taste edit); `node --check`
+  on the extracted script OK; release guard `test_guide_releases.py` green; worker `npm test` 162.
+
+**Deferred + tracked — §8b personal watchlist (#319):** owner think-big to add an arbitrary ticker to
+the next N Morning scrapes. Key realization (owner's, lead under-weighted first): **force-include** the
+ticker into the EOD picks scrape so it becomes a picks-adjacent row and rides Morning status unchanged —
+NOT a separate pipeline. Two open Qs (public-CSV privacy signal; TTL). Unifies with §8a as the *same
+form, two actions* ("Watch" vs "I took it"). Full brief: `trade-lifecycle-engine.md` §8b + #319 +
+SPRINT WS5-8b (with a next-eng read list). Deferred to a dedicated session.
+
+**Low-confidence calls flagged to owner:** (1) non-blocking ticker resolve (above). (2) None else —
+placement, payload, sizing all owner-approved.
+
+**Next steps:** merge #320 → `deploy-workers.yml` auto-deploys `finviz-positions` (backward-compatible
+optional field). Then WS5-4 (VAPID push) is the remaining phase-4 item. §8b watchlist is its own session.
+
+**Note:** this session-notes commit must land on default via #320 merging to be visible next session.
+
+---
+
 ## 2026-08-14 — WS5-3b-ii: owner exit-transition routes + autoConfirm in the sweep
 
 **Status: safe to close once this PR merges.** Shipped the owner-facing half of the daily engine.
