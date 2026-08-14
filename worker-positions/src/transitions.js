@@ -104,24 +104,10 @@ export async function persistTransition(db, { trade_id, user_id, expectedState, 
   stmts.push(
     db
       .prepare(
-        `UPDATE positions SET
-           state = ?, expected_exit_price = ?, exit_signal_date = ?, exit_reason = ?,
-           exit_price = ?, closed_at = ?, confirmation_status = ?, caution_flag = ?
+        `UPDATE positions SET ${TRANSITION_COLS.map((col) => `${col} = ?`).join(", ")}
          WHERE trade_id = ? AND user_id = ? AND state = ?`
       )
-      .bind(
-        position.state,
-        position.expected_exit_price,
-        position.exit_signal_date,
-        position.exit_reason,
-        position.exit_price,
-        position.closed_at,
-        position.confirmation_status,
-        position.caution_flag,
-        trade_id,
-        user_id,
-        expectedState
-      )
+      .bind(...TRANSITION_COLS.map((col) => position[col]), trade_id, user_id, expectedState)
   );
 
   const results = await db.batch(stmts);

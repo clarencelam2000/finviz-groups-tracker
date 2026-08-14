@@ -185,7 +185,12 @@ export async function handleRequest(request, env) {
   // pipeline; here we only parse the body and map its typed result to a Response.
   const tx = pathname.match(TRANSITION_PATH);
   if (tx && method === "POST") {
-    const trade_id = decodeURIComponent(tx[1]);
+    let trade_id;
+    try {
+      trade_id = decodeURIComponent(tx[1]);
+    } catch {
+      return json({ error: "invalid trade_id" }, 400, request, env);
+    }
     const action = tx[2];
     let body = {};
     if ((request.headers.get("content-type") || "").includes("application/json")) {

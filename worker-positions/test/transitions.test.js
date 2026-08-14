@@ -311,4 +311,16 @@ describe("transition routes via handleRequest", () => {
     const res = await handleRequest(txReq(`/positions`, { method: "GET", token }), env);
     expect(res.status).toBe(200); // list, not a transition 404
   });
+
+  it("400s (not an uncaught URIError) on a malformed percent-encoded trade_id", async () => {
+    const token = await mintToken(env);
+    const bad = new Request(`https://finviz-positions.workers.dev/positions/%E0%A4%A/confirm-exit`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, origin: "https://clarencelam2000.github.io" },
+    });
+    const res = await handleRequest(bad, env);
+    expect(res.status).toBe(400);
+    // Must still be a proper CORS'd json() response, not a raw thrown error.
+    expect(res.headers.get("access-control-allow-origin")).toBeTruthy();
+  });
 });
