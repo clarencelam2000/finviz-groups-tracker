@@ -29,15 +29,42 @@ This is **phase 1** of the four-phase WS5 plan (ADR-012 §10), with **phase 2 in
      `position_events` under a DB-layer compare-and-set on `last_advanced_date`. Exposed as
      `POST /advance`; triggered by `scripts/collect_held.py` immediately after a successful
      `/ingest/quotes`.
-   - ⬜ **3b-ii — the owner transition routes** (`confirm-exit`, `still-holding`, `correct-exit`,
-     `reopen`) + `autoConfirm()` wired into the sweep. Deliberately ordered AFTER 3b-i: shipping
-     `autoConfirm` first would mean every exit signal auto-closes at `EXIT_AUTOCONFIRM_SESSIONS`
-     with no endpoint for the owner to confirm or reject it.
+   - ✅ **3b-ii — the owner transition routes + `autoConfirm`** (`src/transitions.js`): the four
+     owner-bearer actions `confirm-exit` / `still-holding` / `correct-exit` / `reopen` over the pure
+     functions already in `advance.js`, plus `autoConfirm()` wired into the sweep. Ordered AFTER 3b-i
+     on purpose — shipping `autoConfirm` first would auto-close every exit at
+     `EXIT_AUTOCONFIRM_SESSIONS` with no endpoint for the owner to confirm or reject it.
 4. ⬜ Push notifications (VAPID; the sibling `distil` worker's web-push code is the reference).
 
-Until 3b-ii lands, an exit signal parks the position in `closing` and stays there — nothing
-auto-closes, and the position keeps accruing bars (`closing` is in `HELD_STATES`), so no history is
-lost while the confirmation surface is being built.
+The PWA surfaces that *call* these transition routes (the "needs your confirmation" strip, the
+editable Confirm-fill / Still-holding actions, the two-tier exit push) are phase-4 work — the
+routes exist and are tested; the PWA client is not wired to them yet.
+
+### Owner transition routes + auto-confirm (3b-ii)
+
+`src/transitions.js` is the mirror image of the sweep's engine write path. The sweep's
+`persistAdvance()` UPDATE deliberately **never** writes `exit_price` / `closed_at` /
+`confirmation_status` — those are user-owned, and they are written **only** here, by
+`persistTransition()`. The two write paths keep disjoint column lists (`caution_flag` is the one
+shared column, legitimately re-armed by `still-holding`/`reopen`, and only ever touched while the
+position is in `closing`/`closed` — a state the sweep does not advance), so neither can clobber the
+other's fields.
+
+- **State preconditions.** `confirm-exit` / `still-holding` require `closing`; `correct-exit` /
+  `reopen` require `closed`. Any other current state is a `409`, not a silent no-op.
+- **Idempotency = CAS on `state`.** `persistTransition()` guards every statement on the pre-state
+  (`WHERE … state = ?`), events-first then the UPDATE, in one `db.batch` — so a double-submitted
+  "confirm exit" applies once and the retry no-ops (its guard no longer matches). A retry that
+  arrives *after* the row settled is caught earlier still, by the precondition check → `409`.
+- **`autoConfirm` in the sweep.** After the advance loop, the sweep loads every `closing` position
+  and closes any that has sat past `EXIT_AUTOCONFIRM_SESSIONS` sessions, at the price **frozen at
+  signal time** (`expected_exit_price`, never re-derived), labeled `confirmation_status = 'auto'`.
+  The session clock is the **global** trading-session calendar — `SELECT DISTINCT trade_date FROM
+  ticker_quotes` (the union across all held tickers, so a feed gap for one symbol can't understate
+  how long its position has been parked) — counted strictly after `exit_signal_date`. Reported via
+  the sweep's new `auto_confirmed` count (and per-position `results` rows tagged
+  `action: "auto_confirm"`, stripped for a service caller like every other result). `dry_run`
+  computes it and writes nothing.
 
 ### How the sweep runs (3b-i)
 
@@ -74,6 +101,10 @@ by construction (the engine runs exactly when fresh bars exist) and keeps us cle
 | `GET` | `/held-tickers` | Service token | WS5 phase 2: the union of open/managing/closing tickers the held feed must scrape (`{ tickers: [...] }`) |
 | `POST` | `/ingest/quotes` | Service token | WS5 phase 2: append-only batch write of a day's scraped bars into `ticker_quotes` (`{ trade_date, collected_at, quotes:[...] }` → `{ written }`) |
 | `POST` | `/advance?dry_run=1` | Service token **or** Bearer | WS5 phase 3b: run the daily engine sweep over stored bars. Service caller gets **counts only**; the owner bearer additionally gets per-position `results`. |
+| `POST` | `/positions/<trade_id>/confirm-exit` | Bearer | WS5 phase 3b-ii: `closing → closed` at the confirmed fill. Body `{ exit_price? }` — omitted/absent defaults to the modeled `expected_exit_price`; a supplied fill must be `> 0`. |
+| `POST` | `/positions/<trade_id>/still-holding` | Bearer | WS5 phase 3b-ii: reject an exit signal, `closing → managing`; clears the exit fields and re-arms the two-close rule. |
+| `POST` | `/positions/<trade_id>/correct-exit` | Bearer | WS5 phase 3b-ii: append-only correction of a `closed` position's fill. Body `{ exit_price }` (required, `> 0`); emits `exit_corrected`, recomputes R. |
+| `POST` | `/positions/<trade_id>/reopen` | Bearer | WS5 phase 3b-ii: `closed → managing` for a wrongly-closed trade; clears the exit fields so the sweep resumes from the next bar. |
 
 **Two auth paths, one seam.** The interactive `Bearer` rows above are the owner's HMAC login token
 (`authenticate()`); the machine rows use a **separate service token** (`authenticateService()`,
@@ -179,7 +210,10 @@ Auto-deploy: `.github/workflows/deploy-workers.yml` (job `deploy-positions`) on 
 `test/index.test.js` (routing, CORS, 401 gating, create+list, independent lots, user isolation),
 `test/advance.test.js` (the engine's spec-lock — every design-§9 rule plus randomized property
 tests), `test/sweep.test.js` (catch-up fold, entry-day exclusion, idempotency, CAS races, stale-bar
-handling, dry run, `/advance` response shaping).
+handling, dry run, `/advance` response shaping, **auto-confirm of stuck `closing` positions +
+`sessionsSince` session-counting**), `test/transitions.test.js` (the four owner transition routes:
+state preconditions → 409, editable/validated fill, tenant scoping → 404, double-submit safety,
+`persistTransition` CAS, and the HTTP surface incl. owner-only gating).
 
 No network. `test/helpers/d1.js` shims the D1 surface over **Node 22's built-in `node:sqlite`**
 (zero dependencies) and applies the **real migration files**, so the tests exercise actual SQL and

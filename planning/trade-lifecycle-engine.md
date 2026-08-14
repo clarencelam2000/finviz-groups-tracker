@@ -334,6 +334,11 @@ user decides.
   `confirmation_status = 'auto'`. Never silently wrong: every closed row is labeled, expectancy
   queries can filter `confirmed`-only, and the row stays correctable (below). Price is the one frozen
   at signal time — do **not** re-derive from later bars.
+  - *Impl (WS5-3b-ii):* the "sessions in `Closing`" clock is the **global** trading-session
+    calendar — `SELECT DISTINCT trade_date FROM ticker_quotes` (the union across every held ticker),
+    counted strictly after `exit_signal_date` — not the position's own ticker's bars. Global is
+    robust to a one-symbol feed gap understating how long a position has actually been parked. Lead
+    reading of "natural session calendar"; owner-ratification item in SPRINT § WS5-3b-OWNER.
 - **Edit / undo a closed position** — corrections are **append-only events**, never destructive:
   fixing the exit price on a closed trade emits `exit_corrected` (recompute R from the new price);
   reopening a wrongly-closed trade emits `reopened` (`Closed → Managing`). The original record stays

@@ -7,6 +7,12 @@ import { authenticate, authenticateService, login } from "./auth.js";
 import { validateCreatePayload, buildPositionRow, insertPosition, listPositions } from "./positions.js";
 import { validateIngestBatch, ingestQuotes, heldTickers } from "./quotes.js";
 import { sweep } from "./sweep.js";
+import { applyTransition } from "./transitions.js";
+
+// Owner exit-transition actions (WS5 phase 3b-ii). The path is /positions/<trade_id>/<action>; the
+// trade_id is identity (in the path), not payload — the editable fill / corrected price ride in the
+// body. Anchored ^…$ so it can never shadow the exact /positions collection routes above it.
+const TRANSITION_PATH = /^\/positions\/([^/]+)\/(confirm-exit|still-holding|correct-exit|reopen)$/;
 
 // ── CORS ──────────────────────────────────────────────────────────────────────────────────────
 // The PWA is a cross-origin GitHub-Pages page, so every response needs CORS headers scoped to the
@@ -170,6 +176,38 @@ export async function handleRequest(request, env) {
       return json({ error: "read failed" }, 500, request, env);
     }
     return json({ positions: rows }, 200, request, env);
+  }
+
+  // ── Owner exit-transition routes — WS5 phase 3b-ii (SPRINT WS5-3b-ii) ───────────────────────────
+  // POST /positions/<trade_id>/{confirm-exit|still-holding|correct-exit|reopen}. Owner-bearer only
+  // (the machine service token gets no say over a human's exit fill), so these correctly sit BELOW
+  // the owner-auth gate above. applyTransition() owns the load → precondition → pure-fn → CAS-persist
+  // pipeline; here we only parse the body and map its typed result to a Response.
+  const tx = pathname.match(TRANSITION_PATH);
+  if (tx && method === "POST") {
+    let trade_id;
+    try {
+      trade_id = decodeURIComponent(tx[1]);
+    } catch {
+      return json({ error: "invalid trade_id" }, 400, request, env);
+    }
+    const action = tx[2];
+    let body = {};
+    if ((request.headers.get("content-type") || "").includes("application/json")) {
+      try {
+        body = await request.json();
+      } catch {
+        return json({ error: "invalid JSON" }, 400, request, env);
+      }
+    }
+    let result;
+    try {
+      result = await applyTransition(env.POSITIONS_DB, { user_id: auth.user_id, trade_id, action, body });
+    } catch (e) {
+      return json({ error: "transition failed" }, 500, request, env);
+    }
+    if (result.error) return json({ error: result.error }, result.status, request, env);
+    return json({ position: result.position }, 200, request, env);
   }
 
   return json({ error: "not found" }, 404, request, env);

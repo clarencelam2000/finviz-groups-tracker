@@ -17,9 +17,9 @@ GitHub-Actions held feed. See README § Auth — the Cloudflare-Access-vs-bearer
 1. ✅ D1 schema + ticker-generic "I took it" write path (`src/positions.js`, `/positions`).
 2. ✅ Held-tickers feed → `ticker_quotes` (`src/quotes.js`, `/held-tickers`, `/ingest/quotes`;
    GH-Actions `scripts/collect_held.py` + `worker-cron` `held` job at 17:30 ET).
-3. 🟡 **`advance()` daily engine** — **3a (pure engine) = `src/advance.js`**; **3b-i (wiring) =
-   `src/sweep.js` + `POST /advance`**, done; **3b-ii (owner transition routes + `autoConfirm`) is
-   next** (see below).
+3. ✅ **`advance()` daily engine** — **3a (pure engine) = `src/advance.js`**; **3b-i (wiring) =
+   `src/sweep.js` + `POST /advance`**; **3b-ii (owner transition routes + `autoConfirm`) =
+   `src/transitions.js`**, all done (see below).
 4. ⬜ Push notifications (VAPID; reuse the sibling `distil` worker's web-push + `push_subscriptions`).
 
 ## The engine: `src/advance.js` (phase 3a)
@@ -87,14 +87,38 @@ only**; the owner bearer additionally gets per-position `results`. Trigger is
 `scripts/collect_held.py` immediately after a successful `/ingest/quotes` — dependency-gated, no new
 cron trigger, no new secret.
 
-## Phase 3b-ii (next PR)
+## The owner transitions: `src/transitions.js` (phase 3b-ii)
 
-The owner transition routes — `confirm-exit`, `still-holding`, `correct-exit`, `reopen` — over the
-already-written pure functions in `advance.js`, plus `autoConfirm()` wired into the sweep (it needs
-a trading-session count between `exit_signal_date` and today; the distinct `trade_date`s in
-`ticker_quotes` are the natural session calendar). **Ordered after 3b-i on purpose:** `autoConfirm`
-without a confirm route means every exit silently auto-closes at `EXIT_AUTOCONFIRM_SESSIONS` with no
-way for the owner to intervene. Tracked: SPRINT WS5-3b-ii.
+The four owner-bearer routes `confirm-exit` / `still-holding` / `correct-exit` / `reopen` (at
+`POST /positions/<trade_id>/<action>`, matched by an anchored regex in `index.js` so they never
+shadow the exact `/positions` collection routes) over the already-pure functions in `advance.js`,
+plus `autoConfirm()` folded into the sweep. Ordered after 3b-i on purpose: `autoConfirm` without a
+confirm route would silently auto-close every exit at `EXIT_AUTOCONFIRM_SESSIONS`.
+
+Three things to internalize before editing the transitions:
+
+- **`persistTransition` is the MIRROR of `persistAdvance`.** It writes exactly the columns the
+  sweep's UPDATE refuses to (`state`, the exit-signal fields, `exit_price`, `closed_at`,
+  `confirmation_status`, `caution_flag`) and none of the engine columns. That disjointness is the
+  whole safety story — neither write path clobbers the other's fields. Same load-bearing batch
+  order (guarded event INSERTs first, CAS UPDATE last), but the CAS version column is **`state`**,
+  not `last_advanced_date`: a transition is valid only from a known pre-state, so guarding on it
+  makes a double-submit a no-op. `state` is NOT NULL, so it's `state = ?` (plain `=`), unlike
+  persistAdvance's nullable `last_advanced_date IS ?`.
+- **The pure fns return `trade_date` as a SIBLING of `events`, not stamped per-event** (unlike the
+  fold in `advanceThroughBars`). `position_events.trade_date` is NOT NULL, so the wiring stamps
+  each event with the transition's `trade_date` before persisting — in `applyTransition` and in the
+  sweep's auto-confirm block. Miss that and the batch throws a NOT NULL constraint.
+- **`autoConfirm`'s session clock is the GLOBAL calendar.** `sessionsSince(distinctTradeDates(db),
+  exit_signal_date)` counts distinct `trade_date`s in `ticker_quotes` (union across all held
+  tickers) strictly after the signal — global, not the position's own ticker, so a one-symbol feed
+  gap can't understate how long a position has been parked. The price is the one frozen at signal
+  (`expected_exit_price`), labeled `confirmation_status='auto'`. Global-vs-per-ticker is a lead
+  interpretation of the design's "natural session calendar" — flagged for owner ratification
+  (SPRINT WS5-3b-OWNER), non-blocking.
+
+The PWA client that calls these routes (confirmation strip, editable Confirm-fill) is phase-4 work;
+3b-ii ships the routes + tests only. Tracked: SPRINT WS5-3b-ii.
 
 ## Tests
 

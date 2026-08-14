@@ -8,8 +8,9 @@
 // Design: planning/trade-lifecycle-engine.md §4 (algorithm), §5 (schema), §7 (edge cases),
 // ADR-012, SPRINT WS5-3b.
 
-import { advance, normalizeBar, effectiveConfig, ENGINE_CONFIG } from "./advance.js";
-import { isoUtc } from "./time.js";
+import { advance, autoConfirm, normalizeBar, effectiveConfig, ENGINE_CONFIG } from "./advance.js";
+import { persistTransition } from "./transitions.js";
+import { etDateStr, isoUtc } from "./time.js";
 
 // ── Configurable constants (triple-documented: here + README § Configurable parameters +
 // worker-positions/CLAUDE.md — see this repo's 3-places rule, CLAUDE.md § Code quality).
@@ -139,6 +140,51 @@ export async function loadAdvanceablePositions(db) {
     }
     return { ...row, meta };
   });
+}
+
+// ── loadClosingPositions(db) — every position awaiting an exit confirmation, across all users. ──
+// The auto-confirm pass (§7) operates on exactly the states the main advance loop EXCLUDES: a
+// `closing` position is not advanceable (advance() no-ops it), but it can still time out. meta is
+// parsed here too so effectiveConfig() sees per-position EXIT_AUTOCONFIRM_SESSIONS overrides.
+export async function loadClosingPositions(db) {
+  const { results } = await db
+    .prepare("SELECT * FROM positions WHERE state = 'closing' ORDER BY exit_signal_date ASC, trade_id ASC")
+    .all();
+  return results.map((row) => {
+    let meta = {};
+    try {
+      meta = JSON.parse(row.meta || "{}");
+    } catch {
+      meta = {};
+    }
+    return { ...row, meta };
+  });
+}
+
+// ── distinctTradeDates(db) — the session calendar, ascending. ───────────────────────────────────
+// The natural trading-session calendar is the set of dates on which the held feed captured ANY bar
+// (the union across all held tickers). Using the GLOBAL union — not one ticker's own bars — makes
+// the session count robust to a single symbol missing a day: a market session that produced bars
+// for other held names still counts, so a feed gap for one ticker can't understate how long its
+// position has actually sat in Closing. Ascending order lets sessionsSince() do a cheap filter.
+export async function distinctTradeDates(db) {
+  const { results } = await db
+    .prepare("SELECT DISTINCT trade_date FROM ticker_quotes ORDER BY trade_date ASC")
+    .all();
+  return results.map((r) => r.trade_date);
+}
+
+// ── sessionsSince(dates, exitSignalDate) — PURE. Trading sessions STRICTLY AFTER the exit signal. ─
+// dates is the ascending session calendar (distinctTradeDates). The signal fires ON a session that
+// itself has a bar; the clock we care about is how many sessions have settled SINCE — so the count
+// is dates strictly greater than exitSignalDate. All are 'YYYY-MM-DD' strings, which sort
+// identically as strings and as dates, so a string comparison is correct without parsing.
+// With EXIT_AUTOCONFIRM_SESSIONS=5 this reaches the threshold on the 5th session after the signal.
+export function sessionsSince(dates, exitSignalDate) {
+  if (!exitSignalDate) return 0;
+  let n = 0;
+  for (const d of dates) if (d > exitSignalDate) n++;
+  return n;
 }
 
 // ── loadBarsAfter(db, ticker, afterDate, limit) ───────────────────────────────────────────────
@@ -356,6 +402,59 @@ export async function sweep(db, { dry_run = false, now = new Date(), cfg } = {})
     });
   }
 
+  // ── AUTO-CONFIRM pass (§7): close out positions parked in `closing` past EXIT_AUTOCONFIRM_SESSIONS.
+  // Runs AFTER the advance loop and over a DIFFERENT population (closing positions, which the advance
+  // loop excludes). The price is the one frozen AT SIGNAL time (autoConfirm() reads
+  // expected_exit_price — never re-derived from a later bar), labeled confirmation_status='auto' so
+  // expectancy queries can filter it out and the owner can still correct/reopen it. It writes the
+  // settled-close columns (exit_price/closed_at/confirmation_status) via persistTransition — the same
+  // user-owned write path the manual confirm-exit route uses — NOT persistAdvance, whose UPDATE
+  // deliberately never touches those columns. Skipped entirely in dry_run (report, don't write).
+  let autoConfirmed = 0;
+  const closing = await loadClosingPositions(db);
+  if (closing.length) {
+    const calendar = await distinctTradeDates(db);
+    const trade_date = etDateStr(now);
+    for (const pos of closing) {
+      const effCfg = effectiveConfig(pos, globals);
+      const sessionsInClosing = sessionsSince(calendar, pos.exit_signal_date);
+      const outcome = autoConfirm(pos, effCfg, { sessionsInClosing, trade_date, now_iso });
+      if (!outcome) continue; // not yet time — leave it parked, awaiting the owner.
+
+      let applied = false;
+      if (!dry_run) {
+        // autoConfirm() returns trade_date as a sibling of events (like the other pure transitions);
+        // position_events.trade_date is NOT NULL, so stamp each event before persisting.
+        const events = outcome.events.map((ev) => ({ ...ev, trade_date: outcome.trade_date ?? trade_date }));
+        const persisted = await persistTransition(db, {
+          trade_id: pos.trade_id,
+          user_id: pos.user_id,
+          expectedState: "closing",
+          position: outcome.position,
+          events,
+          now_iso,
+        });
+        applied = persisted.applied;
+      } else {
+        applied = true;
+      }
+
+      autoConfirmed++;
+      results.push({
+        trade_id: pos.trade_id,
+        ticker: pos.ticker,
+        user_id: pos.user_id,
+        from_state: "closing",
+        to_state: outcome.position.state,
+        bars_advanced: 0,
+        advanced_to: pos.last_advanced_date,
+        events: outcome.events.map((e) => e.event_type),
+        applied,
+        action: "auto_confirm",
+      });
+    }
+  }
+
   return {
     dry_run,
     positions: positions.length,
@@ -363,6 +462,7 @@ export async function sweep(db, { dry_run = false, now = new Date(), cfg } = {})
     signalled,
     unchanged,
     stale: staleCount,
+    auto_confirmed: autoConfirmed,
     results,
   };
 }
