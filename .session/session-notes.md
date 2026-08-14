@@ -1147,3 +1147,39 @@ sweep write anything.
 
 **Note:** this session-notes commit is on the feature branch — it must land on default via a merged
 PR to be visible next session (branch-commit-discipline § "Session notes MUST land on default").
+
+---
+
+## 2026-08-14 — OVERHEAD-4/5: overhead-supply chip on Lookup + Morning
+
+**Status: safe to close** once this PR merges. 670 pytest green (Playwright-tagged files excluded,
+same as CI); `node --check` on the extracted `<script>` block passes.
+
+### What landed
+
+Chip-only pass, mocked and owner-approved before implementation (artifact:
+https://claude.ai/code/artifact/d365a1fc-f2b1-44bb-ae49-b1d92e67f0e5). Both surfaces reuse the
+existing `computeLaunchReady()` verbatim — no new thresholds, no new data plumbing:
+
+- **Lookup (#304):** `findTickerPickInfo()` now returns `launchReady: computeLaunchReady(row)`
+  off the row it already resolves from `state.picksData`; `tickerContextHtml()` renders it next
+  to the category chips on the "This stock — in today's Stage-2 picks" card.
+- **Morning (#305, chip only):** `renderMorning()`'s card builder calls `ws4FindPicksRow(r.ticker)`
+  — the join already built for the WS4 trade ticket, since `morning_latest.csv` itself carries
+  neither `52W High` nor `atr_ext_50` — and renders the same chip markup next to the ticker. This
+  answers #305's stated open question (whether the morning store needs widening): it doesn't, the
+  join already existed.
+- Release triplet: `releases.json` 2026.08.14 entry, `sw.js` v65→v66.
+
+**Deliberately deferred (owner call, not an oversight):** Playwright/e2e coverage for both chips.
+Owner is fast-following with #305's other half — an overhead-aware sort/filter on Morning, still
+being designed — and wants one test pass covering chip + sort/filter together rather than two.
+Tracked as **OVERHEAD-6** in `SPRINT.md` (also covers the sort/filter itself). Do not let this sit
+past that follow-up PR — if OVERHEAD-6 stalls, add the chip tests standalone rather than let both
+ship untested indefinitely.
+
+### Next steps
+
+OVERHEAD-6: owner asked for several sort/filter option mockups for Morning (one explicitly
+exploring reuse/adaptation of the Picks-tab top filter bar — `ATR extension bands` legend +
+All/Focus + Basis + Ariel row) before picking a direction. No option chosen yet as of this entry.

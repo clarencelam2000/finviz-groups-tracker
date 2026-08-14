@@ -1,6 +1,18 @@
 {
-  "current": "2026.08.13",
+  "current": "2026.08.14",
   "releases": [
+    {
+      "version": "2026.08.14",
+      "date": "2026-08-14",
+      "title": "Overhead-supply chip on Lookup and Morning",
+      "tag": "improvement",
+      "tab": "lookup",
+      "notes": [
+        "Lookup now shows the same Coiled / Extended / Overhead chip Picks has, when the ticker is in today's Stage-2 picks.",
+        "Morning cards show it too, next to the ticker — a triggered breakout that's still buried below its 52-week high now looks different from one at fresh highs.",
+        "Display-only, same thresholds as Picks — no scoring or sort change."
+      ]
+    },
     {
       "version": "2026.08.13",
       "date": "2026-08-13",
