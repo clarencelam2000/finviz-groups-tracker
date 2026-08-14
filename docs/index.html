@@ -3432,15 +3432,21 @@
         ext: _pF(row.atr_ext_50),
         earnings: parseEarningsInfo(row['Earnings']),
         focusScore: focus ? focus.score : null,
+        launchReady: computeLaunchReady(row),
       };
     }
 
     function tickerContextHtml(symbol) {
       const info = findTickerPickInfo(symbol);
       if (!info) return '';
+      // GH #304: same chip/thresholds as the Picks tab (computeLaunchReady()), reused
+      // as-is — display-only, no scoring effect here either.
+      const launchReadyChip = info.launchReady
+        ? `<span class="text-[0.6rem] px-1.5 py-0.5 rounded-full font-bold ${info.launchReady.cls}" title="Launch-ready: overhead supply vs. 52-week high + short-term extension">${info.launchReady.label}</span>`
+        : '';
       const chips = info.categories
         .map(c => `<span class="text-[0.6rem] px-1.5 py-0.5 rounded-full ${CATEGORY_CHIP_CLS[c] || 'bg-slate-700/60 text-slate-300'}">${CATEGORY_LABEL[c] || c}</span>`)
-        .join('');
+        .join('') + launchReadyChip;
       const extHtml = !isNaN(info.ext)
         ? `<span class="${atrTextColor(info.ext)}">${info.ext.toFixed(1)}× ATR ext</span>` : '';
       const earnHtml = info.earnings && info.earnings.daysUntil !== null && info.earnings.daysUntil <= EARNINGS_CAUTION_DAYS
@@ -6141,10 +6147,19 @@
       const cards = sorted.map(r => {
         const meta = MORNING_STATUS_META[r.status] || MORNING_STATUS_META.no_quote;
         const grp = r.group ? `<span class="text-xs text-slate-500">· ${r.group}</span>` : '';
+        // GH #305: overhead-supply chip, joined off the prior-EOD picks_latest row via the
+        // same ws4FindPicksRow() the trade ticket already uses (morning_latest.csv itself
+        // carries neither 52W High nor atr_ext_50) — reuses computeLaunchReady() as-is, so
+        // a morning name with no EOD match just renders no chip (silence = no signal).
+        const picksRow = ws4FindPicksRow(r.ticker);
+        const launchReady = picksRow ? computeLaunchReady(picksRow) : null;
+        const launchReadyChip = launchReady
+          ? `<span class="text-[0.55rem] px-1 rounded font-bold ml-1 ${launchReady.cls}" title="Launch-ready: overhead supply vs. 52-week high + short-term extension">${launchReady.label}</span>`
+          : '';
         return `
           <div class="bg-slate-800 border border-slate-700 border-l-4 ${meta.stripe} rounded-lg px-3.5 py-3">
             <div class="flex justify-between items-center">
-              <span><span class="font-bold text-sm tracking-wide">${r.ticker}</span> ${grp}</span>
+              <span><span class="font-bold text-sm tracking-wide">${r.ticker}</span>${launchReadyChip} ${grp}</span>
               <span class="text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${meta.pill}">${meta.label}</span>
             </div>
             ${morningCardBody(r)}

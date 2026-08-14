@@ -2,7 +2,7 @@
   "current": "2026.08.14",
   "releases": [
     {
-      "version": "2026.08.14",
+      "version": "2026.08.14.2",
       "date": "2026-08-14",
       "title": "Log a position on any ticker",
       "tag": "feature",
@@ -11,6 +11,18 @@
         "New \"+ Log a position manually\" form on the Positions tab — enter any ticker, your entry, and a stop (price or % below), and it sizes the trade by risk $ or shares.",
         "Optional backdate and days-to-earnings fields for trades you're logging after the fact.",
         "From the Lookup tab, tap \"Open a position on {ticker} →\" to jump straight into the form pre-filled."
+      ]
+    },
+    {
+      "version": "2026.08.14",
+      "date": "2026-08-13",  
+      "title": "Overhead-supply chip on Lookup and Morning",
+      "tag": "improvement",
+      "tab": "lookup",
+      "notes": [
+        "Lookup now shows the same Coiled / Extended / Overhead chip Picks has, when the ticker is in today's Stage-2 picks.",
+        "Morning cards show it too, next to the ticker — a triggered breakout that's still buried below its 52-week high now looks different from one at fresh highs.",
+        "Display-only, same thresholds as Picks — no scoring or sort change."
       ]
     },
     {
