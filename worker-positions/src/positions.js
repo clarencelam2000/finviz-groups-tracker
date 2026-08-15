@@ -46,7 +46,29 @@ export function validateCreatePayload(body) {
 
   const days_to_earnings = isFiniteNumber(body.days_to_earnings) ? Math.trunc(body.days_to_earnings) : null;
 
-  return { ok: true, value: { ticker, entry_price, initial_stop, qty, stop_basis, meta, days_to_earnings } };
+  // entry_date (optional, § 8a manual entry): lets the owner log a trade taken on an earlier
+  // date. Absent/null/'' -> null, so buildPositionRow falls back to today's ET date (unchanged
+  // behavior). Present -> must be a YYYY-MM-DD calendar date, and not in the future (ET).
+  let entry_date = null;
+  if (body.entry_date != null && body.entry_date !== "") {
+    // Format check, then a UTC round-trip so a well-formed but impossible date (e.g. 2026-02-30,
+    // 2026-13-01) is rejected — entry_date becomes a NOT-NULL trade_date in the append-only
+    // position_events ledger, so a garbage value must never be storable. (JS Date rolls invalid
+    // days over, so the round-trip back to the same string is the real calendar check.)
+    if (typeof body.entry_date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(body.entry_date)) {
+      return { ok: false, error: "entry_date must be YYYY-MM-DD" };
+    }
+    const parsed = new Date(body.entry_date + "T00:00:00Z");
+    if (isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== body.entry_date) {
+      return { ok: false, error: "entry_date must be YYYY-MM-DD" };
+    }
+    if (body.entry_date > etDateStr(new Date())) {
+      return { ok: false, error: "entry_date cannot be in the future" };
+    }
+    entry_date = body.entry_date;
+  }
+
+  return { ok: true, value: { ticker, entry_price, initial_stop, qty, stop_basis, meta, days_to_earnings, entry_date } };
 }
 
 // Build the initial positions row from a validated payload. PURE (takes trade_id/now as inputs).
@@ -56,7 +78,10 @@ export function validateCreatePayload(body) {
 //   trail_basis = 20ma  (default trailing basis before the first advance widens it; § 4)
 //   remaining_qty = initial_qty = qty
 export function buildPositionRow(v, { trade_id, user_id, now = new Date() }) {
-  const entry_date = etDateStr(now);
+  // entry_date may be an owner-supplied backdate (manual § 8a entry); opened_at stays the real
+  // creation time. The engine advances forward from the next fed bar, so a backdate is only an
+  // accurate trade-date label — never a retroactive replay.
+  const entry_date = v.entry_date || etDateStr(now);
   return {
     trade_id,
     user_id,

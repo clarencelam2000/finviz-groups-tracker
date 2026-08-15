@@ -69,15 +69,23 @@ other's fields.
 ### How the sweep runs (3b-i)
 
 `sweep()` is a **catch-up fold**, not a single-day advance: for each position it loads every bar with
-`trade_date > max(last_advanced_date, entry_date)` and folds `advance()` over them in order. One
-mechanism therefore covers same-day idempotency, a missed feed day, and a deliberate backfill over
-bars captured before the engine had a caller.
+`trade_date > max(last_advanced_date, entry_date, openedAtEtDate)` and folds `advance()` over them in
+order. One mechanism therefore covers same-day idempotency, a missed feed day, and a deliberate
+backfill over bars captured before the engine had a caller.
 
-Two rules the wiring layer adds on top of the pure engine, neither of which is in the design doc:
+Three rules the wiring layer adds on top of the pure engine, none of which is in the design doc:
 
 - **A position is never advanced on its own entry-day bar** (the window bound is strictly `>`
   `entry_date`). That day's `low` is largely *pre-purchase* — advancing on it risks firing a false
   `stop_hit` on the very day the user bought. Lead decision, 2026-08-13.
+- **A position is never advanced on bars that predate its real creation** (the window bound is also
+  strictly `>` `opened_at`'s ET trading date). `ticker_quotes` is a global, un-scoped-by-position
+  feed, so a §8a backdated `entry_date` can land on a ticker that already has bars sitting in the
+  table from before this position existed (e.g. a prior or concurrent position on the same ticker).
+  Without this floor the first sweep after a backdated create would fold `advance()` over that
+  pre-existing history in one shot — a genuine retroactive replay, contradicting the "a backdate is
+  a label, not a replay" design promise. For a non-backdated position `entry_date == opened_at`'s ET
+  date already, so this floor is a no-op there. Lead decision, 2026-08-15.
 - **Persistence is gated on `last_advanced_date` actually moving**, not on "were there events".
   A stale bar emits a `note` but deliberately does not stamp the date, so it stays inside the query
   window forever; persisting on events alone would re-append that note every sweep, compounding
@@ -121,8 +129,12 @@ beside the existing two in `src/auth.js` — one secret and one function, no sch
 `src/auth.js` (§ Auth). Market data (`ticker_quotes`) carries **no `user_id`** — it is public bars;
 only the *selection* of tickers to fetch derives from private positions, at query time.
 
-`POST /positions` body: `{ ticker, entry_price, initial_stop, qty, stop_basis?, meta?, days_to_earnings? }`.
+`POST /positions` body: `{ ticker, entry_price, initial_stop, qty, stop_basis?, meta?, days_to_earnings?, entry_date? }`.
 `stop_basis` ∈ `prior_day_low | todays_low | 20ma | 50ma | manual` (default `manual`).
+`entry_date` (optional, § 8a manual entry) is `YYYY-MM-DD`, must be ≤ today's ET date, and defaults
+to today when omitted. It lets the owner log a trade taken on an earlier date; `opened_at` (the real
+creation timestamp) is never backdated, and a backdate does not replay the engine — `advance()` still
+only runs forward from the next fed bar.
 Validation rejects `initial_stop >= entry_price` (long-only: R = entry − stop must be > 0).
 Each call creates an **independent lot** — "I took it" twice on one ticker makes two rows on purpose
 (§ 3a scale-ins); there is deliberately no `(user_id, ticker)` uniqueness assumption.

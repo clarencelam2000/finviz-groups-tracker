@@ -433,6 +433,62 @@ way costs nothing extra:
 This future feature therefore needs **no ADR-012 storage change** — it is deferred UI work on top of
 a phase-1 write path that is already ticker-generic. Tracked as a note here so it isn't proposed cold.
 
+The §8a manual-entry form shipped in epic #264 (see the "Manual Position Entry" design review). Two
+refinements landed with it, both pure display logic (no storage change): sizing is a **driver toggle**
+(size by risk $ → derive qty, or size by shares → derive risk), and the stop can be entered as an
+absolute price *or* a % below entry. An **optional backdated `entry_date`** was added to the write path
+for logging trades already taken (validator accepts it; `buildPositionRow` uses it when present, else
+stamps today) — note the lifecycle engine still advances **forward** from the next fed bar, so a
+backdate is an accurate *label* and correct "days held", never a retroactive replay.
+
+## 8b. Think-big (deferred): personal watchlist that rides the Morning scrape
+
+Owner "think big" (2026-08-14, recorded from the §8a session): let the user add an arbitrary ticker
+(e.g. FTNT) that is neither a pick nor a held position to a **personal watchlist**, so it rides the
+**next N Morning scrapes** and shows a real Morning status card — a personal pre-position universe.
+
+**Why it's cheaper than it first looks (the key realization):** a watchlist ticker does **not** need a
+new parallel scrape/store. The Morning status card's value is *status vs. a trigger level*, and that
+trigger/stop/ATR is computed by the picks pipeline from screener columns. So the clean design is
+**force-include**: the watchlist ticker is injected into the EOD picks scrape as a *picks-adjacent row*
+(included because the user asked, not because it ranked), gets its trigger/stop computed **identically
+to any pick**, and every downstream process (Morning status, held feed) works unchanged. It literally
+*becomes* a pick for the day. Trigger/stop can be auto-derived (same as picks) and/or user-supplied
+(the "carry your own setup" variant — see the unification below).
+
+**Two open design questions for the dedicated session (do NOT decide cold):**
+1. **Public-CSV privacy signal.** Force-including into the *public* `data/picks/sessions/` +
+   `picks.csv` means "FTNT was forced into the scrape" is visible in public git history — with a
+   single user, that ≈ "the owner is watching FTNT." It is only market data (no positions/PII), so
+   this is a judgment call, not a blocker. If it matters, keep watchlist *membership* in D1 (private,
+   like the held feed) while the resulting picks row stays public — or keep watchlist-derived rows in
+   a private store. Decide with the owner.
+2. **Bounded growth / TTL.** "Next N mornings" needs a per-entry session-counter and auto-expiry so
+   the forced-include set doesn't grow without bound. N and the renew UX are owner calls.
+
+**The unification with §8a (build §8a so this slots in later, no redesign):** watchlist-add and
+manual-position-entry are the **same form** — ticker + a setup (entry/trigger, stop, optional size) —
+differing only in the terminal action: **"Watch"** (rides the scrape, no position) vs **"I took it"**
+(creates a position, `POST /positions`). A watched item graduates to a position with one tap, reusing
+the manual-position payload. §8a's form is intentionally shaped so a "Watch" button can sit beside
+"I took it" without rework.
+
+**Next eng — read these to get up to speed (in order):**
+- This doc §8a (manual entry, shipped) + §8b (this note) + §10 (phasing).
+- `knowledge/decisions/ADR-013-ws3-morning-status.md` — the Morning status engine + provisional
+  session store this rides on.
+- `scripts/collect_picks.py` + `scripts/picks_config.py` + `data/picks/screener_config.json` — the
+  picks scrape + selector; the **force-include seam** lives here (an "always include these tickers
+  regardless of selection" list is the core new hook).
+- `scripts/collect_morning.py` + `scripts/pick_status.py` — how a picks row becomes a Morning status
+  card (what a forced-include row would light up).
+- `worker-positions/` (README + `src/quotes.js` held-feed path) — the reference pattern for a
+  **private, per-user D1 store with a service-token ingest**, if question 1 lands on "keep it private".
+- `docs/CLAUDE.md` — PWA surface conventions (a "Watchlist" section or a Morning-card badge).
+
+Tracked as a GitHub issue under epic #264; **deferred to a dedicated session** (own scope: D1 watchlist
+table + TTL, `collect_picks` force-include, PWA manage-watchlist surface + the shared form).
+
 ## 9. Testing plan
 
 - **Pure `advance()` unit tests** — one fixture per rule: stop-hit, gap-through, hard-exit (both

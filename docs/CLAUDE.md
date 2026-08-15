@@ -92,6 +92,43 @@ and phase 4 (VAPID push). Auth is a worker-native bearer token (not Cloudflare A
 cross-origin GitHub-Pages page); the whole auth surface is the swap seam `worker-positions/src/auth.js`.
 See `worker-positions/README.md` and ADR-012 for the backend contract.
 
+### Manual entry: "log a position on any ticker" (WS5 §8a)
+
+Signed-in Positions tab renders a collapsed-by-default expander ("＋ Log a position manually") above
+the "Open positions" header (`manualEntryHtml()`, called from `renderPositions()` in every signed-in
+branch — loading/error/empty/loaded — so it's always reachable regardless of fetch state). Expanded
+form mirrors the ws4Ticket markup vocabulary (slate-900/slate-800 insets, sky-500 buttons, segmented
+toggles) and freeze-confirms exactly like the Morning "I took it" flow (`manualConfirmHtml()` mirrors
+`ws5ConfirmHtml()`), but is entirely standalone state (`state.manualEntry`) and payload builder
+(`manualBuildPayload()`) — it does **not** touch `ws5BuildPayload`/the morning trade-ticket state.
+
+- **Ticker resolve line**: typing debounces ~400ms (`manualTickerInput` → `manualResolveTicker`) then
+  calls the existing `lookupTicker(sym)` (ticker-lookup worker, `WORKER_URL`). Success shows a green
+  "✓ {company_name} · {finviz_sector}"; failure/unknown shows a muted "symbol not recognized — you can
+  still log it" and **never blocks logging**. A sequence counter (`_manualLookupSeq`, module-level, not
+  on `state`) guards against a stale earlier lookup overwriting a newer one.
+- **Stop as** toggle: Price (direct stop input) or `% below` (computed `entry * (1 - pct/100)`).
+- **Size by** toggle: `Risk $` (default `ws4RiskDefault()`, `qty = floor(risk / riskShare)`) or
+  `Shares` (direct qty input, `risk = qty * riskShare`). Live "Risk / share" and "→ Position" readouts
+  patch by id (`manual-riskshare`/`manual-position`) via `manualRecompute()` on every `oninput` — same
+  focus-preserving discipline as `ws4Recompute` (never a full re-render on a keystroke; toggle clicks
+  are the one case that does re-render, since a click doesn't lose input focus).
+- **Optional fields**: `entry_date` (backdate — copy notes it's managed forward from the next bar, not
+  replayed) and `days_to_earnings`. Both omitted from the payload (not sent as empty string/null-key)
+  when left blank, except `days_to_earnings` which is explicitly `null` (matches `ws5BuildPayload`'s
+  convention for the same field).
+- **Payload shape** (`manualBuildPayload()`): `{ ticker, entry_price, initial_stop, qty,
+  stop_basis: 'manual', meta: { source: 'manual' }, days_to_earnings, entry_date? }`. `stop_basis`
+  is always the literal `'manual'` — already a valid `POS_STOP_BASIS_ENUM` fallback value, no worker
+  change needed. Validates `entry>0`, `stop>0`, `stop<entry`, resulting `qty>=1`.
+- **Lookup → Positions redirect**: the ticker-result view in `renderLookup()` shows "Open a position on
+  {SYM} →" (`manualOpenFromLookup(sym)`), which prefills `state.manualEntry` (ticker + `resolved` from
+  the already-fetched lookup data, no extra network call) and calls `switchTab('positions')`. If not
+  signed in, the Positions tab's own sign-in gate handles it — the form only renders under the
+  signed-in branch.
+- Tests: `tests/test_pwa_manual_entry.py` (Playwright — in the CI `--ignore=` list, see
+  `.claude/rules/branch-commit-discipline.md` § New Playwright test files).
+
 ## Cutting a release ("What's New") — 3 steps, always together
 
 The PWA's **What's New** hub reads `docs/releases.json`. Release versions use the
