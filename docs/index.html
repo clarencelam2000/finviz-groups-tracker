@@ -479,11 +479,7 @@
       // ({payload, display}); `resolved` caches the async lookupTicker() result for the
       // ticker's inline company-name line ({company_name, finviz_sector} or {error:true}).
       // See manualEntryDefault() for the canonical empty shape (reused on close/submit).
-      manualEntry: {
-        open: false, ticker: '', entry: '', stopMode: 'price', stopPrice: '', stopPct: '',
-        sizeMode: 'risk', risk: '', qty: '', entryDate: '', earningsDays: '',
-        resolved: null, confirm: null, submitting: false, error: '',
-      },
+      manualEntry: manualEntryDefault(),
       // 'all' | 'focus'; persists across tab navigation within a session (A4 REVERSED
       // 2026-06-30 — VP call, see PICKS-STATE-PERSIST in SPRINT.md and the note in
       // planning/stock-picks-from-leading-groups.md). Previously reset to 'all' on every
