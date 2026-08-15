@@ -1233,3 +1233,70 @@ ship untested indefinitely.
 OVERHEAD-6: owner asked for several sort/filter option mockups for Morning (one explicitly
 exploring reuse/adaptation of the Picks-tab top filter bar — `ATR extension bands` legend +
 All/Focus + Basis + Ariel row) before picking a direction. No option chosen yet as of this entry.
+
+---
+
+## 2026-08-15 — PR #320 review pass: 4 fixes on `claude/any-ticker-entry-form-guwbl2`
+
+**Status: safe to close, PR #320 not yet merged — pushed to the existing branch/PR, no new PR opened.**
+Owner asked for a review of #320 (WS5 §8a manual entry, see the 2026-08-14 entry above for the
+original feature). Review found 4 issues; owner fixed `releases.json` themselves, this session fixed
+the remaining 3 on the same branch after re-fetching it fresh (confirmed no merge/rebase needed).
+
+**Fixes landed (all on `claude/any-ticker-entry-form-guwbl2`, on top of the owner's `releases.json`
+fix):**
+- **`docs/sw.js`**: `CACHE` bumped `finviz-v66` → `finviz-v67`. Had been left unbumped despite the
+  `index.html` change shipping in the same PR — violates the repo's hard "code + releases.json +
+  sw.js, same PR" rule (CLAUDE.md § Automation).
+- **`docs/index.html`**: `state.manualEntry`'s init object literal (~line 482) duplicated all 15
+  fields from `manualEntryDefault()` verbatim instead of calling it. Now `manualEntry:
+  manualEntryDefault()` — safe because `manualEntryDefault` is a hoisted `function` declaration in
+  the same top-level `<script>` scope as `state`, so calling it before its textual definition (line
+  ~5758) works fine.
+- **`worker-positions/src/sweep.js` — real correctness bug, not just cleanup.** The §8a backdated
+  `entry_date` feature (positions.js) is documented as "a backdate is a label, not a replay," but
+  nothing enforced that: `barWindowStart()`'s floor was `max(last_advanced_date, entry_date)` only.
+  `ticker_quotes` is a GLOBAL feed, not scoped per-position (`quotes.js` `heldTickers()` — "market
+  data is user-less"), so a backdate onto a ticker that already had bars in that window (from a
+  prior or concurrent position on the same ticker) would let the very next `sweep()` fold `advance()`
+  over that pre-existing history in one shot on the first invocation — real retroactive false
+  stop-hits/trims off historical closes, on a position the owner is still actually holding live,
+  potentially auto-confirmed shut within `EXIT_AUTOCONFIRM_SESSIONS` (5 sessions) if unnoticed.
+  **Fix:** added a third floor, `opened_at`'s ET trading date (`etDateStr(new Date(pos.opened_at))`),
+  to `barWindowStart()`. For a non-backdated position `entry_date == opened_at`'s ET date already, so
+  this is a no-op there; it only ever binds when `entry_date` is backdated behind the position's real
+  creation time. Documented in all 3 required places (in-code comment, README § How the sweep runs,
+  `worker-positions/CLAUDE.md` § The wiring — now "three rules," not two). 6 new vitest: 4 unit tests
+  on `barWindowStart` directly + 2 through `sweep()` end-to-end (backdated position with a
+  pre-existing bar in the gap → 0 bars advanced / 0 events; a bar after real creation → advances
+  normally). Full suite: 167 vitest (worker-positions) + 670 pytest (root, CI ignore list), all green.
+
+**Two fix options were considered and discussed with the owner before implementing** (see chat
+history this session for the full adversarial writeup): (1) the `opened_at` floor shipped above, vs
+(2) rejecting/flagging backdates at creation time when `ticker_quotes` already has overlapping rows.
+Option 2 was rejected — it would break `validateCreatePayload`'s current DB-free purity, produce
+false positives on the most likely real use case (re-entering a previously-traded ticker), and only
+partially solve the problem even after adding that complexity. Option 1 is a pure, single-file,
+no-op-for-the-common-case fix that matches the PR's own stated design intent exactly.
+
+**Low-confidence calls flagged to owner:**
+- The `opened_at` floor makes a backdated `entry_date` *purely* a label + correct "days held"/R-multiple
+  input — it has **zero** effect on engine state (no retroactive trims/stop-trailing) for the
+  backdated window itself, even when the ticker's real historical bars are known. This matches what
+  the PWA copy already tells the user ("managed forward from the next bar, not retroactively"), so
+  it's not a new surprise, but flagging in case the owner's actual intent for backdating was closer
+  to "let the engine reconstruct what would have happened" rather than "pure label + forward-only
+  management." If the latter is wanted, that is a materially bigger feature (historical MA/ATR
+  reconstruction, ledger backfill semantics) than this fix — not attempted here.
+- No cleanup was done for any position that might have already been created (and possibly falsely
+  advanced) under the buggy code before this fix landed. Believed to be a non-issue since #320 hasn't
+  merged yet, so nothing has run against production D1 — but not independently verified against the
+  live `finviz-positions` D1 database from this session.
+- Did not verify the PWA form end-to-end in a browser for this pass (no `index.html` behavior change,
+  only a state-init refactor with no functional difference) — relied on the existing
+  `tests/test_pwa_manual_entry.py` Playwright suite (CI-ignored, not runnable in this cloud session
+  per the known sandbox gap) staying valid, and on `node --check`-equivalent confidence from the
+  small, mechanical nature of the edit.
+
+**Next steps:** owner to review the `sweep.js` fix and the "backdate is a pure label" tradeoff above;
+merge #320 once satisfied. `deploy-workers.yml` auto-deploys `finviz-positions` + `docs/` on merge.
