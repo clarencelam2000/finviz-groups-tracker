@@ -1,537 +1,347 @@
-<title>Watchlist Design Directions</title>
+<title>Watchlist Card v2</title>
 <style>
   :root{
-    /* deep ink ground, cool-neutral, slight blue bias — chosen, not default slate */
-    --bg:#0a0e16;
-    --surface:#111725;
-    --surface2:#161e2e;
-    --raise:#1c2536;
-    --line:#232d40;
-    --line-2:#2e3a51;
-    --ink:#e9eef7;
-    --ink-2:#c3ccdb;
-    --mut:#8b97ab;
-    --dim:#586477;
-    --faint:#3a4457;
-    --cy:#46c6e6;        /* single cool accent, used sparingly */
-    --cy-ink:#062430;
-    --good:#3ed397;
-    --warn:#f6b93b;
-    --bad:#ef7369;
-    --vio:#a99bf5;       /* your-level channel only */
-    --good-bg:rgba(62,211,151,.12);
-    --warn-bg:rgba(246,185,59,.13);
-    --bad-bg:rgba(239,115,105,.13);
-    --vio-bg:rgba(169,155,245,.14);
-    --cy-bg:rgba(70,198,230,.13);
-    --mut-bg:rgba(139,151,171,.12);
+    --bg:#0a0e16; --surface:#111725; --surface2:#161e2e; --raise:#1c2536;
+    --line:#232d40; --line-2:#2e3a51;
+    --ink:#e9eef7; --ink-2:#c3ccdb; --mut:#8b97ab; --dim:#586477; --faint:#3a4457;
+    --cy:#46c6e6; --cy-ink:#062430;
+    --good:#3ed397; --warn:#f6b93b; --bad:#ef7369; --vio:#a99bf5;
+    --good-bg:rgba(62,211,151,.12); --warn-bg:rgba(246,185,59,.13);
+    --bad-bg:rgba(239,115,105,.13); --vio-bg:rgba(169,155,245,.13); --cy-bg:rgba(70,198,230,.13); --mut-bg:rgba(139,151,171,.12);
     --sans:-apple-system,"SF Pro Text",system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
   }
   *{box-sizing:border-box}
-  html{-webkit-text-size-adjust:100%}
-  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
-    font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
   .num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
-  .wrap{max-width:1200px;margin:0 auto;padding:44px 24px 100px}
-
-  /* ---- page header ---- */
+  .wrap{max-width:1140px;margin:0 auto;padding:44px 24px 100px}
   .eyebrow{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.13em}
-  h1{font-size:30px;line-height:1.15;margin:10px 0 10px;letter-spacing:-.025em;text-wrap:balance;font-weight:700}
-  .lede{color:var(--mut);max-width:66ch;font-size:15px;margin:0}
+  h1{font-size:29px;line-height:1.15;margin:10px 0 10px;letter-spacing:-.025em;text-wrap:balance;font-weight:700}
+  .lede{color:var(--mut);max-width:68ch;font-size:15px;margin:0}
   .lede b{color:var(--ink-2)}
-  code{font-family:var(--mono);font-size:.86em;color:var(--cy);background:var(--cy-bg);padding:1px 5px;border-radius:5px}
-
-  /* ---- section scaffold ---- */
-  section{margin-top:64px}
-  .sec-head{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:26px}
-  .sec-n{font-family:var(--mono);font-size:12px;color:var(--cy);letter-spacing:.05em;flex:0 0 auto;padding-top:3px}
-  .sec-head h2{font-size:21px;margin:0;letter-spacing:-.02em;font-weight:650}
-  .sec-head p{margin:5px 0 0;color:var(--mut);font-size:13.5px;max-width:74ch}
+  code{font-family:var(--mono);font-size:.85em;color:var(--cy);background:var(--cy-bg);padding:1px 5px;border-radius:5px}
+  section{margin-top:58px}
+  .sec-head{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:24px}
+  .sec-n{font-family:var(--mono);font-size:12px;color:var(--cy);flex:0 0 auto;padding-top:3px}
+  .sec-head h2{font-size:20px;margin:0;letter-spacing:-.02em;font-weight:650}
+  .sec-head p{margin:5px 0 0;color:var(--mut);font-size:13.5px;max-width:76ch}
   .sec-titles{flex:1}
-
-  .cols{display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start}
-  .col{flex:1 1 300px;min-width:290px}
-  .col .cap{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
-  .col .cap .k{font-family:var(--mono);font-size:11px;color:var(--cy);font-weight:600}
-  .col .cap .nm{font-size:14px;font-weight:650;color:var(--ink)}
-  .col .cap .tag{margin-left:auto;font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
-  .col .why{font-size:12.5px;color:var(--mut);margin:0 0 14px;line-height:1.5}
-  .stack{display:flex;flex-direction:column;gap:12px}
-
-  /* ---- shared card atoms ---- */
   .lbl{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
-  .pill{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:.04em;
-    padding:3px 9px;border-radius:999px;text-transform:uppercase;white-space:nowrap}
-  .pill.good{background:var(--good-bg);color:var(--good)}
-  .pill.warn{background:var(--warn-bg);color:var(--warn)}
-  .pill.bad{background:var(--bad-bg);color:var(--bad)}
-  .pill.mut{background:var(--mut-bg);color:var(--mut)}
-  .pill.cy{background:var(--cy-bg);color:var(--cy)}
-  .pill.vio{background:var(--vio-bg);color:var(--vio)}
-  .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
-  .dot.good{background:var(--good)} .dot.warn{background:var(--warn)}
-  .dot.bad{background:var(--bad)} .dot.mut{background:var(--dim)} .dot.vio{background:var(--vio)}
-  .tk{font-family:var(--mono);font-weight:700;letter-spacing:.01em}
-  .grp{font-size:11px;color:var(--dim)}
-  .delta.up{color:var(--good)} .delta.dn{color:var(--bad)}
 
-  .act{font-size:12px;font-weight:650;border-radius:8px;padding:8px 12px;border:1px solid var(--line-2);
-    color:var(--ink-2);background:transparent;text-align:center;cursor:default}
-  .act.primary{background:var(--cy);border-color:var(--cy);color:var(--cy-ink);font-weight:700}
-  .act.sm{padding:6px 10px;font-size:11.5px}
-  .ovf{color:var(--dim);font-size:16px;line-height:1;padding:4px 6px;cursor:default}
-  .ttl{font-size:10.5px;color:var(--dim)}
-  .ttl b{color:var(--mut);font-family:var(--mono)}
+  /* ---------- THE WATCH CARD ---------- */
+  .stage{display:flex;flex-wrap:wrap;gap:34px;align-items:flex-start}
+  .phone{flex:0 0 380px;max-width:380px}
+  .annot{flex:1 1 300px;min-width:280px}
+  .annot h3{margin:0 0 4px;font-size:14px;color:var(--cy);font-weight:650}
+  .annot ul{margin:0 0 18px;padding-left:17px;color:var(--mut);font-size:13px}
+  .annot li{margin-bottom:7px}
+  .annot b{color:var(--ink-2);font-weight:600}
 
-  /* ===== DIRECTION A — Blotter ===== */
-  .A .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;
-    padding:13px 15px 12px 13px;position:relative;border-left:3px solid var(--faint)}
-  .A .card.good{border-left-color:var(--good)} .A .card.warn{border-left-color:var(--warn)}
-  .A .card.bad{border-left-color:var(--bad)} .A .card.mut{border-left-color:var(--dim)}
-  .A .top{display:flex;align-items:center;gap:9px}
-  .A .top .tk{font-size:16px}
-  .A .status{font-size:11px;font-weight:700;letter-spacing:.03em;text-transform:uppercase}
-  .A .status.good{color:var(--good)} .A .status.warn{color:var(--warn)}
-  .A .status.bad{color:var(--bad)} .A .status.mut{color:var(--mut)}
-  .A .top .spacer{flex:1}
-  .A .read{margin-top:9px;font-family:var(--mono);font-size:12.5px;color:var(--ink-2);letter-spacing:-.01em}
-  .A .read .mut{color:var(--dim)}
-  .A .yl{margin-top:6px;font-size:11.5px;color:var(--vio)}
-  .A .yl .lbl{color:var(--dim)}
-  .A .foot{display:flex;align-items:center;gap:10px;margin-top:11px}
-  .A .foot .spacer{flex:1}
-  .A .txtbtn{font-size:11.5px;font-weight:650;color:var(--cy);cursor:default}
+  .wcard{background:var(--surface2);border:1px solid var(--line-2);border-radius:14px;padding:15px 16px 13px;
+    border-left:3px solid var(--good)}
+  .wcard.mut{border-left-color:var(--dim)} .wcard.bad{border-left-color:var(--bad)}
 
-  /* ===== DIRECTION B — Focused card ===== */
-  .B .card{background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:16px 17px}
-  .B .head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-  .B .tk{font-size:19px}
-  .B .grp{margin-top:2px}
-  .B .pricewrap{display:flex;align-items:baseline;gap:10px;margin-top:14px}
-  .B .price{font-family:var(--mono);font-size:26px;font-weight:700;letter-spacing:-.02em}
-  .B .dl{font-family:var(--mono);font-size:14px;font-weight:600}
-  .B .read{margin-top:8px;font-size:13px;color:var(--mut);line-height:1.5}
-  .B .read b{color:var(--ink-2);font-weight:600}
-  .B .gauge{margin-top:15px}
-  .B .foot{display:flex;align-items:center;gap:8px;margin-top:16px}
-  .B .foot .spacer{flex:1}
+  .wc-head{display:flex;align-items:flex-start;gap:8px}
+  .wc-head .tk{font-family:var(--mono);font-weight:700;font-size:18px;letter-spacing:.01em}
+  .wc-head .chip{font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:5px;letter-spacing:.03em;text-transform:uppercase}
+  .chip.coiled{background:var(--good-bg);color:var(--good)} .chip.ext{background:var(--warn-bg);color:var(--warn)} .chip.over{background:var(--bad-bg);color:var(--bad)}
+  .wc-head .grp{font-size:11px;color:var(--dim);align-self:center}
+  .wc-head .sp{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 9px;border-radius:999px;text-transform:uppercase;white-space:nowrap}
+  .pill.good{background:var(--good-bg);color:var(--good)} .pill.mut{background:var(--mut-bg);color:var(--mut)} .pill.bad{background:var(--bad-bg);color:var(--bad)}
+  .dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+  .dot.good{background:var(--good)} .dot.mut{background:var(--dim)} .dot.bad{background:var(--bad)}
 
-  /* horizontal gauge (both-reads, visual) */
-  .gauge .track{position:relative;height:5px;border-radius:3px;background:var(--raise);margin:20px 4px 6px}
-  .gauge .fill{position:absolute;top:0;bottom:0;left:0;border-radius:3px;background:linear-gradient(90deg,var(--faint),var(--good))}
-  .gauge .mk{position:absolute;top:50%;transform:translate(-50%,-50%);width:2px;height:13px;background:var(--dim);border-radius:2px}
-  .gauge .mk.trig{background:var(--good)} .gauge .mk.lvl{background:var(--vio)}
-  .gauge .mk .cap{position:absolute;bottom:15px;left:50%;transform:translateX(-50%);font-size:9px;
-    font-family:var(--mono);color:var(--dim);white-space:nowrap}
-  .gauge .mk.trig .cap{color:var(--good)} .gauge .mk.lvl .cap{color:var(--vio)}
-  .gauge .price{position:absolute;top:50%;transform:translate(-50%,-50%);width:12px;height:12px;border-radius:50%;
-    background:var(--ink);border:2px solid var(--surface2);box-shadow:0 0 0 1px var(--line-2)}
-  .gauge .scale{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9.5px;color:var(--faint);margin:0 4px}
+  /* the two labeled reads */
+  .block{margin-top:13px}
+  .block .bh{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+  .kv{display:flex;justify-content:space-between;align-items:baseline;padding:3px 0;font-size:13px}
+  .kv .k{color:var(--mut)}
+  .kv .v{font-family:var(--mono);font-weight:650;color:var(--ink)}
+  .kv .v .d.up{color:var(--good)} .kv .v .d.dn{color:var(--bad)}
+  .kv .v.good{color:var(--good)}
+  .myread{margin-top:12px;background:rgba(169,155,245,.07);border:1px solid rgba(169,155,245,.22);border-radius:10px;padding:9px 12px;
+    display:flex;align-items:center;gap:9px}
+  .myread .tag{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--vio)}
+  .myread .val{font-family:var(--mono);font-size:13px;font-weight:650;color:var(--ink)}
+  .myread .met{margin-left:auto;font-size:11px;font-weight:650;color:var(--good)}
+  .myread .met.no{color:var(--dim)}
 
-  /* ===== DIRECTION C — Scan row ===== */
-  .C .list{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-  .C .r{display:grid;grid-template-columns:3px 64px 1fr auto;gap:0;align-items:center;
-    padding:0;border-bottom:1px solid var(--line)}
-  .C .r:last-child{border-bottom:none}
-  .C .r .stripe{width:3px;height:100%;min-height:46px;background:var(--faint)}
-  .C .r.good .stripe{background:var(--good)} .C .r.warn .stripe{background:var(--warn)}
-  .C .r.bad .stripe{background:var(--bad)} .C .r.mut .stripe{background:var(--dim)}
-  .C .r .tkcell{padding:11px 0 11px 12px}
-  .C .r .tk{font-size:14px}
-  .C .r .mid{padding:9px 12px;display:flex;flex-direction:column;gap:3px;min-width:0}
-  .C .r .midtop{display:flex;align-items:center;gap:8px}
-  .C .r .st{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em}
-  .C .r .st.good{color:var(--good)} .C .r .st.warn{color:var(--warn)} .C .r .st.bad{color:var(--bad)} .C .r .st.mut{color:var(--mut)}
-  .C .r .sub{font-family:var(--mono);font-size:11px;color:var(--dim)}
-  .C .r .sub .vio{color:var(--vio)}
-  .C .r .end{padding:9px 12px 9px 0;text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:2px}
-  .C .r .px{font-family:var(--mono);font-size:13.5px;font-weight:650}
-  .C .r .dl{font-family:var(--mono);font-size:11px}
-  .C .r .chev{color:var(--faint);font-size:12px;margin-left:2px}
-  .C .expanded{background:var(--surface2);border-bottom:1px solid var(--line)}
-  .C .expanded .inner{padding:12px 15px;display:flex;flex-direction:column;gap:10px}
-  .C .expanded .row-actions{display:flex;gap:8px;align-items:center}
+  /* ---- gauge: prior levels top, today levels bottom ---- */
+  .gauge{margin:22px 6px 8px;position:relative}
+  .g-track{position:relative;height:6px;border-radius:3px;background:var(--raise)}
+  .g-band{position:absolute;top:0;bottom:0;border-radius:3px;background:rgba(62,211,151,.28)}
+  .g-price{position:absolute;top:50%;width:13px;height:13px;border-radius:50%;background:var(--ink);border:2px solid var(--surface2);box-shadow:0 0 0 1px var(--line-2);transform:translate(-50%,-50%);z-index:3}
+  .g-mk{position:absolute;width:1.5px;background:var(--dim);z-index:2}
+  .g-mk.top{bottom:3px;height:11px} .g-mk.bot{top:3px;height:11px}
+  .g-mk.high{background:var(--good)} .g-mk.low{background:var(--bad)}
+  .g-mk.you{background:var(--vio)}
+  .g-cap{position:absolute;font-family:var(--mono);font-size:9px;white-space:nowrap;color:var(--dim);transform:translateX(-50%)}
+  .g-cap.top{bottom:17px} .g-cap.bot{top:17px}
+  .g-cap .u{color:var(--faint)}
+  .g-cap.high{color:var(--good)} .g-cap.low{color:var(--bad)} .g-cap.you{color:var(--vio)}
+  .g-legend{display:flex;gap:14px;justify-content:center;margin-top:22px;font-size:9.5px;color:var(--dim)}
+  .g-legend span{display:inline-flex;align-items:center;gap:4px}
+  .g-legend i{width:8px;height:2px;display:inline-block;border-radius:2px}
 
-  /* ---- add affordances ---- */
+  /* card footer */
+  .wc-foot{display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .wc-foot .sp{flex:1}
+  .toggle{font-size:11.5px;font-weight:600;color:var(--cy);cursor:default}
+  .ttl{font-size:10.5px;color:var(--dim)} .ttl b{color:var(--mut);font-family:var(--mono)}
+  .act{font-size:12px;font-weight:700;border-radius:9px;padding:9px 14px;text-align:center;cursor:default}
+  .act.primary{background:var(--cy);color:var(--cy-ink)} .act.ghost{border:1px solid var(--line-2);color:var(--ink-2);font-weight:600}
+  .ovf{color:var(--dim);font-size:17px;line-height:1;padding:2px 6px;cursor:default}
+  .chartrow{margin-top:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--mut);font-size:11.5px;padding:8px 12px;display:flex;align-items:center;gap:8px}
+  .chartrow .cy{color:var(--cy);font-weight:600}
+
+  /* compact row (density toggle) */
+  .crow{display:grid;grid-template-columns:3px 58px 1fr auto;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .crow .st3{width:3px;align-self:stretch;background:var(--good)}
+  .crow.mut .st3{background:var(--dim)}
+  .crow .c-tk{padding:10px 0 10px 12px;font-family:var(--mono);font-weight:700;font-size:13.5px}
+  .crow .c-mid{padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+  .crow .c-st{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--good)}
+  .crow.mut .c-st{color:var(--mut)}
+  .crow .c-sub{font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+  .crow .c-sub .vio{color:var(--vio)}
+  .crow .c-end{padding:8px 12px;text-align:right}
+  .crow .c-px{font-family:var(--mono);font-size:13px;font-weight:650}
+  .crow .c-dl{font-family:var(--mono);font-size:10.5px}
+  .up{color:var(--good)} .dn{color:var(--bad)}
+
+  /* option panels */
+  .opts{display:flex;flex-wrap:wrap;gap:18px}
+  .opt{flex:1 1 250px;min-width:240px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:14px 15px}
+  .opt .oh{display:flex;align-items:baseline;gap:8px;margin-bottom:10px}
+  .opt .oh .k{font-family:var(--mono);font-size:11px;color:var(--cy)}
+  .opt .oh .nm{font-size:13px;font-weight:650}
+  .opt .oh .rec{margin-left:auto;font-size:9.5px;color:var(--good);text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+  .opt .demo{background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:11px 12px;font-size:12.5px}
+  .opt .note{font-size:11.5px;color:var(--mut);margin-top:9px;line-height:1.45}
+  .swatch{font-family:var(--mono)}
+
+  /* positions collapsible */
   .phoneframe{max-width:380px;background:var(--surface);border:1px solid var(--line-2);border-radius:20px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.45)}
   .tabbar{display:flex;gap:2px;padding:8px 10px 0;background:var(--bg);border-bottom:1px solid var(--line)}
   .tabbar .t{font-size:11.5px;color:var(--dim);padding:7px 11px;border-radius:9px 9px 0 0}
   .tabbar .t.on{color:var(--cy);font-weight:700;background:var(--surface2)}
-  .pbody{padding:14px 14px 18px;display:flex;flex-direction:column;gap:12px}
+  .pbody{padding:14px;display:flex;flex-direction:column;gap:11px}
   .collap{border:1px solid var(--line);border-radius:12px;background:var(--surface2);overflow:hidden}
   .collap .bar{display:flex;align-items:center;gap:10px;padding:12px 14px;font-size:13.5px;font-weight:650}
-  .collap .bar .ic{color:var(--cy);font-size:16px;font-weight:700}
-  .collap .bar .chev{margin-left:auto;color:var(--dim)}
+  .collap .bar .ic{color:var(--cy);font-size:16px;font-weight:700} .collap .bar .chev{margin-left:auto;color:var(--dim)}
   .collap.on .bar{border-bottom:1px solid var(--line)}
   .collap .inner{padding:14px}
   .field{display:flex;gap:9px}
-  .field input{flex:1;background:var(--bg);border:1px solid var(--line-2);border-radius:9px;padding:10px 12px;
-    color:var(--ink);font-family:var(--mono);font-size:15px;font-weight:700;letter-spacing:.04em}
+  .field input{flex:1;background:var(--bg);border:1px solid var(--line-2);border-radius:9px;padding:10px 12px;color:var(--ink);font-family:var(--mono);font-size:15px;font-weight:700;letter-spacing:.04em}
   .field input::placeholder{color:var(--faint);font-weight:500}
   .field .act{flex:0 0 auto;padding:10px 20px}
   .optline{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line-2);display:flex;flex-direction:column;gap:9px}
-  .optline .hint{font-size:11.5px;color:var(--dim)}
   .mini{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
   .seg{display:inline-flex;border:1px solid var(--line-2);border-radius:8px;overflow:hidden;font-size:11.5px}
-  .seg div{padding:7px 13px;color:var(--mut)}
+  .seg div{padding:7px 12px;color:var(--mut);border-right:1px solid var(--line-2)} .seg div:last-child{border-right:none}
   .seg .on{background:var(--vio-bg);color:var(--vio);font-weight:700}
-  .mini input{width:104px;background:var(--bg);border:1px solid var(--line-2);border-radius:8px;padding:8px 10px;
-    color:var(--ink);font-family:var(--mono);font-size:13px;font-weight:700}
-  .quickadd{display:flex;align-items:center;gap:9px;padding:10px 13px;border:1px dashed var(--line-2);
-    border-radius:11px;background:var(--cy-bg);color:var(--cy);font-size:12.5px;font-weight:600}
-  .quickadd .ic{font-size:15px}
-  .quickadd .arrow{margin-left:auto;color:var(--cy);opacity:.7}
-  .sectionhdr{display:flex;align-items:center;justify-content:space-between;padding:2px 2px 0}
-  .sectionhdr .h{font-size:15px;font-weight:700}
-  .sectionhdr .s{font-size:10.5px;color:var(--dim)}
-
-  /* ---- both-reads options ---- */
-  .optgrid{display:flex;flex-wrap:wrap;gap:22px}
-  .optcard{flex:1 1 250px;min-width:240px}
-  .optcard .oc-h{display:flex;align-items:baseline;gap:8px;margin-bottom:9px}
-  .optcard .oc-h .k{font-family:var(--mono);font-size:11px;color:var(--cy)}
-  .optcard .oc-h .nm{font-size:13.5px;font-weight:650}
-  .optcard .oc-note{font-size:12px;color:var(--mut);margin-top:9px;line-height:1.45}
-  .demo{background:var(--surface2);border:1px solid var(--line);border-radius:12px;padding:14px}
-
-  /* ---- enum gallery ---- */
-  .axis{margin-bottom:30px}
-  .axis-h{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
-  .axis-h .n{font-family:var(--mono);font-size:11px;color:var(--cy)}
-  .axis-h .t{font-size:14.5px;font-weight:650}
-  .axis-h .c{font-size:11px;color:var(--dim);margin-left:auto}
-  .enum{display:flex;flex-wrap:wrap;gap:10px}
-  .estate{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:11px 13px;
-    flex:1 1 220px;min-width:210px;border-left:3px solid var(--faint)}
-  .estate.good{border-left-color:var(--good)} .estate.warn{border-left-color:var(--warn)}
-  .estate.bad{border-left-color:var(--bad)} .estate.mut{border-left-color:var(--dim)}
-  .estate.cy{border-left-color:var(--cy)} .estate.vio{border-left-color:var(--vio)}
-  .estate .en{display:flex;align-items:center;gap:8px}
-  .estate .en .name{font-size:12.5px;font-weight:700}
-  .estate .en .code{font-family:var(--mono);font-size:10px;color:var(--dim);margin-left:auto}
-  .estate .desc{font-size:11.5px;color:var(--mut);margin-top:6px;line-height:1.45}
-  .estate .desc b{color:var(--ink-2);font-weight:600;font-family:var(--mono)}
-
-  /* ---- notes / callouts ---- */
-  .note{border:1px solid var(--line);border-left:3px solid var(--cy);background:var(--surface);
-    border-radius:0 10px 10px 0;padding:13px 16px;margin-top:20px;font-size:13px;color:var(--mut);max-width:80ch}
-  .note b{color:var(--ink-2)}
-  .rec{color:var(--good);font-weight:650}
-  .tweaks{display:flex;flex-wrap:wrap;gap:14px;margin-top:8px}
-  .tweak{flex:1 1 240px;min-width:230px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:14px 15px}
-  .tweak h4{margin:0 0 4px;font-size:13px;font-weight:700}
-  .tweak .opts{font-size:12px;color:var(--mut);line-height:1.6}
-  .tweak .opts .pick{color:var(--good);font-weight:650}
-  hr.soft{border:none;border-top:1px solid var(--line);margin:26px 0}
+  .mini input{width:96px;background:var(--bg);border:1px solid var(--line-2);border-radius:8px;padding:8px 10px;color:var(--ink);font-family:var(--mono);font-size:13px;font-weight:700}
+  .saved{font-size:11.5px;color:var(--mut);background:var(--cy-bg);border-radius:8px;padding:8px 11px;line-height:1.45}
+  .saved b{color:var(--ink-2)}
+  .note-lg{border:1px solid var(--line);border-left:3px solid var(--cy);background:var(--surface);border-radius:0 10px 10px 0;padding:13px 16px;margin-top:20px;font-size:13px;color:var(--mut);max-width:82ch}
+  .note-lg b{color:var(--ink-2)} .rec-g{color:var(--good);font-weight:650}
 </style>
 
 <div class="wrap">
-
   <header>
-    <div class="eyebrow">finviz-groups-tracker · WS5 §8b · issue #319 · design directions</div>
-    <h1>Watchlist — pick a direction</h1>
-    <p class="lede">The first mock was anchored on the current app's cramped card styling. This is a
-    clean-sheet exploration: <b>three card treatments</b> to choose one, <b>four ways to show both
-    reads</b>, the <b>full enum-state gallery</b>, and the <b>two add affordances</b>. Dark-committed
-    (the app is single-theme). Numbers are monospace throughout; one cool accent, semantic color only
-    for status. Mix a direction with any tweaks — none of this is locked.</p>
+    <div class="eyebrow">finviz-groups-tracker · WS5 §8b · issue #319 · watch card v2</div>
+    <h1>Watch card — built on your Morning card</h1>
+    <p class="lede">Rebuilt from your feedback: the base is your <b>current Morning card</b> (labeled
+    reads, top-level chart, ticket expander), plus a <b>your-level</b> block and an optional <b>gauge</b>
+    — prior levels on top, today's on the bottom, all labeled. Copy fixed: no "System", no "broke",
+    no "crossed". Consistent sample numbers this time.</p>
   </header>
 
-  <!-- ============ 1 · CARD DIRECTIONS ============ -->
+  <!-- ===== THE CARD ===== -->
   <section>
-    <div class="sec-head">
-      <div class="sec-n">01</div>
-      <div class="sec-titles">
-        <h2>Card directions — choose one</h2>
-        <p>Same two names in each: <b>CRWD</b> (triggered, with a level set) and <b>FTNT</b> (setting
-        up, level set). Judge legibility, density, and how loud the chrome feels.</p>
-      </div>
-    </div>
+    <div class="sec-head"><div class="sec-n">01</div><div class="sec-titles">
+      <h2>The card — CRWD, triggered, watching for above 144</h2>
+      <p>Prior high 143.20 · your level 144.00 (watching above) · now 145.10 → above both.</p>
+    </div></div>
+    <div class="stage">
+      <div class="phone">
+        <div class="wcard good">
+          <div class="wc-head">
+            <span class="tk">CRWD</span><span class="chip coiled">Coiled</span>
+            <span class="grp">· Software — Infra</span><span class="sp"></span>
+            <span class="pill good"><span class="dot good"></span>Triggered</span>
+          </div>
 
-    <div class="cols">
-      <!-- A -->
-      <div class="col A">
-        <div class="cap"><span class="k">A</span><span class="nm">Blotter</span><span class="tag">quiet · dense</span></div>
-        <p class="why">Pro terminal feel. No loud pills — status is a color stripe + a small word.
-        Mono numbers do the talking. Actions stay quiet until you act. Most names per screen.</p>
-        <div class="stack">
-          <div class="card good">
-            <div class="top">
-              <span class="tk">CRWD</span><span class="grp">Software</span>
-              <span class="spacer"></span>
-              <span class="status good">Triggered</span>
-            </div>
-            <div class="read">145.10 <span class="mut">·</span> broke 155.10 <span class="delta up">+2.1%</span></div>
-            <div class="yl"><span class="lbl">your 156</span> · crossed ✓</div>
-            <div class="foot">
-              <span class="ttl"><b>5</b> left</span><span class="spacer"></span>
-              <span class="txtbtn">I took it →</span><span class="ovf">⋯</span>
-            </div>
+          <div class="block">
+            <div class="bh">Morning read</div>
+            <div class="kv"><span class="k">Trigger (prior high)</span><span class="v">143.20</span></div>
+            <div class="kv"><span class="k">Now</span><span class="v">145.10 <span class="d up">+2.1%</span></span></div>
+            <div class="kv"><span class="k">ATR from day low</span><span class="v good">0.6 — ok to act</span></div>
           </div>
-          <div class="card mut">
-            <div class="top">
-              <span class="tk">FTNT</span><span class="grp">Security</span>
-              <span class="spacer"></span>
-              <span class="status mut">Setting up</span>
-            </div>
-            <div class="read">152.60 <span class="mut">·</span> under 154.20 <span class="delta dn">−1.1%</span></div>
-            <div class="yl"><span class="lbl">your 156</span> · 2.2% away</div>
-            <div class="foot">
-              <span class="ttl"><b>10</b> left</span><span class="spacer"></span>
-              <span class="ovf">⋯</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- B -->
-      <div class="col B">
-        <div class="cap"><span class="k">B</span><span class="nm">Focused card</span><span class="tag">editorial · airy</span></div>
-        <p class="why">One big number, one status pill, a plain-language read, and a gauge that shows
-        both reads at a glance. One primary action only when actionable. Fewer per screen, each crystal.</p>
-        <div class="stack">
-          <div class="card">
-            <div class="head">
-              <div><span class="tk">CRWD</span><div class="grp">Software — Infrastructure</div></div>
-              <span class="pill good"><span class="dot good"></span>Triggered</span>
-            </div>
-            <div class="pricewrap">
-              <span class="price">145.10</span><span class="dl delta up">+2.1%</span>
-            </div>
-            <div class="read">Broke <b>155.10</b> and crossed <b>your 156</b>.</div>
-            <div class="gauge">
-              <div class="track">
-                <div class="fill" style="width:82%"></div>
-                <div class="mk" style="left:20%"><span class="cap">low</span></div>
-                <div class="mk trig" style="left:58%"><span class="cap">high 155</span></div>
-                <div class="mk lvl" style="left:66%"><span class="cap">you 156</span></div>
-                <div class="price" style="left:82%"></div>
-              </div>
-              <div class="scale"><span>128</span><span>158</span></div>
-            </div>
-            <div class="foot">
-              <span class="ttl"><b>5</b> mornings left</span><span class="spacer"></span>
-              <span class="act primary sm">I took it →</span><span class="ovf">⋯</span>
-            </div>
+          <div class="myread">
+            <span class="tag">Your level</span>
+            <span class="val">above 144.00</span>
+            <span class="met">now above</span>
           </div>
-          <div class="card">
-            <div class="head">
-              <div><span class="tk">FTNT</span><div class="grp">Software — Security</div></div>
-              <span class="pill mut"><span class="dot mut"></span>Setting up</span>
-            </div>
-            <div class="pricewrap">
-              <span class="price">152.60</span><span class="dl delta dn">−1.1%</span>
-            </div>
-            <div class="read">Below <b>154.20</b> · <b>2.2%</b> under your 156.</div>
-            <div class="gauge">
-              <div class="track">
-                <div class="fill" style="width:46%;background:linear-gradient(90deg,var(--faint),var(--dim))"></div>
-                <div class="mk" style="left:18%"><span class="cap">low</span></div>
-                <div class="mk trig" style="left:60%"><span class="cap">high 154</span></div>
-                <div class="mk lvl" style="left:72%"><span class="cap">you 156</span></div>
-                <div class="price" style="left:46%"></div>
-              </div>
-              <div class="scale"><span>146</span><span>159</span></div>
-            </div>
-            <div class="foot">
-              <span class="ttl"><b>10</b> mornings left</span><span class="spacer"></span>
-              <span class="ovf">⋯</span>
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <!-- C -->
-      <div class="col C">
-        <div class="cap"><span class="k">C</span><span class="nm">Scan row</span><span class="tag">compact · expandable</span></div>
-        <p class="why">A screener-style list. One tight row per name, tap to expand for detail + actions.
-        Best when you're watching many. Shown with CRWD expanded.</p>
-        <div class="list">
-          <div class="r good">
-            <div class="stripe"></div>
-            <div class="tkcell"><span class="tk">CRWD</span></div>
-            <div class="mid">
-              <div class="midtop"><span class="st good">Triggered</span></div>
-              <div class="sub">broke 155.10 · <span class="vio">your 156 ✓</span></div>
-            </div>
-            <div class="end"><span class="px">145.10</span><span class="dl delta up">+2.1%</span></div>
-          </div>
-          <div class="expanded">
-            <div class="inner">
-              <div class="gauge" style="margin:0">
-                <div class="track">
-                  <div class="fill" style="width:82%"></div>
-                  <div class="mk" style="left:20%"><span class="cap">low</span></div>
-                  <div class="mk trig" style="left:58%"><span class="cap">high</span></div>
-                  <div class="mk lvl" style="left:66%"><span class="cap">you</span></div>
-                  <div class="price" style="left:82%"></div>
-                </div>
-              </div>
-              <div style="font-size:12px;color:var(--mut)">Entry quality <b class="num" style="color:var(--ink-2)">0.6× ATR</b> from low — clean</div>
-              <div class="row-actions">
-                <span class="act primary sm">I took it →</span>
-                <span class="act sm">Renew</span><span class="ovf">⋯</span>
-                <span style="flex:1"></span><span class="ttl"><b>5</b> left</span>
-              </div>
-            </div>
-          </div>
-          <div class="r mut">
-            <div class="stripe"></div>
-            <div class="tkcell"><span class="tk">FTNT</span></div>
-            <div class="mid">
-              <div class="midtop"><span class="st mut">Setting up</span></div>
-              <div class="sub">under 154.20 · <span class="vio">2.2% to 156</span></div>
-            </div>
-            <div class="end"><span class="px">152.60</span><span class="dl delta dn">−1.1%</span><span class="chev">⌄</span></div>
-          </div>
-          <div class="r bad">
-            <div class="stripe"></div>
-            <div class="tkcell"><span class="tk">SNOW</span></div>
-            <div class="mid">
-              <div class="midtop"><span class="st bad">Back below low</span></div>
-              <div class="sub">under 128.40 · no level</div>
-            </div>
-            <div class="end"><span class="px">126.10</span><span class="dl delta dn">−2.4%</span><span class="chev">⌄</span></div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="note"><b class="rec">My lean: B for the Morning view, C as a "compact mode" toggle.</b>
-    B gives each watched name the clarity of a real setup read (the gauge unifies both reads visually);
-    C is what you'll want once the list grows past ~8. A is elegant but its quietness fights the
-    "tell me what needs attention this morning" job. Pick one to start — the others are cheap to add later.</div>
-  </section>
-
-  <!-- ============ 2 · BOTH READS ============ -->
-  <section>
-    <div class="sec-head">
-      <div class="sec-n">02</div>
-      <div class="sec-titles">
-        <h2>System read + your-level read — how they coexist</h2>
-        <p>The <b>system read</b> (always, from the shared morning engine) and the <b>your-level read</b>
-        (only when you set a level). Four ways to surface both without clutter.</p>
-      </div>
-    </div>
-    <div class="optgrid">
-      <div class="optcard">
-        <div class="oc-h"><span class="k">i</span><span class="nm">Stacked lines</span></div>
-        <div class="demo">
-          <div style="display:flex;justify-content:space-between;align-items:center"><span class="tk" style="font-size:15px">CRWD</span><span class="pill good">Triggered</span></div>
-          <div style="font-size:12px;color:var(--mut);margin-top:9px"><span class="lbl">system</span> <span class="num" style="color:var(--ink-2)">broke 155.10 · +2.1%</span></div>
-          <div style="font-size:12px;color:var(--vio);margin-top:6px;padding-top:6px;border-top:1px dashed var(--line-2)"><span class="lbl" style="color:var(--dim)">your 156</span> <span class="num">crossed ✓</span></div>
-        </div>
-        <div class="oc-note">Explicit, unambiguous. Costs vertical height. (What the v1 mock did.)</div>
-      </div>
-      <div class="optcard">
-        <div class="oc-h"><span class="k">ii</span><span class="nm">Headline swap</span></div>
-        <div class="demo">
-          <div style="display:flex;justify-content:space-between;align-items:center"><span class="tk" style="font-size:15px">CRWD</span><span class="pill vio">Your 156 ✓</span></div>
-          <div style="font-size:12px;color:var(--mut);margin-top:9px">crossed your level · <span class="num" style="color:var(--dim)">system: triggered, +2.1%</span></div>
-        </div>
-        <div class="oc-note">When <i>you</i> set a level, it becomes the headline; the system read demotes to a sub-line. Puts your thesis first.</div>
-      </div>
-      <div class="optcard">
-        <div class="oc-h"><span class="k">iii</span><span class="nm">Merged sentence</span></div>
-        <div class="demo">
-          <div style="display:flex;justify-content:space-between;align-items:center"><span class="tk" style="font-size:15px">CRWD</span><span class="pill good">Triggered</span></div>
-          <div style="font-size:12.5px;color:var(--ink-2);margin-top:9px;line-height:1.5">Broke <b style="color:var(--ink)">155.10</b> and crossed <b style="color:var(--vio)">your 156</b> · <span class="num delta up">+2.1%</span></div>
-        </div>
-        <div class="oc-note">One natural line. Compact and human; slightly less scannable at a glance.</div>
-      </div>
-      <div class="optcard">
-        <div class="oc-h"><span class="k">iv</span><span class="nm">Gauge (visual)</span></div>
-        <div class="demo">
-          <div style="display:flex;justify-content:space-between;align-items:center"><span class="tk" style="font-size:15px">CRWD</span><span class="pill good">Triggered</span></div>
           <div class="gauge">
-            <div class="track"><div class="fill" style="width:82%"></div>
-              <div class="mk" style="left:20%"><span class="cap">low</span></div>
-              <div class="mk trig" style="left:58%"><span class="cap">high</span></div>
-              <div class="mk lvl" style="left:66%"><span class="cap">you</span></div>
-              <div class="price" style="left:82%"></div></div>
+            <div class="g-track">
+              <div class="g-band" style="left:11%;right:10%"></div>
+              <!-- top = prior (yesterday) -->
+              <div class="g-mk top low"  style="left:11%"></div>
+              <div class="g-cap top low" style="left:11%">prior low<br><span class="u">138.00</span></div>
+              <div class="g-mk top high"  style="left:69%"></div>
+              <div class="g-cap top high" style="left:69%">prior high<br><span class="u">143.20</span></div>
+              <!-- bottom = today -->
+              <div class="g-mk bot"  style="left:50%"></div>
+              <div class="g-cap bot" style="left:50%">day low<br><span class="u">141.50</span></div>
+              <div class="g-mk bot"  style="left:64%"></div>
+              <div class="g-cap bot" style="left:64%">open<br><span class="u">142.80</span></div>
+              <div class="g-mk bot you"  style="left:78%"></div>
+              <div class="g-cap bot you" style="left:78%">your 144</div>
+              <!-- price -->
+              <div class="g-price" style="left:90%"></div>
+            </div>
+            <div class="g-legend">
+              <span><i style="background:var(--bad)"></i>prior low</span>
+              <span><i style="background:var(--good)"></i>prior high</span>
+              <span><i style="background:var(--vio)"></i>your level</span>
+              <span><i style="background:var(--ink)"></i>now</span>
+            </div>
+          </div>
+
+          <div class="chartrow"><span class="cy">▾ Show chart</span> · TradingView, one tap</div>
+
+          <div class="wc-foot">
+            <span class="ttl"><b>5</b> mornings left</span><span class="sp"></span>
+            <span class="toggle">▾ Trade ticket</span>
+            <span class="act primary">I took it →</span>
+            <span class="ovf">⋯</span>
           </div>
         </div>
-        <div class="oc-note">Both reads become one picture: price dot vs. prior-low, prior-high, and your level. Scales to MA-reclaim (add a "50MA" marker). My pick, paired with a one-line caption.</div>
       </div>
-    </div>
-    <div class="note"><b>MA-reclaim fits here natively:</b> a structural level ("reclaim the 50MA") is just
-    another marker on the gauge (iv) or another clause in the sentence (iii) — the 50MA recovered from
-    the private feed's <code>raw</code> blob. That's the phase-2 level type you asked for.</div>
-  </section>
-
-  <!-- ============ 3 · ENUM STATES ============ -->
-  <section>
-    <div class="sec-head">
-      <div class="sec-n">03</div>
-      <div class="sec-titles">
-        <h2>Every state the Morning watchlist can show</h2>
-        <p>Four independent axes. A card's appearance = one value from each. Axis 1 is inherited
-        verbatim from the shared morning engine — <b>add a state there and watch cards get it free.</b></p>
-      </div>
-    </div>
-
-    <div class="axis">
-      <div class="axis-h"><span class="n">Axis 1</span><span class="t">System read — price vs prior High/Low</span><span class="c">from <code>pick_status.py</code> · inherited</span></div>
-      <div class="enum">
-        <div class="estate good"><div class="en"><span class="dot good"></span><span class="name">Triggered</span><span class="code">triggered</span></div><div class="desc">price ≥ prior High. <b>145.10 ≥ 143.20</b></div></div>
-        <div class="estate good"><div class="en"><span class="dot good"></span><span class="name">Gapped through</span><span class="code">gapped_through</span></div><div class="desc">opened above the trigger — chase risk. <b>open &gt; high</b></div></div>
-        <div class="estate warn"><div class="en"><span class="dot warn"></span><span class="name">Failed breakout</span><span class="code">failed_breakout</span></div><div class="desc">tagged prior High intraday, fell back under it.</div></div>
-        <div class="estate mut"><div class="en"><span class="dot mut"></span><span class="name">Setting up</span><span class="code">setting_up</span></div><div class="desc">below trigger, constructive / quiet. The default.</div></div>
-        <div class="estate bad"><div class="en"><span class="dot bad"></span><span class="name">Back below low</span><span class="code">invalidated</span></div><div class="desc">price ≤ prior Low. Range break — <b>not a "stop"</b>.</div></div>
-        <div class="estate mut"><div class="en"><span class="dot mut"></span><span class="name">No quote</span><span class="code">no_quote</span></div><div class="desc">feed gap / ticker not in this morning's scrape.</div></div>
-        <div class="estate cy"><div class="en"><span class="dot" style="background:var(--cy)"></span><span class="name">Future states</span><span class="code">e.g. failed_breakdown</span></div><div class="desc">anything added to the engine later renders here automatically.</div></div>
-      </div>
-    </div>
-
-    <div class="axis">
-      <div class="axis-h"><span class="n">Axis 2</span><span class="t">Your-level overlay — only when a level is set</span><span class="c">watchlist-only · optional</span></div>
-      <div class="enum">
-        <div class="estate vio"><div class="en"><span class="dot vio"></span><span class="name">Approaching (above)</span></div><div class="desc">price under your level · "<b>2.2% away</b>"</div></div>
-        <div class="estate vio"><div class="en"><span class="dot vio"></span><span class="name">Crossed (above)</span></div><div class="desc">price ≥ your level · "<b>crossed ✓</b>"</div></div>
-        <div class="estate vio"><div class="en"><span class="dot vio"></span><span class="name">Approaching (below)</span></div><div class="desc">watching for a breakdown/reclaim from above.</div></div>
-        <div class="estate vio"><div class="en"><span class="dot vio"></span><span class="name">Crossed (below)</span></div><div class="desc">price ≤ your level.</div></div>
-        <div class="estate cy"><div class="en"><span class="dot" style="background:var(--cy)"></span><span class="name">MA-reclaim</span><span class="code">phase 2</span></div><div class="desc">structural level · "<b>reclaimed 50MA ✓</b>" / "1.4% below 50MA"</div></div>
-        <div class="estate mut"><div class="en"><span class="dot mut"></span><span class="name">No level</span></div><div class="desc">system read only — overlay absent.</div></div>
-      </div>
-    </div>
-
-    <div class="axis">
-      <div class="axis-h"><span class="n">Axis 3</span><span class="t">Watch-entry lifecycle / TTL</span><span class="c">orthogonal to price</span></div>
-      <div class="enum">
-        <div class="estate cy"><div class="en"><span class="dot" style="background:var(--cy)"></span><span class="name">Adding</span></div><div class="desc">just added; first read pending · "<b>first check tomorrow AM</b>"</div></div>
-        <div class="estate good"><div class="en"><span class="dot good"></span><span class="name">Active</span></div><div class="desc">N mornings left, N &gt; 1.</div></div>
-        <div class="estate warn"><div class="en"><span class="dot warn"></span><span class="name">Expiring</span></div><div class="desc">1 morning left — nudge to renew.</div></div>
-        <div class="estate mut"><div class="en"><span class="dot mut"></span><span class="name">Expired</span></div><div class="desc">0 left; in the bin, not scraped; auto-purge in ~14d.</div></div>
-        <div class="estate mut"><div class="en"><span class="dot mut"></span><span class="name">Graduated</span></div><div class="desc">became a position → leaves the watchlist.</div></div>
-      </div>
-    </div>
-
-    <div class="axis">
-      <div class="axis-h"><span class="n">Axis 4</span><span class="t">Section / global</span><span class="c">the whole "Your watchlist" block</span></div>
-      <div class="enum">
-        <div class="estate mut"><div class="en"><span class="dot mut"></span><span class="name">Empty</span></div><div class="desc">no items · "Add a ticker to start watching."</div></div>
-        <div class="estate mut"><div class="en"><span class="dot mut"></span><span class="name">Signed out</span></div><div class="desc">cards still viewable (market data); manage actions prompt sign-in.</div></div>
-        <div class="estate warn"><div class="en"><span class="dot warn"></span><span class="name">Stale / non-trading day</span></div><div class="desc">weekend/holiday — "Last read Fri Aug 15."</div></div>
-        <div class="estate mut"><div class="en"><span class="dot mut"></span><span class="name">Loading</span></div><div class="desc">fetching this morning's reads.</div></div>
+      <div class="annot">
+        <h3>What changed</h3>
+        <ul>
+          <li><b>Base = your Morning card.</b> The <b>Morning read</b> block is your existing
+            <code>Trigger (prior high) / Now / ATR from day low</code> rows, verbatim — good info design,
+            kept.</li>
+          <li><b>No "System".</b> The block is just labeled "Morning read" (or unlabeled — your call, §03).</li>
+          <li><b>Your-level block</b> states only the direction you chose — <b>"above 144.00"</b> — and a
+            quiet <b>"now above"</b>. No "crossed", no "approaching". You read the price yourself.</li>
+          <li><b>Gauge</b>: prior levels labeled on <b>top</b>, today's open/day-low on the <b>bottom</b>,
+            your level in violet, price = the white dot. Optional — toggle off for a leaner card.</li>
+          <li><b>Show chart</b> is top-level, one tap. <b>⋯</b> = Renew · Edit level · Remove.</li>
+        </ul>
+        <h3>Compact mode (the C toggle)</h3>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+          <div class="crow"><div class="st3"></div><div class="c-tk">CRWD</div>
+            <div class="c-mid"><span class="c-st">Triggered</span><span class="c-sub">above prior high · <span class="vio">above your 144</span></span></div>
+            <div class="c-end"><div class="c-px">145.10</div><div class="c-dl up">+2.1%</div></div></div>
+          <div class="crow mut"><div class="st3"></div><div class="c-tk">FTNT</div>
+            <div class="c-mid"><span class="c-st">Setting up</span><span class="c-sub">under prior high · <span class="vio">watching above 156</span></span></div>
+            <div class="c-end"><div class="c-px">152.60</div><div class="c-dl dn">−1.1%</div></div></div>
+        </div>
+        <p style="font-size:12px;color:var(--mut);margin-top:10px"><b style="color:var(--ink-2)">C vs full card:</b>
+        compact hides the gauge, ATR line, and actions until you tap a row. Same card, denser — a toggle for
+        when the list is long, not a different design.</p>
       </div>
     </div>
   </section>
 
-  <!-- ============ 4 · ADD AFFORDANCES ============ -->
+  <!-- ===== YOUR-LEVEL COPY OPTIONS ===== -->
   <section>
-    <div class="sec-head">
-      <div class="sec-n">04</div>
-      <div class="sec-titles">
-        <h2>Adding — two entry points, one home</h2>
-        <p>Home is a <b>collapsible on the Positions tab</b>, sitting as a sibling to the existing
-        "Log a position manually" expander (clearly distinct, no confusion). A <b>quick-add on Morning</b>
-        jumps straight to it.</p>
+    <div class="sec-head"><div class="sec-n">02</div><div class="sec-titles">
+      <h2>Your-level block — pick the wording</h2>
+      <p>Simplified per your call: store only the <b>direction you were watching</b>. No "crossed / approaching".
+      Met = a quiet green cue, nothing louder.</p>
+    </div></div>
+    <div class="opts">
+      <div class="opt"><div class="oh"><span class="k">a</span><span class="nm">Direction + quiet met</span><span class="rec">lean</span></div>
+        <div class="demo"><div class="myread" style="margin:0"><span class="tag">Your level</span><span class="val">above 144.00</span><span class="met">now above</span></div></div>
+        <div class="note">States your watch direction; "now above" in green only when true (grey "now below" otherwise). You do the math.</div></div>
+      <div class="opt"><div class="oh"><span class="k">b</span><span class="nm">Bare direction</span></div>
+        <div class="demo"><div class="myread" style="margin:0"><span class="tag">Watching</span><span class="val">above 144.00</span></div></div>
+        <div class="note">Just the level + direction. No met/not-met at all — the price is right there on the card. Minimal.</div></div>
+      <div class="opt"><div class="oh"><span class="k">c</span><span class="nm">Direction as a verb-label</span></div>
+        <div class="demo"><div class="myread" style="margin:0"><span class="tag" style="color:var(--vio)">Your trigger ↑</span><span class="val">144.00</span></div></div>
+        <div class="note">↑ = watching for above, ↓ = below. Tightest. Reads "your trigger 144, watching up".</div></div>
+    </div>
+    <div class="note-lg"><b>Level types</b> (set at add time): <b>above price</b> · <b>below price</b> ·
+      <b>reclaim 20MA</b> · <b>reclaim 50MA</b>. A reclaim level reads <code>reclaim 50MA (218.40)</code> and
+      lights green when today's low dipped under it but price is back above — see §04.</div>
+  </section>
+
+  <!-- ===== SECTION LABEL OPTIONS ===== -->
+  <section>
+    <div class="sec-head"><div class="sec-n">03</div><div class="sec-titles">
+      <h2>Killing "System" — the two-block header</h2>
+      <p>Options for naming the price-read block. My lean is (a): no header word at all — the row labels
+      already self-explain, exactly like your current card.</p>
+    </div></div>
+    <div class="opts">
+      <div class="opt"><div class="oh"><span class="k">a</span><span class="nm">No header — labeled rows only</span><span class="rec">lean</span></div>
+        <div class="demo"><div class="kv"><span class="k">Trigger (prior high)</span><span class="v">143.20</span></div><div class="kv"><span class="k">Now</span><span class="v">145.10 <span class="up">+2.1%</span></span></div></div>
+        <div class="note">Matches your current Morning card. Nothing to name badly.</div></div>
+      <div class="opt"><div class="oh"><span class="k">b</span><span class="nm">"Morning read" / "Your level"</span></div>
+        <div class="demo"><div class="bh" style="margin-bottom:4px">Morning read</div><div class="kv"><span class="k">Trigger (prior high)</span><span class="v">143.20</span></div></div>
+        <div class="note">Explicit two-block framing. "Morning read" is plain, not jargon.</div></div>
+      <div class="opt"><div class="oh"><span class="k">c</span><span class="nm">"The setup" / "Your level"</span></div>
+        <div class="demo"><div class="bh" style="margin-bottom:4px">The setup</div><div class="kv"><span class="k">Trigger (prior high)</span><span class="v">143.20</span></div></div>
+        <div class="note">Trader-native. Slightly more voice.</div></div>
+    </div>
+  </section>
+
+  <!-- ===== RECLAIM ===== -->
+  <section>
+    <div class="sec-head"><div class="sec-n">04</div><div class="sec-titles">
+      <h2>Failed-breakdown / reclaim — a real engine state</h2>
+      <p>Your "compare yesterday/today low vs price" instinct, formalized. Mirror of failed_breakout.
+      Goes in the <b>shared engine</b> → picks get it too.</p>
+    </div></div>
+    <div class="stage">
+      <div class="phone" style="flex:0 0 340px">
+        <div class="wcard good" style="border-left-color:var(--good)">
+          <div class="wc-head"><span class="tk">MELI</span><span class="grp">· Internet Retail</span><span class="sp"></span><span class="pill good"><span class="dot good"></span>Reclaimed</span></div>
+          <div class="block"><div class="bh">Morning read</div>
+            <div class="kv"><span class="k">Ref (50MA)</span><span class="v">218.40</span></div>
+            <div class="kv"><span class="k">Day low</span><span class="v">216.10 <span class="dn">▼ under</span></span></div>
+            <div class="kv"><span class="k">Now</span><span class="v good">221.05 — back above</span></div>
+          </div>
+          <div class="myread"><span class="tag">Your level</span><span class="val">reclaim 50MA</span><span class="met">reclaimed</span></div>
+        </div>
+      </div>
+      <div class="annot">
+        <h3>The predicate</h3>
+        <ul>
+          <li><b>Reclaim = <code>day_low &lt; ref</code> AND <code>price &gt; ref</code></b>, where <code>ref</code>
+            = prior low, 20MA, or 50MA.</li>
+          <li><b>Mirror of failed_breakout</b> (tagged the high, fell back). This is: dipped below support,
+            recovered above it — a bullish reversal read.</li>
+          <li><b>Lives in <code>pick_status.py</code></b>, so picks inherit it — the "add once, everywhere"
+            property you asked me to protect.</li>
+          <li><b>Needs the reference level.</b> Prior low is free; 20/50MA recovered from the private feed's
+            <code>raw</code> blob (%-distance → price via existing <code>normalizeBar</code> math). Phase 2.</li>
+        </ul>
+        <div class="note-lg" style="margin-top:6px"><b>Open question for you:</b> should reclaim use
+          <b>today's low</b> (intraday dipped-and-recovered, what the 10:05 read sees) or also consider
+          <b>yesterday's low</b> (broke down yesterday, recovering today)? I lean today's-low for the
+          morning read; a multi-day reclaim is a richer signal we can add later.</div>
       </div>
     </div>
-    <div class="cols">
-      <div class="col">
-        <div class="cap"><span class="nm">Positions tab — sibling collapsibles</span></div>
+  </section>
+
+  <!-- ===== ADD ===== -->
+  <section>
+    <div class="sec-head"><div class="sec-n">05</div><div class="sec-titles">
+      <h2>Add — Positions tab, with 20MA/50MA level types</h2>
+      <p>Sibling collapsible under "Log a position manually". Level types now include 20MA / 50MA reclaim.
+      Stop/size copy removed.</p>
+    </div></div>
+    <div class="stage">
+      <div class="phone">
         <div class="phoneframe">
           <div class="tabbar"><div class="t">Picks</div><div class="t">Morning</div><div class="t on">Positions</div><div class="t">Lookup</div></div>
           <div class="pbody">
@@ -543,61 +353,32 @@
                 <div class="optline">
                   <div class="lbl">Level of interest — optional</div>
                   <div class="mini">
-                    <div class="seg"><div class="on">Above</div><div>Below</div><div>50MA</div></div>
+                    <div class="seg"><div class="on">Above</div><div>Below</div><div>20MA</div><div>50MA</div></div>
                     <input class="num" value="156.00">
                   </div>
-                  <div class="hint">No stop, no size — you set those if you take it.</div>
+                  <div class="saved">Saved to your watchlist — it'll show on the <b>Morning tab</b> each day with
+                    a status read, and your level of interest displayed alongside.</div>
                 </div>
               </div>
             </div>
-            <div style="font-size:11px;color:var(--dim);text-align:center;padding-top:4px">Open positions below…</div>
           </div>
         </div>
       </div>
-      <div class="col">
-        <div class="cap"><span class="nm">Morning tab — quick-add</span></div>
-        <div class="phoneframe">
-          <div class="tabbar"><div class="t">Picks</div><div class="t on">Morning</div><div class="t">Positions</div><div class="t">Lookup</div></div>
-          <div class="pbody">
-            <div class="sectionhdr"><span class="h">Your watchlist</span><span class="s">Fri Aug 15 · 10:05 ET</span></div>
-            <div class="quickadd"><span class="ic">＋</span> Watch a ticker<span class="arrow">→ opens add on Positions</span></div>
-            <div class="B" style="margin-top:2px">
-              <div class="card">
-                <div class="head"><div><span class="tk">CRWD</span><div class="grp">Software — Infra</div></div><span class="pill good"><span class="dot good"></span>Triggered</span></div>
-                <div class="pricewrap"><span class="price">145.10</span><span class="dl delta up">+2.1%</span></div>
-                <div class="read">Broke <b>155.10</b> and crossed <b>your 156</b>.</div>
-                <div class="foot"><span class="ttl"><b>5</b> mornings left</span><span class="spacer"></span><span class="act primary sm">I took it →</span></div>
-              </div>
-            </div>
-          </div>
-        </div>
-        <p class="why" style="margin-top:14px">Tap <b>Watch a ticker</b> → <code>switchTab('positions')</code>
-        + auto-expands the add collapsible. Two-way door; if you later want a full inline add on Morning,
-        it's a small change.</p>
+      <div class="annot">
+        <h3>Details</h3>
+        <ul>
+          <li><b>Level types:</b> <code>Above</code> / <code>Below</code> a price, or <code>20MA</code> /
+            <code>50MA</code> reclaim. Picking 20MA/50MA hides the price input (the level <i>is</i> the MA).</li>
+          <li><b>One-liner replaces the stop/size note</b> — tells you where it'll show and that your level
+            rides along.</li>
+          <li><b>Morning quick-add</b> (a "＋ Watch a ticker" button atop the Morning watchlist) deep-links
+            here and auto-expands this collapsible.</li>
+        </ul>
+        <div class="note-lg"><b class="rec-g">Say the word on: </b> your-level wording (§02 a/b/c) ·
+          block header (§03 a/b/c) · reclaim today-vs-yesterday-low · gauge on-by-default or a toggle —
+          and I'll lock the surface and write the build brief.</div>
       </div>
     </div>
-  </section>
-
-  <!-- ============ 5 · TWEAKS ============ -->
-  <section>
-    <div class="sec-head">
-      <div class="sec-n">05</div>
-      <div class="sec-titles">
-        <h2>Tweak dials — mix into whichever direction</h2>
-        <p>Independent of the card choice. Tell me a value for each and I'll lock the final surface.</p>
-      </div>
-    </div>
-    <div class="tweaks">
-      <div class="tweak"><h4>Status expression</h4><div class="opts"><span class="pick">Pill + dot</span> (B) · Color word + stripe (A) · Chip (C) — pick per direction</div></div>
-      <div class="tweak"><h4>Both-reads layout</h4><div class="opts">Stacked · Headline-swap · Merged · <span class="pick">Gauge</span></div></div>
-      <div class="tweak"><h4>Card richness</h4><div class="opts"><span class="pick">Minimal</span> (status + price + level) · +ATR-ext · +Focus/launch-ready adornments</div></div>
-      <div class="tweak"><h4>Density</h4><div class="opts">Comfortable (B) · <span class="pick">Compact toggle</span> (C) for long lists</div></div>
-      <div class="tweak"><h4>Actions</h4><div class="opts"><span class="pick">Primary-only when actionable</span> + overflow ⋯ · Always-visible buttons</div></div>
-      <div class="tweak"><h4>Level types</h4><div class="opts"><span class="pick">Price above/below</span> now · <span class="pick">50MA reclaim</span> phase 2</div></div>
-    </div>
-    <div class="note"><b class="rec">If you want a fast default:</b> Direction <b>B</b> + gauge both-reads
-    + minimal richness + primary-only actions, with Direction <b>C</b> added as a compact toggle and
-    MA-reclaim as a phase-2 level type. Say the word (or swap any dial) and I'll write the build brief.</div>
   </section>
 
 </div>
