@@ -137,6 +137,10 @@ describe("ingestQuotes", () => {
   });
 });
 
+// NOTE: heldTickers() now also unions in the active watchlist (WS5 §8b, issue #319). That coverage
+// lives in test/watchlist.test.js's "heldTickers union with active watchlist" describe block, using
+// the real makeD1() shim from helpers/d1.js instead of this file's hand-rolled makeQuoteDb() mock —
+// the watchlist table is real D1 schema, so a hand-rolled mock can't exercise its join/query.
 describe("heldTickers", () => {
   it("returns DISTINCT open/managing/closing tickers, excludes watching/closed, user-agnostic", async () => {
     const db = makeQuoteDb([

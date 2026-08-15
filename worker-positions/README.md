@@ -113,6 +113,12 @@ by construction (the engine runs exactly when fresh bars exist) and keeps us cle
 | `POST` | `/positions/<trade_id>/still-holding` | Bearer | WS5 phase 3b-ii: reject an exit signal, `closing → managing`; clears the exit fields and re-arms the two-close rule. |
 | `POST` | `/positions/<trade_id>/correct-exit` | Bearer | WS5 phase 3b-ii: append-only correction of a `closed` position's fill. Body `{ exit_price }` (required, `> 0`); emits `exit_corrected`, recomputes R. |
 | `POST` | `/positions/<trade_id>/reopen` | Bearer | WS5 phase 3b-ii: `closed → managing` for a wrongly-closed trade; clears the exit fields so the sweep resumes from the next bar. |
+| `POST` | `/watchlist` | Bearer | WS5 §8b P1: add `{ticker, level_type?, level_value?}` — UPSERT on `(user_id, ticker)`, so re-adding an existing ticker renews the TTL and updates the level. |
+| `GET` | `/watchlist` | Bearer | WS5 §8b P1: list the caller's watch entries (active + expired), each joined to its latest `ticker_quotes` bar → `prior_high/prior_low/atr/sma20/sma50` (null until the first EOD bar lands). Includes `level_value`. |
+| `PATCH` | `/watchlist/<id>` | Bearer | WS5 §8b P1: `{renew:true}` resets the TTL/status, or an edit-level body `{level_type?, level_value?}`. |
+| `DELETE` | `/watchlist/<id>` | Bearer | WS5 §8b P1: remove a watch entry (also called on graduation, right after `POST /positions` succeeds). |
+| `GET` | `/watchlist-tickers` | Service token | WS5 §8b P1: for `scripts/collect_morning.py` — active watch tickers + `level_type` + latest-bar refs. **Omits `level_value`** (privacy — see `src/watchlist.js::watchlistTickerRefs`). |
+| `POST` | `/watchlist/tick` | Service token | WS5 §8b P1: idempotent-per-ET-date TTL decrement + expire + purge (`src/watchlist.js::tickWatchlist`); optional body `{date}` overrides the derived ET date. |
 
 **Two auth paths, one seam.** The interactive `Bearer` rows above are the owner's HMAC login token
 (`authenticate()`); the machine rows use a **separate service token** (`authenticateService()`,
@@ -166,6 +172,17 @@ token is minted server-side from a login passphrase and lives only in the owner'
 | secret | `POSITIONS_SESSION_SECRET` | — | HMAC key signing bearer tokens (rotating it invalidates all tokens) |
 | secret | `POSITIONS_AUTH_PASSPHRASE` | — | the owner's login passphrase (user = 1) |
 | secret | `POSITIONS_INGEST_TOKEN` | — | WS5 phase 2 machine token for the GH-Actions held feed (`/held-tickers`, `/ingest/quotes`); also a GitHub Actions secret. Least-privilege, distinct from the owner passphrase. |
+
+### Watchlist constants (`src/watchlist.js`, WS5 §8b)
+
+Private, user-scoped personal watchlist (issue #319) — an owner can add an arbitrary ticker to
+track ahead of taking a position; no stop, no size, ever (that's what makes it a watch item and not
+a trade ticket). These two constants govern its TTL lifecycle.
+
+| Name | Default | Controls |
+|---|---|---|
+| `WATCHLIST_TTL_SESSIONS` | `10` | Trading mornings a watch entry survives before expiring; `sessions_remaining`'s starting/renew value, decremented once per ET trading date by `tickWatchlist()`. |
+| `WATCHLIST_PURGE_DAYS` | `14` | Calendar days an `expired` entry lingers (collapsed bin) before `tickWatchlist()` purges it (keyed off `expired_at`, not trading sessions). |
 
 ### Engine constants (`src/advance.js` `ENGINE_CONFIG`, design §6)
 
@@ -225,7 +242,9 @@ tests), `test/sweep.test.js` (catch-up fold, entry-day exclusion, idempotency, C
 handling, dry run, `/advance` response shaping, **auto-confirm of stuck `closing` positions +
 `sessionsSince` session-counting**), `test/transitions.test.js` (the four owner transition routes:
 state preconditions → 409, editable/validated fill, tenant scoping → 404, double-submit safety,
-`persistTransition` CAS, and the HTTP surface incl. owner-only gating).
+`persistTransition` CAS, and the HTTP surface incl. owner-only gating), `test/watchlist.test.js`
+(WS5 §8b P1 — validation, UPSERT renew semantics, latest-bar join/level recovery, tenant scoping,
+tick idempotency/expire/purge, and the `heldTickers()` watchlist union).
 
 No network. `test/helpers/d1.js` shims the D1 surface over **Node 22's built-in `node:sqlite`**
 (zero dependencies) and applies the **real migration files**, so the tests exercise actual SQL and

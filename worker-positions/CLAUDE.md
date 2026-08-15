@@ -23,6 +23,10 @@ GitHub-Actions held feed. See README § Auth — the Cloudflare-Access-vs-bearer
    `src/sweep.js` + `POST /advance`**; **3b-ii (owner transition routes + `autoConfirm`) =
    `src/transitions.js`**, all done (see below).
 4. ⬜ Push notifications (VAPID; reuse the sibling `distil` worker's web-push + `push_subscriptions`).
+5. 🟡 **Personal watchlist (WS5 §8b, issue #319) — P1 (this worker) done.** `migrations/0003_watchlist.sql`
+   + `src/watchlist.js` + the `/watchlist*` routes + `heldTickers()` union. P2 (`pick_status.py`
+   reclaim state + `collect_morning.py` union) and P3 (PWA) are separate, not-yet-started phases —
+   see `planning/watchlist-build-brief-8b.md`.
 
 ## The engine: `src/advance.js` (phase 3a)
 
@@ -127,6 +131,66 @@ Three things to internalize before editing the transitions:
 
 The PWA client that calls these routes (confirmation strip, editable Confirm-fill) is phase-4 work;
 3b-ii ships the routes + tests only. Tracked: SPRINT WS5-3b-ii.
+
+## The watchlist: `src/watchlist.js` (WS5 §8b, P1)
+
+A **private, user-scoped** membership+level+TTL store for tickers the owner is tracking ahead of
+taking a position — an arbitrary ticker, not necessarily a pick. A watch item carries **no stop, no
+size, ever**: that's the load-bearing distinction from a position (design brief § 1). It carries a
+ticker and an OPTIONAL "carry your own" level of interest (`above`/`below` a price, or
+`reclaim_20ma`/`reclaim_50ma`); the system read (breakout vs prior high) is computed separately by
+`scripts/pick_status.py` and always runs regardless of whether a level is set — that engine lives in
+Python (P2, not yet built) and is unioned into `scripts/collect_morning.py`'s scrape universe via
+`GET /watchlist-tickers`, never re-implemented here.
+
+- **Privacy posture is the mirror image of `ticker_quotes`.** Migration 0002's `ticker_quotes` is
+  deliberately user-less (public market data); migration 0003's `watchlist` is deliberately
+  user-scoped (private membership/level/TTL). Only an ANONYMOUS status row for the ticker — no
+  level, no size — is meant to ride the public morning store (P2, `collect_morning.py`), built from
+  `GET /watchlist-tickers`'s response, which **omits `level_value`** on purpose: the your-level read
+  is computed client-side in the PWA off the owner's own `GET /watchlist` (which DOES include
+  `level_value`), so the private price target never has to leave this worker's owner-bearer surface.
+- **Two constants, both TTL/lifecycle, not scoring.** `WATCHLIST_TTL_SESSIONS = 10` (trading
+  mornings a watch entry survives; `sessions_remaining`'s starting/renew value) and
+  `WATCHLIST_PURGE_DAYS = 14` (calendar days an `expired` row lingers before purge). Both live in
+  `src/watchlist.js` with in-code comments; see README § Configurable parameters › Watchlist
+  constants for the public-facing table.
+- **Tick idempotency is a dedicated table, not KV.** `watchlist_tick_log(tick_date TEXT PRIMARY
+  KEY)` + `INSERT OR IGNORE` — this worker has no KV binding (unlike `worker-cron`'s dispatch-guard
+  pattern), so the guard lives in D1 instead, co-located with the data it protects.
+  `tickWatchlist(db, {date, now})` resolves `date` from `now` via `etDateStr()` when omitted, tries
+  the guarded insert first, and returns `{ticked:false, decremented:0, expired:0, purged:0}`
+  immediately if that date was already ticked — a same-day retry (a double GitHub Actions dispatch,
+  the `collect.yml`/`collect_picks.yml`-style GitHub cron backstop) is a true no-op, never a double
+  decrement.
+- **UPSERT-on-add is the intended renew UX**, not a bug to guard against: `addWatch()` upserts on
+  `(user_id, ticker)` — re-adding an already-watched ticker resets `sessions_remaining` to
+  `WATCHLIST_TTL_SESSIONS`, clears `expired_at`/`status`, and updates the level, while `created_at`
+  survives untouched (not referenced in the `ON CONFLICT … DO UPDATE`). This is the opposite
+  uniqueness stance from `positions.js::insertPosition`, which deliberately allows duplicate
+  `(user_id, ticker)` rows (independent lots, § 3a) — a watch item has no lot/qty concept to make a
+  second row meaningful.
+- **`normalizeBar()` reuse, not re-derivation.** `listWatch()` and `watchlistTickerRefs()` both join
+  each ticker to its latest `ticker_quotes` bar and run it through `src/advance.js`'s
+  `normalizeBar()` to recover `prior_high`/`prior_low`/`atr`/`sma20`/`sma50` from Finviz's
+  %-distance SMA columns — the exact math `advance()` itself depends on (module header there). A
+  freshly-added ticker with no bar yet gets all-null refs — the "adding, first check tomorrow AM"
+  state the build brief describes; expected, not an error.
+- **Auth split mirrors `/held-tickers` + `/ingest/quotes` exactly.** `GET /watchlist-tickers` and
+  `POST /watchlist/tick` sit ABOVE the owner-auth gate in `src/index.js`, guarded by
+  `authenticateService()`; `POST/GET /watchlist` and `PATCH/DELETE /watchlist/:id` sit BELOW it,
+  guarded by `authenticate()`. Same reasoning as the held feed (`src/auth.js`'s comment): the
+  service token can read/tick the watchlist's market-data-adjacent surface but can never see or
+  touch a specific owner's private rows, and the owner bearer can't satisfy the service check.
+- **`heldTickers()` (`src/quotes.js`) now unions in the active watchlist.** The held-tickers feed
+  job scrapes `positions(open/managing/closing) ∪ watchlist(active)` — a watch item rides the SAME
+  EOD 17:30 ET held-feed run as open positions so it accumulates the prior-day High/Low/ATR/MAs a
+  brand-new watch has no history for. `watchlistTickers(db)` (user-less, same rationale as
+  `heldTickers` itself) is the seam; do not inline a second `SELECT DISTINCT ticker FROM watchlist`
+  elsewhere — always route through it so the "active" definition never drifts.
+- **Migration 0003 is applied out-of-band**, exactly like 0001/0002 — `wrangler deploy` does not run
+  it. `test/helpers/d1.js`'s `MIGRATIONS` array runs it for real in tests (real SQLite, real schema),
+  plus `_seedWatchlist()`/`_watchlist()` test-only conveniences mirroring `_seedQuote()`/`_quotes()`.
 
 ## Tests
 
