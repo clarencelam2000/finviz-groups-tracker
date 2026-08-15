@@ -8,6 +8,11 @@ inputs; the function itself never knows which session invoked it.
 
 Mirrors the pure/impure split used by `worker-cron/src/picksGate.js` (pure state-machine core,
 impure caller does clock/file/network).
+
+P2 (WS5 §8b watchlist build brief) added `STATUS_RECLAIM` + `compute_reclaim` — an optional
+`ref` param on `compute_pick_status` lets a caller (collect_morning.py's watchlist union) ask
+for the reclaim read against a structural level (system default: the ticker's 50-day MA). Picks
+callers never pass `ref`, so `compute_pick_status`'s behavior for them is unchanged byte-for-byte.
 """
 
 import math
@@ -22,6 +27,12 @@ STATUS_INVALIDATED = "invalidated"
 STATUS_GAPPED_THROUGH = "gapped_through"
 STATUS_TRIGGERED = "triggered"
 STATUS_FAILED_BREAKOUT = "failed_breakout"
+# STATUS_RECLAIM (P2, WS5 §8b watchlist build brief §3/§4c/§4d/§5): a watch ticker's
+# price is back above its reclaim `ref` after a dip below it — the mirror of
+# failed_breakout (which pokes above the prior High and falls back; reclaim dips
+# below a level and recovers). Only ever evaluated when a caller passes `ref` (picks
+# callers never do, so this is zero-impact on the existing picks pipeline).
+STATUS_RECLAIM = "reclaim"
 STATUS_SETTING_UP = "setting_up"
 
 # Ordered per ADR-013 Decision 3's precedence table (top-down, first match wins).
@@ -29,18 +40,27 @@ STATUS_SETTING_UP = "setting_up"
 # amending the ADR first (the mock's sort is: Triggered -> Gapped -> Failed ->
 # Setting-up -> Invalidated -> No-quote, a DIFFERENT order than evaluation precedence;
 # STATUS_PRECEDENCE below is the evaluation order, not the display order).
+# STATUS_RECLAIM sits between failed_breakout and setting_up (watchlist build brief
+# §4c: "above setting_up, below the breakout states") — it never outranks a genuine
+# triggered/gapped_through/failed_breakout read of the same quote, but a name that
+# would otherwise be a flat setting_up gets flagged reclaim if it dipped below its
+# reclaim ref and recovered.
 STATUS_PRECEDENCE = [
     STATUS_NO_QUOTE,
     STATUS_INVALIDATED,
     STATUS_GAPPED_THROUGH,
     STATUS_TRIGGERED,
     STATUS_FAILED_BREAKOUT,
+    STATUS_RECLAIM,
     STATUS_SETTING_UP,
 ]
 
 # States considered "actionable" — Phase C shows ATR-from-LoD only for these, and
-# Decision 5's "I took it" button only appears for these two states.
-ACTIONABLE_STATUSES = {STATUS_TRIGGERED, STATUS_GAPPED_THROUGH}
+# Decision 5's "I took it" button only appears for these states. STATUS_RECLAIM was
+# added here in P2 (lead decision 2) so a reclaimed watch ticker gets atr_from_lod
+# computed and the PWA's "I took it" affordance — picks callers never pass `ref`, so
+# they never produce STATUS_RECLAIM and this addition is zero-impact for them.
+ACTIONABLE_STATUSES = {STATUS_TRIGGERED, STATUS_GAPPED_THROUGH, STATUS_RECLAIM}
 
 
 # ---------------------------------------------------------------------------
@@ -57,7 +77,28 @@ def _is_missing(x) -> bool:
     return False
 
 
-def compute_pick_status(trigger, stop, price, open_, high, low) -> str:
+def compute_reclaim(price, today_low, prior_low, ref) -> bool:
+    """price back above `ref` after today's OR yesterday's low dipped below it.
+
+    Mirror of failed_breakout (which pokes above the prior High and falls back) —
+    reclaim instead dips below a structural level and recovers. `ref` is the
+    system-read reclaim level: P2's lead decision fixes this to the ticker's 50-day
+    MA (`sma50`), independent of the watchlist user's chosen level_type, because
+    `ref` must be a level that CAN differ from `prior_low` (the caller's `stop`) —
+    if ref==prior_low, the `prior_low < ref` branch degenerates to always-false. The
+    user's own reclaim_20ma/reclaim_50ma overlay is a separate client-side read
+    (P3), not this system read.
+
+    Returns False if any input is missing/NaN (never raises) — this mirrors
+    `_is_missing`'s NaN/None handling used by `compute_pick_status` itself, so a
+    watch ticker with no MA bar yet (or a bad quote) just never reads as reclaim.
+    """
+    if any(_is_missing(x) for x in (price, today_low, prior_low, ref)):
+        return False
+    return price > ref and (today_low < ref or prior_low < ref)
+
+
+def compute_pick_status(trigger, stop, price, open_, high, low, ref=None) -> str:
     """Evaluate a single ticker's morning status against ADR-013 Decision 3.
 
     Inputs: `trigger` (prior High), `stop` (prior Low), and today's quote fields
@@ -71,7 +112,20 @@ def compute_pick_status(trigger, stop, price, open_, high, low) -> str:
       4. triggered        — price >= trigger
       5. failed_breakout  — high >= trigger  (price < trigger, open_ <= trigger, by
                              falling through 3 and 4)
-      6. setting_up       — everything else
+      6. reclaim          — (P2, watchlist build brief §4c) only evaluated when the
+                             caller passes `ref` (picks callers never do); price is
+                             back above `ref` after today's or the prior low dipped
+                             below it. Sits between failed_breakout and setting_up —
+                             it never outranks a genuine breakout-family read of the
+                             same quote, but promotes an otherwise-flat setting_up
+                             name that reclaimed a level worth watching.
+      7. setting_up       — everything else
+
+    `ref` (optional, default None — reclaim never fires, byte-identical to the
+    pre-P2 behavior): the reclaim level. `low`/`stop` (today's low / prior low) are
+    already validated non-missing by the no_quote gate above by the time reclaim is
+    evaluated; `compute_reclaim` itself still guards `ref` (and re-checks the others
+    defensively) since `ref` is NOT part of the no_quote gate — see below.
 
     Notes (see ADR-013 Decision 3 for full rationale — do not "improve" these):
     - invalidated outranks triggered/gapped_through: a name below its planned stop
@@ -84,6 +138,9 @@ def compute_pick_status(trigger, stop, price, open_, high, low) -> str:
       near the trigger level at all (chase-risk), even though price >= trigger also
       holds. Reaching "triggered" therefore implies open_ <= trigger <= price — a
       genuine intraday break of the level, not a pre-existing gap.
+    - `ref` is deliberately NOT part of the no_quote gate: a watch ticker with a
+      valid quote but no MA bar yet (ref missing) must still get a real
+      breakout/setting_up read against trigger/stop, just never STATUS_RECLAIM.
     """
     if any(_is_missing(x) for x in (trigger, stop, price, open_, high, low)):
         return STATUS_NO_QUOTE
@@ -95,6 +152,8 @@ def compute_pick_status(trigger, stop, price, open_, high, low) -> str:
         return STATUS_TRIGGERED
     if high >= trigger:
         return STATUS_FAILED_BREAKOUT
+    if ref is not None and compute_reclaim(price, low, stop, ref):
+        return STATUS_RECLAIM
     return STATUS_SETTING_UP
 
 

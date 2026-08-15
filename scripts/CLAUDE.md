@@ -130,12 +130,18 @@ prior-session pick with a morning status (Triggered / Setting-up / Gapped-throug
 Failed-breakout / Invalidated / No-quote) at ~10:05 ET.
 
 - **`scripts/pick_status.py`** — pure status engine, no I/O, no clock/file reads.
-  `compute_pick_status(trigger, stop, price, open_, high, low)` evaluates ADR-013 Decision 3's
-  precedence table top-down, first match wins (order matters — see the in-code doc comment for
-  the invalidated-outranks-triggered / gapped-outranks-triggered rationale). Session-agnostic
-  by contract: WS3b (#268, 15:30 ET) calls it verbatim against a different quote snapshot.
-  `compute_atr_from_lod()` is the entry-quality metric, meaningful only for `ACTIONABLE_STATUSES`
-  (`triggered`, `gapped_through`) — display thresholds are a PWA concern, not this module's.
+  `compute_pick_status(trigger, stop, price, open_, high, low, ref=None)` evaluates ADR-013
+  Decision 3's precedence table top-down, first match wins (order matters — see the in-code doc
+  comment for the invalidated-outranks-triggered / gapped-outranks-triggered rationale).
+  Session-agnostic by contract: WS3b (#268, 15:30 ET) calls it verbatim against a different
+  quote snapshot. `compute_atr_from_lod()` is the entry-quality metric, meaningful only for
+  `ACTIONABLE_STATUSES` (`triggered`, `gapped_through`, `reclaim`) — display thresholds are a
+  PWA concern, not this module's. **P2 (WS5 §8b watchlist build brief) added the `reclaim`
+  state and `compute_reclaim(price, today_low, prior_low, ref)`** — the mirror of
+  `failed_breakout` (dips below a level, then recovers, instead of poking above one and
+  falling back). Sits between `failed_breakout` and `setting_up` in precedence; only ever
+  evaluated when a caller passes `ref` — picks callers never do, so `ref=None` keeps
+  `compute_pick_status` byte-identical to pre-P2 behavior for every existing caller.
 - **`scripts/collect_morning.py`** — the writer. `fetch_ticker_quotes(page, tickers, config)` is
   the **shared component** WS3b and WS5's held-tickers feed reuse: batches tickers into
   `MORNING_BATCH_SIZE`-sized (50) chunks against the `morning` block in `screener_config.json`
@@ -174,6 +180,30 @@ Failed-breakout / Invalidated / No-quote) at ~10:05 ET.
     no write.
   - **`--dry-run`:** scrapes + parses + prints row counts, skips `write_store()`. This is Phase
     B's `collect_morning.yml` first-slice hook (`workflow_dispatch` dry run before cron enable).
+  - **P2 watchlist union (WS5 §8b build brief §3/§4c/§4d/§5):** after the Focus universe is
+    built and before the scrape, `main()` reads `POSITIONS_WORKER_URL`/`POSITIONS_INGEST_TOKEN`
+    (same env vars as `collect_held.py`) — if BOTH are set, it calls
+    `fetch_watchlist_tickers()` (GET `/watchlist-tickers` on the `finviz-positions` Worker),
+    maps the response through `build_watch_levels()` into `pick_levels`-shaped dicts (`ref` =
+    the ticker's `sma50` — the SYSTEM-read reclaim level, always the 50-day MA regardless of
+    the watch entry's own `level_type`; the user's `reclaim_20ma`/`reclaim_50ma` overlay is a
+    separate client-side P3 read), and unions them into the scrape universe via
+    `union_watch_levels()` (pure; de-dupes on ticker, Focus pick's level dict wins on a
+    collision). If either env var is unset, the watchlist union is skipped entirely with an
+    informational print — the morning job never hard-requires watchlist config. The single
+    existing scrape covers both picks and watch tickers; `build_status_rows` threads
+    `ref=lvl.get("ref")` into `compute_pick_status`, so Focus levels (no `ref` key) never
+    reclaim and watch levels do. `fetch_watchlist_tickers`/`post_watchlist_tick` are both
+    IMPURE and NON-FATAL by design (unlike `collect_held.py`'s loud-exit fetch): any fetch/POST
+    failure prints a stderr warning and returns `[]`/`None` rather than exiting, since a
+    watchlist/worker hiccup must never drop the picks-only morning run. After a successful,
+    non-empty `write_store()` (never on `--dry-run`), `main()` calls
+    `post_watchlist_tick(worker_url, token, today_str)` to decrement each watch entry's TTL for
+    the day — also non-fatal (idempotent, self-heals on a later run). The non-trading-day exit
+    guards run before any of this, so a closed-market day never ticks. `_authed_request` is
+    replicated verbatim from `collect_held.py` in this module rather than imported —
+    `collect_held.py` imports FROM `collect_morning.py` (`CONFIG_PATH`, `_to_float`,
+    `fetch_ticker_quotes`), so importing back would create a cycle.
 
 ## WS5 held-tickers feed (`collect_held.py`)
 
