@@ -1,0 +1,384 @@
+<title>Watchlist Card v2</title>
+<style>
+  :root{
+    --bg:#0a0e16; --surface:#111725; --surface2:#161e2e; --raise:#1c2536;
+    --line:#232d40; --line-2:#2e3a51;
+    --ink:#e9eef7; --ink-2:#c3ccdb; --mut:#8b97ab; --dim:#586477; --faint:#3a4457;
+    --cy:#46c6e6; --cy-ink:#062430;
+    --good:#3ed397; --warn:#f6b93b; --bad:#ef7369; --vio:#a99bf5;
+    --good-bg:rgba(62,211,151,.12); --warn-bg:rgba(246,185,59,.13);
+    --bad-bg:rgba(239,115,105,.13); --vio-bg:rgba(169,155,245,.13); --cy-bg:rgba(70,198,230,.13); --mut-bg:rgba(139,151,171,.12);
+    --sans:-apple-system,"SF Pro Text",system-ui,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+  .wrap{max-width:1140px;margin:0 auto;padding:44px 24px 100px}
+  .eyebrow{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.13em}
+  h1{font-size:29px;line-height:1.15;margin:10px 0 10px;letter-spacing:-.025em;text-wrap:balance;font-weight:700}
+  .lede{color:var(--mut);max-width:68ch;font-size:15px;margin:0}
+  .lede b{color:var(--ink-2)}
+  code{font-family:var(--mono);font-size:.85em;color:var(--cy);background:var(--cy-bg);padding:1px 5px;border-radius:5px}
+  section{margin-top:58px}
+  .sec-head{display:flex;align-items:baseline;gap:14px;border-bottom:1px solid var(--line);padding-bottom:12px;margin-bottom:24px}
+  .sec-n{font-family:var(--mono);font-size:12px;color:var(--cy);flex:0 0 auto;padding-top:3px}
+  .sec-head h2{font-size:20px;margin:0;letter-spacing:-.02em;font-weight:650}
+  .sec-head p{margin:5px 0 0;color:var(--mut);font-size:13.5px;max-width:76ch}
+  .sec-titles{flex:1}
+  .lbl{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+
+  /* ---------- THE WATCH CARD ---------- */
+  .stage{display:flex;flex-wrap:wrap;gap:34px;align-items:flex-start}
+  .phone{flex:0 0 380px;max-width:380px}
+  .annot{flex:1 1 300px;min-width:280px}
+  .annot h3{margin:0 0 4px;font-size:14px;color:var(--cy);font-weight:650}
+  .annot ul{margin:0 0 18px;padding-left:17px;color:var(--mut);font-size:13px}
+  .annot li{margin-bottom:7px}
+  .annot b{color:var(--ink-2);font-weight:600}
+
+  .wcard{background:var(--surface2);border:1px solid var(--line-2);border-radius:14px;padding:15px 16px 13px;
+    border-left:3px solid var(--good)}
+  .wcard.mut{border-left-color:var(--dim)} .wcard.bad{border-left-color:var(--bad)}
+
+  .wc-head{display:flex;align-items:flex-start;gap:8px}
+  .wc-head .tk{font-family:var(--mono);font-weight:700;font-size:18px;letter-spacing:.01em}
+  .wc-head .chip{font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:5px;letter-spacing:.03em;text-transform:uppercase}
+  .chip.coiled{background:var(--good-bg);color:var(--good)} .chip.ext{background:var(--warn-bg);color:var(--warn)} .chip.over{background:var(--bad-bg);color:var(--bad)}
+  .wc-head .grp{font-size:11px;color:var(--dim);align-self:center}
+  .wc-head .sp{flex:1}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:.04em;padding:3px 9px;border-radius:999px;text-transform:uppercase;white-space:nowrap}
+  .pill.good{background:var(--good-bg);color:var(--good)} .pill.mut{background:var(--mut-bg);color:var(--mut)} .pill.bad{background:var(--bad-bg);color:var(--bad)}
+  .dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+  .dot.good{background:var(--good)} .dot.mut{background:var(--dim)} .dot.bad{background:var(--bad)}
+
+  /* the two labeled reads */
+  .block{margin-top:13px}
+  .block .bh{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+  .kv{display:flex;justify-content:space-between;align-items:baseline;padding:3px 0;font-size:13px}
+  .kv .k{color:var(--mut)}
+  .kv .v{font-family:var(--mono);font-weight:650;color:var(--ink)}
+  .kv .v .d.up{color:var(--good)} .kv .v .d.dn{color:var(--bad)}
+  .kv .v.good{color:var(--good)}
+  .myread{margin-top:12px;background:rgba(169,155,245,.07);border:1px solid rgba(169,155,245,.22);border-radius:10px;padding:9px 12px;
+    display:flex;align-items:center;gap:9px}
+  .myread .tag{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--vio)}
+  .myread .val{font-family:var(--mono);font-size:13px;font-weight:650;color:var(--ink)}
+  .myread .met{margin-left:auto;font-size:11px;font-weight:650;color:var(--good)}
+  .myread .met.no{color:var(--dim)}
+
+  /* ---- gauge: prior levels top, today levels bottom ---- */
+  .gauge{margin:22px 6px 8px;position:relative}
+  .g-track{position:relative;height:6px;border-radius:3px;background:var(--raise)}
+  .g-band{position:absolute;top:0;bottom:0;border-radius:3px;background:rgba(62,211,151,.28)}
+  .g-price{position:absolute;top:50%;width:13px;height:13px;border-radius:50%;background:var(--ink);border:2px solid var(--surface2);box-shadow:0 0 0 1px var(--line-2);transform:translate(-50%,-50%);z-index:3}
+  .g-mk{position:absolute;width:1.5px;background:var(--dim);z-index:2}
+  .g-mk.top{bottom:3px;height:11px} .g-mk.bot{top:3px;height:11px}
+  .g-mk.high{background:var(--good)} .g-mk.low{background:var(--bad)}
+  .g-mk.you{background:var(--vio)}
+  .g-cap{position:absolute;font-family:var(--mono);font-size:9px;white-space:nowrap;color:var(--dim);transform:translateX(-50%)}
+  .g-cap.top{bottom:17px} .g-cap.bot{top:17px}
+  .g-cap .u{color:var(--faint)}
+  .g-cap.high{color:var(--good)} .g-cap.low{color:var(--bad)} .g-cap.you{color:var(--vio)}
+  .g-legend{display:flex;gap:14px;justify-content:center;margin-top:22px;font-size:9.5px;color:var(--dim)}
+  .g-legend span{display:inline-flex;align-items:center;gap:4px}
+  .g-legend i{width:8px;height:2px;display:inline-block;border-radius:2px}
+
+  /* card footer */
+  .wc-foot{display:flex;align-items:center;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+  .wc-foot .sp{flex:1}
+  .toggle{font-size:11.5px;font-weight:600;color:var(--cy);cursor:default}
+  .ttl{font-size:10.5px;color:var(--dim)} .ttl b{color:var(--mut);font-family:var(--mono)}
+  .act{font-size:12px;font-weight:700;border-radius:9px;padding:9px 14px;text-align:center;cursor:default}
+  .act.primary{background:var(--cy);color:var(--cy-ink)} .act.ghost{border:1px solid var(--line-2);color:var(--ink-2);font-weight:600}
+  .ovf{color:var(--dim);font-size:17px;line-height:1;padding:2px 6px;cursor:default}
+  .chartrow{margin-top:10px;border:1px solid var(--line);border-radius:9px;background:var(--surface);color:var(--mut);font-size:11.5px;padding:8px 12px;display:flex;align-items:center;gap:8px}
+  .chartrow .cy{color:var(--cy);font-weight:600}
+
+  /* compact row (density toggle) */
+  .crow{display:grid;grid-template-columns:3px 58px 1fr auto;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .crow .st3{width:3px;align-self:stretch;background:var(--good)}
+  .crow.mut .st3{background:var(--dim)}
+  .crow .c-tk{padding:10px 0 10px 12px;font-family:var(--mono);font-weight:700;font-size:13.5px}
+  .crow .c-mid{padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+  .crow .c-st{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--good)}
+  .crow.mut .c-st{color:var(--mut)}
+  .crow .c-sub{font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+  .crow .c-sub .vio{color:var(--vio)}
+  .crow .c-end{padding:8px 12px;text-align:right}
+  .crow .c-px{font-family:var(--mono);font-size:13px;font-weight:650}
+  .crow .c-dl{font-family:var(--mono);font-size:10.5px}
+  .up{color:var(--good)} .dn{color:var(--bad)}
+
+  /* option panels */
+  .opts{display:flex;flex-wrap:wrap;gap:18px}
+  .opt{flex:1 1 250px;min-width:240px;background:var(--surface);border:1px solid var(--line);border-radius:11px;padding:14px 15px}
+  .opt .oh{display:flex;align-items:baseline;gap:8px;margin-bottom:10px}
+  .opt .oh .k{font-family:var(--mono);font-size:11px;color:var(--cy)}
+  .opt .oh .nm{font-size:13px;font-weight:650}
+  .opt .oh .rec{margin-left:auto;font-size:9.5px;color:var(--good);text-transform:uppercase;letter-spacing:.08em;font-weight:700}
+  .opt .demo{background:var(--surface2);border:1px solid var(--line);border-radius:9px;padding:11px 12px;font-size:12.5px}
+  .opt .note{font-size:11.5px;color:var(--mut);margin-top:9px;line-height:1.45}
+  .swatch{font-family:var(--mono)}
+
+  /* positions collapsible */
+  .phoneframe{max-width:380px;background:var(--surface);border:1px solid var(--line-2);border-radius:20px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+  .tabbar{display:flex;gap:2px;padding:8px 10px 0;background:var(--bg);border-bottom:1px solid var(--line)}
+  .tabbar .t{font-size:11.5px;color:var(--dim);padding:7px 11px;border-radius:9px 9px 0 0}
+  .tabbar .t.on{color:var(--cy);font-weight:700;background:var(--surface2)}
+  .pbody{padding:14px;display:flex;flex-direction:column;gap:11px}
+  .collap{border:1px solid var(--line);border-radius:12px;background:var(--surface2);overflow:hidden}
+  .collap .bar{display:flex;align-items:center;gap:10px;padding:12px 14px;font-size:13.5px;font-weight:650}
+  .collap .bar .ic{color:var(--cy);font-size:16px;font-weight:700} .collap .bar .chev{margin-left:auto;color:var(--dim)}
+  .collap.on .bar{border-bottom:1px solid var(--line)}
+  .collap .inner{padding:14px}
+  .field{display:flex;gap:9px}
+  .field input{flex:1;background:var(--bg);border:1px solid var(--line-2);border-radius:9px;padding:10px 12px;color:var(--ink);font-family:var(--mono);font-size:15px;font-weight:700;letter-spacing:.04em}
+  .field input::placeholder{color:var(--faint);font-weight:500}
+  .field .act{flex:0 0 auto;padding:10px 20px}
+  .optline{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line-2);display:flex;flex-direction:column;gap:9px}
+  .mini{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+  .seg{display:inline-flex;border:1px solid var(--line-2);border-radius:8px;overflow:hidden;font-size:11.5px}
+  .seg div{padding:7px 12px;color:var(--mut);border-right:1px solid var(--line-2)} .seg div:last-child{border-right:none}
+  .seg .on{background:var(--vio-bg);color:var(--vio);font-weight:700}
+  .mini input{width:96px;background:var(--bg);border:1px solid var(--line-2);border-radius:8px;padding:8px 10px;color:var(--ink);font-family:var(--mono);font-size:13px;font-weight:700}
+  .saved{font-size:11.5px;color:var(--mut);background:var(--cy-bg);border-radius:8px;padding:8px 11px;line-height:1.45}
+  .saved b{color:var(--ink-2)}
+  .note-lg{border:1px solid var(--line);border-left:3px solid var(--cy);background:var(--surface);border-radius:0 10px 10px 0;padding:13px 16px;margin-top:20px;font-size:13px;color:var(--mut);max-width:82ch}
+  .note-lg b{color:var(--ink-2)} .rec-g{color:var(--good);font-weight:650}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">finviz-groups-tracker · WS5 §8b · issue #319 · watch card v2</div>
+    <h1>Watch card — built on your Morning card</h1>
+    <p class="lede">Rebuilt from your feedback: the base is your <b>current Morning card</b> (labeled
+    reads, top-level chart, ticket expander), plus a <b>your-level</b> block and an optional <b>gauge</b>
+    — prior levels on top, today's on the bottom, all labeled. Copy fixed: no "System", no "broke",
+    no "crossed". Consistent sample numbers this time.</p>
+  </header>
+
+  <!-- ===== THE CARD ===== -->
+  <section>
+    <div class="sec-head"><div class="sec-n">01</div><div class="sec-titles">
+      <h2>The card — CRWD, triggered, watching for above 144</h2>
+      <p>Prior high 143.20 · your level 144.00 (watching above) · now 145.10 → above both.</p>
+    </div></div>
+    <div class="stage">
+      <div class="phone">
+        <div class="wcard good">
+          <div class="wc-head">
+            <span class="tk">CRWD</span><span class="chip coiled">Coiled</span>
+            <span class="grp">· Software — Infra</span><span class="sp"></span>
+            <span class="pill good"><span class="dot good"></span>Triggered</span>
+          </div>
+
+          <div class="block">
+            <div class="bh">Morning read</div>
+            <div class="kv"><span class="k">Trigger (prior high)</span><span class="v">143.20</span></div>
+            <div class="kv"><span class="k">Now</span><span class="v">145.10 <span class="d up">+2.1%</span></span></div>
+            <div class="kv"><span class="k">ATR from day low</span><span class="v good">0.6 — ok to act</span></div>
+          </div>
+
+          <div class="myread">
+            <span class="tag">Your level</span>
+            <span class="val">above 144.00</span>
+            <span class="met">now above</span>
+          </div>
+
+          <div class="gauge">
+            <div class="g-track">
+              <div class="g-band" style="left:11%;right:10%"></div>
+              <!-- top = prior (yesterday) -->
+              <div class="g-mk top low"  style="left:11%"></div>
+              <div class="g-cap top low" style="left:11%">prior low<br><span class="u">138.00</span></div>
+              <div class="g-mk top high"  style="left:69%"></div>
+              <div class="g-cap top high" style="left:69%">prior high<br><span class="u">143.20</span></div>
+              <!-- bottom = today -->
+              <div class="g-mk bot"  style="left:50%"></div>
+              <div class="g-cap bot" style="left:50%">day low<br><span class="u">141.50</span></div>
+              <div class="g-mk bot"  style="left:64%"></div>
+              <div class="g-cap bot" style="left:64%">open<br><span class="u">142.80</span></div>
+              <div class="g-mk bot you"  style="left:78%"></div>
+              <div class="g-cap bot you" style="left:78%">your 144</div>
+              <!-- price -->
+              <div class="g-price" style="left:90%"></div>
+            </div>
+            <div class="g-legend">
+              <span><i style="background:var(--bad)"></i>prior low</span>
+              <span><i style="background:var(--good)"></i>prior high</span>
+              <span><i style="background:var(--vio)"></i>your level</span>
+              <span><i style="background:var(--ink)"></i>now</span>
+            </div>
+          </div>
+
+          <div class="chartrow"><span class="cy">▾ Show chart</span> · TradingView, one tap</div>
+
+          <div class="wc-foot">
+            <span class="ttl"><b>5</b> mornings left</span><span class="sp"></span>
+            <span class="toggle">▾ Trade ticket</span>
+            <span class="act primary">I took it →</span>
+            <span class="ovf">⋯</span>
+          </div>
+        </div>
+      </div>
+      <div class="annot">
+        <h3>What changed</h3>
+        <ul>
+          <li><b>Base = your Morning card.</b> The <b>Morning read</b> block is your existing
+            <code>Trigger (prior high) / Now / ATR from day low</code> rows, verbatim — good info design,
+            kept.</li>
+          <li><b>No "System".</b> The block is just labeled "Morning read" (or unlabeled — your call, §03).</li>
+          <li><b>Your-level block</b> states only the direction you chose — <b>"above 144.00"</b> — and a
+            quiet <b>"now above"</b>. No "crossed", no "approaching". You read the price yourself.</li>
+          <li><b>Gauge</b>: prior levels labeled on <b>top</b>, today's open/day-low on the <b>bottom</b>,
+            your level in violet, price = the white dot. Optional — toggle off for a leaner card.</li>
+          <li><b>Show chart</b> is top-level, one tap. <b>⋯</b> = Renew · Edit level · Remove.</li>
+        </ul>
+        <h3>Compact mode (the C toggle)</h3>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+          <div class="crow"><div class="st3"></div><div class="c-tk">CRWD</div>
+            <div class="c-mid"><span class="c-st">Triggered</span><span class="c-sub">above prior high · <span class="vio">above your 144</span></span></div>
+            <div class="c-end"><div class="c-px">145.10</div><div class="c-dl up">+2.1%</div></div></div>
+          <div class="crow mut"><div class="st3"></div><div class="c-tk">FTNT</div>
+            <div class="c-mid"><span class="c-st">Setting up</span><span class="c-sub">under prior high · <span class="vio">watching above 156</span></span></div>
+            <div class="c-end"><div class="c-px">152.60</div><div class="c-dl dn">−1.1%</div></div></div>
+        </div>
+        <p style="font-size:12px;color:var(--mut);margin-top:10px"><b style="color:var(--ink-2)">C vs full card:</b>
+        compact hides the gauge, ATR line, and actions until you tap a row. Same card, denser — a toggle for
+        when the list is long, not a different design.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== YOUR-LEVEL COPY OPTIONS ===== -->
+  <section>
+    <div class="sec-head"><div class="sec-n">02</div><div class="sec-titles">
+      <h2>Your-level block — pick the wording</h2>
+      <p>Simplified per your call: store only the <b>direction you were watching</b>. No "crossed / approaching".
+      Met = a quiet green cue, nothing louder.</p>
+    </div></div>
+    <div class="opts">
+      <div class="opt"><div class="oh"><span class="k">a</span><span class="nm">Direction + quiet met</span><span class="rec">lean</span></div>
+        <div class="demo"><div class="myread" style="margin:0"><span class="tag">Your level</span><span class="val">above 144.00</span><span class="met">now above</span></div></div>
+        <div class="note">States your watch direction; "now above" in green only when true (grey "now below" otherwise). You do the math.</div></div>
+      <div class="opt"><div class="oh"><span class="k">b</span><span class="nm">Bare direction</span></div>
+        <div class="demo"><div class="myread" style="margin:0"><span class="tag">Watching</span><span class="val">above 144.00</span></div></div>
+        <div class="note">Just the level + direction. No met/not-met at all — the price is right there on the card. Minimal.</div></div>
+      <div class="opt"><div class="oh"><span class="k">c</span><span class="nm">Direction as a verb-label</span></div>
+        <div class="demo"><div class="myread" style="margin:0"><span class="tag" style="color:var(--vio)">Your trigger ↑</span><span class="val">144.00</span></div></div>
+        <div class="note">↑ = watching for above, ↓ = below. Tightest. Reads "your trigger 144, watching up".</div></div>
+    </div>
+    <div class="note-lg"><b>Level types</b> (set at add time): <b>above price</b> · <b>below price</b> ·
+      <b>reclaim 20MA</b> · <b>reclaim 50MA</b>. A reclaim level reads <code>reclaim 50MA (218.40)</code> and
+      lights green when today's low dipped under it but price is back above — see §04.</div>
+  </section>
+
+  <!-- ===== SECTION LABEL OPTIONS ===== -->
+  <section>
+    <div class="sec-head"><div class="sec-n">03</div><div class="sec-titles">
+      <h2>Killing "System" — the two-block header</h2>
+      <p>Options for naming the price-read block. My lean is (a): no header word at all — the row labels
+      already self-explain, exactly like your current card.</p>
+    </div></div>
+    <div class="opts">
+      <div class="opt"><div class="oh"><span class="k">a</span><span class="nm">No header — labeled rows only</span><span class="rec">lean</span></div>
+        <div class="demo"><div class="kv"><span class="k">Trigger (prior high)</span><span class="v">143.20</span></div><div class="kv"><span class="k">Now</span><span class="v">145.10 <span class="up">+2.1%</span></span></div></div>
+        <div class="note">Matches your current Morning card. Nothing to name badly.</div></div>
+      <div class="opt"><div class="oh"><span class="k">b</span><span class="nm">"Morning read" / "Your level"</span></div>
+        <div class="demo"><div class="bh" style="margin-bottom:4px">Morning read</div><div class="kv"><span class="k">Trigger (prior high)</span><span class="v">143.20</span></div></div>
+        <div class="note">Explicit two-block framing. "Morning read" is plain, not jargon.</div></div>
+      <div class="opt"><div class="oh"><span class="k">c</span><span class="nm">"The setup" / "Your level"</span></div>
+        <div class="demo"><div class="bh" style="margin-bottom:4px">The setup</div><div class="kv"><span class="k">Trigger (prior high)</span><span class="v">143.20</span></div></div>
+        <div class="note">Trader-native. Slightly more voice.</div></div>
+    </div>
+  </section>
+
+  <!-- ===== RECLAIM ===== -->
+  <section>
+    <div class="sec-head"><div class="sec-n">04</div><div class="sec-titles">
+      <h2>Failed-breakdown / reclaim — a real engine state</h2>
+      <p>Your "compare yesterday/today low vs price" instinct, formalized. Mirror of failed_breakout.
+      Goes in the <b>shared engine</b> → picks get it too.</p>
+    </div></div>
+    <div class="stage">
+      <div class="phone" style="flex:0 0 340px">
+        <div class="wcard good" style="border-left-color:var(--good)">
+          <div class="wc-head"><span class="tk">MELI</span><span class="grp">· Internet Retail</span><span class="sp"></span><span class="pill good"><span class="dot good"></span>Reclaimed</span></div>
+          <div class="block"><div class="bh">Morning read</div>
+            <div class="kv"><span class="k">Ref (50MA)</span><span class="v">218.40</span></div>
+            <div class="kv"><span class="k">Day low</span><span class="v">216.10 <span class="dn">▼ under</span></span></div>
+            <div class="kv"><span class="k">Now</span><span class="v good">221.05 — back above</span></div>
+          </div>
+          <div class="myread"><span class="tag">Your level</span><span class="val">reclaim 50MA</span><span class="met">reclaimed</span></div>
+        </div>
+      </div>
+      <div class="annot">
+        <h3>The predicate</h3>
+        <ul>
+          <li><b>Reclaim = <code>day_low &lt; ref</code> AND <code>price &gt; ref</code></b>, where <code>ref</code>
+            = prior low, 20MA, or 50MA.</li>
+          <li><b>Mirror of failed_breakout</b> (tagged the high, fell back). This is: dipped below support,
+            recovered above it — a bullish reversal read.</li>
+          <li><b>Lives in <code>pick_status.py</code></b>, so picks inherit it — the "add once, everywhere"
+            property you asked me to protect.</li>
+          <li><b>Needs the reference level.</b> Prior low is free; 20/50MA recovered from the private feed's
+            <code>raw</code> blob (%-distance → price via existing <code>normalizeBar</code> math). Phase 2.</li>
+        </ul>
+        <div class="note-lg" style="margin-top:6px"><b>Open question for you:</b> should reclaim use
+          <b>today's low</b> (intraday dipped-and-recovered, what the 10:05 read sees) or also consider
+          <b>yesterday's low</b> (broke down yesterday, recovering today)? I lean today's-low for the
+          morning read; a multi-day reclaim is a richer signal we can add later.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== ADD ===== -->
+  <section>
+    <div class="sec-head"><div class="sec-n">05</div><div class="sec-titles">
+      <h2>Add — Positions tab, with 20MA/50MA level types</h2>
+      <p>Sibling collapsible under "Log a position manually". Level types now include 20MA / 50MA reclaim.
+      Stop/size copy removed.</p>
+    </div></div>
+    <div class="stage">
+      <div class="phone">
+        <div class="phoneframe">
+          <div class="tabbar"><div class="t">Picks</div><div class="t">Morning</div><div class="t on">Positions</div><div class="t">Lookup</div></div>
+          <div class="pbody">
+            <div class="collap"><div class="bar"><span class="ic">＋</span> Log a position manually<span class="chev">▾</span></div></div>
+            <div class="collap on">
+              <div class="bar"><span class="ic">＋</span> Add to watchlist<span class="chev">▴</span></div>
+              <div class="inner">
+                <div class="field"><input placeholder="TICKER" value="FTNT" spellcheck="false"><span class="act primary">Watch</span></div>
+                <div class="optline">
+                  <div class="lbl">Level of interest — optional</div>
+                  <div class="mini">
+                    <div class="seg"><div class="on">Above</div><div>Below</div><div>20MA</div><div>50MA</div></div>
+                    <input class="num" value="156.00">
+                  </div>
+                  <div class="saved">Saved to your watchlist — it'll show on the <b>Morning tab</b> each day with
+                    a status read, and your level of interest displayed alongside.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="annot">
+        <h3>Details</h3>
+        <ul>
+          <li><b>Level types:</b> <code>Above</code> / <code>Below</code> a price, or <code>20MA</code> /
+            <code>50MA</code> reclaim. Picking 20MA/50MA hides the price input (the level <i>is</i> the MA).</li>
+          <li><b>One-liner replaces the stop/size note</b> — tells you where it'll show and that your level
+            rides along.</li>
+          <li><b>Morning quick-add</b> (a "＋ Watch a ticker" button atop the Morning watchlist) deep-links
+            here and auto-expands this collapsible.</li>
+        </ul>
+        <div class="note-lg"><b class="rec-g">Say the word on: </b> your-level wording (§02 a/b/c) ·
+          block header (§03 a/b/c) · reclaim today-vs-yesterday-low · gauge on-by-default or a toggle —
+          and I'll lock the surface and write the build brief.</div>
+      </div>
+    </div>
+  </section>
+
+</div>
