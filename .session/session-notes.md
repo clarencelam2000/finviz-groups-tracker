@@ -6,6 +6,58 @@
 
 ---
 
+## 2026-08-15 — WS5 §8b: personal watchlist — DESIGN LOCKED (#319, PR #321)
+
+**Status: safe to close once PR #321 merges.** Senior-eng + product design session for the §8b
+personal watchlist. No implementation — this session produced the **locked design + a cold-start
+build brief**. Lead owned all design/taste/architecture and the mocks (wrote the mock code by hand,
+iterated 3× on owner feedback); delegated ONE recon pass to a Sonnet subagent (force-include seam,
+morning pipeline, §8a form, private-D1 pattern) and verified its findings against the code.
+
+**Deliverables (all on PR #321, branch `claude/watchlist-force-include-picks-9w7rfo`):**
+- **`planning/watchlist-build-brief-8b.md`** — the authoritative cold-start brief (supersedes §8b's
+  think-big). Full architecture, D1 schema, worker routes, engine change, PWA spec, phasing, read list.
+- Mocks: `planning/mocks/ws5-watchlist-directions.html` (final **watch card v2** — authoritative UI)
+  + `ws5-watchlist-surface.html` (earlier three-surface context).
+
+**The reframe (owner drove it; lead had over-anchored on the prev-eng §8b note):**
+- **NOT public-picks force-include.** The picks selector is group-level with no ticker seam; force-in
+  would make the ticker a full public pick. Instead: private D1 `watchlist` table; union watch tickers
+  into the **morning + held feeds**; membership/level/TTL stay private.
+- **A watch item is not a trade ticket** — no stop/size ever (a stop is born at entry, depends on an
+  unknowable future fill). Add path = one-field radar-add + optional level. The §8a ticket is reused
+  **only at graduation** ("I took it").
+- **ONE status engine, no drift** — watch system-read MUST run through Python `pick_status.py`
+  (union into `collect_morning`), never a re-impl. Add a state there → picks + watch inherit it.
+
+**Locked decisions (see brief §2):** privacy posture (a) anonymous-public quote row, membership
+private; trigger = carry-your-own + auto system-read; N=10 trading mornings, renew resets, 14-day
+expired bin; your-level wording = direction + quiet met ("above 144.00 · now above"), no
+"crossed/approaching"; block header = none (labeled rows like the current Morning card), word "System"
+banned; **new `reclaim` engine state** = `price > ref AND (today_low < ref OR prior_low < ref)`, ref ∈
+{prior low, 20/50MA} — both today's AND yesterday's low; gauge on-by-default+collapsible; level types
+above/below/20MA/50MA; kebab = Renew/Edit/Remove; manage on Positions (sibling collapsible to §8a),
+view on Morning ("Your watchlist" + quick-add deep-link); top-level one-tap Show chart.
+
+**Verified code facts that shaped it:** morning status = prior High/Low/ATR only (no MAs) via
+`compute_pick_status`; MAs (for ATR-ext / MA-reclaim / stops) ARE in the private `ticker_quotes.raw`
+(84-col held scrape), recovered from %-distance via `advance.js::normalizeBar`; `collect_morning`
+narrows to Focus top-100 so watch tickers need an explicit union (§8b's "rides for free" was optimistic).
+
+**Low-confidence / owner-flagged:** (1) privacy posture (a) is the one-way door — accepted, fully-
+private morning store tracked as a follow-up. (2) gauge density on a phone — landed on
+on-by-default-but-collapsible. Neither blocks the build.
+
+**Next steps:** merge PR #321 (lands brief + notes on default). Then a fresh session executes the brief:
+**P1** worker/D1 (`0003_watchlist.sql` + CRUD + `/watchlist-tickers` + `/watchlist/tick` + `heldTickers`
+union) → **P2** feed+engine (`pick_status.py` reclaim + `collect_morning` union) → **P3** PWA (add
+collapsible + Morning section + card/gauge + graduation + release triplet + Playwright). Feed dormant
+until a few `ticker_quotes` bars accumulate (same gate as the rest of WS5).
+
+**Note:** this session-notes commit + the brief must land on default via #321 merging to be visible/usable next session.
+
+---
+
 ## 2026-08-14 — WS5 §8a: manual "any ticker" position entry (#264, PR #320)
 
 **Status: safe to close once PR #320 merges.** Senior-eng + product session driving epic #264 §8a —
