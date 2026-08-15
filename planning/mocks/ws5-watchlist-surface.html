@@ -1,0 +1,408 @@
+<title>Watchlist Surface Mock</title>
+<style>
+  :root{
+    --bg:#0b1220; --panel:#0f172a; --panel2:#1e293b; --line:#334155;
+    --ink:#f1f5f9; --mut:#94a3b8; --dim:#64748b;
+    --accent:#38bdf8; --good:#34d399; --warn:#fbbf24; --bad:#f87171; --violet:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:15px/1.55 -apple-system,"SF Pro Text",Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 24px 80px}
+  header.page .meta{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+  header.page h1{font-size:26px;margin:6px 0 6px;letter-spacing:-.02em}
+  header.page p{color:var(--mut);max-width:64ch;margin:0 0 8px}
+  header.page code{color:var(--accent);font-size:.9em}
+  .principle{margin-top:20px;border:1px solid var(--line);border-radius:12px;background:var(--panel);
+    padding:16px 18px;max-width:760px}
+  .principle b{color:var(--ink)}
+  .principle .lede{color:var(--accent);font-weight:700;font-size:13.5px;letter-spacing:.02em;text-transform:uppercase}
+  .principle p{color:var(--mut);font-size:13.5px;margin:8px 0 0}
+  .row{display:flex;flex-wrap:wrap;gap:36px;margin-top:32px;align-items:flex-start}
+  .mockcol{flex:0 0 360px}
+  .notes{flex:1 1 320px;min-width:280px}
+  .notes h3{margin:0 0 4px;font-size:15px;color:var(--accent)}
+  .notes .ws{font-size:11px;color:var(--dim);letter-spacing:.1em;text-transform:uppercase}
+  .notes ul{margin:10px 0 0;padding-left:18px;color:var(--mut);font-size:13.5px}
+  .notes li{margin-bottom:8px}
+  .notes b{color:var(--ink);font-weight:600}
+  .q{border-left:3px solid var(--warn);padding:2px 0 2px 10px;margin-top:14px;font-size:13px;color:var(--warn)}
+  .phone{width:360px;background:var(--panel);border:1px solid var(--line);border-radius:22px;overflow:hidden;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  .phead{padding:12px 16px 8px;border-bottom:1px solid var(--line);background:rgba(15,23,42,.95);
+    display:flex;justify-content:space-between;align-items:flex-end}
+  .phead .t{font-weight:700;font-size:15px}
+  .phead .s{font-size:11px;color:var(--mut)}
+  .tabbar{display:flex;gap:2px;padding:6px 10px 0;background:rgba(15,23,42,.95);border-bottom:1px solid var(--line)}
+  .tabbar .tab{font-size:11.5px;color:var(--dim);padding:6px 10px;border-radius:8px 8px 0 0}
+  .tabbar .tab.on{color:var(--accent);font-weight:700;background:var(--panel2)}
+  .body{padding:12px 12px 18px;display:flex;flex-direction:column;gap:10px}
+  .card{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .tick{font-weight:700;font-size:15px;letter-spacing:.02em}
+  .grp{font-size:11px;color:var(--dim)}
+  .num{font-variant-numeric:tabular-nums}
+  .pill{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.05em;padding:2px 8px;border-radius:999px;text-transform:uppercase}
+  .p-good{background:rgba(52,211,153,.15);color:var(--good)}
+  .p-warn{background:rgba(251,191,36,.15);color:var(--warn)}
+  .p-bad{background:rgba(248,113,113,.15);color:var(--bad)}
+  .p-mut{background:rgba(148,163,184,.14);color:var(--mut)}
+  .p-vio{background:rgba(167,139,250,.15);color:var(--violet)}
+  .p-acc{background:rgba(56,189,248,.15);color:var(--accent)}
+  .kv{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mut);margin-top:4px}
+  .kv .v{color:var(--ink);font-weight:600}
+  .stripe{border-left:3px solid var(--line)}
+  .stripe.good{border-left-color:var(--good)} .stripe.warn{border-left-color:var(--warn)}
+  .stripe.bad{border-left-color:var(--bad)} .stripe.mut{border-left-color:var(--dim)}
+  .stripe.acc{border-left-color:var(--accent)}
+  .banner{font-size:11px;color:var(--mut);background:rgba(56,189,248,.06);border:1px dashed rgba(56,189,248,.35);border-radius:8px;padding:6px 10px}
+  .readline{font-size:12px;color:var(--mut);margin-top:8px;display:flex;flex-direction:column;gap:5px}
+  .readline .lab{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+  .readline .sys{color:var(--ink)}
+  .readline .lvl{color:var(--violet)}
+  .dual{border-top:1px dashed var(--line);margin-top:9px;padding-top:8px}
+  .actions{display:flex;gap:6px;margin-top:11px}
+  .btn{flex:1;display:inline-block;text-align:center;font-size:12px;font-weight:700;border-radius:8px;padding:8px 10px;border:1px solid var(--line);color:var(--mut);white-space:nowrap}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#082f49}
+  .btn.ghost{flex:0 0 auto;padding:8px 12px}
+  .ttl{font-size:10.5px;color:var(--dim);letter-spacing:.03em}
+  .ttl b{color:var(--mut)}
+  .addbar{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .addbar .lab{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+  .field{display:flex;gap:8px}
+  .field input{flex:1;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 11px;color:var(--ink);font-size:14px;font-weight:700;letter-spacing:.03em}
+  .field .btn{flex:0 0 auto;padding:9px 18px}
+  .opt{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px}
+  .opt summary{font-size:11.5px;color:var(--accent);cursor:pointer;list-style:none}
+  .opt summary::-webkit-details-marker{display:none}
+  .opt .inner{margin-top:9px;display:flex;flex-direction:column;gap:8px}
+  .opt .hint{font-size:11px;color:var(--dim)}
+  .minifield{display:flex;gap:8px;align-items:center}
+  .minifield input{width:96px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 9px;color:var(--ink);font-size:13px;font-weight:700}
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;font-size:11.5px}
+  .seg div{padding:7px 12px;color:var(--mut)}
+  .seg .on{background:rgba(167,139,250,.18);color:var(--violet);font-weight:700}
+  .manrow{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid rgba(51,65,85,.6);font-size:13px}
+  .manrow:last-child{border-bottom:none}
+  .manrow .r-tick{font-weight:700}
+  .manrow .r-meta{font-size:11px;color:var(--dim)}
+  .manrow .r-act{display:flex;gap:6px}
+  .linkbtn{font-size:11px;color:var(--mut);border:1px solid var(--line);border-radius:6px;padding:4px 9px}
+  .linkbtn.warn{color:var(--warn);border-color:rgba(251,191,36,.4)}
+  .expired summary{font-size:11.5px;color:var(--dim);cursor:pointer;list-style:none;padding:4px 0}
+  .expired summary::-webkit-details-marker{display:none}
+  .ticket .trow{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--mut);padding:7px 0;border-bottom:1px solid rgba(51,65,85,.5)}
+  .ticket .trow:last-of-type{border-bottom:none}
+  .ticket .prefill{background:rgba(56,189,248,.1);color:var(--accent);font-size:10px;font-weight:700;padding:1px 6px;border-radius:999px;margin-left:6px}
+  .ticket .need{color:var(--warn)}
+  .ticket .box{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:6px 9px;color:var(--ink);font-weight:700;font-size:13px;min-width:74px;text-align:right}
+  .ticket .box.empty{color:var(--dim);font-weight:500}
+  section.block{margin-top:58px}
+  section.block>h2{font-size:19px;margin:0;letter-spacing:-.01em}
+  section.block>.sub{color:var(--dim);font-size:13px;margin:4px 0 0;max-width:70ch}
+  .flow{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dim);flex-wrap:wrap;margin:14px 0 0}
+  .flow .st{border:1px solid var(--line);border-radius:6px;padding:3px 9px}
+  .flow .st.on{border-color:var(--accent);color:var(--accent);font-weight:700}
+  .flow .ar{color:var(--dim)}
+  a{color:var(--accent)}
+</style>
+
+<div class="wrap">
+<header class="page">
+  <div class="meta">finviz-groups-tracker · design mock · WS5 §8b · issue #319 · 2026-08-15</div>
+  <h1>Personal watchlist — surface mock</h1>
+  <p>A pre-position radar: add a ticker, it rides the next N morning scrapes and shows a real
+  morning status card, then graduates to a position in one tap. Rendered in the shipping PWA's
+  visual language (slate-900 / sky-400) so it translates 1:1 into <code>docs/index.html</code>.
+  Deliberately dark-only — the app is single-theme dark.</p>
+
+  <div class="principle">
+    <div class="lede">The load-bearing idea</div>
+    <p><b>A watch item is not a trade ticket.</b> A stop is a position-management concept — it's
+    born at entry, not before, and it depends on the fill you get on a day you can't predict. So
+    a watch item has <b>no stop and no size, ever</b>. It carries a ticker and, optionally, a level
+    of interest. The full ticket (entry · stop · size) appears at exactly one moment: <b>"I took
+    it."</b> That's the only place the §8a form is reused.</p>
+  </div>
+</header>
+
+<!-- =================== MANAGE SURFACE =================== -->
+<section class="block">
+  <h2>1 · Manage — Positions tab (behind your sign-in)</h2>
+  <p class="sub">Adding/removing writes to a private D1 table, so it lives on the authed surface next
+  to the manual ticket. Adding is one field: a ticker. Everything else is optional.</p>
+  <div class="row">
+    <div class="mockcol">
+      <div class="phone">
+        <div class="tabbar">
+          <div class="tab">Picks</div><div class="tab">Morning</div>
+          <div class="tab on">Positions</div><div class="tab">Lookup</div>
+        </div>
+        <div class="body">
+          <div class="addbar">
+            <div class="lab">＋ Add to watchlist</div>
+            <div class="field">
+              <input value="FTNT" spellcheck="false" aria-label="ticker">
+              <span class="btn primary">Watch</span>
+            </div>
+            <details class="opt" open>
+              <summary>Set a level of interest (optional) ▾</summary>
+              <div class="inner">
+                <div class="minifield">
+                  <div class="seg"><div class="on">Above</div><div>Below</div></div>
+                  <input value="156.00" class="num" aria-label="level">
+                </div>
+                <div class="hint">We'll flag when it crosses. <b>No stop, no size</b> — you set those
+                if and when you take it.</div>
+              </div>
+            </details>
+          </div>
+
+          <div class="card">
+            <div class="lab" style="font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin-bottom:2px">Watching · 3 active</div>
+            <div class="manrow">
+              <div><span class="r-tick">CRWD</span> <span class="r-meta">· level 156 · auto + your level</span><div class="ttl"><b>5</b> mornings left</div></div>
+              <div class="r-act"><span class="linkbtn">Renew</span><span class="linkbtn">Remove</span></div>
+            </div>
+            <div class="manrow">
+              <div><span class="r-tick">NVDA</span> <span class="r-meta">· auto read</span><div class="ttl"><b>9</b> mornings left</div></div>
+              <div class="r-act"><span class="linkbtn">Renew</span><span class="linkbtn">Remove</span></div>
+            </div>
+            <div class="manrow">
+              <div><span class="r-tick">FTNT</span> <span class="r-meta">· level 156 · adding…</span><div class="ttl"><b>10</b> mornings left</div></div>
+              <div class="r-act"><span class="linkbtn">Renew</span><span class="linkbtn">Remove</span></div>
+            </div>
+            <details class="expired">
+              <summary>Expired · 1 &nbsp;▾</summary>
+              <div class="manrow">
+                <div><span class="r-tick" style="color:var(--dim)">PANW</span> <span class="r-meta">· expired 2 days ago · auto-clears in 12</span></div>
+                <div class="r-act"><span class="linkbtn warn">Renew</span><span class="linkbtn">Remove</span></div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="ws">the add path</div>
+      <h3>One field. Not a form.</h3>
+      <ul>
+        <li><b>Required = ticker.</b> Type it, tap Watch, done. The prev-eng "same form as §8a" is
+          dropped for the add path — a full trade ticket to <i>watch</i> something is nonsense.</li>
+        <li><b>Optional level of interest</b> — a single price + above/below. Drives a "your level"
+          read on the card. <b>No stop. No size.</b> Those don't exist until you're in.</li>
+        <li><b>Manage here, view on Morning.</b> Add/remove/renew are D1 writes → they sit on the
+          authed Positions tab (where the manual ticket already lives). The status cards you actually
+          read each morning render on the Morning tab (§2). Mirrors how picks work: selected in the
+          backend world, viewed on Morning.</li>
+        <li><b>TTL.</b> Each entry rides N mornings then drops out of the scrape. Expired items fall
+          into a collapsed bin with one-tap Renew; auto-purged after ~14 days so nothing silently
+          vanishes and the active list stays clean.</li>
+      </ul>
+      <div class="q">Owner call — <b>N default.</b> Mock shows N=10 (≈2 weeks). Enough for a breakout
+      setup to trigger or go stale? Renew resets to N.</div>
+      <div class="q">Owner call — <b>manage location.</b> Positions tab (shown) vs. a small manage
+      strip on Morning itself. Solo user + low-PII, so either works.</div>
+    </div>
+  </div>
+</section>
+
+<!-- =================== MORNING VIEW =================== -->
+<section class="block">
+  <h2>2 · View — Morning tab, "Your watchlist" section</h2>
+  <p class="sub">Same status vocabulary as pick cards (Triggered / Setting-up / Failed / Gapped /
+  Back-below-low), computed from prior High/Low/ATR — no moving averages, all available privately
+  from the held-feed bars. When you've set a level, the card shows both reads.</p>
+  <div class="row">
+    <div class="mockcol">
+      <div class="phone">
+        <div class="tabbar">
+          <div class="tab">Picks</div><div class="tab on">Morning</div>
+          <div class="tab">Positions</div><div class="tab">Lookup</div>
+        </div>
+        <div class="phead">
+          <div class="t">Your watchlist</div>
+          <div class="s">Fri Aug 15 · 10:05 ET</div>
+        </div>
+        <div class="body">
+          <div class="banner">Morning prices are mid-session reads. Watch items carry no position —
+          "I took it" opens a real ticket.</div>
+
+          <!-- Triggered + actionable -->
+          <div class="card stripe good">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">NVDA</span> <span class="grp">· Semiconductors</span></span>
+              <span class="pill p-good">Triggered</span>
+            </div>
+            <div class="readline">
+              <div><span class="lab">System read</span> <span class="sys num">broke prior high 143.20 · price 145.10 (+1.3%)</span></div>
+              <div><span class="sys">Entry quality: <b class="num">0.6× ATR</b> from the low — clean</span></div>
+            </div>
+            <div class="actions">
+              <span class="btn primary">I took it →</span>
+              <span class="btn ghost">Renew</span>
+            </div>
+            <div class="ttl" style="margin-top:8px"><b>9</b> mornings left</div>
+          </div>
+
+          <!-- Auto + user level, both reads -->
+          <div class="card stripe acc">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">CRWD</span> <span class="grp">· Software — Infra</span></span>
+              <span class="pill p-good">Triggered</span>
+            </div>
+            <div class="readline">
+              <div><span class="lab">System read</span> <span class="sys num">broke prior high 155.10 · price 158.40 (+2.1%)</span></div>
+              <div class="dual"><span class="lab">Your level · above 156</span> <span class="lvl num">crossed — price 1.5% above ✓</span></div>
+            </div>
+            <div class="actions">
+              <span class="btn primary">I took it →</span>
+              <span class="btn ghost">Renew</span>
+            </div>
+            <div class="ttl" style="margin-top:8px"><b>5</b> mornings left · level 156</div>
+          </div>
+
+          <!-- Setting up, auto only -->
+          <div class="card stripe mut">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">FTNT</span> <span class="grp">· Software — Security</span></span>
+              <span class="pill p-mut">Setting up</span>
+            </div>
+            <div class="readline">
+              <div><span class="lab">System read</span> <span class="sys num">below prior high 154.20 · price 152.60 (−1.1%)</span></div>
+              <div class="dual"><span class="lab">Your level · above 156</span> <span class="lvl num">2.2% away</span></div>
+            </div>
+            <div class="actions">
+              <span class="btn">I took it →</span>
+              <span class="btn ghost">Renew</span>
+            </div>
+            <div class="ttl" style="margin-top:8px"><b>10</b> mornings left · level 156</div>
+          </div>
+
+          <!-- Back below yesterday's low (honest downside, no "stop") -->
+          <div class="card stripe bad">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span><span class="tick">SNOW</span> <span class="grp">· Software — Data</span></span>
+              <span class="pill p-bad">Back below low</span>
+            </div>
+            <div class="readline">
+              <div><span class="lab">System read</span> <span class="sys num">under prior low 128.40 · price 126.10 (−2.4%)</span></div>
+            </div>
+            <div class="actions">
+              <span class="btn">I took it →</span>
+              <span class="btn ghost">Remove</span>
+            </div>
+            <div class="ttl" style="margin-top:8px"><b>3</b> mornings left</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="ws">the morning read</div>
+      <h3>Both reads, when you've set a level.</h3>
+      <ul>
+        <li><b>System read (always).</b> Uses prior High as the trigger and prior Low as the floor —
+          the exact same engine as pick cards (<code>compute_pick_status</code>). Full vocabulary,
+          including the honest "back below yesterday's low" downside — labeled as a range break, <b>not
+          a "stop"</b> (there's no position to stop out of).</li>
+        <li><b>Your-level read (when set).</b> A trigger-only read vs. your price — "crossed ✓" /
+          "2.2% away". No floor, because a watch item has no stop.</li>
+        <li><b>Actionable cards</b> (Triggered / Gapped) surface the entry-quality metric
+          (ATR-from-low) and a prominent <b>I took it →</b>, exactly like pick cards do.</li>
+        <li><b>No MAs needed.</b> The whole read is High / Low / ATR — all in the private
+          <code>ticker_quotes</code> feed already. MAs live in that feed's <code>raw</code> blob too,
+          so richer chips (Focus / launch-ready) are possible later without new plumbing.</li>
+      </ul>
+      <div class="q">Owner call — <b>watch cards: minimal (shown) or full pick adornments?</b> I kept
+      them lean (status + your level). Focus score / launch-ready chips are derivable but add noise
+      to a radar.</div>
+    </div>
+  </div>
+</section>
+
+<!-- =================== GRADUATION =================== -->
+<section class="block">
+  <h2>3 · Graduate — "I took it" opens the real ticket</h2>
+  <p class="sub">This is the one place the §8a form is reused — because <i>now</i> a stop and size are
+  real. The ticket opens prefilled with the ticker (and your level as an entry hint); you set the
+  stop and size against today's actual structure, then it becomes a position.</p>
+  <div class="row">
+    <div class="mockcol">
+      <div class="phone">
+        <div class="phead">
+          <div class="t">Open position · CRWD</div>
+          <div class="s">from watchlist · <span style="color:var(--accent)">graduating</span></div>
+        </div>
+        <div class="body">
+          <div class="banner">Now it's real. A stop and size finally mean something — set them
+          against where price is <b>today</b>.</div>
+          <div class="card ticket">
+            <div class="trow"><span>Ticker</span><span class="box">CRWD <span class="prefill">from watch</span></span></div>
+            <div class="trow"><span>Entry</span><span class="box num">158.40 <span class="prefill">your level</span></span></div>
+            <div class="trow"><span class="need">Stop — set now</span><span class="box empty num">— set —</span></div>
+            <div class="trow"><span class="need">Size / risk — set now</span><span class="box empty num">— set —</span></div>
+            <div class="trow"><span>Earnings (optional)</span><span class="box empty num">—</span></div>
+            <div class="actions" style="margin-top:12px">
+              <span class="btn primary">Confirm — log it</span>
+              <span class="btn ghost">Cancel</span>
+            </div>
+          </div>
+          <div class="flow">
+            <span class="st">Watching</span><span class="ar">→</span>
+            <span class="st on">I took it</span><span class="ar">→</span>
+            <span class="st">Position · engine manages</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="notes">
+      <div class="ws">the unification, done right</div>
+      <h3>Same payload, at the right moment.</h3>
+      <ul>
+        <li><b>Prefilled, not pre-decided.</b> Ticker carries over; your watch level seeds the entry
+          field. Stop and size are <b>blank and required</b> — you fill them against today's structure,
+          which is the whole reason they weren't asked at watch time.</li>
+        <li><b>Reuses the shipped path.</b> Confirm → <code>POST /positions</code> with the exact §8a
+          manual payload (<code>meta.source</code> can note <code>'watchlist'</code>). Zero new write
+          path; the position list already renders it.</li>
+        <li><b>Graduation clears the watch entry</b> — it's a position now, and rides the held feed /
+          lifecycle engine from here.</li>
+      </ul>
+      <div class="q">Confirms the prev-eng instinct was <b>half</b> right: the form unifies at
+      <b>graduation</b>, not at add. That's the reframe this mock is built on.</div>
+    </div>
+  </div>
+</section>
+
+<!-- =================== DECISIONS =================== -->
+<section class="block">
+  <h2>Decisions baked into this mock &amp; what's still yours</h2>
+  <div class="row">
+    <div class="notes" style="flex:1 1 340px">
+      <div class="ws">locked (your prior greens)</div>
+      <h3>Settled</h3>
+      <ul>
+        <li><b>Privacy posture (a).</b> Membership + your levels stay private in D1. Only an
+          <i>anonymous</i> 10:05 quote row rides the public morning scrape — market data, no size, no
+          position. SPRINT item filed to revisit a fully-private morning store later.</li>
+        <li><b>No stop / no size at watch time.</b> Your call, and it drove the whole reframe.</li>
+        <li><b>Auto read is default, level is optional</b> — never forced.</li>
+        <li><b>TTL with a renew + expired bin.</b></li>
+      </ul>
+    </div>
+    <div class="notes" style="flex:1 1 340px">
+      <div class="ws">need your green</div>
+      <h3>Open for you</h3>
+      <ul>
+        <li><b>N default</b> — mock uses 10 mornings.</li>
+        <li><b>Manage location</b> — Positions tab (shown) vs. a manage strip on Morning.</li>
+        <li><b>Watch-card richness</b> — minimal (shown) vs. full pick adornments.</li>
+        <li><b>Level semantics</b> — I modeled "above/below a price." Enough, or do you want "reclaim
+          the 50MA"-style structural levels too? (That <i>would</i> pull in MAs — deferrable.)</li>
+      </ul>
+      <div class="q">Green-light the direction and I'll turn it into a phased build brief
+      (D1 table + routes → feed union + TTL → PWA surfaces) and hand the boots-on-ground to subagents
+      against locked specs.</div>
+    </div>
+  </div>
+</section>
+
+</div>
