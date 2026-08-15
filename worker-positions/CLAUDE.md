@@ -59,19 +59,25 @@ Configurable parameters › Engine constants table, and this file. To change a d
 ## The wiring: `src/sweep.js` (phase 3b-i)
 
 `sweep()` is the engine's only caller. It is a **catch-up fold**: per position, load every
-`ticker_quotes` bar with `trade_date > max(last_advanced_date, entry_date)` and fold `advance()`
-over them in order. That one mechanism gives same-day idempotency, missed-day self-heal, and
-backfill over bars captured before the engine had a caller.
+`ticker_quotes` bar with `trade_date > max(last_advanced_date, entry_date, openedAtEtDate)` and fold
+`advance()` over them in order. That one mechanism gives same-day idempotency, missed-day self-heal,
+and backfill over bars captured before the engine had a caller.
 
 Four things to internalize before editing the wiring:
 
-- **Two rules live here, not in the design doc** (lead decisions, 2026-08-13, not yet owner-ratified).
-  (1) A position is **never advanced on its own entry-day bar** — the bound is strictly `>`
-  `entry_date`, because that day's `low` is largely pre-purchase and would fire a false `stop_hit`
-  on the day of entry. (2) **Persistence is gated on `last_advanced_date` moving**, not on "were
-  there events" — a stale bar emits a `note` without stamping the date, so it never leaves the query
-  window; the weaker gate re-appends that note on every sweep, forever. Both are pinned by tests;
-  don't "simplify" either away.
+- **Three rules live here, not in the design doc** (lead decisions, 2026-08-13/15, not yet
+  owner-ratified). (1) A position is **never advanced on its own entry-day bar** — the bound is
+  strictly `>` `entry_date`, because that day's `low` is largely pre-purchase and would fire a false
+  `stop_hit` on the day of entry. (2) A position is **never advanced on bars that predate its own
+  creation** — the bound is also strictly `>` `opened_at`'s ET trading date, closing a gap the §8a
+  backdated `entry_date` feature opened: `ticker_quotes` is global/un-scoped-by-position, so a
+  backdate onto a ticker with pre-existing bars (from a prior or concurrent position) would otherwise
+  make the very next sweep fold `advance()` over real history in one shot — a genuine replay, not
+  just a label, breaking the §8a design promise. A no-op for non-backdated positions (`entry_date ==
+  opened_at`'s ET date already). (3) **Persistence is gated on `last_advanced_date` moving**, not on
+  "were there events" — a stale bar emits a `note` without stamping the date, so it never leaves the
+  query window; the weaker gate re-appends that note on every sweep, forever. All three are pinned
+  by tests; don't "simplify" any of them away.
 - **`meta` is a JSON string in D1, an object to the engine.** `loadAdvanceablePositions()` parses it
   at the load boundary. Skip that and `effectiveConfig()` silently sees no overrides and
   `meta.widen_enabled=false` stops working — a bug with no exception to catch it.

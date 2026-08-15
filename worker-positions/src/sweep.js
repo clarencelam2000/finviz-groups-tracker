@@ -37,18 +37,34 @@ export const SWEEP_CONFIG = Object.freeze({
 // ── barWindowStart(pos) — PURE. The exclusive lower bound on trade_date this position may
 // advance through this sweep. ──────────────────────────────────────────────────────────────────
 //
-// The bound is the lexicographic MAX of last_advanced_date and entry_date. Both are 'YYYY-MM-DD'
-// strings, and that format sorts identically under string comparison and date comparison, so a
-// plain string max() is correct without parsing either into a Date.
+// The bound is the lexicographic MAX of last_advanced_date, entry_date, and opened_at's ET trading
+// date. All three are (or reduce to) 'YYYY-MM-DD' strings, and that format sorts identically under
+// string comparison and date comparison, so a plain string max() is correct without parsing any of
+// them into a Date.
 //
-// WIRING-LAYER RULE, not in the design doc (lead decision, 2026-08-13): entry_date is included in
-// the floor ON PURPOSE. A position must never be advanced on its own entry-day bar, because that
-// day's `low` (and often `open`) is largely PRE-PURCHASE — the low can easily sit below the entry
-// fill's initial stop for reasons that have nothing to do with the trade (e.g. the stock dipped
-// before the entry print that afternoon). Advancing on the entry-day bar would risk firing a false
-// `stop_hit` on the very day the user bought, before the engine has any business judging the trade.
+// WIRING-LAYER RULES, not in the design doc (lead decisions, 2026-08-13): entry_date and opened_at
+// are included in the floor ON PURPOSE.
+//
+// (1) entry_date: a position must never be advanced on its own entry-day bar, because that day's
+// `low` (and often `open`) is largely PRE-PURCHASE — the low can easily sit below the entry fill's
+// initial stop for reasons that have nothing to do with the trade (e.g. the stock dipped before the
+// entry print that afternoon). Advancing on the entry-day bar would risk firing a false `stop_hit`
+// on the very day the user bought, before the engine has any business judging the trade.
+//
+// (2) opened_at (ET trading date): closes a gap the §8a backdated-entry feature (positions.js
+// buildPositionRow) opened. entry_date can now be an owner-supplied date in the past, but
+// ticker_quotes is a GLOBAL, un-scoped-by-position feed (quotes.js heldTickers) — if the ticker was
+// already being fed (held by any other position, this user's or, in a multi-user future, another's)
+// during the backdated window, bars already sit in ticker_quotes for dates the position never
+// actually lived through. Without this floor, the very first sweep after a backdated create would
+// fold advance() over that pre-existing history in one shot — a genuine retroactive replay (false
+// stop-hits/trims off historical closes) — contradicting the explicit design promise that "a
+// backdate is a label, not a replay" (planning/trade-lifecycle-engine.md §8a). For an ordinary
+// (non-backdated) position entry_date already equals opened_at's ET date, so this floor is a no-op
+// there; it only ever binds when entry_date is backdated behind the position's real creation time.
+//
 // The bound is strictly EXCLUSIVE (bar.trade_date > start, not >=), so the first bar the engine
-// ever sees for a position is the session strictly AFTER entry_date.
+// ever sees for a position is the session strictly AFTER all three floors.
 //
 // Returns null only when BOTH last_advanced_date and entry_date are absent — a position with no
 // entry_date at all is a data-integrity gap the sweep orchestrator skips outright (see sweep()).
@@ -56,9 +72,10 @@ export function barWindowStart(pos) {
   const a = pos && pos.last_advanced_date;
   const b = pos && pos.entry_date;
   if (!a && !b) return null;
-  if (!a) return b;
-  if (!b) return a;
-  return a > b ? a : b;
+  let start = !a ? b : !b ? a : a > b ? a : b;
+  const opened = pos && pos.opened_at ? etDateStr(new Date(pos.opened_at)) : null;
+  if (opened && opened > start) start = opened;
+  return start;
 }
 
 // ── advanceThroughBars(pos, rows, cfg) — PURE, no I/O. ────────────────────────────────────────

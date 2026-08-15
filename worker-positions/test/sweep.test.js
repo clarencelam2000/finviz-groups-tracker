@@ -93,6 +93,28 @@ describe("barWindowStart", () => {
   it("returns null only when BOTH dates are absent", () => {
     expect(barWindowStart({ entry_date: null, last_advanced_date: null })).toBe(null);
   });
+  it("is also floored by opened_at's ET trading date (§8a backdate guard)", () => {
+    // Backdated entry_date, but the position was really created 9 days later — opened_at wins.
+    expect(barWindowStart({
+      entry_date: "2026-08-01",
+      last_advanced_date: null,
+      opened_at: "2026-08-10T15:00:00Z", // ET trading date 2026-08-10 (EDT, UTC-4)
+    })).toBe("2026-08-10");
+  });
+  it("opened_at is a no-op for a non-backdated position (entry_date == opened_at's ET date)", () => {
+    expect(barWindowStart({
+      entry_date: "2026-08-10",
+      last_advanced_date: null,
+      opened_at: "2026-08-10T15:00:00Z",
+    })).toBe("2026-08-10");
+  });
+  it("last_advanced_date can still exceed opened_at once the position has advanced for real", () => {
+    expect(barWindowStart({
+      entry_date: "2026-08-01",
+      last_advanced_date: "2026-08-15",
+      opened_at: "2026-08-10T15:00:00Z",
+    })).toBe("2026-08-15");
+  });
 });
 
 // ── 1. Happy path: managing position + 3 consecutive bars ──────────────────────────────────────
@@ -151,6 +173,41 @@ describe("sweep — pre-entry bars ignored", () => {
     const result = await sweep(db);
     expect(result.results[0].bars_advanced).toBe(0);
     expect(db._positions()[0].last_advanced_date).toBe(null);
+  });
+});
+
+// ── 4b. Backdated entry_date must not replay pre-existing bars (opened_at floor, §8a guard) ─────
+describe("sweep — backdated entry_date does not replay pre-existing bars", () => {
+  it("a bar dated between the backdated entry_date and the position's real creation is never loaded", async () => {
+    seedPos(db, {
+      entry_date: "2026-08-01", // owner-supplied backdate
+      opened_at: "2026-08-10T15:00:00Z", // position actually created 9 days later
+      last_advanced_date: null,
+      state: "open",
+    });
+    // A bar already sitting in the (global, un-scoped) ticker_quotes feed from before this
+    // position existed — e.g. left over from a prior/concurrent position on the same ticker.
+    // Would fire a false stop_hit if the fold ever reached it.
+    db._seedQuote(quoteRow({ trade_date: "2026-08-05", close: 50, sma20: 95, sma50: 80, low: 1 }));
+    const result = await sweep(db);
+    expect(result.results[0].bars_advanced).toBe(0);
+    const [row] = db._positions();
+    expect(row.last_advanced_date).toBe(null);
+    expect(row.state).toBe("open");
+    expect(db._events().length).toBe(0);
+  });
+
+  it("a bar dated after the position's real creation IS advanced normally", async () => {
+    seedPos(db, {
+      entry_date: "2026-08-01",
+      opened_at: "2026-08-10T15:00:00Z",
+      last_advanced_date: null,
+      state: "managing",
+    });
+    db._seedQuote(quoteRow({ trade_date: "2026-08-11", close: 101, sma20: 95, sma50: 80, low: 99 }));
+    const result = await sweep(db);
+    expect(result.results[0].bars_advanced).toBe(1);
+    expect(db._positions()[0].last_advanced_date).toBe("2026-08-11");
   });
 });
 
