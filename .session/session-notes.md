@@ -38,11 +38,20 @@ P1+P2) directly against Cloudflare, not just against code:
    `recoverMaLevel()`/`pctFromRaw()` in `worker-positions/src/advance.js` reconstruct the MA price
    from Finviz's own `%`-from-SMA columns, which Finviz computes server-side per-row. Confirmed live:
    `ticker_quotes` currently has exactly 2 rows, both `trade_date=2026-08-14` (one day), and that's
-   already sufficient. The "needs several days" claim conflates this with the WS5 phase-3
-   `advance()` engine (2026-08-15 entry below, GO-LIVE checklist), which genuinely does need several
-   days of held bars to exercise trailing-stop transitions — a different feature. Corrected in
-   `planning/watchlist-build-brief-8b.md` §7 and in PR #322's description; not correcting the prose
-   in the 2026-08-15 entry below per the append-only rule, but flagging it stale here.
+   already sufficient.
+   **Correction to this entry's own first draft (owner caught it same-day):** the first version of
+   this note claimed the WS5 phase-3 `advance()` engine "genuinely does need several days of bars" —
+   that's also wrong, checked directly against `advance.js`. `advance(pos, bar, cfg)` is a pure
+   function of ONE current bar + the position's own persisted state (`current_stop`/`trail_basis`/
+   `profit_floor`/`caution_flag`/`highest_trim_atr`, each updated one call at a time) — not a
+   multi-day `ticker_quotes` lookback. `atrExt50()` and the trail-basis-widen check are both
+   single-bar computations; the ratchet (`Math.max(next.current_stop, trailLevel, ...)`) reads
+   yesterday's STATE on the position row, not yesterday's BAR. "Needs a few days to test
+   meaningfully" (2026-08-15 entry below, GO-LIVE checklist) is a QA-confidence statement about
+   watching real state transitions across live runs, not an algorithmic data dependency — same
+   category of claim as the watchlist one this entry set out to correct, and equally wrong for the
+   same reason. Fixed in `planning/watchlist-build-brief-8b.md` §7 and PR #322's description;
+   not editing the 2026-08-15 entry's original prose per the append-only rule.
 
 **Next steps:** none blocking. Only remaining open item is #3 — confirm the `POSITIONS_WORKER_URL`/
 `POSITIONS_INGEST_TOKEN` secrets actually work end-to-end on a real weekday `collect_morning` run

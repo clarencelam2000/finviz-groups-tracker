@@ -256,9 +256,13 @@ Four independent axes (full gallery in mock §03 of the surface mock / §-axes):
   mock**; the lead owns final markup review.
 
 **Correction (verified against live D1 2026-08-16, see PR #322 ops-verification):** P2's live
-behavior does NOT need multiple days of `ticker_quotes` history — that's the `advance()` engine's
-gate (WS5 phase 3, genuinely needs several days to observe trailing-stop transitions), not this
-one. `sma20`/`sma50`/`atr`/`prior_high`/`prior_low` are all recovered from a SINGLE scraped row —
+behavior does NOT need multiple days of `ticker_quotes` history. Note the WS5 phase-3 `advance()`
+engine ALSO doesn't computationally need it — `advance(pos, bar, cfg)` is a pure function of one
+current bar + the position's own persisted state (`current_stop`/`trail_basis`/`profit_floor`,
+updated one call at a time), not a multi-day bar lookback. "Needs a few days to test meaningfully"
+(earlier session notes) is a QA-confidence statement about watching state transitions across real
+runs, not a data dependency of the algorithm. `sma20`/`sma50`/`atr`/`prior_high`/`prior_low` are
+all recovered from a SINGLE scraped row —
 `normalizeBar()`/`recoverMaLevel()` in `worker-positions/src/advance.js` reconstruct the MA price
 level from Finviz's own `%`-distance-from-SMA columns (`raw["SMA20"]`/`raw["SMA50"]`), which Finviz
 computes server-side and reports per-row. No rolling window is computed in our own D1. A watch
