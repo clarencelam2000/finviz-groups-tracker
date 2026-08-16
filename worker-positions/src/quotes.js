@@ -5,6 +5,8 @@
 // Validation of the ingest payload is a PURE function (unit-tested without D1). Design:
 // planning/trade-lifecycle-engine.md § 5 / § 5a; ADR-012 § 10 / § 11; issues #312, #297.
 
+import { watchlistTickers } from "./watchlist.js";
+
 const TICKER_RE = /^[A-Z][A-Z0-9.\-]{0,9}$/; // 1–10 chars, letters/digits/./-, starts with a letter.
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/; // ET trading date YYYY-MM-DD.
 
@@ -94,13 +96,17 @@ export async function ingestQuotes(db, value) {
   return written;
 }
 
-// The held set the feed must scrape: DISTINCT tickers across all users' held positions. Market data
-// is user-less (§ 5), so we intentionally do NOT scope this by user_id — the symbol list is shared.
+// The feed set the held-tickers job must scrape: DISTINCT tickers across all users' held positions
+// UNION the active personal watchlist (WS5 §8b, issue #319 — a watch item rides the EOD held feed
+// to accumulate the prior-day High/Low/ATR/MAs a fresh watch has no bar history for yet, build
+// brief § 3). Market data is user-less (§ 5), so we intentionally do NOT scope either half by
+// user_id — the symbol list is shared.
 export async function heldTickers(db) {
   const marks = HELD_STATES.map(() => "?").join(", ");
-  const { results } = await db
-    .prepare(`SELECT DISTINCT ticker FROM positions WHERE state IN (${marks}) ORDER BY ticker`)
-    .bind(...HELD_STATES)
-    .all();
-  return results.map((r) => r.ticker);
+  const [{ results: posResults }, watchTickers] = await Promise.all([
+    db.prepare(`SELECT DISTINCT ticker FROM positions WHERE state IN (${marks}) ORDER BY ticker`).bind(...HELD_STATES).all(),
+    watchlistTickers(db),
+  ]);
+  const merged = new Set([...posResults.map((r) => r.ticker), ...watchTickers]);
+  return [...merged].sort();
 }

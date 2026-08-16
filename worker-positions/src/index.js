@@ -8,6 +8,21 @@ import { validateCreatePayload, buildPositionRow, insertPosition, listPositions 
 import { validateIngestBatch, ingestQuotes, heldTickers } from "./quotes.js";
 import { sweep } from "./sweep.js";
 import { applyTransition } from "./transitions.js";
+import {
+  validateAddPayload,
+  validatePatchPayload,
+  addWatch,
+  listWatch,
+  patchWatch,
+  deleteWatch,
+  watchlistTickerRefs,
+  tickWatchlist,
+} from "./watchlist.js";
+
+// Anchored :id route for the owner watchlist collection, matched AFTER the exact /watchlist string
+// checks below so it can never shadow them (mirror of TRANSITION_PATH's placement rationale). \d+
+// cannot match the literal "tick" of /watchlist/tick, but that exact check is still tried first.
+const WATCHLIST_ID_PATH = /^\/watchlist\/(\d+)$/;
 
 // Owner exit-transition actions (WS5 phase 3b-ii). The path is /positions/<trade_id>/<action>; the
 // trade_id is identity (in the path), not payload — the editable fill / corrected price ride in the
@@ -28,7 +43,7 @@ function allowedOrigin(request, env) {
 function corsHeaders(request, env) {
   const origin = allowedOrigin(request, env);
   const h = {
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "authorization, content-type",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
@@ -110,6 +125,41 @@ export async function handleRequest(request, env) {
     return json({ written, trade_date: v.value.trade_date }, 200, request, env);
   }
 
+  // ── Watchlist machine routes — WS5 §8b P1 (issue #319) ──────────────────────────────────────────
+  // Same auth split as /held-tickers + /ingest/quotes above: service-token only, no owner bearer can
+  // satisfy authenticateService(). GET /watchlist-tickers omits level_value on purpose (privacy —
+  // see watchlistTickerRefs()'s comment); POST /watchlist/tick is the idempotent-per-ET-date TTL
+  // decrement collect_morning.py calls after a successful morning run.
+  if (pathname === "/watchlist-tickers" && method === "GET") {
+    if (!authenticateService(request, env)) return json({ error: "unauthorized" }, 401, request, env);
+    let tickers;
+    try {
+      tickers = await watchlistTickerRefs(env.POSITIONS_DB);
+    } catch (e) {
+      return json({ error: "read failed" }, 500, request, env);
+    }
+    return json({ tickers }, 200, request, env);
+  }
+
+  if (pathname === "/watchlist/tick" && method === "POST") {
+    if (!authenticateService(request, env)) return json({ error: "unauthorized" }, 401, request, env);
+    let body = {};
+    if ((request.headers.get("content-type") || "").includes("application/json")) {
+      try {
+        body = await request.json();
+      } catch {
+        body = {}; // invalid/absent JSON tolerated — `date` is optional, defaults to today's ET date.
+      }
+    }
+    let result;
+    try {
+      result = await tickWatchlist(env.POSITIONS_DB, { date: body.date, now: new Date() });
+    } catch (e) {
+      return json({ error: "tick failed" }, 500, request, env);
+    }
+    return json(result, 200, request, env);
+  }
+
   // ── /advance — WS5 phase 3b daily-engine sweep (SPRINT WS5-3b) ─────────────────────────────────
   // Dual auth, ONE route: either the service token (the GitHub-Actions cron caller, once the daily
   // trigger lands) or the owner bearer (so the owner can also fire a sweep manually / for a live
@@ -176,6 +226,70 @@ export async function handleRequest(request, env) {
       return json({ error: "read failed" }, 500, request, env);
     }
     return json({ positions: rows }, 200, request, env);
+  }
+
+  // ── Owner watchlist routes — WS5 §8b P1 (issue #319) ────────────────────────────────────────────
+  // Exact-string checks for the /watchlist collection FIRST, then the anchored WATCHLIST_ID_PATH
+  // regex for /watchlist/:id — same shadowing-avoidance order as TRANSITION_PATH below.
+  if (pathname === "/watchlist" && method === "POST") {
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: "invalid JSON" }, 400, request, env);
+    }
+    const v = validateAddPayload(body);
+    if (!v.ok) return json({ error: v.error }, 400, request, env);
+    let row;
+    try {
+      row = await addWatch(env.POSITIONS_DB, { ...v.value, user_id: auth.user_id });
+    } catch (e) {
+      return json({ error: "write failed" }, 500, request, env);
+    }
+    return json({ watch: row }, 201, request, env);
+  }
+
+  if (pathname === "/watchlist" && method === "GET") {
+    let rows;
+    try {
+      rows = await listWatch(env.POSITIONS_DB, auth.user_id);
+    } catch (e) {
+      return json({ error: "read failed" }, 500, request, env);
+    }
+    return json({ watchlist: rows }, 200, request, env);
+  }
+
+  const watchId = pathname.match(WATCHLIST_ID_PATH);
+  if (watchId && method === "PATCH") {
+    const id = Number(watchId[1]);
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: "invalid JSON" }, 400, request, env);
+    }
+    const v = validatePatchPayload(body);
+    if (!v.ok) return json({ error: v.error }, 400, request, env);
+    let result;
+    try {
+      result = await patchWatch(env.POSITIONS_DB, { ...v.value, user_id: auth.user_id, id });
+    } catch (e) {
+      return json({ error: "write failed" }, 500, request, env);
+    }
+    if (!result.changed) return json({ error: "not found" }, 404, request, env);
+    return json({ ok: true }, 200, request, env);
+  }
+
+  if (watchId && method === "DELETE") {
+    const id = Number(watchId[1]);
+    let result;
+    try {
+      result = await deleteWatch(env.POSITIONS_DB, { user_id: auth.user_id, id });
+    } catch (e) {
+      return json({ error: "write failed" }, 500, request, env);
+    }
+    if (!result.changed) return json({ error: "not found" }, 404, request, env);
+    return json({ ok: true }, 200, request, env);
   }
 
   // ── Owner exit-transition routes — WS5 phase 3b-ii (SPRINT WS5-3b-ii) ───────────────────────────

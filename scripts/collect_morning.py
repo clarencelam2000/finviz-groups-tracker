@@ -13,8 +13,10 @@ blocks headless Chromium from Google Cloud IPs, same constraint as collect.py/co
 """
 
 import csv
+import json
 import math
 import sys
+import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,6 +28,12 @@ import replay_picks  # noqa: E402  (reuse the server-side Focus reconstruction �
 import session_config  # noqa: E402
 from collect import NYSE_HOLIDAYS, _is_trading_day  # noqa: E402  (reuse holiday table only — NOT trading_date's rollback)
 from pick_status import compute_pick_status, compute_atr_from_lod, ACTIONABLE_STATUSES  # noqa: E402
+
+# NOTE: `collect_held.py` imports FROM this module (CONFIG_PATH, _to_float,
+# fetch_ticker_quotes) — importing `collect_held._authed_request` back here would
+# create an import cycle. Per the P2 spec's explicit fallback, `_authed_request` is
+# replicated verbatim below (same UA/Bearer pattern, same worker, same auth) rather
+# than imported. Keep the two copies in sync if the auth pattern ever changes.
 
 # ---------------------------------------------------------------------------
 # Config
@@ -89,6 +97,11 @@ MORNING_FOCUS_SCORE_FLOOR = 0.3
 MAX_STALE_SESSIONS = 5
 
 SCREENER_BASE = "https://finviz.com/screener.ashx"
+
+# P2 (WS5 §8b watchlist build brief §3/§4c/§4d/§5): watchlist union into the morning
+# scrape universe. Same `finviz-positions` Worker as collect_held.py, distinct routes.
+WATCHLIST_TICKERS_PATH = "/watchlist-tickers"
+WATCHLIST_TICK_PATH = "/watchlist/tick"
 
 
 # ---------------------------------------------------------------------------
@@ -192,6 +205,142 @@ def _to_float(x):
         return None
 
 
+def _authed_request(url: str, token: str, method: str = "GET", body: bytes = None):
+    """UA+Bearer request helper — replicated verbatim from `collect_held.py` (see the
+    import-cycle note near the top of this module for why it's a copy, not an import).
+    """
+    req = urllib.request.Request(url, data=body, method=method)
+    req.add_header("Authorization", f"Bearer {token}")
+    # Cloudflare's Bot Fight Mode blocks the default "Python-urllib/x.y" User-Agent with a
+    # generic 403 (error code 1010) on workers.dev zones, before the request ever reaches the
+    # Worker's own auth code — verified live 2026-08-13. A non-generic UA (anything not matching
+    # python-urllib/python-requests/curl/scrapy signatures) clears it.
+    req.add_header("User-Agent", "finviz-groups-tracker-morning-feed/1.0")
+    if body is not None:
+        req.add_header("Content-Type", "application/json")
+    return urllib.request.urlopen(req, timeout=30)
+
+
+def build_watch_levels(watch_refs: list) -> list:
+    """Map the `/watchlist-tickers` payload to `pick_levels`-shaped dicts (P2).
+
+    PURE. Input rows: `{ticker, level_type, prior_high, prior_low, atr, sma20, sma50}`
+    (P1's `/watchlist-tickers` response — note `level_value` is deliberately absent
+    from that payload; the user's chosen level is never sent to this public store).
+    Output rows mirror `load_pick_levels`'s shape plus a `ref` key:
+
+      {ticker, group: "", list_category: "watchlist",
+       trigger: prior_high, stop: prior_low, atr: atr, ref: sma50}
+
+    `ref` is the SYSTEM-read reclaim level — always the ticker's 50-day MA,
+    independent of the watch entry's own `level_type` (lead decision 1: the user's
+    reclaim_20ma/reclaim_50ma overlay is a separate client-side P3 concern, not this
+    system read). Every field is run through `_to_float` (payload values may already
+    be numbers or None — Worker JSON round-trips numbers fine, but stay defensive).
+
+    A row with a null/None prior_high/prior_low/atr/sma50 is KEPT, not dropped — its
+    status just resolves to no_quote/setting_up naturally downstream (same contract
+    as `load_pick_levels`'s missing-value handling). Only a blank/missing ticker is
+    skipped (unusable as a row key).
+    """
+    levels = []
+    for r in watch_refs:
+        ticker = r.get("ticker") or ""
+        if not ticker:
+            continue
+        levels.append({
+            "ticker": ticker,
+            "group": "",
+            "list_category": "watchlist",
+            "trigger": _to_float(r.get("prior_high")),
+            "stop": _to_float(r.get("prior_low")),
+            "atr": _to_float(r.get("atr")),
+            "ref": _to_float(r.get("sma50")),
+        })
+    return levels
+
+
+def union_watch_levels(pick_levels: list, watch_levels: list) -> tuple:
+    """Union watch tickers into the Focus pick_levels universe, de-duping by ticker.
+
+    PURE. Returns `(levels, tickers)` — `levels` is `pick_levels` plus any
+    `watch_levels` rows whose ticker is NOT already present in `pick_levels`;
+    `tickers` is the corresponding ticker list for the scrape (each ticker appears
+    exactly once). A ticker that is BOTH a Focus pick and a watch entry keeps the
+    Focus pick's level dict (it carries a real group/list_category for attribution;
+    the watch dup contributes nothing) — the watchlist union only ever ADDS names
+    that aren't already in the Focus universe, never a second row for one already
+    there. Order is preserved: pick_levels first (Focus order), then new watch
+    additions in their given order.
+    """
+    seen = {lvl["ticker"] for lvl in pick_levels if lvl.get("ticker")}
+    levels = list(pick_levels)
+    for lvl in watch_levels:
+        ticker = lvl.get("ticker")
+        if not ticker or ticker in seen:
+            continue
+        seen.add(ticker)
+        levels.append(lvl)
+    tickers = [lvl["ticker"] for lvl in levels if lvl.get("ticker")]
+    return levels, tickers
+
+
+def fetch_watchlist_tickers(worker_url: str, token: str) -> list:
+    """GET {worker_url}/watchlist-tickers -> list of watch-ref row dicts (P2).
+
+    IMPURE, NON-FATAL (brief §4d): unlike collect_held.py's fetch_held_tickers (which
+    exits 1 loud on any failure, since the held feed has no fallback), a watchlist
+    hiccup must NEVER drop the picks morning run — the watchlist is an ADDITIVE
+    union on top of the Focus universe, so on ANY error (HTTPError, network failure,
+    non-200, malformed JSON) this prints a loud stderr warning and returns `[]`,
+    letting main() proceed with the Focus-only universe exactly as it would have
+    pre-P2.
+    """
+    url = worker_url.rstrip("/") + WATCHLIST_TICKERS_PATH
+    try:
+        with _authed_request(url, token) as resp:
+            status = resp.status
+            data = json.loads(resp.read().decode("utf-8"))
+        if status != 200:
+            print(f"GET {WATCHLIST_TICKERS_PATH} returned HTTP {status} — "
+                  f"skipping the watchlist union for this run.", file=sys.stderr)
+            return []
+        return data.get("tickers", [])
+    except Exception as exc:
+        print(f"GET {WATCHLIST_TICKERS_PATH} failed: {exc} — skipping the "
+              f"watchlist union for this run (non-fatal, picks-only fallback).",
+              file=sys.stderr)
+        return []
+
+
+def post_watchlist_tick(worker_url: str, token: str, date: str) -> "dict | None":
+    """POST {worker_url}/watchlist/tick {"date": date} -> parsed response dict, or
+    None on any failure (P2).
+
+    IMPURE, NON-FATAL: the tick decrements each watch entry's TTL for `date`. It is
+    idempotent server-side and self-heals — a missed tick just means a TTL doesn't
+    decrement that particular day, which is strictly better than failing the whole
+    run (and the exit code) AFTER the status store has already been written
+    successfully. So this never raises/exits; it logs and returns None on error.
+    """
+    url = worker_url.rstrip("/") + WATCHLIST_TICK_PATH
+    body = json.dumps({"date": date}).encode("utf-8")
+    try:
+        with _authed_request(url, token, method="POST", body=body) as resp:
+            status = resp.status
+            data = json.loads(resp.read().decode("utf-8"))
+        if status != 200:
+            print(f"POST {WATCHLIST_TICK_PATH} returned HTTP {status} — "
+                  f"tick not recorded for {date} (non-fatal).", file=sys.stderr)
+            return None
+        return data
+    except Exception as exc:
+        print(f"POST {WATCHLIST_TICK_PATH} failed: {exc} — tick not recorded for "
+              f"{date} (non-fatal; idempotent, self-heals on a future run).",
+              file=sys.stderr)
+        return None
+
+
 def select_focus_universe(focus_df, top_n=MORNING_FOCUS_TOP_N,
                           floor=MORNING_FOCUS_SCORE_FLOOR) -> list:
     """Return the ordered ticker list to scrape from a replay Focus view (issue #293).
@@ -263,8 +412,14 @@ def build_status_rows(pick_levels: list, quotes: list, collected_at: str, date: 
     by fetch_ticker_quotes (or an equivalent fixture); tickers with no matching
     quote row, or an unparseable price/open/high/low, get status=no_quote via
     compute_pick_status's own missing-value check. atr_from_lod is computed only
-    for actionable statuses (triggered/gapped_through) per ADR-013 Decision 3 —
-    left as "" otherwise, matching the CSV empty-value convention.
+    for actionable statuses (triggered/gapped_through/reclaim) per ADR-013
+    Decision 3 (extended by P2 lead decision 2) — left as "" otherwise, matching
+    the CSV empty-value convention.
+
+    `ref=lvl.get("ref")` (P2): Focus pick levels (from load_pick_levels) have no
+    `ref` key, so `.get` returns None and compute_pick_status's reclaim check never
+    fires for them — byte-identical to pre-P2 behavior. Watch levels (from
+    build_watch_levels) carry `ref=sma50`, the system-read reclaim level.
     """
     quotes_by_ticker = {q.get("Ticker"): q for q in quotes if q.get("Ticker")}
 
@@ -279,7 +434,8 @@ def build_status_rows(pick_levels: list, quotes: list, collected_at: str, date: 
         low = _to_float(q.get("Low")) if q else None
         change = _to_float(q.get("Change")) if q else None
 
-        status = compute_pick_status(lvl["trigger"], lvl["stop"], price, open_, high, low)
+        status = compute_pick_status(lvl["trigger"], lvl["stop"], price, open_, high, low,
+                                      ref=lvl.get("ref"))
 
         atr_from_lod = None
         if status in ACTIONABLE_STATUSES:
@@ -452,15 +608,36 @@ def main() -> None:
     levels_by_ticker = {lvl["ticker"]: lvl for lvl in pick_levels}
     pick_levels = [levels_by_ticker[t] for t in focus_tickers if t in levels_by_ticker]
 
+    # P2 watchlist union (WS5 §8b build brief §4d) — done BEFORE the emptiness guard
+    # below on purpose: a watch item rides the morning scrape independently of whether
+    # any Focus pick qualified, so a thin/zero-Focus day must NOT blind the watchlist.
+    # Both env vars must be set to participate — either missing means a picks-only run,
+    # not an error (the morning job must not hard-require watchlist config to run).
+    import os
+    worker_url = os.environ.get("POSITIONS_WORKER_URL")
+    token = os.environ.get("POSITIONS_INGEST_TOKEN")
+    watchlist_configured = bool(worker_url and token)
+    watch_levels = []
+    if not watchlist_configured:
+        print("POSITIONS_WORKER_URL/POSITIONS_INGEST_TOKEN not both set — "
+              "skipping the watchlist union (picks-only run).")
+    else:
+        watch_refs = fetch_watchlist_tickers(worker_url, token)
+        watch_levels = build_watch_levels(watch_refs)
+    # union_watch_levels is a no-op passthrough when watch_levels is empty (picks-only
+    # or a non-fatal fetch that returned []), so this call is unconditional.
+    pick_levels, tickers = union_watch_levels(pick_levels, watch_levels)
+
     if not pick_levels:
         print(f"No Focus candidates at/above focus_score {MORNING_FOCUS_SCORE_FLOOR} "
-              f"for {picks_max_date} — nothing to tag. Exiting 0.")
+              f"for {picks_max_date} and no active watchlist tickers — nothing to tag. "
+              f"Exiting 0.")
         sys.exit(0)
 
     config = json.loads(CONFIG_PATH.read_text())
-    tickers = [lvl["ticker"] for lvl in pick_levels if lvl["ticker"]]
 
-    print(f"Focus universe: {len(tickers)} tickers (top {MORNING_FOCUS_TOP_N}, "
+    print(f"Universe: {len(tickers)} tickers to scrape "
+          f"({len(watch_levels)} from watchlist, rest Focus top {MORNING_FOCUS_TOP_N}/"
           f"floor {MORNING_FOCUS_SCORE_FLOOR}) from picks {picks_max_date}.")
 
     if args.dry_run:
@@ -495,6 +672,16 @@ def main() -> None:
 
     write_store(rows)
     print(f"Wrote {len(rows)} rows to {MORNING_STORE} and {MORNING_LATEST}.")
+
+    # P2: tick the watchlist TTL once the store write has succeeded. Reached only on
+    # a real (non-dry-run) trading-day run past the emptiness guard, so `rows` is
+    # non-empty here — never on a dry-run (early return above) and never on a
+    # non-trading day (exit-0 guards at the top). TTL counts trading mornings only,
+    # so ticking exactly here is correct. The call itself is idempotent + non-fatal.
+    if watchlist_configured:
+        tick_result = post_watchlist_tick(worker_url, token, today_str)
+        if tick_result is not None:
+            print(f"Watchlist tick recorded for {today_str}: {tick_result}")
 
 
 if __name__ == "__main__":

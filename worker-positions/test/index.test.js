@@ -172,3 +172,96 @@ describe("WS5 phase 2 — held-tickers feed machine routes", () => {
     expect((await handleRequest(bad, env)).status).toBe(401);
   });
 });
+
+describe("WS5 §8b P1 — personal watchlist routes (issue #319)", () => {
+  const ingestReq = (path, { method = "GET", body } = {}) => {
+    const headers = { authorization: `Bearer ${INGEST_TOKEN}` };
+    if (body !== undefined) headers["content-type"] = "application/json";
+    return new Request(`https://finviz-positions.workers.dev${path}`, {
+      method,
+      headers,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  };
+
+  it("happy-path round-trip: add -> list -> patch(renew) -> delete with an owner token", async () => {
+    const token = await mintToken(env, "owner");
+    const add = await handleRequest(
+      req("/watchlist", { method: "POST", token, body: { ticker: "nvda", level_type: "above", level_value: 200 } }),
+      env
+    );
+    expect(add.status).toBe(201);
+    const { watch } = await add.json();
+    expect(watch.ticker).toBe("NVDA");
+    expect(watch.sessions_remaining).toBe(10);
+
+    const list = await handleRequest(req("/watchlist", { token }), env);
+    expect(list.status).toBe(200);
+    const { watchlist } = await list.json();
+    expect(watchlist).toHaveLength(1);
+    expect(watchlist[0].prior_high).toBeNull(); // no bar yet
+
+    const patch = await handleRequest(req(`/watchlist/${watch.id}`, { method: "PATCH", token, body: { renew: true } }), env);
+    expect(patch.status).toBe(200);
+    expect((await patch.json()).ok).toBe(true);
+
+    const del = await handleRequest(req(`/watchlist/${watch.id}`, { method: "DELETE", token }), env);
+    expect(del.status).toBe(200);
+    expect((await del.json()).ok).toBe(true);
+
+    const listAfter = await handleRequest(req("/watchlist", { token }), env);
+    expect((await listAfter.json()).watchlist).toHaveLength(0);
+  });
+
+  it("POST /watchlist rejects an invalid payload with 400", async () => {
+    const token = await mintToken(env, "owner");
+    const res = await handleRequest(req("/watchlist", { method: "POST", token, body: { ticker: "1BAD" } }), env);
+    expect(res.status).toBe(400);
+  });
+
+  it("PATCH/DELETE /watchlist/:id 404 on an unowned or unknown id", async () => {
+    const token = await mintToken(env, "owner");
+    const patch = await handleRequest(req("/watchlist/9999", { method: "PATCH", token, body: { renew: true } }), env);
+    expect(patch.status).toBe(404);
+    const del = await handleRequest(req("/watchlist/9999", { method: "DELETE", token }), env);
+    expect(del.status).toBe(404);
+  });
+
+  it("service token: GET /watchlist-tickers + POST /watchlist/tick", async () => {
+    const token = await mintToken(env, "owner");
+    await handleRequest(req("/watchlist", { method: "POST", token, body: { ticker: "AAPL", level_type: "above", level_value: 200 } }), env);
+
+    const refs = await handleRequest(ingestReq("/watchlist-tickers"), env);
+    expect(refs.status).toBe(200);
+    const { tickers } = await refs.json();
+    expect(tickers).toHaveLength(1);
+    expect(tickers[0].ticker).toBe("AAPL");
+    expect(tickers[0]).not.toHaveProperty("level_value");
+
+    const tick = await handleRequest(ingestReq("/watchlist/tick", { method: "POST", body: { date: "2026-08-13" } }), env);
+    expect(tick.status).toBe(200);
+    const tickBody = await tick.json();
+    expect(tickBody.ticked).toBe(true);
+    expect(tickBody.decremented).toBe(1);
+  });
+
+  // ── Cross-auth isolation ──────────────────────────────────────────────────────────────────────
+  it("owner token is REJECTED on the service watchlist routes", async () => {
+    const ownerToken = await mintToken(env, "owner");
+    const withOwner = (path, method = "GET", body) =>
+      new Request(`https://x${path}`, {
+        method,
+        headers: { authorization: `Bearer ${ownerToken}`, ...(body !== undefined ? { "content-type": "application/json" } : {}) },
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+    expect((await handleRequest(withOwner("/watchlist-tickers"), env)).status).toBe(401);
+    expect((await handleRequest(withOwner("/watchlist/tick", "POST", {}), env)).status).toBe(401);
+  });
+
+  it("service token is REJECTED on all owner watchlist routes", async () => {
+    expect((await handleRequest(ingestReq("/watchlist"), env)).status).toBe(401);
+    expect((await handleRequest(ingestReq("/watchlist", { method: "POST", body: { ticker: "AAPL" } }), env)).status).toBe(401);
+    expect((await handleRequest(ingestReq("/watchlist/1", { method: "PATCH", body: { renew: true } }), env)).status).toBe(401);
+    expect((await handleRequest(ingestReq("/watchlist/1", { method: "DELETE" }), env)).status).toBe(401);
+  });
+});

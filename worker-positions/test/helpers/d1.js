@@ -29,7 +29,11 @@ const { DatabaseSync } = createRequire(import.meta.url)("node:sqlite");
 
 // Migration files, resolved relative to THIS helper (not cwd) so `vitest run` works regardless of
 // the invocation directory. Run in order — 0002 assumes 0001's tables already exist.
-const MIGRATIONS = ["../../migrations/0001_init.sql", "../../migrations/0002_ticker_quotes.sql"];
+const MIGRATIONS = [
+  "../../migrations/0001_init.sql",
+  "../../migrations/0002_ticker_quotes.sql",
+  "../../migrations/0003_watchlist.sql",
+];
 
 // The leading SQL keyword decides node:sqlite dispatch: SELECT reads (`.all()`), everything else
 // writes (`.run()`). This also has to handle `INSERT ... SELECT ... WHERE EXISTS (...)` — the
@@ -189,6 +193,32 @@ export function makeD1() {
       return row;
     },
 
+    // Seed a watchlist row. Requires nothing beyond sane defaults: user_id 'owner', status 'active',
+    // sessions_remaining 10 (WATCHLIST_TTL_SESSIONS), created_at set. Mirrors _seedPosition/_seedQuote's
+    // convention of not importing src/watchlist.js, so a bug in addWatch() can't silently make its own
+    // tests pass.
+    _seedWatchlist(partial = {}) {
+      const row = {
+        user_id: "owner",
+        ticker: "TEST",
+        level_type: null,
+        level_value: null,
+        sessions_remaining: 10,
+        status: "active",
+        created_at: "2026-01-01T00:00:00Z",
+        updated_at: null,
+        expired_at: null,
+        meta: "{}",
+        ...partial,
+      };
+      const cols = Object.keys(row);
+      const placeholders = cols.map(() => "?").join(", ");
+      sqlite
+        .prepare(`INSERT INTO watchlist (${cols.join(", ")}) VALUES (${placeholders})`)
+        .run(...coerceBinds(cols.map((c) => row[c])));
+      return row;
+    },
+
     _positions() {
       return sqlite.prepare("SELECT * FROM positions").all().map(toPlain);
     },
@@ -197,6 +227,9 @@ export function makeD1() {
     },
     _quotes() {
       return sqlite.prepare("SELECT * FROM ticker_quotes ORDER BY ticker ASC, trade_date ASC").all().map(toPlain);
+    },
+    _watchlist() {
+      return sqlite.prepare("SELECT * FROM watchlist ORDER BY id ASC").all().map(toPlain);
     },
   };
   return d1;

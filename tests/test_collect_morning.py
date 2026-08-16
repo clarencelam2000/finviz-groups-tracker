@@ -441,3 +441,184 @@ def test_write_store_calls_assert_provisional(monkeypatch, tmp_path):
 def test_assert_provisional_raises_for_eod():
     with pytest.raises(ValueError):
         session_config.assert_provisional(session_config.EOD)
+
+
+# ---------------------------------------------------------------------------
+# build_watch_levels (P2)
+# ---------------------------------------------------------------------------
+
+
+def test_build_watch_levels_maps_fields():
+    watch_refs = [
+        {"ticker": "AAPL", "level_type": "reclaim_50ma", "prior_high": 190.5,
+         "prior_low": 185.0, "atr": 3.2, "sma20": 188.0, "sma50": 180.0},
+    ]
+    levels = cm.build_watch_levels(watch_refs)
+    assert len(levels) == 1
+    lvl = levels[0]
+    assert lvl["ticker"] == "AAPL"
+    assert lvl["group"] == ""
+    assert lvl["list_category"] == "watchlist"
+    assert lvl["trigger"] == 190.5
+    assert lvl["stop"] == 185.0
+    assert lvl["atr"] == 3.2
+    assert lvl["ref"] == 180.0  # sma50, NOT sma20 — system read is always the 50MA
+
+
+def test_build_watch_levels_keeps_null_prior_high():
+    watch_refs = [
+        {"ticker": "ZZZ", "prior_high": None, "prior_low": None, "atr": None, "sma50": None},
+    ]
+    levels = cm.build_watch_levels(watch_refs)
+    assert len(levels) == 1
+    assert levels[0]["trigger"] is None
+    assert levels[0]["stop"] is None
+    assert levels[0]["ref"] is None
+
+
+def test_build_watch_levels_skips_blank_ticker():
+    watch_refs = [
+        {"ticker": "", "prior_high": 10, "prior_low": 8, "atr": 1, "sma50": 9},
+        {"ticker": None, "prior_high": 10, "prior_low": 8, "atr": 1, "sma50": 9},
+        {"ticker": "OK", "prior_high": 10, "prior_low": 8, "atr": 1, "sma50": 9},
+    ]
+    levels = cm.build_watch_levels(watch_refs)
+    assert len(levels) == 1
+    assert levels[0]["ticker"] == "OK"
+
+
+def test_build_watch_levels_coerces_string_numbers():
+    watch_refs = [
+        {"ticker": "STR", "prior_high": "190.5", "prior_low": "185.0", "atr": "3.2", "sma50": "180.0"},
+    ]
+    lvl = cm.build_watch_levels(watch_refs)[0]
+    assert lvl["trigger"] == 190.5
+    assert lvl["stop"] == 185.0
+    assert lvl["atr"] == 3.2
+    assert lvl["ref"] == 180.0
+
+
+# ---------------------------------------------------------------------------
+# union_watch_levels (P2)
+# ---------------------------------------------------------------------------
+
+
+def test_union_watch_levels_dedupes_ticker():
+    pick_levels = [
+        {"ticker": "AAPL", "group": "G", "list_category": "leaders", "trigger": 190.0, "stop": 185.0, "atr": 3.0},
+    ]
+    watch_levels = [
+        {"ticker": "AAPL", "group": "", "list_category": "watchlist", "trigger": 999, "stop": 999, "atr": 999, "ref": 999},
+        {"ticker": "MSFT", "group": "", "list_category": "watchlist", "trigger": 420, "stop": 410, "atr": 5, "ref": 400},
+    ]
+    levels, tickers = cm.union_watch_levels(pick_levels, watch_levels)
+    assert tickers == ["AAPL", "MSFT"]
+    by_ticker = {lvl["ticker"]: lvl for lvl in levels}
+    # AAPL keeps the Focus pick's level dict (real group/list_category), not the watch dup.
+    assert by_ticker["AAPL"]["list_category"] == "leaders"
+    assert by_ticker["AAPL"]["trigger"] == 190.0
+    # MSFT is a pure watch addition.
+    assert by_ticker["MSFT"]["list_category"] == "watchlist"
+    assert by_ticker["MSFT"]["ref"] == 400
+
+
+def test_union_watch_levels_empty_watch_is_noop():
+    pick_levels = [{"ticker": "AAPL", "group": "G", "list_category": "leaders",
+                     "trigger": 1, "stop": 1, "atr": 1}]
+    levels, tickers = cm.union_watch_levels(pick_levels, [])
+    assert levels == pick_levels
+    assert tickers == ["AAPL"]
+
+
+# ---------------------------------------------------------------------------
+# build_status_rows with reclaim ref (P2)
+# ---------------------------------------------------------------------------
+
+
+def test_build_status_rows_watch_level_reclaim():
+    pick_levels = [
+        {"ticker": "WATCH1", "group": "", "list_category": "watchlist",
+         "trigger": 999.0, "stop": 8.0, "atr": 2.0, "ref": 8.5},
+        # A regular picks level (no "ref" key) must be unaffected — regression.
+        {"ticker": "PICK1", "group": "G", "list_category": "leaders",
+         "trigger": 10.0, "stop": 8.0, "atr": 2.0},
+    ]
+    quotes = [
+        # price=9.0 > ref=8.5; today_low=7.5 < ref=8.5 -> reclaim (price/high/open all < trigger=999)
+        {"Ticker": "WATCH1", "Price": "9.0", "Open": "8.0", "High": "9.1", "Low": "7.5", "Change": "0.5%"},
+        {"Ticker": "PICK1", "Price": "9.0", "Open": "8.5", "High": "9.2", "Low": "8.4", "Change": "0%"},
+    ]
+    rows = cm.build_status_rows(pick_levels, quotes, "2026-08-07T13:45:00Z", "2026-08-07")
+    by_ticker = {r["ticker"]: r for r in rows}
+
+    assert by_ticker["WATCH1"]["status"] == "reclaim"
+    assert by_ticker["WATCH1"]["atr_from_lod"] != ""  # actionable status
+
+    assert by_ticker["PICK1"]["status"] == "setting_up"
+
+
+# ---------------------------------------------------------------------------
+# fetch_watchlist_tickers / post_watchlist_tick non-fatal behavior (P2)
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_watchlist_tickers_non_fatal_on_error(monkeypatch):
+    def raising_authed_request(*args, **kwargs):
+        raise RuntimeError("network broke")
+
+    monkeypatch.setattr(cm, "_authed_request", raising_authed_request)
+    result = cm.fetch_watchlist_tickers("https://worker.example", "tok")
+    assert result == []  # never raises, never exits
+
+
+def test_fetch_watchlist_tickers_non_fatal_on_non_200(monkeypatch):
+    class _Resp:
+        status = 500
+        def read(self):
+            return b'{"tickers": []}'
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(cm, "_authed_request", lambda *a, **k: _Resp())
+    assert cm.fetch_watchlist_tickers("https://worker.example", "tok") == []
+
+
+def test_fetch_watchlist_tickers_success(monkeypatch):
+    class _Resp:
+        status = 200
+        def read(self):
+            return b'{"tickers": [{"ticker": "AAPL"}]}'
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(cm, "_authed_request", lambda *a, **k: _Resp())
+    result = cm.fetch_watchlist_tickers("https://worker.example", "tok")
+    assert result == [{"ticker": "AAPL"}]
+
+
+def test_post_watchlist_tick_non_fatal_on_error(monkeypatch):
+    def raising_authed_request(*args, **kwargs):
+        raise RuntimeError("network broke")
+
+    monkeypatch.setattr(cm, "_authed_request", raising_authed_request)
+    result = cm.post_watchlist_tick("https://worker.example", "tok", "2026-08-07")
+    assert result is None  # never raises, never exits
+
+
+def test_post_watchlist_tick_success(monkeypatch):
+    class _Resp:
+        status = 200
+        def read(self):
+            return b'{"ticked": 3}'
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(cm, "_authed_request", lambda *a, **k: _Resp())
+    result = cm.post_watchlist_tick("https://worker.example", "tok", "2026-08-07")
+    assert result == {"ticked": 3}

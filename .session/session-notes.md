@@ -6,6 +6,61 @@
 
 ---
 
+## 2026-08-15 — WS5 §8b: personal watchlist — P1 + P2 BUILT (#319, PR #322)
+
+**Status: safe to close once PR #322 merges. P3 (PWA) NOT started — recommended as a fresh
+focused session (taste-heavy, lead-owned).** Executed the locked build brief
+(`planning/watchlist-build-brief-8b.md`). Lead delegated both boots-on-ground builds to Sonnet
+subagents against self-contained locked specs (`scratchpad/p1-spec.md`, `p2-spec.md`) and reviewed
+every line; lead studied the v2 mock by hand and mapped the P3 anchors but did not build P3.
+
+**P1 (worker/D1) — branch `claude/ws5-watchlist-p1-tyj03t`, commit ca9bdf1:**
+- `worker-positions/migrations/0003_watchlist.sql` — private user-scoped `watchlist` table
+  (`UNIQUE(user_id,ticker)`, no stop/size) + `watchlist_tick_log(tick_date)` idempotency guard.
+  Applied OUT-OF-BAND (`wrangler d1 execute … --file …`) — `wrangler deploy` doesn't run migrations.
+- `src/watchlist.js` — validation (above/below need price; reclaim_* reject one) + CRUD + upsert-as-
+  renew + `watchlistTickers`/`watchlistTickerRefs` + `tickWatchlist` (decrement→expire@0→purge>14d).
+  Reuses `normalizeBar` for MA-ref recovery, not re-derived.
+- `heldTickers` unions `positions(open/managing/closing) ∪ watchlist(active)`.
+- 6 routes: owner-bearer `POST/GET /watchlist` + `PATCH/DELETE /watchlist/:id` (below auth gate);
+  service-token `GET /watchlist-tickers` + `POST /watchlist/tick` (above it). 209 vitest (+36),
+  incl. cross-auth isolation both directions, TTL idempotency, purge boundary, user-scoping.
+
+**P2 (feed + engine) — commit 9279a7a:**
+- `pick_status.py` — new `STATUS_RECLAIM` + `compute_reclaim(price, today_low, prior_low, ref)`
+  (mirror of failed_breakout). `compute_pick_status` gains optional `ref=` → **byte-identical for
+  picks** (they never pass ref). Reclaim sits between failed_breakout and setting_up; is actionable.
+- `collect_morning.py` — unions active watch tickers into the single morning scrape; `build_watch_levels`
+  maps `/watchlist-tickers` → pick_levels shape with `ref=sma50`; `union_watch_levels` (pure, dedupe,
+  Focus wins collision); non-fatal `fetch_watchlist_tickers`/`post_watchlist_tick`. 68 tests in the
+  two files (+25). Full non-Playwright suite green (only pre-existing Chromium-absent Playwright fails).
+- **Lead-caught bug (subagent had it green but wrong):** union originally ran AFTER the empty-Focus
+  `exit(0)` guard → a zero-Focus day would silently skip watch tickers. Moved union BEFORE the guard;
+  guard now checks the combined universe. Watch tickers ride the morning scrape independently.
+
+**Two lead calls flagged to owner (both reversible, non-blocking):**
+1. `/watchlist-tickers` OMITS `level_value` (privacy; CI path never needs it; owner `GET /watchlist`
+   still returns it). Deviation from brief §3's literal payload shape, deliberate.
+2. **System-read `reclaim` ref = 50MA** (not prior_low, which degenerates the formula; matches the
+   mock's §04 "Ref (50MA)"). User's own 20MA/50MA reclaim overlay is a separate client-side P3 read.
+   One-liner to change if owner wants 20MA or per-level-type. **This is the one worth an owner nod.**
+
+**Owner post-merge TODO:** (1) apply `0003_watchlist.sql` out-of-band to `finviz-positions` D1;
+(2) confirm `collect_morning.yml` has `POSITIONS_WORKER_URL`/`POSITIONS_INGEST_TOKEN` (same secrets as
+`collect_held.yml`) — without them the morning run is picks-only (no error). Feed dormant until a few
+`ticker_quotes` bars accumulate (same WS5 gate). `deploy-workers.yml` auto-deploys the worker on merge.
+
+**Next: P3 (PWA), lead-owned.** Build to the v2 mock `planning/mocks/ws5-watchlist-directions.html`.
+Anchors mapped in `docs/index.html`: `renderMorning`@6114, `renderPositions`/`manualBuildPayload`
+@5691/5866, `morningChartAffordance`@5058, `posApi`@5440, `computeLaunchReady`@3920,
+`tradingViewChartHtml`@3547, `switchTab`@6199, `POSITIONS_API`@404, `MORNING_STATUS_META`. Scope:
+Positions add collapsible (sibling to manualEntry) + Morning "Your watchlist" section + card + gauge
+(client-side your-level read from private `GET /watchlist`; NEVER write level to public store) +
+graduation ("I took it" → §8a ticket prefilled → DELETE watch) + release triplet + `test_pwa_watchlist.py`
+(add to tests.yml `--ignore`). Add `reclaim` to `MORNING_STATUS_META` too.
+
+---
+
 ## 2026-08-15 — WS5 §8b: personal watchlist — DESIGN LOCKED (#319, PR #321)
 
 **Status: safe to close once PR #321 merges.** Senior-eng + product design session for the §8b

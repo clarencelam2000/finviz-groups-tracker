@@ -13,11 +13,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
 from pick_status import (  # noqa: E402
     compute_pick_status,
     compute_atr_from_lod,
+    compute_reclaim,
     STATUS_NO_QUOTE,
     STATUS_INVALIDATED,
     STATUS_GAPPED_THROUGH,
     STATUS_TRIGGERED,
     STATUS_FAILED_BREAKOUT,
+    STATUS_RECLAIM,
     STATUS_SETTING_UP,
     STATUS_PRECEDENCE,
     ACTIONABLE_STATUSES,
@@ -111,12 +113,91 @@ def test_status_precedence_order():
         STATUS_GAPPED_THROUGH,
         STATUS_TRIGGERED,
         STATUS_FAILED_BREAKOUT,
+        STATUS_RECLAIM,
         STATUS_SETTING_UP,
     ]
 
 
 def test_actionable_statuses():
-    assert ACTIONABLE_STATUSES == {STATUS_TRIGGERED, STATUS_GAPPED_THROUGH}
+    assert ACTIONABLE_STATUSES == {STATUS_TRIGGERED, STATUS_GAPPED_THROUGH, STATUS_RECLAIM}
+
+
+# ---------------------------------------------------------------------------
+# compute_reclaim (P2, watchlist build brief §3/§4c)
+# ---------------------------------------------------------------------------
+
+
+def test_compute_reclaim_true_today_low_dipped():
+    # price > ref, today_low < ref (prior_low stays >= ref)
+    assert compute_reclaim(price=51, today_low=49, prior_low=50.5, ref=50) is True
+
+
+def test_compute_reclaim_true_prior_low_dipped():
+    # price > ref, prior_low < ref, today_low >= ref
+    assert compute_reclaim(price=51, today_low=50.5, prior_low=49, ref=50) is True
+
+
+def test_compute_reclaim_false_price_not_above_ref():
+    assert compute_reclaim(price=49, today_low=49, prior_low=49, ref=50) is False
+
+
+def test_compute_reclaim_false_neither_low_dipped():
+    assert compute_reclaim(price=51, today_low=50.5, prior_low=50.2, ref=50) is False
+
+
+def test_compute_reclaim_false_on_missing_input():
+    assert compute_reclaim(None, 49, 50.5, 50) is False
+    assert compute_reclaim(51, None, 50.5, 50) is False
+    assert compute_reclaim(51, 49, None, 50) is False
+    assert compute_reclaim(51, 49, 50.5, None) is False
+    assert compute_reclaim(51, NAN, 50.5, 50) is False
+
+
+def test_compute_reclaim_boundary_price_equals_ref_is_false():
+    assert compute_reclaim(price=50, today_low=49, prior_low=50.5, ref=50) is False
+
+
+def test_compute_reclaim_boundary_low_equals_ref_is_not_below():
+    # today_low == ref is not "< ref"; prior_low == ref is also not "< ref" -> False
+    assert compute_reclaim(price=51, today_low=50, prior_low=50, ref=50) is False
+
+
+# ---------------------------------------------------------------------------
+# compute_pick_status with ref (P2)
+# ---------------------------------------------------------------------------
+
+
+def test_compute_pick_status_fires_reclaim():
+    # trigger=10, stop=8 (prior_low); low(today)=7.5 < ref=8.5; price=9 > ref=8.5;
+    # price < trigger, high < trigger, open <= trigger -> falls through to reclaim.
+    assert compute_pick_status(10, 8, 9.0, 8.0, 9.1, 7.5, ref=8.5) == STATUS_RECLAIM
+
+
+def test_compute_pick_status_ref_none_never_reclaims_regression():
+    # Same inputs as the reclaim-firing case above, but ref=None (default) must
+    # be byte-identical to pre-P2 behavior: setting_up, never reclaim.
+    assert compute_pick_status(10, 8, 9.0, 8.0, 9.1, 7.5) == STATUS_SETTING_UP
+
+
+def test_compute_pick_status_reclaim_does_not_outrank_triggered():
+    # price >= trigger -> triggered wins even though a ref is supplied and would
+    # also qualify as reclaim in isolation.
+    assert compute_pick_status(10, 8, 10.5, 9.5, 10.6, 9.4, ref=9.0) == STATUS_TRIGGERED
+
+
+def test_compute_pick_status_reclaim_does_not_outrank_gapped():
+    assert compute_pick_status(10, 8, 11.0, 10.5, 11.2, 10.4, ref=9.0) == STATUS_GAPPED_THROUGH
+
+
+def test_compute_pick_status_reclaim_does_not_outrank_failed_breakout():
+    # high >= trigger -> failed_breakout wins even with a qualifying ref.
+    assert compute_pick_status(10, 8, 9.8, 9.5, 10.1, 7.5, ref=8.5) == STATUS_FAILED_BREAKOUT
+
+
+def test_compute_pick_status_reclaim_outranks_setting_up():
+    # Without ref this would be setting_up (see regression test above); with a
+    # qualifying ref it must promote to reclaim.
+    assert compute_pick_status(10, 8, 9.0, 8.0, 9.1, 7.5, ref=8.5) == STATUS_RECLAIM
 
 
 # ---------------------------------------------------------------------------
