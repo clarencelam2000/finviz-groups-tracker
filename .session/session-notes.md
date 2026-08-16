@@ -6,6 +6,47 @@
 
 ---
 
+## 2026-08-16 — PR #322 ops-verification: migration NOT applied, deploy confirmed, bars claim corrected
+
+**Status: blocking-on owner action.** Verified the "what the owner should verify after merge" list
+from PR #322 (WS5 §8b watchlist P1+P2) directly against Cloudflare, not just against code:
+
+1. **`0003_watchlist.sql` migration — NOT APPLIED.** Queried the live `finviz-positions` D1
+   (`SELECT name FROM sqlite_master WHERE type='table'`) via the Cloudflare API directly
+   (`CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` were already in the session env — no OAuth
+   needed). Tables present: `_cf_KV`, `position_events`, `positions`, `sqlite_sequence`,
+   `ticker_quotes`. **No `watchlist` or `watchlist_tick_log` table.** The worker code and routes
+   are live (see #2) but any `/watchlist*` route will fail until the owner runs:
+   `wrangler d1 execute finviz-positions --remote --file worker-positions/migrations/0003_watchlist.sql`
+2. **`deploy-workers.yml` auto-deploy — CONFIRMED, via Cloudflare, not just green CI.** GH Actions
+   run 31972877074 (fired at PR #322's merge, 2026-08-16T21:13:54Z) shows all 3 deploy jobs
+   succeeded. Cross-checked against Cloudflare's own `workers/scripts` listing: `finviz-positions`
+   `modified_on` = `2026-08-16T21:14:15Z`, matching the deploy job's completion — the script was
+   genuinely re-pushed, not just a green checkmark. Note `wrangler deploy` (ships worker code) and
+   `wrangler d1 execute` (applies SQL migrations) are two independent commands — deploy succeeding
+   says nothing about migration state, which is why #1 above still needed a separate live check.
+3. **`collect_morning.yml` secrets — owner confirmed added to GH repo secrets.** GitHub does not
+   expose secret values via API, so this can't be verified by name/value; instead triggered a real
+   `workflow_dispatch` with `dry_run: true` (run queued from this session) to observe whether the
+   watchlist union actually fires end-to-end instead of falling back to picks-only. See run result
+   for outcome (check `collect_morning.yml` run at ~2026-08-16 21:3x UTC).
+4. **"Feed is dormant until a few `ticker_quotes` bars accumulate" — WRONG, corrected in the brief.**
+   Traced the actual data path: `sma20`/`sma50`/`atr`/`prior_high`/`prior_low` (the watchlist
+   status engine's inputs, incl. the `reclaim` ref) are all recovered from a SINGLE scraped row —
+   `recoverMaLevel()`/`pctFromRaw()` in `worker-positions/src/advance.js` reconstruct the MA price
+   from Finviz's own `%`-from-SMA columns, which Finviz computes server-side per-row. Confirmed live:
+   `ticker_quotes` currently has exactly 2 rows, both `trade_date=2026-08-14` (one day), and that's
+   already sufficient. The "needs several days" claim conflates this with the WS5 phase-3
+   `advance()` engine (2026-08-15 entry below, GO-LIVE checklist), which genuinely does need several
+   days of held bars to exercise trailing-stop transitions — a different feature. Corrected in
+   `planning/watchlist-build-brief-8b.md` §7 and in PR #322's description; not correcting the prose
+   in the 2026-08-15 entry below per the append-only rule, but flagging it stale here.
+
+**Next steps:** owner applies the migration (see #1); check the triggered dry-run's log for the
+watchlist-union outcome to close out #3.
+
+---
+
 ## 2026-08-15 — WS5 §8b: personal watchlist — P1 + P2 BUILT (#319, PR #322)
 
 **Status: safe to close once PR #322 merges. P3 (PWA) NOT started — recommended as a fresh
