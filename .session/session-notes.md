@@ -6,18 +6,20 @@
 
 ---
 
-## 2026-08-16 — PR #322 ops-verification: migration NOT applied, deploy confirmed, bars claim corrected
+## 2026-08-16 — PR #322 ops-verification: migration applied, deploy confirmed, bars claim corrected
 
-**Status: blocking-on owner action.** Verified the "what the owner should verify after merge" list
-from PR #322 (WS5 §8b watchlist P1+P2) directly against Cloudflare, not just against code:
+**Status: safe to close — all four ops items resolved or explicitly flagged as needing a weekday
+run.** Verified the "what the owner should verify after merge" list from PR #322 (WS5 §8b watchlist
+P1+P2) directly against Cloudflare, not just against code:
 
-1. **`0003_watchlist.sql` migration — NOT APPLIED.** Queried the live `finviz-positions` D1
-   (`SELECT name FROM sqlite_master WHERE type='table'`) via the Cloudflare API directly
-   (`CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` were already in the session env — no OAuth
-   needed). Tables present: `_cf_KV`, `position_events`, `positions`, `sqlite_sequence`,
-   `ticker_quotes`. **No `watchlist` or `watchlist_tick_log` table.** The worker code and routes
-   are live (see #2) but any `/watchlist*` route will fail until the owner runs:
-   `wrangler d1 execute finviz-positions --remote --file worker-positions/migrations/0003_watchlist.sql`
+1. **`0003_watchlist.sql` migration — was NOT applied at first check; now APPLIED.** Queried the
+   live `finviz-positions` D1 (`SELECT name FROM sqlite_master WHERE type='table'`) via the
+   Cloudflare API directly (`CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` were already in the
+   session env — no OAuth needed). Initially found: `_cf_KV`, `position_events`, `positions`,
+   `sqlite_sequence`, `ticker_quotes` — no `watchlist`/`watchlist_tick_log`. Ran the migration's 3
+   statements (`CREATE TABLE watchlist`, `CREATE INDEX idx_watchlist_user_status`, `CREATE TABLE
+   watchlist_tick_log`) directly via the D1 HTTP query API with owner sign-off, then re-verified
+   live: all 3 objects now present. `/watchlist*` routes are unblocked.
 2. **`deploy-workers.yml` auto-deploy — CONFIRMED, via Cloudflare, not just green CI.** GH Actions
    run 31972877074 (fired at PR #322's merge, 2026-08-16T21:13:54Z) shows all 3 deploy jobs
    succeeded. Cross-checked against Cloudflare's own `workers/scripts` listing: `finviz-positions`
@@ -42,8 +44,10 @@ from PR #322 (WS5 §8b watchlist P1+P2) directly against Cloudflare, not just ag
    `planning/watchlist-build-brief-8b.md` §7 and in PR #322's description; not correcting the prose
    in the 2026-08-15 entry below per the append-only rule, but flagging it stale here.
 
-**Next steps:** owner applies the migration (see #1); check the triggered dry-run's log for the
-watchlist-union outcome to close out #3.
+**Next steps:** none blocking. Only remaining open item is #3 — confirm the `POSITIONS_WORKER_URL`/
+`POSITIONS_INGEST_TOKEN` secrets actually work end-to-end on a real weekday `collect_morning` run
+(Monday 10:05 ET Cloudflare-dispatched, or a manual weekday `workflow_dispatch --dry-run`); the
+2026-08-16 dry-run exited at the weekend guard before reaching that code path.
 
 ---
 
