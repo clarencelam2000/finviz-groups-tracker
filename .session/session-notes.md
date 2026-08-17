@@ -689,3 +689,43 @@ call already on record in the original PR body.
 **Next steps:** none beyond merging #328 — this recreates #327's intended end state exactly. Once
 merged, resume the WS3b follow-ups listed in the entry above (WS4-C verification, healthchecks DMS,
 closing #261).
+
+---
+
+## 2026-08-17 — Positions tab empty-state bug: root-caused + fixed (PR #331)
+
+**Status: safe to close** once PR #331 merges (open at time of writing, no review comments yet).
+
+**What happened:** owner reported the Positions tab was showing zero positions despite having open
+trades since Friday, visible again this morning. Root-caused by querying the live `finviz-positions`
+D1 database directly (read-only `SELECT`, using the already-provisioned `CLOUDFLARE_API_TOKEN`/
+`CLOUDFLARE_ACCOUNT_ID` env vars — no MCP/OAuth needed, per the standing note above): all 3 open
+positions (OUST, NVT, EOG) were sitting in `state='managing'`, not `'open'`.
+
+**Root cause:** `docs/index.html`'s Positions tab has always called `GET /positions?state=open`
+(phase 1, #309) — an exact-match filter. The phase-3a `advance()` engine
+(`worker-positions/src/advance.js:271`) auto-transitions `open → managing` the first time a
+position is advanced without an exit signal, which now happens automatically via the daily 17:30 ET
+held-feed sweep (`worker-cron`'s `held` job → `POST /advance`). Phase 1's PWA read query was never
+updated when phase 3a shipped, so any position survives exactly one sweep before silently vanishing
+from the tab — it's still a live trade, just no longer visible.
+
+**Fix (PR #331):** `posLoadPositions()` now fetches `GET /positions` unfiltered and shows
+`open`/`managing`/`closing` client-side (only `closed` drops off), with a small state badge on
+`managing`/`closing` cards since there's no confirmation-strip UI yet for a signaled exit (that's
+phase 4, per `worker-positions/CLAUDE.md`). Docs updated (`docs/CLAUDE.md` § Positions tab). Release
+triplet done: `releases.json` `2026.08.17.2` (fix) + `sw.js` v69→v70.
+
+**Verification:** `test_guide_releases.py` + full non-Playwright suite (700/700) green. Ran the
+actual `test_pwa_positions.py` Playwright suite via the documented sandbox Chromium-revision symlink
+workaround; added a new regression test (`test_managing_and_closing_positions_still_render`) that
+directly pins the bug (managing/closing render, closed does not) — green, along with the two other
+targeted tests run. One unrelated pre-existing Playwright failure in the same file
+(`test_signed_out_take_it_shows_signin_note_no_post`, Morning tab "I took it" flow — code this PR
+never touches) confirmed as a sandbox flake, not a regression from this change.
+
+**Next steps:** merge #331. No follow-ups tracked — this is a complete, self-contained fix. Worth
+flagging for the owner: `closing`-state positions (a signaled exit awaiting confirm/revert) are now
+at least visible again, but there's still no confirm/revert UI on the Positions tab (phase 4,
+untracked as an open SPRINT item as far as this session found — worth checking before it's assumed
+covered).
