@@ -574,3 +574,37 @@ Minor deferral: graduation does not yet prefill the entry hint from an above/bel
 **Next steps:** validate Playwright locally; open the P3 PR (ready-for-review). Then WS5 phase 4 (VAPID
 push, reuse `distil`) and the deferred watchlist follow-ups (fully-private morning store, multi-day
 reclaim, picks opting into reclaim).
+
+---
+
+## 2026-08-17 — WS3b (#268) pre-close confirmation surface: scoping + spec + mock
+
+**Status: safe to close (scoping only, no impl).** Got issue #268 impl-ready for a senior+junior
+pair. No production code touched — spec, mock, tracking only.
+
+**What landed (branch `claude/issue-268-scoping-spec-ra01f6`):**
+- `planning/ws3b-preclose-surface-spec.md` — full spec: guiding principle (this IS the morning
+  pipeline run once more), non-goals, 4-phase plan (A writer / B dispatch / C PWA / D ship),
+  acceptance criteria, key-files index.
+- `planning/mocks/ws3b-preclose-toggle.html` — interactive mock (Morning · Pre-close toggle,
+  faithful slate design language), published as Artifact for owner review.
+- `.session/SPRINT.md` — WS3b-A..D tasks added under a new "Session surfaces" backlog block.
+- Issue #268 body rewritten with the spec.
+
+**Recon findings (2 Sonnet subagents):** WS1/#258 + WS3/#262 both DONE & merged; WS2/#261 DONE in
+practice (`session_config.py` registers `pre_close` already, issue just never closed). The status
+engine `scripts/pick_status.py` is pure + explicitly built session-agnostic for WS3b reuse. So
+WS3b = generalize `collect_morning.py` by a `--session` arg + one 15:30 cron job + a toggle in the
+Morning tab. Much cheaper than the issue's framing implied.
+
+**Owner decisions locked (2026-08-17):** dispatch 15:30 ET; one tab + toggle (NO new tab); tab
+label stays "Morning"; "since AM" delta chips IN for v1; generalize-don't-clone (parameterize by
+session, per ADR-011). Naming: new job `preclose_status` (do NOT reuse the existing `collect_preclose`
+settled-backstop job — it's load-bearing for the #259 picks gate).
+
+**Design lead taste-calls in the mock:** delta chips (green `held since AM`/red `faded from AM`) are
+the surface's payoff — answer "did the setup hold from open into close?" without a second tab;
+`gapped_through` suppressed at pre-close (morning-open concept) as a display decision, engine stays pure.
+
+**Next steps:** hand to eng team (paste-note prepared). WS4-C (pre-close trade ticket, ADR-014) is
+blocked-by this and cross-linked in SPRINT — unblocks when the `pre_close` store lands.
