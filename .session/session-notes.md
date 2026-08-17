@@ -729,3 +729,11 @@ flagging for the owner: `closing`-state positions (a signaled exit awaiting conf
 at least visible again, but there's still no confirm/revert UI on the Positions tab (phase 4,
 untracked as an open SPRINT item as far as this session found — worth checking before it's assumed
 covered).
+
+**Addendum (same session):** owner asked whether closed positions ever reappear, or drop off
+permanently — confirmed permanently (no grace window; `POS_VISIBLE_STATES` excludes `closed`
+unconditionally). Owner then asked to file that as tracked work. Opened **issue #332** + SPRINT
+**WS5-5** for it. Also corrected a wrong claim in the "Next steps" note just above: WS5-4 is push
+notifications (VAPID) *and* the confirm/still-holding action surface for `closing`-state
+positions — it does NOT cover a closed-trades history/grace-window view. That's WS5-5, a distinct,
+newly-filed item, not something already tracked under WS5-4 as previously implied.
