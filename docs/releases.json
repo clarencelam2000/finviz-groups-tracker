@@ -1,6 +1,16 @@
 {
-  "current": "2026.08.17.1",
+  "current": "2026.08.17.2",
   "releases": [
+    {
+      "version": "2026.08.17.2",
+      "date": "2026-08-17",
+      "title": "Positions tab: fix vanishing positions",
+      "tag": "fix",
+      "tab": "positions",
+      "notes": [
+        "Fixed a bug where a position would disappear from the Positions tab once it had been open for more than a day — the tab now shows managing and exit-pending positions too, not just brand-new ones."
+      ]
+    },
     {
       "version": "2026.08.17.1",
       "date": "2026-08-17",

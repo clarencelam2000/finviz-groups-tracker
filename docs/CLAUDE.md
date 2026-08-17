@@ -126,10 +126,18 @@ the empty state — a 404 is expected, never an error.
 ## Positions tab (WS5 phase 1, #309)
 
 Read-only. Signed out → a passphrase sign-in card (`posLogin` → `POST /auth/login` → bearer token in
-`localStorage['fv_pos_token']`). Signed in → `GET /positions?state=open` renders frozen open-position
-cards (entry/stop/risk/qty). No stop management or alerts yet — that is phase 3 (`advance()` engine)
-and phase 4 (VAPID push). Auth is a worker-native bearer token (not Cloudflare Access — the PWA is a
-cross-origin GitHub-Pages page); the whole auth surface is the swap seam `worker-positions/src/auth.js`.
+`localStorage['fv_pos_token']`). Signed in → `GET /positions` (unfiltered) renders frozen
+position cards (entry/stop/risk/qty) for `state` in `open`/`managing`/`closing`
+(`POS_VISIBLE_STATES`, filtered client-side — only `closed` drops off). This was fixed 2026-08-17:
+the original phase-1 code queried `?state=open` only, which predates the phase-3a `advance()`
+engine's `open → managing` auto-transition (`src/advance.js`, first successful advance with no
+exit signal) — once the daily sweep (held-feed job, 17:30 ET) advances a position past day one, it
+silently vanished from the tab even though it was still a live trade. `managing`/`closing` cards
+get a small badge (`POS_STATE_BADGE`) since there's no confirmation-strip UI yet for `closing`
+(exit signaled, awaiting the owner's confirm/revert) — that's phase 4 in
+`worker-positions/CLAUDE.md`. No stop management or alerts yet beyond what the engine already
+writes. Auth is a worker-native bearer token (not Cloudflare Access — the PWA is a cross-origin
+GitHub-Pages page); the whole auth surface is the swap seam `worker-positions/src/auth.js`.
 See `worker-positions/README.md` and ADR-012 for the backend contract.
 
 ### Manual entry: "log a position on any ticker" (WS5 §8a)

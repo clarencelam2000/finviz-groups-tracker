@@ -172,7 +172,7 @@ def test_signin_success_renders_open_positions(server):
             "ticker": "NVDA", "entry_price": 120.50, "initial_stop": 110.00,
             "current_stop": 110.00, "qty": 40, "remaining_qty": 40,
             "stop_basis": "prior_day_low", "entry_date": "2026-08-12",
-            "meta": {"source": "picks"},
+            "meta": {"source": "picks"}, "state": "open",
         }
         _mock_worker(page, positions_rows=[row])
         _boot(page, signed_in=False)
@@ -191,6 +191,42 @@ def test_signin_success_renders_open_positions(server):
         assert "Prior low" in html
         assert "40" in html
         assert "No open positions" not in html
+        browser.close()
+
+
+def test_managing_and_closing_positions_still_render(server):
+    # Regression: the tab used to call GET /positions?state=open, which excludes anything the
+    # advance() engine has moved past its first bar (open -> managing) or flagged for exit
+    # (-> closing) — a live position would silently vanish once the daily sweep advanced it.
+    # See docs/CLAUDE.md § Positions tab for the 2026-08-17 fix.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        rows = [
+            {"ticker": "NVDA", "entry_price": 120.50, "initial_stop": 110.00,
+             "current_stop": 110.00, "qty": 40, "remaining_qty": 40,
+             "stop_basis": "prior_day_low", "entry_date": "2026-08-12",
+             "meta": {"source": "picks"}, "state": "managing"},
+            {"ticker": "AXON", "entry_price": 613.90, "initial_stop": 597.10,
+             "current_stop": 597.10, "qty": 29, "remaining_qty": 29,
+             "stop_basis": "prior_day_low", "entry_date": "2026-08-10",
+             "meta": {"source": "picks"}, "state": "closing"},
+            {"ticker": "OLD", "entry_price": 50.00, "initial_stop": 45.00,
+             "current_stop": 45.00, "qty": 10, "remaining_qty": 10,
+             "stop_basis": "prior_day_low", "entry_date": "2026-08-01",
+             "meta": {"source": "picks"}, "state": "closed"},
+        ]
+        _mock_worker(page, positions_rows=rows)
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        assert "NVDA" in html, "a 'managing' position must still render"
+        assert "AXON" in html, "a 'closing' position must still render"
+        assert "OLD" not in html, "a 'closed' position must not render"
         browser.close()
 
 
