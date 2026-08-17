@@ -73,3 +73,9 @@ def test_assert_provisional_raises_for_unknown_key():
 
 def test_registry_order_is_eod_morning_pre_close():
     assert list(sc.SESSIONS) == ["eod", "morning", "pre_close"]
+
+
+def test_watchlist_tick_sessions_is_morning_only():
+    # Pinned deliberately (WS3b, issue #268): adding a session here is an opt-in
+    # decision, not automatic — see the constant's doc comment in session_config.py.
+    assert sc.WATCHLIST_TICK_SESSIONS == frozenset({"morning"})

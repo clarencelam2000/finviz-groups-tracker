@@ -643,3 +643,19 @@ def test_post_watchlist_tick_success(monkeypatch):
     monkeypatch.setattr(cm, "_authed_request", lambda *a, **k: _Resp())
     result = cm.post_watchlist_tick("https://worker.example", "tok", "2026-08-07")
     assert result == {"ticked": 3}
+
+
+# should_tick_watchlist (WS3b, issue #268) — gates the P2 watchlist tick to only the
+# sessions in session_config.WATCHLIST_TICK_SESSIONS, so a pre_close run never
+# double-decrements a watch entry's TTL for the same trading day.
+
+def test_should_tick_watchlist_true_for_morning():
+    assert cm.should_tick_watchlist(session_config.MORNING) is True
+
+
+def test_should_tick_watchlist_false_for_pre_close():
+    assert cm.should_tick_watchlist(session_config.PRE_CLOSE) is False
+
+
+def test_should_tick_watchlist_false_for_unknown_session():
+    assert cm.should_tick_watchlist("some_future_session") is False

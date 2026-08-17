@@ -69,6 +69,16 @@ SESSIONS: dict[str, Session] = {
 # in terms of multiple sessions should default to this.
 DEFAULT_SESSION = EOD
 
+# Sessions that decrement the personal watchlist's TTL (WS5 §8b) when their writer
+# completes a successful, non-dry-run write. Ticking is a once-per-trading-day concept
+# anchored to a single capture — currently only `morning`. A session outside this set
+# (e.g. `pre_close`) must NOT also tick the same day's TTL, or a watch entry would lose
+# two "mornings remaining" for one calendar day. Kept here (not inline in
+# collect_morning.py) so adding a future session forces a conscious opt-in decision
+# at the same place the session itself is registered, rather than an easy-to-miss
+# comment on an unrelated call site. See collect_morning.should_tick_watchlist().
+WATCHLIST_TICK_SESSIONS = frozenset({MORNING})
+
 
 # ---------------------------------------------------------------------------
 # Pure helpers

@@ -330,6 +330,16 @@ def fetch_watchlist_tickers(worker_url: str, token: str) -> list:
         return []
 
 
+def should_tick_watchlist(session: str) -> bool:
+    """True if `session` is one that decrements the watchlist TTL (WS3b, issue #268).
+
+    Pure gate around session_config.WATCHLIST_TICK_SESSIONS — kept as its own function
+    (rather than an inline comparison in main()) so it's independently unit-testable
+    without exercising the rest of main()'s scrape/write flow.
+    """
+    return session in session_config.WATCHLIST_TICK_SESSIONS
+
+
 def post_watchlist_tick(worker_url: str, token: str, date: str) -> "dict | None":
     """POST {worker_url}/watchlist/tick {"date": date} -> parsed response dict, or
     None on any failure (P2).
@@ -718,8 +728,11 @@ def main() -> None:
     # a real (non-dry-run) trading-day run past the emptiness guard, so `rows` is
     # non-empty here — never on a dry-run (early return above) and never on a
     # non-trading day (exit-0 guards at the top). TTL counts trading mornings only,
-    # so ticking exactly here is correct. The call itself is idempotent + non-fatal.
-    if watchlist_configured:
+    # so `should_tick_watchlist(session)` (WS3b, issue #268) restricts this to the
+    # sessions in session_config.WATCHLIST_TICK_SESSIONS (currently `morning` only) —
+    # `pre_close` must not also tick the same day's TTL. The call itself is
+    # idempotent + non-fatal.
+    if watchlist_configured and should_tick_watchlist(session):
         tick_result = post_watchlist_tick(worker_url, token, today_str)
         if tick_result is not None:
             print(f"Watchlist tick recorded for {today_str}: {tick_result}")

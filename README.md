@@ -315,6 +315,11 @@ session-keyed stores added later (not yet built).
 
 `DEFAULT_SESSION` = `eod` — callers that don't yet think in terms of multiple sessions default here.
 
+`WATCHLIST_TICK_SESSIONS` = `{morning}` — sessions whose writer decrements the personal
+watchlist's TTL on a successful, non-dry-run write (WS5 §8b). `pre_close` is deliberately
+excluded so a watch entry doesn't lose two "mornings remaining" for one calendar day; see
+`scripts/collect_morning.py`'s `should_tick_watchlist()`.
+
 ### WS3 morning status (`scripts/collect_morning.py`)
 
 First writer under the provisional-session store pattern (ADR-013). Pure status engine
