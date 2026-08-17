@@ -412,6 +412,8 @@ These constants control when visual indicators appear or change state. All are n
 | `WATCHLIST_TTL_SESSIONS` | `10` | Personal watchlist (WS5 §8b): display-only mirror of the worker's `WATCHLIST_TTL_SESSIONS` — drives the watch card's "N mornings left" readout. The worker (`worker-positions`) owns the real `sessions_remaining` counter; see its README for the source-of-truth constant. |
 | `WATCHLIST_EXPIRING_AT` | `1` | Personal watchlist: `sessions_remaining <=` this shows the amber "expiring" cue on a watch card's footer. |
 | `WATCHLIST_GAUGE_PAD` | `0.08` | Personal watchlist: fraction of the price domain padded on each end of a watch card's levels gauge, so end markers aren't clipped. |
+| `POS_VISIBLE_STATES` | `{'open','managing','closing'}` | Positions tab: which worker `state` values still render as a card. `GET /positions` returns all states; the PWA filters client-side (the worker's `state` query param is a single exact match, no OR) so only `closed` drops off the list. |
+| `POS_STATE_BADGE` | see code | Positions tab: small uppercase badge shown on `managing` ("managing") and `closing` ("exit pending", amber) cards; `open` shows no badge (default/expected state). |
 
 > The worker-side `WATCHLIST_TTL_SESSIONS` (source of truth for `sessions_remaining`) and
 > `WATCHLIST_PURGE_DAYS` (expired-entry retention) are documented in

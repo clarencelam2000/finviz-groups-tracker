@@ -62,6 +62,8 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `WATCHLIST_TTL_SESSIONS` | `10` | Watch card "N mornings left" — display-only mirror of the worker's `WATCHLIST_TTL_SESSIONS` (worker-positions), which owns the real `sessions_remaining` counter. |
 | `WATCHLIST_EXPIRING_AT` | `1` | Watch card footer: `sessions_remaining <= this` shows the amber "expiring" cue (e.g. "1 morning left" in amber). |
 | `WATCHLIST_GAUGE_PAD` | `0.08` | Fraction of the price domain padded on each end of a watch card's levels gauge so end markers (prior high/low, your level) aren't clipped at the track edges. |
+| `POS_VISIBLE_STATES` | `{'open','managing','closing'}` | Positions tab: worker `state` values that still render as a card (client-side filter over the unfiltered `GET /positions` response — the worker's `state` query param is a single exact match, no OR support). Only `closed` drops off. |
+| `POS_STATE_BADGE` | see code | Positions tab: small uppercase badge on `managing`/`closing` cards (`closing` = amber "exit pending"); `open` gets no badge. |
 
 ## Watchlist (Morning + Positions, WS5 §8b)
 
