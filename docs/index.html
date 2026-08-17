@@ -5670,6 +5670,7 @@
       const ok = await posLogin(pass);
       if (ok) {
         state.positionsData = null;
+        state.watchlistData = null;
         renderPositions();
       } else if (errEl) {
         errEl.textContent = 'Wrong passphrase';
@@ -5680,6 +5681,7 @@
       posClearToken();
       state.positionsData = null;
       state.positionsError = false;
+      state.watchlistData = null;
       renderPositions();
     };
 
@@ -6376,7 +6378,7 @@
         const open = !!state.watchExpiredOpen;
         expiredHtml = `
           <div class="mt-2">
-            <button onclick="window.__toggleWatchExpired()" class="text-[11px] text-slate-500 hover:text-slate-300">${open ? '▾' : '▸'} Expired (${expired.length})</button>
+            <button onclick="window.__toggleWatchExpired(this)" class="text-[11px] text-slate-500 hover:text-slate-300">${open ? '▾' : '▸'} Expired (${expired.length})</button>
             <div id="watch-expired-bin" class="${open ? '' : 'hidden'} mt-2 space-y-2">
               ${expired.map(entry => watchCardHtml(entry, findPub(entry.ticker))).join('')}
             </div>
@@ -6386,11 +6388,10 @@
       el.innerHTML = head + `<div class="space-y-2">${activeHtml}</div>` + expiredHtml;
     }
 
-    window.__toggleWatchExpired = function () {
+    window.__toggleWatchExpired = function (btn) {
       state.watchExpiredOpen = !state.watchExpiredOpen;
       const bin = document.getElementById('watch-expired-bin');
       if (bin) bin.classList.toggle('hidden', !state.watchExpiredOpen);
-      const btn = event && event.target;
       if (btn) btn.textContent = (state.watchExpiredOpen ? '▾' : '▸') + ' Expired (' + (btn.textContent.match(/\((\d+)\)/) || [,''])[1] + ')';
     };
 
@@ -6643,8 +6644,16 @@
       const useReclaim = pub.status === 'reclaim' && entry.sma50 != null;
       let body;
       if (useReclaim) {
+        // Reclaim can trigger off yesterday's low alone (see watchYourLevel's reclaim
+        // predicate below) — only badge today's low as "▼ under" when it actually breached ref.
+        const reclaimRef = parseFloat(entry.sma50);
+        const todayLow = parseFloat(pub.low);
+        const todayUnder = !isNaN(reclaimRef) && !isNaN(todayLow) && todayLow < reclaimRef;
+        const lowLabel = todayUnder
+          ? `${_mNum(pub.low)} <span class="text-red-400">▼ under</span>`
+          : _mNum(pub.low);
         body = _mKv('Ref (50MA)', _mNum(entry.sma50))
-             + _mKv('Day low', `${_mNum(pub.low)} <span class="text-red-400">▼ under</span>`)
+             + _mKv('Day low', lowLabel)
              + _mKv('Now', `<span class="text-emerald-400">${_mNum(pub.price)} — back above</span>`);
       } else {
         const now = `${_mNum(pub.price)} · ${_mChange(pub.change)}`;
