@@ -649,3 +649,43 @@ has live rows, then close. (2) healthchecks DMS on `collect_preclose_status.yml`
 (3) #261 (WS2) can be closed for hygiene — `pre_close` is fully wired now. (4) First live 15:30 run
 happens on the next trading day via the Cloudflare dispatcher; no data exists until then (404 → empty
 state is expected and handled).
+
+---
+
+## 2026-08-17 — WS3b (#268) implementation recovered after stranding on a merged PR branch
+
+**Status: safe to close** once PR #328 merges (open at time of writing).
+
+**What happened:** PR #327 merged with only the scoping spec + mock (the WS3b-C entry above,
+"IMPLEMENTED", was written *into* the actual implementation commit — but that commit was pushed to
+`claude/issue-268-scoping-spec-ra01f6` roughly 10 minutes *after* GitHub had already closed/merged
+#327 as the scoping-only version. A closed/merged PR's branch has no path into default, so the
+implementation commit (`e436c4b`) sat stranded — invisible to `origin/claude/elegant-babbage-hlxnfy`
+despite being fully finished, tested, and described as shipped in #327's own PR body. This is exactly
+the failure mode `.claude/rules/branch-commit-discipline.md` § Amendment policy documents.
+
+**Recovery (this session, prompted by the owner noticing new commits on an already-closed PR):**
+confirmed via `git log --oneline origin/<default>..<branch>` that `e436c4b` was unreachable from
+default; branched fresh off default (reusing this session's already-assigned branch
+`claude/review-pr-327-1j88d6`) and cherry-picked `e436c4b` clean, no conflicts (now `13cd139`).
+No re-authoring — this is the same code, same commit message, same author, just relocated onto a
+branch with an open path to default. Opened as PR #328 (does not need to wait for the OOO original
+author — the commit was self-contained and mechanically recoverable per the documented procedure).
+
+**Verification done before pushing (see PR #328 body for full detail):** `worker-cron` 93/93 tests
+green; `test_guide_releases.py` / `test_session_config.py` / `test_collect_morning.py` green.
+Applied the documented sandbox Chromium-revision symlink workaround
+(`knowledge/investigations/playwright-cloud-session-testing.md`) to actually run the PWA Playwright
+suite instead of skipping it — found 22 failures in `test_pwa_morning.py` /
+`test_pwa_positions.py` / `test_pwa_trade_ticket.py` / `test_pwa_watchlist.py`, root-caused them
+(not just noted): the new pre-close CSV fetch hits a real network-level failure in this sandbox
+(no external network reachability at all, a separate known gap) because the existing test fixtures
+don't intercept the new `pre_close_latest.csv` route. Confirmed via a standalone repro script that
+swapping in a real HTTP 404 response for that route (what production/CI actually returns
+pre-first-run) renders correctly — so these are sandbox-only false negatives, not a functional
+regression. Did not edit the test files themselves, per the owner's "don't over-invest in tests"
+call already on record in the original PR body.
+
+**Next steps:** none beyond merging #328 — this recreates #327's intended end state exactly. Once
+merged, resume the WS3b follow-ups listed in the entry above (WS4-C verification, healthchecks DMS,
+closing #261).
