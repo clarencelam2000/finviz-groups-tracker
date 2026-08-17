@@ -19,6 +19,17 @@ Design: ADR-014 · roadmap § WS4 · mock `planning/mocks/ws4-trade-ticket.html`
 | WS4-C | **Pre-close (15:50) ticket rendering** | `docs/index.html` | S | Same component keyed on `session=pre_close`. **Blocked-by #268 (WS3b)** — `pre_close` session store not yet populated. |
 | WS4-RT | **Revisit with real-time quotes (Alpaca)** (#287) | — | — | Parked. Replace snapshot-read price with a live feed; keep manual override as fallback. Not scheduled. |
 
+#### Session surfaces (WS3b — pre-close confirmation)
+
+Scoped 2026-08-17. Spec: `planning/ws3b-preclose-surface-spec.md` · mock `planning/mocks/ws3b-preclose-toggle.html` · issue #268. Owner decisions locked: 15:30 ET, one tab + toggle, tab label stays "Morning", delta chips in, generalize-don't-clone.
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| WS3b-A | **Writer: generalize `collect_morning.py` → `--session`** | `scripts/collect_morning.py` (or `collect_session.py`), `scripts/session_config.py`, `tests/**`, `.github/workflows/tests.yml` | M | Junior + senior review. `pre_close` capture_et 15:50→**15:30** (triple-doc). Writes `data/picks/sessions/pre_close{,_latest}.csv`, `assert_provisional("pre_close")`. Morning output byte-identical (regression test). |
+| WS3b-B | **Dispatch: gated 15:30 ET job** | `worker-cron/src/routing.js`, `worker-cron/test/**`, `.github/workflows/collect_preclose.yml` (if wrapper path), README, CLAUDE.md | S | Senior. New `preclose_status` job (own KV key); pass `session` input OR thin yml wrapper. Leave existing `collect_preclose` backstop + #259 gate untouched. Healthchecks DMS. |
+| WS3b-C | **PWA: Morning tab session toggle + delta chips** | `docs/index.html`, `docs/sw.js`, `docs/releases.json` | M | Design lead owns taste. [Morning · Pre-close] toggle, default freshest; "into the close" copy; `held/faded since AM` chips (morning⋈pre_close on ticker); suppress `gapped_through` at pre-close (display-only, engine pure). Release triplet same PR. |
+| WS3b-D | **Ship: notes + SPRINT + WS4 follow-up** | `.session/**` | XS | WS4-C (pre-close ticket) unblocks once pre_close store lands — cross-link. |
+
 #### Trade Lifecycle (WS5 — position engine + D1)
 
 Design: ADR-012 · `planning/trade-lifecycle-engine.md` · roadmap § WS5 · epic #264. Owner decisions 2026-08-13: worker-native Bearer auth (not CF Access), dedicated `finviz-positions` worker, provision/deploy on the shared CF account.

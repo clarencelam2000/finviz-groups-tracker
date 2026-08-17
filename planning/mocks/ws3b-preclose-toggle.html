@@ -1,0 +1,267 @@
+<title>Pre-close Confirmation Mock</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  /* Faithful reproduction of docs/index.html's Tailwind-slate design language.
+     Dark-only by design (the real app has no light mode). Tokens below mirror
+     Tailwind's slate/emerald/amber/red/sky named palette 1:1 so this mock reads
+     exactly like the shipped Morning surface. */
+  :root{
+    --slate-900:#0f172a; --slate-800:#1e293b; --slate-700:#334155; --slate-600:#475569;
+    --slate-500:#64748b; --slate-400:#94a3b8; --slate-300:#cbd5e1; --slate-200:#e2e8f0; --slate-100:#f1f5f9;
+    --emerald-400:#34d399; --emerald-500:#10b981;
+    --amber-400:#fbbf24; --amber-500:#f59e0b;
+    --red-400:#f87171; --red-500:#ef4444;
+    --sky-400:#38bdf8;
+    --font: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#020617;color:var(--slate-100);font-family:var(--font);
+       min-height:100vh;display:flex;flex-direction:column;align-items:center;
+       gap:16px;padding:24px 12px 48px;-webkit-font-smoothing:antialiased}
+  .note{max-width:390px;font-size:12px;line-height:1.5;color:var(--slate-400);
+        border-left:2px solid var(--sky-400);padding:8px 12px;background:rgba(56,189,248,.06);
+        border-radius:0 6px 6px 0}
+  .note b{color:var(--slate-200)}
+  .phone{width:390px;max-width:100%;background:var(--slate-900);border:1px solid var(--slate-700);
+         border-radius:22px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  /* App header */
+  .appbar{display:flex;align-items:center;gap:8px;padding:12px 14px;background:var(--slate-900);
+          border-bottom:1px solid var(--slate-700)}
+  .appbar .dot{width:20px;height:20px;border-radius:5px;background:#0f172a;border:1px solid var(--sky-400);
+               display:flex;align-items:center;justify-content:center}
+  .appbar .dot svg{width:13px;height:13px}
+  .appbar h1{font-size:14px;font-weight:700;letter-spacing:.2px}
+  .appbar .sub{font-size:10.5px;color:var(--slate-500);margin-left:auto}
+  /* Tab bar */
+  .tabs{display:flex;background:var(--slate-800);border-bottom:1px solid var(--slate-700);
+        font-size:11px;font-weight:500;overflow-x:auto;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tabs button{flex:0 0 auto;padding:10px 12px;color:var(--slate-400);background:none;border:none;
+               font:inherit;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent}
+  .tabs button.active{color:var(--sky-400);border-bottom-color:var(--sky-400)}
+  /* Body */
+  .body{padding:12px 12px 28px}
+  /* Segmented toggle */
+  .seg{display:flex;align-items:center;gap:4px;margin-bottom:10px}
+  .seg .lbl{font-size:11px;color:var(--slate-500);margin-right:2px}
+  .seg button{padding:4px 12px;font-size:11px;font-weight:500;border-radius:999px;border:none;
+              cursor:pointer;font-family:inherit;background:var(--slate-700);color:var(--slate-400)}
+  .seg button.on{background:var(--slate-600);color:#fff}
+  .seg .clock{margin-left:auto;font-size:10px;color:var(--slate-500);font-variant-numeric:tabular-nums}
+  /* Provisional banner */
+  .freshline{font-size:11px;color:var(--slate-400);margin-bottom:6px}
+  .freshline .prov{color:var(--amber-400);font-weight:500}
+  .banner{font-size:11px;color:var(--amber-400);background:rgba(245,158,11,.10);
+          border:1px dashed rgba(245,158,11,.40);border-radius:8px;padding:8px 12px;margin-bottom:12px;line-height:1.45}
+  /* Cards */
+  .cards{display:flex;flex-direction:column;gap:8px}
+  .card{background:var(--slate-800);border:1px solid var(--slate-700);border-left:4px solid var(--slate-600);
+        border-radius:8px;padding:11px 14px}
+  .card.s-triggered{border-left-color:var(--emerald-500)}
+  .card.s-held{border-left-color:var(--emerald-500)}
+  .card.s-amber{border-left-color:var(--amber-500)}
+  .card.s-invalidated{border-left-color:var(--red-500)}
+  .card.s-setup{border-left-color:var(--slate-600)}
+  .card.s-noquote{border-left-color:var(--slate-700)}
+  .crow{display:flex;justify-content:space-between;align-items:center}
+  .tk{font-weight:700;font-size:13px;letter-spacing:.4px}
+  .grp{font-size:11px;color:var(--slate-500)}
+  .pill{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+        padding:2px 8px;border-radius:999px}
+  .pill.triggered{background:rgba(16,185,129,.15);color:var(--emerald-400)}
+  .pill.held{background:rgba(16,185,129,.15);color:var(--emerald-400)}
+  .pill.amber{background:rgba(245,158,11,.15);color:var(--amber-400)}
+  .pill.invalidated{background:rgba(239,68,68,.15);color:var(--red-400)}
+  .pill.setup{background:rgba(100,116,139,.20);color:var(--slate-300)}
+  .pill.noquote{background:rgba(100,116,139,.20);color:var(--slate-400)}
+  .kv{display:flex;justify-content:space-between;font-size:11px;margin-top:4px}
+  .kv .k{color:var(--slate-400)}
+  .kv .v{color:var(--slate-200);font-weight:500;font-variant-numeric:tabular-nums}
+  .v .pos{color:var(--emerald-400)} .v .neg{color:var(--red-400)}
+  .atr-ok{color:var(--emerald-400)} .atr-caution{color:var(--amber-400)} .atr-chase{color:var(--red-400)}
+  .cnote{font-size:11px;color:var(--slate-400);margin-top:6px;line-height:1.45}
+  /* delta chip — the pre-close-only "since morning" affordance */
+  .delta{display:inline-block;font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:4px;margin-left:6px;
+         vertical-align:middle}
+  .delta.good{background:rgba(16,185,129,.15);color:var(--emerald-400)}
+  .delta.bad{background:rgba(239,68,68,.15);color:var(--red-400)}
+  .cta{margin-top:8px;padding-top:8px;border-top:1px solid var(--slate-700)}
+  .cta button{width:100%;padding:6px;font-size:11px;font-weight:600;border-radius:6px;border:none;
+              background:var(--emerald-500);color:#052e1b;cursor:pointer;font-family:inherit}
+  .logged{text-align:center;font-size:11px;font-weight:600;color:var(--emerald-400)}
+  .logged a{color:inherit}
+  .chartrow{margin-top:8px;padding-top:8px;border-top:1px solid rgba(51,65,85,.5)}
+  .chartrow button{font-size:10px;padding:4px 8px;border-radius:5px;background:var(--slate-700);
+                   color:var(--slate-300);border:none;cursor:pointer;font-family:inherit;font-weight:500}
+  .caption{max-width:390px;font-size:11px;color:var(--slate-500);text-align:center;line-height:1.5}
+  .hidden{display:none}
+</style>
+
+<p class="note"><b>WS3b mock — the Morning tab, now session-aware.</b> Tap
+<b>Morning · Pre-close</b> to switch reads. The toggle defaults to whichever is freshest for
+today (Pre-close after 15:30 ET). Same cards, same engine — only the framing and the
+"since morning" delta chips change. This is a design mock, not the live app.</p>
+
+<div class="phone">
+  <div class="appbar">
+    <div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2.5"><polyline points="3 17 9 11 13 15 21 7"/></svg></div>
+    <h1>Finviz Groups</h1>
+    <span class="sub">confirmation</span>
+  </div>
+
+  <div class="tabs">
+    <button>Today</button><button>Movers</button><button>Momentum</button>
+    <button>Strength</button><button>vs Mkt</button><button>AI</button>
+    <button>Lookup</button><button>Picks</button>
+    <button class="active">Morning</button><button>Positions</button>
+  </div>
+
+  <div class="body">
+    <!-- Session toggle -->
+    <div class="seg">
+      <span class="lbl">Read:</span>
+      <button id="t-morning" onclick="setView('morning')">Morning</button>
+      <button id="t-preclose" class="on" onclick="setView('preclose')">Pre-close</button>
+      <span class="clock" id="clock">15:32 ET</span>
+    </div>
+
+    <!-- ===== PRE-CLOSE VIEW ===== -->
+    <div id="view-preclose">
+      <div class="freshline">Snapshot today 15:30 ET · <span class="prov">provisional — not settled</span></div>
+      <div class="banner">Pre-close read — are today's setups <b>confirming into the close</b>? Prices
+        are a mid-session snapshot ~30&nbsp;min before the bell. Nothing here changes your EOD data.</div>
+      <div class="cards">
+        <div class="card s-triggered">
+          <div class="crow">
+            <span><span class="tk">NVDA</span> <span class="grp">· Technology</span><span class="delta good">held since AM</span></span>
+            <span class="pill triggered">Triggered</span>
+          </div>
+          <div class="kv"><span class="k">Trigger (prior high)</span><span class="v">184.20</span></div>
+          <div class="kv"><span class="k">Now</span><span class="v">187.65 · <span class="pos">+2.1%</span></span></div>
+          <div class="kv"><span class="k">ATR from LoD</span><span class="v atr-ok">0.6 — ok to act</span></div>
+          <div class="cta"><button>I took it →</button></div>
+          <div class="chartrow"><button>Show chart ▼</button></div>
+        </div>
+
+        <div class="card s-triggered">
+          <div class="crow">
+            <span><span class="tk">APP</span> <span class="grp">· Technology</span><span class="delta good">firmed up</span></span>
+            <span class="pill triggered">Triggered</span>
+          </div>
+          <div class="kv"><span class="k">Trigger (prior high)</span><span class="v">402.10</span></div>
+          <div class="kv"><span class="k">Now</span><span class="v">405.80 · <span class="pos">+1.4%</span></span></div>
+          <div class="kv"><span class="k">ATR from LoD</span><span class="v atr-caution">0.9 — caution</span></div>
+          <div class="cta"><div class="logged">✓ Logged · <a href="#">view in Positions ›</a></div></div>
+          <div class="chartrow"><button>Show chart ▼</button></div>
+        </div>
+
+        <div class="card s-invalidated">
+          <div class="crow">
+            <span><span class="tk">SMCI</span> <span class="grp">· Technology</span><span class="delta bad">faded from AM</span></span>
+            <span class="pill invalidated">Faded into close</span>
+          </div>
+          <div class="kv"><span class="k">Trigger (prior high)</span><span class="v">48.30</span></div>
+          <div class="kv"><span class="k">Now</span><span class="v">46.10 · <span class="neg">−3.2%</span></span></div>
+          <div class="cnote">Was triggered this morning, rolling over into the close. Late entry has poor odds.</div>
+          <div class="chartrow"><button>Show chart ▼</button></div>
+        </div>
+
+        <div class="card s-setup">
+          <div class="crow">
+            <span><span class="tk">CRWD</span> <span class="grp">· Technology</span></span>
+            <span class="pill setup">Setting up</span>
+          </div>
+          <div class="kv"><span class="k">Trigger (prior high)</span><span class="v">312.00</span></div>
+          <div class="kv"><span class="k">Now</span><span class="v">309.40 · <span class="neg">−0.4%</span></span></div>
+          <div class="cnote">Coiling below trigger into the close. No entry unless it breaks.</div>
+          <div class="chartrow"><button>Show chart ▼</button></div>
+        </div>
+
+        <div class="card s-noquote">
+          <div class="crow">
+            <span><span class="tk">VRT</span> <span class="grp">· Industrials</span></span>
+            <span class="pill noquote">No quote</span>
+          </div>
+          <div class="cnote">Pre-close feed missed this ticker — shown explicitly, never silently dropped.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== MORNING VIEW ===== -->
+    <div id="view-morning" class="hidden">
+      <div class="freshline">Snapshot today 10:05 ET · <span class="prov">provisional — not settled</span></div>
+      <div class="banner">Morning read — did yesterday's setups <b>survive the open</b>? Prices are
+        a mid-session snapshot. Nothing here changes your EOD data.</div>
+      <div class="cards">
+        <div class="card s-triggered">
+          <div class="crow">
+            <span><span class="tk">NVDA</span> <span class="grp">· Technology</span></span>
+            <span class="pill triggered">Triggered</span>
+          </div>
+          <div class="kv"><span class="k">Trigger (prior high)</span><span class="v">184.20</span></div>
+          <div class="kv"><span class="k">Now</span><span class="v">185.90 · <span class="pos">+1.0%</span></span></div>
+          <div class="kv"><span class="k">ATR from LoD</span><span class="v atr-ok">0.5 — ok to act</span></div>
+          <div class="cta"><button>I took it →</button></div>
+          <div class="chartrow"><button>Show chart ▼</button></div>
+        </div>
+
+        <div class="card s-amber">
+          <div class="crow">
+            <span><span class="tk">APP</span> <span class="grp">· Technology</span></span>
+            <span class="pill amber">Gapped through</span>
+          </div>
+          <div class="kv"><span class="k">Trigger</span><span class="v">402.10</span></div>
+          <div class="kv"><span class="k">Opened</span><span class="v">409.50 · <span class="pos">+2.6%</span> gap</span></div>
+          <div class="cnote">Entry here has poor R vs the planned stop.</div>
+          <div class="chartrow"><button>Show chart ▼</button></div>
+        </div>
+
+        <div class="card s-triggered">
+          <div class="crow">
+            <span><span class="tk">SMCI</span> <span class="grp">· Technology</span></span>
+            <span class="pill triggered">Triggered</span>
+          </div>
+          <div class="kv"><span class="k">Trigger (prior high)</span><span class="v">48.30</span></div>
+          <div class="kv"><span class="k">Now</span><span class="v">49.10 · <span class="pos">+1.7%</span></span></div>
+          <div class="kv"><span class="k">ATR from LoD</span><span class="v atr-caution">0.9 — caution</span></div>
+          <div class="cta"><button>I took it →</button></div>
+          <div class="chartrow"><button>Show chart ▼</button></div>
+        </div>
+
+        <div class="card s-setup">
+          <div class="crow">
+            <span><span class="tk">CRWD</span> <span class="grp">· Technology</span></span>
+            <span class="pill setup">Setting up</span>
+          </div>
+          <div class="kv"><span class="k">Trigger (prior high)</span><span class="v">312.00</span></div>
+          <div class="kv"><span class="k">Now</span><span class="v">310.20 · <span class="neg">−0.1%</span></span></div>
+          <div class="cnote">Below trigger. Nothing to do yet.</div>
+          <div class="chartrow"><button>Show chart ▼</button></div>
+        </div>
+
+        <div class="card s-noquote">
+          <div class="crow">
+            <span><span class="tk">VRT</span> <span class="grp">· Industrials</span></span>
+            <span class="pill noquote">No quote</span>
+          </div>
+          <div class="cnote">Morning feed missed this ticker — shown explicitly, never silently dropped.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<p class="caption">Note the two design decisions to react to: (1) the <b>Pre-close</b> read is the
+default after 15:30; (2) the small <b>green/red "since AM" delta chips</b> that only appear on the
+pre-close read — they answer "did it hold from the open into the close?" without a second tab.
+SMCI shows the payoff: Triggered at the open, Faded into close by 15:30.</p>
+
+<script>
+  function setView(v){
+    document.getElementById('view-preclose').classList.toggle('hidden', v!=='preclose');
+    document.getElementById('view-morning').classList.toggle('hidden', v!=='morning');
+    document.getElementById('t-preclose').classList.toggle('on', v==='preclose');
+    document.getElementById('t-morning').classList.toggle('on', v==='morning');
+    document.getElementById('clock').textContent = v==='preclose' ? '15:32 ET' : '10:07 ET';
+  }
+</script>
