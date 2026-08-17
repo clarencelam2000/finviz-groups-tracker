@@ -324,6 +324,60 @@ plain HTML files don't. (Owner directive, 2026-08-09.) Committing the mock's sou
 `planning/mocks/` for history is still expected — the Artifact is *how the owner reviews it*, the
 committed file is the durable record.
 
+### Cloudflare can be queried directly — no MCP/OAuth needed
+
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are already present in the session environment.
+The `Cloudflare_Developer_Platform` MCP server requires an interactive OAuth flow this
+non-interactive session can't complete — **do not stop at "that server needs authorization."**
+Instead `curl` the Cloudflare REST API directly, e.g.:
+```bash
+# List D1 databases
+curl -s "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database" \
+  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+# Query a D1 database (find its uuid from the list above)
+curl -s "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${DB_ID}/query" \
+  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" \
+  -d '{"sql": "SELECT name FROM sqlite_master WHERE type=\"table\""}'
+# List deployed Worker scripts (check modified_on to confirm a deploy actually landed)
+curl -s "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts" \
+  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
+```
+Applying a migration directly this way is a real production write — get explicit owner sign-off
+first, same as any other schema change, even though the SQL itself is idempotent
+(`CREATE TABLE IF NOT EXISTS`). See `.session/session-notes.md` 2026-08-16 entry (PR #322
+ops-verification) for a worked example: this is how the `0003_watchlist.sql` migration was
+confirmed missing, then applied and re-verified, entirely from a cloud session with no `wrangler`
+CLI and no interactive OAuth.
+
+### Verification discipline — hard-won takeaways (2026-08-16, PR #322 ops-verification)
+
+A single ops-verification task produced three separate wrong claims in one session, each caught
+only because the owner pushed back and demanded the actual mechanism, not a plausible-sounding
+one. Full retrospective in that session's chat; the durable rules:
+
+- **"Verify" means live system state, not source code.** Reading code and reporting confidence
+  ("the fallback handles a missing secret gracefully") answers a different question than "is the
+  secret actually set and working." When asked to verify an ops/deploy/infra claim, check the
+  actual system (Cloudflare API, GitHub Actions run logs, a live D1 query) — code review alone is
+  not verification of runtime state, even when it's faster and feels like it should be enough.
+- **A file:line citation is not proof you read the function body.** Naming `advance.js:184` while
+  describing behavior you pattern-matched from general priors ("trailing stops are usually
+  sequential") reads as verified when it isn't. If a function's body hasn't actually been read,
+  say "I'd guess X because Y" — don't state a mechanism as fact with a citation attached. This
+  produced the worst error in the 2026-08-16 session: a fully fabricated explanation of why
+  `advance()` needs multi-day history, complete with real line numbers, when the file — once
+  actually read — showed the opposite (a pure single-bar + persisted-position-state function,
+  same shape as `worker-positions/CLAUDE.md` line 33 already documents correctly).
+- **Don't re-narrate an inherited claim as independently derived.** Repeating a stale session-notes
+  or PR-description claim in your own words, with your own supporting explanation, makes it look
+  freshly verified. If a claim can't be independently confirmed, quote it and flag it as
+  unverified — don't dress it up.
+- **Check what's actually available before reporting a capability blocked.** An MCP server needing
+  OAuth in a non-interactive session is not the only path to that system — check the environment
+  for API tokens/credentials before concluding the task can't be done. See the Cloudflare note
+  immediately above; this was found in `env`, not documented anywhere, and cost a full round of
+  back-and-forth to discover.
+
 ---
 
 - **Starting a session**: This `CLAUDE.md` auto-loads at session start. Also read `.session/session-notes.md` immediately — it holds the last 4 session entries with recent findings, blockers, and next steps. Start the session by summarizing what's in the notes so the user knows you're oriented. Older history is in `.session/archive/session-notes-archive.md` — only read it if the user asks or context demands it.
