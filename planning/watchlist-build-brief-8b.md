@@ -244,7 +244,7 @@ Four independent axes (full gallery in mock §03 of the surface mock / §-axes):
 
 ---
 
-## 7. Phasing (each independently shippable; feed is dormant until bars accumulate)
+## 7. Phasing (each independently shippable; feed is live after one EOD held-feed scrape)
 - **P1 — worker/D1:** `0003_watchlist.sql` + CRUD routes + `/watchlist-tickers` + `/watchlist/tick` +
   `heldTickers` union + `src/watchlist.js` + vitest (routes, auth isolation, TTL/tick idempotency,
   purge). No PWA. Auto-deploys via `deploy-workers.yml`.
@@ -255,8 +255,21 @@ Four independent axes (full gallery in mock §03 of the surface mock / §-axes):
   graduation wiring + release triplet + Playwright. This is the taste-heavy one — build to the **v2
   mock**; the lead owns final markup review.
 
-P2's live behavior needs a few days of `ticker_quotes` bars to be meaningful (same gate as the rest of
-WS5). Surfaces (P3) can ship with the feed still warming.
+**Correction (verified against live D1 2026-08-16, see PR #322 ops-verification):** P2's live
+behavior does NOT need multiple days of `ticker_quotes` history. Note the WS5 phase-3 `advance()`
+engine ALSO doesn't computationally need it — `advance(pos, bar, cfg)` is a pure function of one
+current bar + the position's own persisted state (`current_stop`/`trail_basis`/`profit_floor`,
+updated one call at a time), not a multi-day bar lookback. "Needs a few days to test meaningfully"
+(earlier session notes) is a QA-confidence statement about watching state transitions across real
+runs, not a data dependency of the algorithm. `sma20`/`sma50`/`atr`/`prior_high`/`prior_low` are
+all recovered from a SINGLE scraped row —
+`normalizeBar()`/`recoverMaLevel()` in `worker-positions/src/advance.js` reconstruct the MA price
+level from Finviz's own `%`-distance-from-SMA columns (`raw["SMA20"]`/`raw["SMA50"]`), which Finviz
+computes server-side and reports per-row. No rolling window is computed in our own D1. A watch
+ticker is fully functional — including the `reclaim` status, whose ref is `sma50` — starting the
+very next morning after its first EOD held-feed scrape (one bar). Before that first bar,
+`watchlistTickerRefs` returns nulls and the ticker just reads as ordinary statuses with no ref
+(never `reclaim`), per `scripts/pick_status.py`'s missing-value handling — not "dormant."
 
 ---
 

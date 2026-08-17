@@ -6,6 +6,60 @@
 
 ---
 
+## 2026-08-16 — PR #322 ops-verification: migration applied, deploy confirmed, bars claim corrected
+
+**Status: safe to close — all four ops items resolved or explicitly flagged as needing a weekday
+run.** Verified the "what the owner should verify after merge" list from PR #322 (WS5 §8b watchlist
+P1+P2) directly against Cloudflare, not just against code:
+
+1. **`0003_watchlist.sql` migration — was NOT applied at first check; now APPLIED.** Queried the
+   live `finviz-positions` D1 (`SELECT name FROM sqlite_master WHERE type='table'`) via the
+   Cloudflare API directly (`CLOUDFLARE_API_TOKEN`/`CLOUDFLARE_ACCOUNT_ID` were already in the
+   session env — no OAuth needed). Initially found: `_cf_KV`, `position_events`, `positions`,
+   `sqlite_sequence`, `ticker_quotes` — no `watchlist`/`watchlist_tick_log`. Ran the migration's 3
+   statements (`CREATE TABLE watchlist`, `CREATE INDEX idx_watchlist_user_status`, `CREATE TABLE
+   watchlist_tick_log`) directly via the D1 HTTP query API with owner sign-off, then re-verified
+   live: all 3 objects now present. `/watchlist*` routes are unblocked.
+2. **`deploy-workers.yml` auto-deploy — CONFIRMED, via Cloudflare, not just green CI.** GH Actions
+   run 31972877074 (fired at PR #322's merge, 2026-08-16T21:13:54Z) shows all 3 deploy jobs
+   succeeded. Cross-checked against Cloudflare's own `workers/scripts` listing: `finviz-positions`
+   `modified_on` = `2026-08-16T21:14:15Z`, matching the deploy job's completion — the script was
+   genuinely re-pushed, not just a green checkmark. Note `wrangler deploy` (ships worker code) and
+   `wrangler d1 execute` (applies SQL migrations) are two independent commands — deploy succeeding
+   says nothing about migration state, which is why #1 above still needed a separate live check.
+3. **`collect_morning.yml` secrets — owner confirmed added to GH repo secrets.** GitHub does not
+   expose secret values via API, so this can't be verified by name/value; instead triggered a real
+   `workflow_dispatch` with `dry_run: true` (run queued from this session) to observe whether the
+   watchlist union actually fires end-to-end instead of falling back to picks-only. See run result
+   for outcome (check `collect_morning.yml` run at ~2026-08-16 21:3x UTC).
+4. **"Feed is dormant until a few `ticker_quotes` bars accumulate" — WRONG, corrected in the brief.**
+   Traced the actual data path: `sma20`/`sma50`/`atr`/`prior_high`/`prior_low` (the watchlist
+   status engine's inputs, incl. the `reclaim` ref) are all recovered from a SINGLE scraped row —
+   `recoverMaLevel()`/`pctFromRaw()` in `worker-positions/src/advance.js` reconstruct the MA price
+   from Finviz's own `%`-from-SMA columns, which Finviz computes server-side per-row. Confirmed live:
+   `ticker_quotes` currently has exactly 2 rows, both `trade_date=2026-08-14` (one day), and that's
+   already sufficient.
+   **Correction to this entry's own first draft (owner caught it same-day):** the first version of
+   this note claimed the WS5 phase-3 `advance()` engine "genuinely does need several days of bars" —
+   that's also wrong, checked directly against `advance.js`. `advance(pos, bar, cfg)` is a pure
+   function of ONE current bar + the position's own persisted state (`current_stop`/`trail_basis`/
+   `profit_floor`/`caution_flag`/`highest_trim_atr`, each updated one call at a time) — not a
+   multi-day `ticker_quotes` lookback. `atrExt50()` and the trail-basis-widen check are both
+   single-bar computations; the ratchet (`Math.max(next.current_stop, trailLevel, ...)`) reads
+   yesterday's STATE on the position row, not yesterday's BAR. "Needs a few days to test
+   meaningfully" (2026-08-15 entry below, GO-LIVE checklist) is a QA-confidence statement about
+   watching real state transitions across live runs, not an algorithmic data dependency — same
+   category of claim as the watchlist one this entry set out to correct, and equally wrong for the
+   same reason. Fixed in `planning/watchlist-build-brief-8b.md` §7 and PR #322's description;
+   not editing the 2026-08-15 entry's original prose per the append-only rule.
+
+**Next steps:** none blocking. Only remaining open item is #3 — confirm the `POSITIONS_WORKER_URL`/
+`POSITIONS_INGEST_TOKEN` secrets actually work end-to-end on a real weekday `collect_morning` run
+(Monday 10:05 ET Cloudflare-dispatched, or a manual weekday `workflow_dispatch --dry-run`); the
+2026-08-16 dry-run exited at the weekend guard before reaching that code path.
+
+---
+
 ## 2026-08-15 — WS5 §8b: personal watchlist — P1 + P2 BUILT (#319, PR #322)
 
 **Status: safe to close once PR #322 merges. P3 (PWA) NOT started — recommended as a fresh
