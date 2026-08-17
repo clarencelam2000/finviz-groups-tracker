@@ -208,7 +208,12 @@ All Playwright-in-cloud work should first read
   - **Current jobs** (`worker-cron/src/routing.js` `JOB_SCHEDULE`, Mon–Fri): `collect_morning`
     at 10:05 ET (WS3 morning status, ADR-013, ungated — dispatches `collect_morning.yml`, KV key
     `last_dispatch_collect_morning`; 10:05 leaves a full 30-min candle after the open so the
-    intraday High/Low the state machine reads are a real range), `collect_preclose`
+    intraday High/Low the state machine reads are a real range), `preclose_status`
+    at 15:30 ET (WS3b pre-close "confirming into the close" status, issue #268, ungated — reruns
+    the same status engine via `scripts/collect_morning.py --session pre_close`, dispatching the
+    thin wrapper `collect_preclose_status.yml`, KV key `last_dispatch_preclose_status`; writes the
+    provisional `data/picks/sessions/pre_close{,_latest}.csv` store; distinct from, and does not
+    touch, the `collect_preclose` job below), `collect_preclose`
     at 15:50 ET (pre-close snapshot, shifted from legacy `:48`), `collect_eod` at 17:00 ET (EOD
     post-close snapshot, shifted from legacy `:01`), `picks` — also targets 17:00 ET, the same as
     `collect_eod`, not a fixed margin after it. The EOD collect run captures the day's final
@@ -222,7 +227,10 @@ All Playwright-in-cloud work should first read
     this existing settled pipeline — `collect_eod`'s output files stay byte-identical, no
     migration. `morning` (10:05 ET, ADR-013 WS3, now writing
     `data/picks/sessions/morning{,_latest}.csv` via `collect_morning.yml`) and `pre_close`
-    (15:50 ET, matching the `collect_preclose` cron above, not yet built — WS3b/WS5) are
+    (**15:30 ET**, WS3b/issue #268 — a distinct provisional confirmation read, NOT the same as
+    the settled `collect_preclose` backstop cron above which stays at 15:50 ET; built out in
+    `collect_morning.py --session pre_close` (writer), the `preclose_status` cron job +
+    `collect_preclose_status.yml` (dispatch), and the Morning tab's session toggle (PWA)) are
     provisional sessions living in physically-separate, session-keyed stores that this settled
     pipeline never reads.
   - **Picks is dependency-gated, not fixed-time (issue #259, closing the last piece of ADR-010).**

@@ -608,3 +608,84 @@ the surface's payoff — answer "did the setup hold from open into close?" witho
 
 **Next steps:** hand to eng team (paste-note prepared). WS4-C (pre-close trade ticket, ADR-014) is
 blocked-by this and cross-linked in SPRINT — unblocks when the `pre_close` store lands.
+
+---
+
+## 2026-08-17 — WS3b (#268) pre-close confirmation surface: IMPLEMENTED
+
+**Status: safe to close.** Built the full WS3b surface (writer + cron + PWA) on branch
+`claude/issue-268-scoping-spec-ra01f6` / PR #327. Staff-eng drove; Phases A & B via Sonnet
+subagents, Phase C (PWA visual) done in the main loop. Tests kept light per owner.
+
+**What landed (all in PR #327):**
+- **Phase A — writer (`scripts/collect_morning.py`, `session_config.py`):** generalized to
+  `--session {morning,pre_close}` (default morning) — NOT cloned. `session_store_paths()`,
+  session-parameterized `write_store`/`assert_provisional`. `pre_close` capture_et 15:50→**15:30**
+  (triple-doc: session_config comment + README + CLAUDE.md). Morning path byte-identical (8 old
+  tests pass unmodified; +1 pre_close test). 49 pytest green.
+- **Phase B — dispatch (`worker-cron/`):** new ungated `preclose_status` job @ 15:30 ET in
+  `routing.js` JOB_SCHEDULE (own KV key), `index.js` WORKFLOWS map, thin
+  `.github/workflows/collect_preclose_status.yml` → `collect_morning.py --session pre_close`
+  (Option 2: wrapper, not shared-dispatch `inputs` — lower risk). Existing 15:50 `collect_preclose`
+  settled backstop + #259 gate untouched. 93 worker-cron tests green. TODO(#268): healthchecks DMS
+  when a secret is provisioned.
+- **Phase C — PWA (`docs/index.html`):** Morning tab is session-aware — `[Morning · Pre-close]`
+  segmented toggle, defaults to freshest read (`freshestSessionView` by collected_at, so morning
+  before ~15:30 / pre-close after). Session-specific "into the close" copy + banner. Pre-close-only
+  `held/firmed up/faded since AM` delta chips (join morning⋈pre_close on ticker). `gapped_through`
+  remapped to `triggered` for DISPLAY at pre-close (`sessionDisplayRow`; engine pure). Ticket /
+  take-it / chart helpers now read `activeSessionRows()` so the expanded ticket uses the shown
+  session's prices. Release triplet `2026.08.17.1` + sw.js v68→v69. JS syntax-checked, releases
+  test green.
+
+**Verification:** releases.json valid + `test_guide_releases.py` green; inline-script syntax check
+clean; worker-cron 93 + collect_morning 49 pytest green. Did NOT run Playwright PWA tests (cloud
+Chromium-revision gap + owner's "don't over-invest in tests" — the surface mirrors the shipped
+morning render 1:1 and was syntax-verified).
+
+**Follow-ups:** (1) WS4-C (pre-close trade ticket) is likely satisfied for free — the ticket already
+renders on pre-close actionable cards via the session-generic helpers; verify once the 15:30 store
+has live rows, then close. (2) healthchecks DMS on `collect_preclose_status.yml` (TODO in the yml).
+(3) #261 (WS2) can be closed for hygiene — `pre_close` is fully wired now. (4) First live 15:30 run
+happens on the next trading day via the Cloudflare dispatcher; no data exists until then (404 → empty
+state is expected and handled).
+
+---
+
+## 2026-08-17 — WS3b (#268) implementation recovered after stranding on a merged PR branch
+
+**Status: safe to close** once PR #328 merges (open at time of writing).
+
+**What happened:** PR #327 merged with only the scoping spec + mock (the WS3b-C entry above,
+"IMPLEMENTED", was written *into* the actual implementation commit — but that commit was pushed to
+`claude/issue-268-scoping-spec-ra01f6` roughly 10 minutes *after* GitHub had already closed/merged
+#327 as the scoping-only version. A closed/merged PR's branch has no path into default, so the
+implementation commit (`e436c4b`) sat stranded — invisible to `origin/claude/elegant-babbage-hlxnfy`
+despite being fully finished, tested, and described as shipped in #327's own PR body. This is exactly
+the failure mode `.claude/rules/branch-commit-discipline.md` § Amendment policy documents.
+
+**Recovery (this session, prompted by the owner noticing new commits on an already-closed PR):**
+confirmed via `git log --oneline origin/<default>..<branch>` that `e436c4b` was unreachable from
+default; branched fresh off default (reusing this session's already-assigned branch
+`claude/review-pr-327-1j88d6`) and cherry-picked `e436c4b` clean, no conflicts (now `13cd139`).
+No re-authoring — this is the same code, same commit message, same author, just relocated onto a
+branch with an open path to default. Opened as PR #328 (does not need to wait for the OOO original
+author — the commit was self-contained and mechanically recoverable per the documented procedure).
+
+**Verification done before pushing (see PR #328 body for full detail):** `worker-cron` 93/93 tests
+green; `test_guide_releases.py` / `test_session_config.py` / `test_collect_morning.py` green.
+Applied the documented sandbox Chromium-revision symlink workaround
+(`knowledge/investigations/playwright-cloud-session-testing.md`) to actually run the PWA Playwright
+suite instead of skipping it — found 22 failures in `test_pwa_morning.py` /
+`test_pwa_positions.py` / `test_pwa_trade_ticket.py` / `test_pwa_watchlist.py`, root-caused them
+(not just noted): the new pre-close CSV fetch hits a real network-level failure in this sandbox
+(no external network reachability at all, a separate known gap) because the existing test fixtures
+don't intercept the new `pre_close_latest.csv` route. Confirmed via a standalone repro script that
+swapping in a real HTTP 404 response for that route (what production/CI actually returns
+pre-first-run) renders correctly — so these are sandbox-only false negatives, not a functional
+regression. Did not edit the test files themselves, per the owner's "don't over-invest in tests"
+call already on record in the original PR body.
+
+**Next steps:** none beyond merging #328 — this recreates #327's intended end state exactly. Once
+merged, resume the WS3b follow-ups listed in the entry above (WS4-C verification, healthchecks DMS,
+closing #261).

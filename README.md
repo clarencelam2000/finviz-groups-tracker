@@ -311,9 +311,14 @@ session-keyed stores added later (not yet built).
 |---------|--------------|----------|-------|
 | `eod` | `17:00` | Yes | The existing settled pipeline; matches the `collect_eod` cron. |
 | `morning` | `10:05` | No | Provisional (WS3, ADR-013); 10:05 ET leaves a full 30-min candle after the open so intraday High/Low are a real range. |
-| `pre_close` | `15:50` | No | Provisional; matches the existing `collect_preclose` cron. |
+| `pre_close` | `15:30` | No | Provisional (WS3b, issue #268); last half-hour read, ~30 min before the close. **Not** the same as the existing settled `collect_preclose` backstop cron job, which stays at `15:50` and dispatches the unrelated #259 picks gate. |
 
 `DEFAULT_SESSION` = `eod` — callers that don't yet think in terms of multiple sessions default here.
+
+`WATCHLIST_TICK_SESSIONS` = `{morning}` — sessions whose writer decrements the personal
+watchlist's TTL on a successful, non-dry-run write (WS5 §8b). `pre_close` is deliberately
+excluded so a watch entry doesn't lose two "mornings remaining" for one calendar day; see
+`scripts/collect_morning.py`'s `should_tick_watchlist()`.
 
 ### WS3 morning status (`scripts/collect_morning.py`)
 

@@ -54,14 +54,30 @@ SESSIONS: dict[str, Session] = {
     # a real intraday High/Low range to read rather than a one-tick open print. Matches the
     # collect_morning cron target in worker-cron/src/routing.js (keep the two in sync).
     MORNING: Session(key=MORNING, label="Morning", capture_et="10:05", settled=False),
-    # 15:50 ET matches the existing collect_preclose cron target (CLAUDE.md § Automation).
-    PRE_CLOSE: Session(key=PRE_CLOSE, label="Pre-close", capture_et="15:50", settled=False),
+    # 15:30 ET (owner-set 2026-08-17, WS3b/issue #268) — a provisional pre-close
+    # confirmation read: the last half-hour of the session, ~30 min before the 16:00
+    # close, giving the state machine one more real intraday read before the close
+    # print. This is DISTINCT from the existing settled `collect_preclose` backstop
+    # cron job (still 15:50 ET, CLAUDE.md § Automation) — that job dispatches the
+    # unrelated #259 settled-data picks gate and is untouched by this change; do not
+    # conflate the two 15-something ET times.
+    PRE_CLOSE: Session(key=PRE_CLOSE, label="Pre-close", capture_et="15:30", settled=False),
 }
 
 # The existing snapshots/deltas/picks files carry eod semantics unchanged — Option C:
 # no migration, no `session` column added to them. Any caller that doesn't yet think
 # in terms of multiple sessions should default to this.
 DEFAULT_SESSION = EOD
+
+# Sessions that decrement the personal watchlist's TTL (WS5 §8b) when their writer
+# completes a successful, non-dry-run write. Ticking is a once-per-trading-day concept
+# anchored to a single capture — currently only `morning`. A session outside this set
+# (e.g. `pre_close`) must NOT also tick the same day's TTL, or a watch entry would lose
+# two "mornings remaining" for one calendar day. Kept here (not inline in
+# collect_morning.py) so adding a future session forces a conscious opt-in decision
+# at the same place the session itself is registered, rather than an easy-to-miss
+# comment on an unrelated call site. See collect_morning.should_tick_watchlist().
+WATCHLIST_TICK_SESSIONS = frozenset({MORNING})
 
 
 # ---------------------------------------------------------------------------

@@ -197,10 +197,14 @@ Failed-breakout / Invalidated / No-quote) at ~10:05 ET.
     IMPURE and NON-FATAL by design (unlike `collect_held.py`'s loud-exit fetch): any fetch/POST
     failure prints a stderr warning and returns `[]`/`None` rather than exiting, since a
     watchlist/worker hiccup must never drop the picks-only morning run. After a successful,
-    non-empty `write_store()` (never on `--dry-run`), `main()` calls
-    `post_watchlist_tick(worker_url, token, today_str)` to decrement each watch entry's TTL for
-    the day — also non-fatal (idempotent, self-heals on a later run). The non-trading-day exit
-    guards run before any of this, so a closed-market day never ticks. `_authed_request` is
+    non-empty `write_store()` (never on `--dry-run`), and only when `should_tick_watchlist(session)`
+    says the active session is in `session_config.WATCHLIST_TICK_SESSIONS` (currently `morning`
+    only — WS3b, issue #268), `main()` calls `post_watchlist_tick(worker_url, token, today_str)`
+    to decrement each watch entry's TTL for the day — also non-fatal (idempotent, self-heals on a
+    later run). This gate exists because `collect_morning.py` was generalized (WS3b) to also serve
+    the `pre_close` session (see the module docstring); without it, a `pre_close` run would tick
+    the same day's TTL a second time. The non-trading-day exit guards run before any of this, so a
+    closed-market day never ticks. `_authed_request` is
     replicated verbatim from `collect_held.py` in this module rather than imported —
     `collect_held.py` imports FROM `collect_morning.py` (`CONFIG_PATH`, `_to_float`,
     `fetch_ticker_quotes`), so importing back would create a cycle.

@@ -1,6 +1,18 @@
 {
-  "current": "2026.08.17",
+  "current": "2026.08.17.1",
   "releases": [
+    {
+      "version": "2026.08.17.1",
+      "date": "2026-08-17",
+      "title": "Pre-close confirmation read",
+      "tag": "feature",
+      "tab": "morning",
+      "notes": [
+        "The Morning tab now has a Morning · Pre-close toggle — switch to the ~15:30 ET read to see which of today's setups are confirming into the close.",
+        "Each pre-close card shows a \"held since AM\" or \"faded from AM\" chip, so you can tell at a glance whether a setup held from the open into the close.",
+        "The tab opens on whichever read is freshest, so before ~15:30 you see the morning check and after it the pre-close check."
+      ]
+    },
     {
       "version": "2026.08.17",
       "date": "2026-08-17",
