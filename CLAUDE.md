@@ -326,28 +326,12 @@ committed file is the durable record.
 
 ### Cloudflare can be queried directly — no MCP/OAuth needed
 
-`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are already present in the session environment.
-The `Cloudflare_Developer_Platform` MCP server requires an interactive OAuth flow this
-non-interactive session can't complete — **do not stop at "that server needs authorization."**
-Instead `curl` the Cloudflare REST API directly, e.g.:
-```bash
-# List D1 databases
-curl -s "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database" \
-  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
-# Query a D1 database (find its uuid from the list above)
-curl -s "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/d1/database/${DB_ID}/query" \
-  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" -H "Content-Type: application/json" \
-  -d '{"sql": "SELECT name FROM sqlite_master WHERE type=\"table\""}'
-# List deployed Worker scripts (check modified_on to confirm a deploy actually landed)
-curl -s "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/workers/scripts" \
-  -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}"
-```
+`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are already present as env vars in the session environment.
+In case the `Cloudflare_Developer_Platform` MCP server transiently requires an interactive OAuth flow — **do not stop at "that server needs authorization."**
+
 Applying a migration directly this way is a real production write — get explicit owner sign-off
-first, same as any other schema change, even though the SQL itself is idempotent
-(`CREATE TABLE IF NOT EXISTS`). See `.session/session-notes.md` 2026-08-16 entry (PR #322
-ops-verification) for a worked example: this is how the `0003_watchlist.sql` migration was
-confirmed missing, then applied and re-verified, entirely from a cloud session with no `wrangler`
-CLI and no interactive OAuth.
+first, same as any other schema change, even though the SQL itself might be idempotent
+(`CREATE TABLE IF NOT EXISTS`). 
 
 ### Verification discipline — hard-won takeaways (2026-08-16, PR #322 ops-verification)
 
@@ -374,7 +358,7 @@ one. Full retrospective in that session's chat; the durable rules:
   unverified — don't dress it up.
 - **Check what's actually available before reporting a capability blocked.** An MCP server needing
   OAuth in a non-interactive session is not the only path to that system — check the environment
-  for API tokens/credentials before concluding the task can't be done. See the Cloudflare note
+  for API tokens/credentials (without secrets leakage) before concluding the task can't be done. See the Cloudflare note
   immediately above; this was found in `env`, not documented anywhere, and cost a full round of
   back-and-forth to discover.
 
