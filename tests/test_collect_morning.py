@@ -409,6 +409,27 @@ def test_write_store_handles_no_existing_file(tmp_path, monkeypatch):
     assert cm.MORNING_LATEST.exists()
 
 
+def test_write_store_pre_close_session_writes_own_store(tmp_path, monkeypatch):
+    # WS3b (issue #268): --session pre_close must write a session-keyed pair
+    # (pre_close.csv / pre_close_latest.csv), not the morning store, and stamp
+    # session="pre_close" on the row.
+    monkeypatch.setattr(cm, "SESSIONS_DIR", tmp_path)
+
+    row = _row("2026-08-17", "AAPL", status="triggered")
+    row["session"] = "pre_close"
+    cm.write_store([row], session=session_config.PRE_CLOSE)
+
+    store_path, latest_path = cm.session_store_paths(session_config.PRE_CLOSE)
+    assert store_path == tmp_path / "pre_close.csv"
+    assert not (tmp_path / "morning.csv").exists()
+
+    with open(latest_path) as f:
+        latest_rows = list(csv.DictReader(f))
+    assert len(latest_rows) == 1
+    assert latest_rows[0]["session"] == "pre_close"
+    assert latest_rows[0]["ticker"] == "AAPL"
+
+
 def test_write_store_empty_rows_noop(tmp_path, monkeypatch):
     monkeypatch.setattr(cm, "SESSIONS_DIR", tmp_path)
     monkeypatch.setattr(cm, "MORNING_STORE", tmp_path / "morning.csv")

@@ -1,12 +1,16 @@
 """
-collect_morning.py — WS3 morning status writer (ADR-013). Phase A skeleton: the
-pure/impure split is real (load -> fetch -> build -> write), but `fetch_ticker_quotes`
-is exercised only via fixtures in this phase — live scrape wiring + the cron job are
-Phase B (`collect_morning.yml`, `--dry-run` first, per ADR-013 Decision 6).
+collect_morning.py — WS3 morning status writer (ADR-013), generalized (WS3b, issue #268
+Phase A) to serve BOTH provisional sessions: `morning` (10:05 ET, default) and `pre_close`
+(15:30 ET, `--session pre_close`). Kept under this filename per the WS3b spec's lower-churn
+guidance (`planning/ws3b-preclose-surface-spec.md` §4) — the workflow/tests reference it and
+a rename buys nothing. The pure/impure split is real (load -> fetch -> build -> write), but
+`fetch_ticker_quotes` is exercised only via fixtures in this phase — live scrape wiring + the
+cron job are Phase B (`collect_morning.yml`, `--dry-run` first, per ADR-013 Decision 6).
 
-Writes a PROVISIONAL store (`data/picks/sessions/morning*.csv`) — never the settled
-snapshot/delta/picks files. `session_config.assert_provisional("morning")` is called
-at the write boundary (write_store) per ADR-011's enforcement point.
+Writes a PROVISIONAL store (`data/picks/sessions/<session>*.csv`) — never the settled
+snapshot/delta/picks files. `session_config.assert_provisional(session)` is called at the
+write boundary (write_store) per ADR-011's enforcement point, generalized to whichever
+session is active (previously hardcoded to "morning").
 
 Must run on GitHub Actions (Azure IPs) once Phase B wires the live scrape — Cloudflare
 blocks headless Chromium from Google Cloud IPs, same constraint as collect.py/collect_picks.py.
@@ -48,8 +52,21 @@ CONFIG_PATH = PICKS_DIR / "screener_config.json"
 PICKS_LATEST_PATH = PICKS_DIR / "picks_latest.csv"
 
 # Provisional morning store (ADR-013 Decision 4). append-only history + latest-date slice.
+# Kept as module-level constants (rather than only a function) so existing callers/tests
+# that reference cm.MORNING_STORE / cm.MORNING_LATEST directly keep working unchanged.
 MORNING_STORE = SESSIONS_DIR / "morning.csv"
 MORNING_LATEST = SESSIONS_DIR / "morning_latest.csv"
+
+
+def session_store_paths(session: str) -> tuple:
+    """Return (store_path, latest_path) for a given session key (WS3b, issue #268).
+
+    Derives `data/picks/sessions/<session>.csv` / `<session>_latest.csv` from the
+    current `SESSIONS_DIR` (not a hardcoded morning path), so `pre_close` gets its
+    own store with the identical schema/dedup convention, and tests that monkeypatch
+    `SESSIONS_DIR` transparently redirect every session's paths, not just morning's.
+    """
+    return SESSIONS_DIR / f"{session}.csv", SESSIONS_DIR / f"{session}_latest.csv"
 
 # Store schema — exact column order (ADR-013 Decision 4). `session` is redundant with
 # the filename on purpose: rows stay self-describing once sessions are concatenated
@@ -499,28 +516,41 @@ def _read_existing(path: Path) -> list:
         return list(csv.DictReader(f))
 
 
-def write_store(rows: list) -> None:
-    """Dedup last-write-wins per (date, ticker) into MORNING_STORE; rewrite
-    MORNING_LATEST as the max-date slice. Same convention as picks.csv:
-    collected_at is NOT part of the uniqueness key.
+def write_store(rows: list, session: str = session_config.MORNING) -> None:
+    """Dedup last-write-wins per (date, ticker) into the session's store; rewrite
+    the session's `*_latest` file as the max-date slice. Same convention as
+    picks.csv: collected_at is NOT part of the uniqueness key.
 
-    Calls session_config.assert_provisional("morning") first — the ADR-011
-    enforcement point; this is the first writer to actually use it (ADR-013).
+    Calls session_config.assert_provisional(session) first — the ADR-011
+    enforcement point; morning was the first writer to actually use it (ADR-013),
+    generalized here (WS3b, issue #268) to whichever provisional session is active.
+
+    `session` defaults to "morning" and, for that default only, writes to the
+    module-level MORNING_STORE/MORNING_LATEST constants (regression guard: this
+    keeps the pre-WS3b morning code path byte-identical, including for callers/
+    tests that monkeypatch those two attributes directly). Any other session
+    (e.g. "pre_close") derives its store paths from `session_store_paths(session)`
+    instead — same schema, same dedup convention, a session-keyed file pair.
     """
-    session_config.assert_provisional(session_config.MORNING)
+    session_config.assert_provisional(session)
 
     if not rows:
         return
 
     SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
 
-    existing = _read_existing(MORNING_STORE)
+    if session == session_config.MORNING:
+        store_path, latest_path = MORNING_STORE, MORNING_LATEST
+    else:
+        store_path, latest_path = session_store_paths(session)
+
+    existing = _read_existing(store_path)
     by_key = {(r["date"], r["ticker"]): r for r in existing}
     for r in rows:
         by_key[(r["date"], r["ticker"])] = r
 
     all_rows = sorted(by_key.values(), key=lambda r: (r["date"], r["ticker"]))
-    with open(MORNING_STORE, "w", newline="", encoding="utf-8") as f:
+    with open(store_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=STORE_COLUMNS)
         writer.writeheader()
         for r in all_rows:
@@ -528,7 +558,7 @@ def write_store(rows: list) -> None:
 
     max_date = max(r["date"] for r in all_rows)
     latest_rows = [r for r in all_rows if r["date"] == max_date]
-    with open(MORNING_LATEST, "w", newline="", encoding="utf-8") as f:
+    with open(latest_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=STORE_COLUMNS)
         writer.writeheader()
         for r in latest_rows:
@@ -548,7 +578,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dry-run", action="store_true",
                          help="Scrape + parse + print row counts; do not write the store.")
+    parser.add_argument("--session", choices=[session_config.MORNING, session_config.PRE_CLOSE],
+                         default=session_config.MORNING,
+                         help="Which provisional session to capture (WS3b, issue #268). "
+                              "Defaults to 'morning' — behavior is unchanged from pre-WS3b "
+                              "for that default. 'pre_close' writes the same schema to "
+                              "data/picks/sessions/pre_close{,_latest}.csv instead.")
     args = parser.parse_args()
+    session = args.session
 
     et = pytz.timezone("America/New_York")
     now_et = datetime.now(et)
@@ -662,7 +699,7 @@ def main() -> None:
         browser.close()
 
     collected_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    rows = build_status_rows(pick_levels, quotes, collected_at, today_str)
+    rows = build_status_rows(pick_levels, quotes, collected_at, today_str, session=session)
 
     print(f"Built {len(rows)} status rows from {len(quotes)} quote rows.")
 
@@ -670,8 +707,12 @@ def main() -> None:
         print("[dry-run] not writing.")
         return
 
-    write_store(rows)
-    print(f"Wrote {len(rows)} rows to {MORNING_STORE} and {MORNING_LATEST}.")
+    write_store(rows, session=session)
+    store_path, latest_path = (
+        (MORNING_STORE, MORNING_LATEST) if session == session_config.MORNING
+        else session_store_paths(session)
+    )
+    print(f"Wrote {len(rows)} rows to {store_path} and {latest_path}.")
 
     # P2: tick the watchlist TTL once the store write has succeeded. Reached only on
     # a real (non-dry-run) trading-day run past the emptiness guard, so `rows` is

@@ -48,6 +48,12 @@ const WORKFLOWS = {
   // WS5 phase 2 (planning/trade-lifecycle-engine.md §5/§5a/§10/§11): ungated, same
   // dispatch shape as `morning` — held-tickers EOD quote feed, writes to D1 (not git).
   held: { url: `${REPO_WORKFLOWS_URL}/collect_held.yml/dispatches` },
+  // WS3b (issue #268): ungated, same dispatch shape as `morning` — pre-close
+  // "confirming into the close" status pass, thin wrapper workflow that calls
+  // scripts/collect_morning.py --session pre_close (see
+  // .github/workflows/collect_preclose_status.yml). Distinct from the
+  // `collect_preclose` job above, which dispatches the unrelated collect.yml.
+  preclose_status: { url: `${REPO_WORKFLOWS_URL}/collect_preclose_status.yml/dispatches` },
 };
 
 function jsonResponse(obj, status = 200) {
