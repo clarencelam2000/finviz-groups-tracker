@@ -1,6 +1,19 @@
 {
-  "current": "2026.08.14.2",
+  "current": "2026.08.17",
   "releases": [
+    {
+      "version": "2026.08.17",
+      "date": "2026-08-17",
+      "title": "Personal watchlist",
+      "tag": "feature",
+      "tab": "morning",
+      "notes": [
+        "Add any ticker to your watchlist from the Positions tab — it rides the next 10 morning checks with a status read.",
+        "Set an optional level of interest (above/below a price, or reclaim 20MA/50MA) shown alongside each watch card.",
+        "The Morning tab now leads with a \"Your watchlist\" section above the picks list, including a price gauge for each entry.",
+        "Tap \"I took it\" on a watch card to graduate it into a tracked position."
+      ]
+    },
     {
       "version": "2026.08.14.2",
       "date": "2026-08-14",

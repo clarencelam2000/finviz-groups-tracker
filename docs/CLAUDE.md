@@ -59,6 +59,46 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `ARIEL_ATR_PCT_FULL_LOW` / `ARIEL_ATR_PCT_FULL_HIGH` | `4.0` / `7.0` | Ariel match: full-qualify band for the daily-move gate; the two outer bands (floor–low, high–ceiling) are soft-qualify. |
 | `ARIEL_GROWTH_MIN_FULL` | `25` | Ariel match: EPS YoY TTM AND Sales YoY TTM must each be ≥ this % for the growth gate to fully qualify (AND, not OR). |
 | `ARIEL_GROWTH_MIN_SOFT` | `15` | Ariel match: soft-qualify floor for EPS YoY TTM AND Sales YoY TTM — either metric below this fails the growth gate outright. |
+| `WATCHLIST_TTL_SESSIONS` | `10` | Watch card "N mornings left" — display-only mirror of the worker's `WATCHLIST_TTL_SESSIONS` (worker-positions), which owns the real `sessions_remaining` counter. |
+| `WATCHLIST_EXPIRING_AT` | `1` | Watch card footer: `sessions_remaining <= this` shows the amber "expiring" cue (e.g. "1 morning left" in amber). |
+| `WATCHLIST_GAUGE_PAD` | `0.08` | Fraction of the price domain padded on each end of a watch card's levels gauge so end markers (prior high/low, your level) aren't clipped at the track edges. |
+
+## Watchlist (Morning + Positions, WS5 §8b)
+
+Personal per-ticker watch entries that ride the morning status-check pipeline for a limited
+window, with an optional private "level of interest" overlay.
+
+- **Two surfaces.** Morning tab: a "Your watchlist" section (`renderWatchlistSection()`)
+  rendered above the picks list (`#morning-list`) — the user's own radar leads. Positions tab:
+  an "＋ Add to watchlist" collapsible, a sibling to the §8a manual-entry expander (separate
+  state, separate handlers — not merged with `manualEntry`).
+- **Merge model, two sources joined client-side by ticker.** (1) The *public system read*:
+  `morning_latest.csv` rows tagged `list_category === 'watchlist'` — the same server-computed
+  status pipeline (`pick_status.py`) that scores picks, so watch tickers get a real
+  triggered/gapped/reclaim/etc. status without any private data leaving the CSV. (2) The
+  *private feed*: owner-bearer `GET /watchlist` on the `finviz-positions` worker, which returns
+  `level_type`/`level_value`, `sessions_remaining`, `status`, and reference values
+  (`prior_high`, `prior_low`, `atr`, `sma20`, `sma50`). The Morning-tab card
+  (`watchCardHtml(entry, pub)`) merges the two by `ticker` at render time; `pub` may be null
+  (freshly added, no morning row yet) → an "Adding" state.
+- **Privacy — load-bearing:** `level_value` (the user's private price/MA threshold) never
+  leaves the owner-bearer `/watchlist` path. There is no server-side "met/not-met" computation
+  or storage of that comparison — the your-level read (`watchYourLevel()`) is computed entirely
+  client-side from the already-fetched private entry plus the public price/low, so the level
+  itself is never exposed through the public `morning_latest.csv` feed or any unauthenticated
+  endpoint.
+- **Graduation.** A watch card's "I took it →" reuses the §8a manual-entry ticket
+  (`state.manualEntry`, prefilled ticker + `graduateWatchId`) rather than a separate trade-entry
+  path. On a successful `POST /positions`, the client also `DELETE`s the watch entry
+  (`watchDeleteApi`, best-effort) so a graduated ticker drops off the watchlist.
+- **Reclaim status** (`pub.status === 'reclaim'`) uses the 50MA ref recovered from the private
+  feed (`entry.sma50`) — the system reclaim signal is fixed to the 50MA per P2; if `sma50` is
+  null (no EOD bar yet), the card falls back to the non-reclaim body rather than showing a ref
+  it doesn't have.
+- Constants: see the display-thresholds table above (`WATCHLIST_TTL_SESSIONS`,
+  `WATCHLIST_EXPIRING_AT`, `WATCHLIST_GAUGE_PAD`). The worker's `WATCHLIST_TTL_SESSIONS` (source
+  of truth for the real countdown) and `WATCHLIST_PURGE_DAYS` are documented in
+  `worker-positions/README.md`.
 
 ## Morning tab (WS3, ADR-013)
 

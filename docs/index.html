@@ -313,6 +313,9 @@
          did to each setup. Provisional session — the banner/timestamp are non-negotiable per
          ADR-011: a mid-session read must never look settled. Rendered by renderMorning(). -->
     <section id="tab-morning" class="px-3 pt-3 pb-24 hidden">
+      <!-- WS5 §8b P3 — personal watchlist, rendered above the picks list (the user's own
+           radar leads). Rendered by renderWatchlistSection(). -->
+      <div id="watchlist-section" class="mb-4"></div>
       <div id="morning-list" class="space-y-2"></div>
     </section>
 
@@ -403,6 +406,13 @@
     // tunables, so a one-line comment is sufficient (no README/CLAUDE.md table entry).
     const POSITIONS_API = 'https://finviz-positions.salmonbaby8.workers.dev';
     const POS_TOKEN_KEY = 'fv_pos_token';
+    // WS5 §8b P3 (personal watchlist) — owner-bearer CRUD base on POSITIONS_API.
+    const WATCHLIST_API_PATH = '/watchlist';
+    // Watchlist display constants (3-places rule: also README § Configurable parameters +
+    // docs/CLAUDE.md).
+    const WATCHLIST_TTL_SESSIONS = 10;  // mirror of worker-positions WATCHLIST_TTL_SESSIONS; drives "N mornings left" + expiring cue. Display-only mirror — the worker owns the real counter.
+    const WATCHLIST_EXPIRING_AT = 1;    // sessions_remaining <= this => amber "expiring" cue on the card.
+    const WATCHLIST_GAUGE_PAD = 0.08;   // fraction of the price domain padded on each end of the levels gauge so end markers aren't clipped.
 
     // localStorage keys for Lookup tab persistence (Ideas 5+7, planning/lookup-search-enhancements.md).
     // fvg_lookup_recent: [{type:'group'|'ticker', name, groupKey?}] newest-first, max RECENT_MAX; pinned items exempt.
@@ -480,6 +490,20 @@
       // ticker's inline company-name line ({company_name, finviz_sector} or {error:true}).
       // See manualEntryDefault() for the canonical empty shape (reused on close/submit).
       manualEntry: manualEntryDefault(),
+      // WS5 §8b P3 — personal watchlist (Morning tab "Your watchlist" section + Positions
+      // tab "Add to watchlist" collapsible). null = not loaded; [] = signed-in empty.
+      watchlistData: null,
+      // non-401 fetch failure => explicit error state (mirrors positionsError).
+      watchlistError: false,
+      // Positions-tab "Add to watchlist" collapsible form state — see watchAddDefault().
+      watchAdd: watchAddDefault(),
+      // ticker -> bool: gauge collapsed? absent/false = shown (on by default per brief §2).
+      watchGauge: {},
+      // tickers with the watch section's chart panel open; mirrors morningChartOpen but kept
+      // independent so the Morning picks chart and watch chart panels don't interfere.
+      watchChartOpen: new Set(),
+      // ticker (or id) of the watch card whose "⋯" kebab menu (Renew/Edit level/Remove) is open.
+      watchMenu: null,
       // 'all' | 'focus'; persists across tab navigation within a session (A4 REVERSED
       // 2026-06-30 — VP call, see PICKS-STATE-PERSIST in SPRINT.md and the note in
       // planning/stock-picks-from-leading-groups.md). Previously reset to 'all' on every
@@ -4917,7 +4941,7 @@
       if (state.tab === 'ai')       renderAI();
       if (state.tab === 'lookup')   { renderLookup(); renderLookupChips(); }
       if (state.tab === 'picks')    renderPicks();
-      if (state.tab === 'morning')  renderMorning();
+      if (state.tab === 'morning')  { renderWatchlistSection(); renderMorning(); }
       if (state.tab === 'positions') renderPositions();
 
       if (state.restoreScrollOnRender) {
@@ -4955,6 +4979,12 @@
       setting_up:      { label: 'Setting up',      order: 3, stripe: 'border-slate-600',   pill: 'bg-slate-500/20 text-slate-300',   actionable: false },
       invalidated:     { label: 'Invalidated',     order: 4, stripe: 'border-red-500',     pill: 'bg-red-500/15 text-red-400',       actionable: false },
       no_quote:        { label: 'No quote',        order: 5, stripe: 'border-slate-700',   pill: 'bg-slate-500/20 text-slate-400',   actionable: false },
+      // WS5 §8b P2 (pick_status.STATUS_RECLAIM) — dipped below a reference level (prior low
+      // / 20MA / 50MA) and recovered above it. Order 1 groups it with the bullish/early
+      // states in the picks sort; picks don't emit reclaim today so this only ever renders
+      // on watch cards (see watchCardHtml), but keeping meta complete avoids a no_quote
+      // fallback if it ever does show up on a picks row.
+      reclaim: { label: 'Reclaimed', order: 1, stripe: 'border-emerald-500', pill: 'bg-emerald-500/15 text-emerald-400', actionable: false },
     };
 
     // ATR-from-LoD → colored label. Bands owner-set 2026-08-08 (ADR-013 Decision 3):
@@ -5454,6 +5484,26 @@
       return resp.json();
     }
 
+    // ── WS5 §8b P3: personal watchlist worker client ────────────────────────────────────
+    // All owner-bearer, reuse posApi (handles Bearer + 401 -> {unauth:true}).
+
+    async function loadWatchlist(force = false) {
+      if (!force && state.watchlistData !== null) return;
+      if (!posIsSignedIn()) { state.watchlistData = null; return; }
+      state.watchlistError = false;
+      try {
+        const data = await posApi(WATCHLIST_API_PATH, { method: 'GET' });
+        state.watchlistData = (data && data.watchlist) || [];
+      } catch (e) {
+        if (e && e.unauth) { state.watchlistData = null; }
+        else { state.watchlistData = null; state.watchlistError = true; }
+      }
+    }
+
+    function watchAddApi(body)       { return posApi(WATCHLIST_API_PATH, { method: 'POST', body }); }
+    function watchPatchApi(id, body) { return posApi(WATCHLIST_API_PATH + '/' + id, { method: 'PATCH', body }); }
+    function watchDeleteApi(id)      { return posApi(WATCHLIST_API_PATH + '/' + id, { method: 'DELETE' }); }
+
     // Ticket stop-basis key -> worker stop_basis enum. These DIFFER (ticket keys are
     // ws4StopLevels' internal keys; the worker enum is its own contract) — see
     // worker-positions/README.md. Unmapped keys fall back to 'manual'.
@@ -5708,7 +5758,7 @@
       if (state.positionsData === null && state.positionsError) {
         // A real fetch failure (network/5xx) — distinct from "signed in with zero open
         // positions" so it isn't mistaken for that empty state.
-        el.innerHTML = manualEntryHtml() + `
+        el.innerHTML = manualEntryHtml() + watchAddHtml() + `
           <div class="flex flex-col items-center text-center py-10 px-4">
             <p class="text-slate-400 text-sm">Couldn't load positions — check your connection.</p>
             <button onclick="posRetryLoad()" class="mt-3 text-xs text-sky-400 underline">Try again</button>
@@ -5718,7 +5768,7 @@
       }
 
       if (state.positionsData === null) {
-        el.innerHTML = manualEntryHtml() + `<p class="text-slate-400 text-sm text-center py-8">Loading positions…</p>`;
+        el.innerHTML = manualEntryHtml() + watchAddHtml() + `<p class="text-slate-400 text-sm text-center py-8">Loading positions…</p>`;
         manualRecompute();
         posLoadPositions();
         return;
@@ -5735,12 +5785,12 @@
 
       const rows = state.positionsData || [];
       if (rows.length === 0) {
-        el.innerHTML = manualEntryHtml() + header + `<p class="text-slate-400 text-sm text-center py-8">No open positions yet — log one from the Morning tab.</p>`;
+        el.innerHTML = manualEntryHtml() + watchAddHtml() + header + `<p class="text-slate-400 text-sm text-center py-8">No open positions yet — log one from the Morning tab.</p>`;
         manualRecompute();
         return;
       }
 
-      el.innerHTML = manualEntryHtml() + header + `<div class="space-y-2">${rows.map(posCardHtml).join('')}</div>`;
+      el.innerHTML = manualEntryHtml() + watchAddHtml() + header + `<div class="space-y-2">${rows.map(posCardHtml).join('')}</div>`;
       manualRecompute();
     }
 
@@ -5756,6 +5806,20 @@
         open: false, ticker: '', entry: '', stopMode: 'price', stopPrice: '', stopPct: '',
         sizeMode: 'risk', risk: '', qty: '', entryDate: '', earningsDays: '',
         resolved: null, confirm: null, submitting: false, error: '',
+        // WS5 §8b P3 — set by watchGraduate() when "I took it" is tapped on a watch card;
+        // remembered so manualConfirmSubmit's success path can DELETE the watch entry once
+        // the position is logged (graduation, not a duplicate: a ticker is either watched
+        // or held, never both).
+        graduateWatchId: null,
+      };
+    }
+
+    // WS5 §8b P3 — Positions-tab "Add to watchlist" collapsible form state. levelType ''
+    // means no level of interest was set; otherwise one of above|below|reclaim_20ma|reclaim_50ma.
+    function watchAddDefault() {
+      return {
+        open: false, ticker: '', levelType: '', levelValue: '',
+        submitting: false, error: '', saved: false,
       };
     }
 
@@ -5945,7 +6009,15 @@
         // Invalidate the positions cache so the new lot shows up immediately, same as
         // ws5ConfirmTakeIt.
         state.positionsData = null;
+        // WS5 §8b P3 graduation: this ticket came from a watch card's "I took it →" —
+        // remove the watch entry now that it's a real logged position (best-effort; a
+        // failure here must not block the position that was already successfully logged).
+        const graduateWatchId = m.graduateWatchId;
         state.manualEntry = manualEntryDefault();
+        if (graduateWatchId) {
+          try { await watchDeleteApi(graduateWatchId); } catch (e) { /* best-effort */ }
+          state.watchlistData = null;
+        }
         renderPositions();
       } catch (e) {
         state.manualEntry.submitting = false;
@@ -5958,6 +6030,138 @@
         renderPositions();
       }
     };
+
+    // ── WS5 §8b P3 — Positions tab "Add to watchlist" collapsible ───────────────────────
+    // A sibling collapsible to manualEntryHtml()'s expander — separate state (state.watchAdd),
+    // separate handlers, not merged with manualEntry (build spec §5).
+
+    window.watchAddOpen = function () {
+      state.watchAdd.open = true;
+      renderPositions();
+    };
+    window.watchAddClose = function () {
+      state.watchAdd = watchAddDefault();
+      renderPositions();
+    };
+
+    // Segmented level-type toggle: tapping the active option again clears back to no-level.
+    window.watchAddSetLevelType = function (lt) {
+      state.watchAdd.levelType = (state.watchAdd.levelType === lt) ? '' : lt;
+      renderPositions();
+    };
+
+    // Plain text inputs patch state without a full re-render (focus-preserving discipline,
+    // mirrors manualFieldInput) — no computed readout to patch here, so no DOM-patch needed.
+    window.watchAddTickerInput = function (el) {
+      const up = (el.value || '').toUpperCase();
+      el.value = up;
+      state.watchAdd.ticker = up;
+    };
+    window.watchAddLevelValueInput = function (v) {
+      state.watchAdd.levelValue = v;
+    };
+
+    window.watchAddSubmit = async function () {
+      const w = state.watchAdd;
+      if (w.submitting) return;
+      if (!posIsSignedIn()) {
+        w.error = 'signin';
+        renderPositions();
+        return;
+      }
+      const ticker = (w.ticker || '').trim().toUpperCase();
+      if (!/^[A-Za-z][A-Za-z0-9.\-]{0,9}$/.test(ticker)) {
+        w.error = 'Enter a valid ticker';
+        renderPositions();
+        return;
+      }
+      const body = { ticker };
+      if (w.levelType === 'above' || w.levelType === 'below') {
+        const lv = parseFloat(w.levelValue);
+        if (isNaN(lv) || lv <= 0) {
+          w.error = 'Enter a price for above/below';
+          renderPositions();
+          return;
+        }
+        body.level_type = w.levelType;
+        body.level_value = lv;
+      } else if (w.levelType === 'reclaim_20ma' || w.levelType === 'reclaim_50ma') {
+        body.level_type = w.levelType;
+      }
+      w.error = '';
+      w.submitting = true;
+      renderPositions();
+      try {
+        await watchAddApi(body);
+        // Keep the collapsible OPEN on success so the "Saved to your watchlist" confirmation
+        // (rendered only in the expanded form) is actually visible; fields are cleared.
+        state.watchAdd = watchAddDefault();
+        state.watchAdd.open = true;
+        state.watchAdd.saved = true;
+        state.watchlistData = null;
+        renderPositions();
+      } catch (e) {
+        w.submitting = false;
+        if (e && e.unauth) w.error = 'signin';
+        else w.error = "Couldn't add — try again";
+        renderPositions();
+      }
+    };
+
+    function watchAddErrorText(err) {
+      if (err === 'signin') return 'Session expired — sign in above to continue.';
+      return err;
+    }
+
+    function watchAddHtml() {
+      const w = state.watchAdd;
+      if (!w.open) {
+        return `<button onclick="watchAddOpen()" class="w-full mb-3 py-2.5 rounded-lg text-xs font-semibold text-slate-400 border border-dashed border-slate-600 hover:border-slate-500 hover:text-slate-300">＋ Add to watchlist</button>`;
+      }
+
+      const segTypes = [['above', 'Above'], ['below', 'Below'], ['reclaim_20ma', '20MA'], ['reclaim_50ma', '50MA']];
+      const seg = segTypes.map(([k, label]) => {
+        const on = w.levelType === k;
+        return `<button onclick="watchAddSetLevelType('${k}')"
+            class="flex-1 text-center px-2 py-1.5 text-[11px] border-r border-slate-700 last:border-r-0
+              ${on ? 'bg-violet-500/20 text-violet-300 font-semibold' : 'text-slate-400 hover:bg-slate-700/50'}">${label}</button>`;
+      }).join('');
+
+      const showPrice = w.levelType === 'above' || w.levelType === 'below';
+      const priceField = showPrice ? `
+        <input id="watch-levelvalue" type="number" step="0.01" value="${escapeHtml(w.levelValue)}"
+          oninput="watchAddLevelValueInput(this.value)" placeholder="Price"
+          class="bg-slate-900 border border-sky-500 rounded px-1.5 py-0.5 w-20 text-right text-slate-100 font-semibold tabular-nums text-xs" />` : '';
+
+      const errRow = w.error ? `<div class="text-[11px] text-red-400">${escapeHtml(watchAddErrorText(w.error))}</div>` : '';
+      const savedRow = w.saved ? `<div class="text-[11.5px] text-slate-400 bg-sky-500/10 rounded px-3 py-2">Saved to your watchlist — it'll show on the Morning tab each day with a status read, and your level of interest displayed alongside.</div>` : '';
+
+      return `
+        <div class="mb-3 bg-slate-900/60 border border-sky-900/50 rounded-lg px-3 py-3 space-y-2.5">
+          <div class="flex justify-between items-center">
+            <div class="text-xs font-semibold text-slate-300">Add to watchlist</div>
+            <button onclick="watchAddClose()" class="text-[11px] text-slate-500 hover:text-slate-300">Cancel</button>
+          </div>
+
+          <div class="flex justify-between items-center gap-2">
+            <input id="watch-ticker" type="text" value="${escapeHtml(w.ticker)}" placeholder="TICKER"
+              oninput="watchAddTickerInput(this)"
+              class="flex-1 bg-slate-900 border border-sky-500 rounded px-1.5 py-1 text-left text-slate-100 font-semibold text-xs uppercase tracking-wide" />
+            <button onclick="watchAddSubmit()" class="py-1.5 px-4 rounded-lg text-xs font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400">Watch</button>
+          </div>
+
+          ${errRow}
+
+          <div class="border-t border-dashed border-slate-700 pt-2.5 space-y-2">
+            <div class="text-[10.5px] uppercase tracking-wider text-slate-500">Level of interest — optional</div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <div class="flex border border-slate-700 rounded-md overflow-hidden">${seg}</div>
+              ${priceField}
+            </div>
+            ${savedRow}
+          </div>
+        </div>`;
+    }
 
     // Lookup tab → Positions tab redirect (WS5 §8a Feature 2): prefills ticker + resolved
     // company/sector from the already-fetched lookup data (no extra lookupTicker() call).
@@ -6111,11 +6315,382 @@
         </div>`;
     }
 
+    // ── WS5 §8b P3: personal watchlist — Morning tab "Your watchlist" section ───────────
+
+    // "＋ Watch a ticker" quick-add: jumps to Positions and auto-expands the add collapsible.
+    window.watchQuickAdd = function () {
+      switchTab('positions');
+      state.watchAdd.open = true;
+      renderPositions();
+    };
+
+    function renderWatchlistSection() {
+      const el = document.getElementById('watchlist-section');
+      if (!el) return;
+
+      if (!posIsSignedIn()) {
+        el.innerHTML = `
+          <div class="bg-slate-800 border border-slate-700 rounded-lg px-3.5 py-4 text-center">
+            <div class="text-sm font-semibold text-slate-200">Your watchlist</div>
+            <div class="text-xs text-slate-400 mt-1.5">Sign in on the <a href="#" onclick="switchTab('positions');return false;" class="underline text-sky-400">Positions tab</a> to add tickers and see your levels here.</div>
+          </div>`;
+        return;
+      }
+
+      const head = `
+        <div class="flex justify-between items-center mb-2">
+          <div class="text-sm font-semibold text-slate-200">Your watchlist</div>
+          <button onclick="watchQuickAdd()" class="text-[11px] font-semibold text-sky-400 hover:text-sky-300">＋ Watch a ticker</button>
+        </div>`;
+
+      if (state.watchlistData === null && state.watchlistError) {
+        el.innerHTML = head + `
+          <div class="text-center py-4">
+            <p class="text-slate-400 text-xs">Couldn't load your watchlist.</p>
+            <button onclick="state.watchlistData=null;state.watchlistError=false;loadWatchlist(true).then(renderWatchlistSection);" class="mt-1 text-xs text-sky-400 underline">Try again</button>
+          </div>`;
+        return;
+      }
+
+      if (state.watchlistData === null) {
+        el.innerHTML = head + `<p class="text-slate-400 text-xs text-center py-4">Loading your watchlist…</p>`;
+        loadWatchlist().then(renderWatchlistSection);
+        return;
+      }
+
+      const entries = state.watchlistData || [];
+      if (entries.length === 0) {
+        el.innerHTML = head + `<p class="text-slate-400 text-xs text-center py-6">No tickers on your watchlist yet — add one to ride the next ${WATCHLIST_TTL_SESSIONS} morning checks.</p>`;
+        return;
+      }
+
+      const active = entries.filter(e => e.status !== 'expired');
+      const expired = entries.filter(e => e.status === 'expired');
+
+      const findPub = ticker => (state.morningData || []).find(m => m.ticker === ticker && (m.list_category || '') === 'watchlist');
+
+      const activeHtml = active.map(entry => watchCardHtml(entry, findPub(entry.ticker))).join('');
+
+      let expiredHtml = '';
+      if (expired.length > 0) {
+        const open = !!state.watchExpiredOpen;
+        expiredHtml = `
+          <div class="mt-2">
+            <button onclick="window.__toggleWatchExpired()" class="text-[11px] text-slate-500 hover:text-slate-300">${open ? '▾' : '▸'} Expired (${expired.length})</button>
+            <div id="watch-expired-bin" class="${open ? '' : 'hidden'} mt-2 space-y-2">
+              ${expired.map(entry => watchCardHtml(entry, findPub(entry.ticker))).join('')}
+            </div>
+          </div>`;
+      }
+
+      el.innerHTML = head + `<div class="space-y-2">${activeHtml}</div>` + expiredHtml;
+    }
+
+    window.__toggleWatchExpired = function () {
+      state.watchExpiredOpen = !state.watchExpiredOpen;
+      const bin = document.getElementById('watch-expired-bin');
+      if (bin) bin.classList.toggle('hidden', !state.watchExpiredOpen);
+      const btn = event && event.target;
+      if (btn) btn.textContent = (state.watchExpiredOpen ? '▾' : '▸') + ' Expired (' + (btn.textContent.match(/\((\d+)\)/) || [,''])[1] + ')';
+    };
+
+    // Client-side "your level" read (brief §2 option a: direction + quiet met). Never touches
+    // the server — the private level_value only ever leaves the owner-bearer /watchlist path.
+    function watchYourLevel(entry, pub) {
+      const price = pub ? parseFloat(pub.price) : NaN;
+      const lt = entry.level_type;
+      if (lt === 'above' || lt === 'below') {
+        const lv = parseFloat(entry.level_value);
+        const label = `${lt} ${lv.toFixed(2)}`;
+        let met = null, metText = '';
+        if (!isNaN(price) && !isNaN(lv)) {
+          met = lt === 'above' ? price > lv : price < lv;
+          metText = met ? (lt === 'above' ? 'now above' : 'now below')
+                        : (lt === 'above' ? 'now below' : 'now above');
+        }
+        return { label, met, metText };
+      }
+      // reclaim_20ma / reclaim_50ma
+      const ref = lt === 'reclaim_20ma' ? parseFloat(entry.sma20) : parseFloat(entry.sma50);
+      const maName = lt === 'reclaim_20ma' ? '20MA' : '50MA';
+      const label = isNaN(ref) ? `reclaim ${maName}` : `reclaim ${maName} (${ref.toFixed(2)})`;
+      let met = null, metText = '';
+      if (!isNaN(price) && !isNaN(ref)) {
+        const todayLow = pub ? parseFloat(pub.low) : NaN;
+        const priorLow = parseFloat(entry.prior_low);
+        // reclaim predicate = price > ref AND (today_low < ref OR prior_low < ref) — mirrors
+        // pick_status.compute_reclaim (brief §2).
+        met = price > ref && ((todayLow < ref) || (priorLow < ref));
+        metText = met ? 'reclaimed' : 'watching';
+      }
+      return { label, met, metText };
+    }
+
+    function watchYourLevelHtml(entry, pub) {
+      if (!entry.level_type) return '';
+      const { label, met, metText } = watchYourLevel(entry, pub);
+      if (met === null) return '';
+      return `
+        <div class="mt-3 flex items-center gap-2 bg-violet-500/5 border border-violet-500/20 rounded-lg px-3 py-2">
+          <span class="text-[9.5px] uppercase tracking-wider text-violet-300">Your level</span>
+          <span class="text-xs font-semibold text-slate-100 tabular-nums">${escapeHtml(label)}</span>
+          <span class="ml-auto text-[11px] font-semibold ${met ? 'text-emerald-400' : 'text-slate-500'}">${escapeHtml(metText)}</span>
+        </div>`;
+    }
+
+    // Levels gauge — prior levels labeled on top, today's on the bottom, your level in
+    // violet, price = the white dot (mock §01). Returns '' when there isn't enough data to
+    // draw a meaningful band (no prior_high/prior_low yet).
+    function watchGaugeHtml(entry, pub) {
+      const price  = pub ? parseFloat(pub.price) : NaN;
+      const open   = pub ? parseFloat(pub.open)  : NaN;
+      const dayLow = pub ? parseFloat(pub.low)   : NaN;
+      const pHigh  = parseFloat(entry.prior_high);
+      const pLow   = parseFloat(entry.prior_low);
+      const you    = (entry.level_type === 'above' || entry.level_type === 'below') ? parseFloat(entry.level_value)
+                   : (entry.level_type === 'reclaim_20ma') ? parseFloat(entry.sma20)
+                   : (entry.level_type === 'reclaim_50ma') ? parseFloat(entry.sma50) : NaN;
+      const vals = [price, open, dayLow, pHigh, pLow, you].filter(v => !isNaN(v));
+      if (vals.length < 2 || isNaN(pHigh) || isNaN(pLow)) return '';
+
+      let lo = Math.min(...vals), hi = Math.max(...vals);
+      const span = (hi - lo) || 1;
+      lo -= span * WATCHLIST_GAUGE_PAD;
+      hi += span * WATCHLIST_GAUGE_PAD;
+      const pct = v => ((v - lo) / (hi - lo) * 100);
+
+      const bandLeft = pct(pLow), bandRight = 100 - pct(pHigh);
+
+      // Top markers (prior levels): prior low (red), prior high (emerald).
+      const topMarkers = `
+        <div class="absolute w-0.5 h-2.5 bottom-3 bg-red-400" style="left:${pct(pLow)}%"></div>
+        <div class="absolute text-[9px] tabular-nums -translate-x-1/2 whitespace-nowrap bottom-[26px] text-red-400" style="left:${pct(pLow)}%">prior low ${pLow.toFixed(2)}</div>
+        <div class="absolute w-0.5 h-2.5 bottom-3 bg-emerald-400" style="left:${pct(pHigh)}%"></div>
+        <div class="absolute text-[9px] tabular-nums -translate-x-1/2 whitespace-nowrap bottom-[26px] text-emerald-400" style="left:${pct(pHigh)}%">prior high ${pHigh.toFixed(2)}</div>`;
+
+      // Bottom markers (today + you): day low (slate), your level (violet). `open` dropped
+      // when the card is crowded (four canonical captions favored per spec §4c-iv).
+      let bottomMarkers = '';
+      if (!isNaN(dayLow)) {
+        bottomMarkers += `
+          <div class="absolute w-0.5 h-2.5 top-3 bg-slate-500" style="left:${pct(dayLow)}%"></div>
+          <div class="absolute text-[9px] tabular-nums -translate-x-1/2 whitespace-nowrap top-[26px] text-slate-500" style="left:${pct(dayLow)}%">day low ${dayLow.toFixed(2)}</div>`;
+      }
+      if (!isNaN(you)) {
+        bottomMarkers += `
+          <div class="absolute w-0.5 h-2.5 top-3 bg-violet-400" style="left:${pct(you)}%"></div>
+          <div class="absolute text-[9px] tabular-nums -translate-x-1/2 whitespace-nowrap top-[26px] text-violet-400" style="left:${pct(you)}%">your ${you.toFixed(2)}</div>`;
+      }
+
+      const priceDot = !isNaN(price)
+        ? `<div class="absolute w-3 h-3 rounded-full bg-white border-2 border-slate-800 -translate-x-1/2 -translate-y-1/2 top-1/2 z-10" style="left:${pct(price)}%"></div>`
+        : '';
+
+      return `
+        <div class="relative h-1.5 bg-slate-700 rounded-full my-6 mx-1">
+          <div class="absolute inset-y-0 rounded-full bg-emerald-500/25" style="left:${bandLeft}%;right:${bandRight}%"></div>
+          ${topMarkers}
+          ${bottomMarkers}
+          ${priceDot}
+        </div>
+        <div class="flex gap-3.5 justify-center -mt-1 mb-1 text-[9px] text-slate-500">
+          <span class="inline-flex items-center gap-1"><i class="inline-block w-2 h-0.5 rounded bg-red-400"></i>prior low</span>
+          <span class="inline-flex items-center gap-1"><i class="inline-block w-2 h-0.5 rounded bg-emerald-400"></i>prior high</span>
+          <span class="inline-flex items-center gap-1"><i class="inline-block w-2 h-0.5 rounded bg-violet-400"></i>your level</span>
+          <span class="inline-flex items-center gap-1"><i class="inline-block w-2 h-0.5 rounded bg-white"></i>now</span>
+        </div>`;
+    }
+
+    // Gauge collapse/show toggle — DOM-patched (no full re-render), mirrors __toggleMorningChart.
+    // Re-resolves entry/pub by ticker from state rather than passing them through the onclick
+    // attribute (avoids JSON-in-HTML-attribute escaping fragility).
+    window.__toggleWatchGauge = function (ticker) {
+      const entry = (state.watchlistData || []).find(e => e.ticker === ticker);
+      if (!entry) return;
+      const pub = (state.morningData || []).find(m => m.ticker === ticker && (m.list_category || '') === 'watchlist');
+      const collapsed = !!state.watchGauge[ticker];
+      state.watchGauge[ticker] = !collapsed;
+      const panel = document.getElementById('watch-gauge-panel-' + ticker);
+      const btn = document.getElementById('watch-gauge-toggle-' + ticker);
+      if (panel) panel.innerHTML = state.watchGauge[ticker] ? '' : watchGaugeHtml(entry, pub);
+      if (btn) btn.textContent = state.watchGauge[ticker] ? '▸ Show levels' : '▾ Hide levels';
+    };
+
+    // Chart toggle for a watch card — clones morningChartAffordance's pattern but keyed on
+    // state.watchChartOpen / __toggleWatchChart so the picks chart and watch chart panels
+    // stay independent.
+    function watchChartAffordance(ticker) {
+      const isOpen = state.watchChartOpen.has(ticker);
+      const tickerJs = ticker.replace(/'/g, "\\'");
+      return `
+        <div class="mt-2 pt-2 border-t border-slate-700/50">
+          <button id="watch-chart-toggle-${escapeHtml(ticker)}" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation();__toggleWatchChart('${tickerJs}')">${isOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
+          <div id="watch-chart-panel-${escapeHtml(ticker)}" class="mt-2">${isOpen ? tradingViewChartHtml(ticker, 560) : ''}</div>
+        </div>`;
+    }
+
+    window.__toggleWatchChart = function (ticker) {
+      const panel = document.getElementById('watch-chart-panel-' + ticker);
+      const btn = document.getElementById('watch-chart-toggle-' + ticker);
+      if (!panel) return;
+      const isOpen = state.watchChartOpen.has(ticker);
+      if (isOpen) {
+        state.watchChartOpen.delete(ticker);
+        panel.innerHTML = '';
+        if (btn) btn.textContent = 'Show chart ▼';
+      } else {
+        state.watchChartOpen.add(ticker);
+        panel.innerHTML = tradingViewChartHtml(ticker, 560);
+        if (btn) btn.textContent = 'Hide chart ▲';
+      }
+    };
+
+    // "I took it →" graduation: prefill the §8a manual-entry ticket and hand off to Positions.
+    // manualConfirmSubmit's success path DELETEs the watch entry once the position is logged.
+    window.watchGraduate = function (id, ticker) {
+      state.manualEntry = manualEntryDefault();
+      state.manualEntry.open = true;
+      state.manualEntry.ticker = ticker;
+      state.manualEntry.graduateWatchId = id;
+      switchTab('positions');
+    };
+
+    window.__toggleWatchMenu = function (key) {
+      state.watchMenu = (state.watchMenu === key) ? null : key;
+      renderWatchlistSection();
+    };
+
+    window.watchRenew = async function (id) {
+      try { await watchPatchApi(id, { renew: true }); } catch (e) { /* best-effort */ }
+      state.watchMenu = null;
+      state.watchlistData = null;
+      await loadWatchlist(true);
+      renderWatchlistSection();
+    };
+
+    // Kebab "Edit level" reuses the add form (re-POST upserts renew+edit per worker) rather
+    // than a bespoke inline level editor — flagged as a minor simplification in the build spec.
+    window.watchEditLevel = function (ticker, levelType, levelValue) {
+      state.watchMenu = null;
+      state.watchAdd = watchAddDefault();
+      state.watchAdd.open = true;
+      state.watchAdd.ticker = ticker;
+      state.watchAdd.levelType = levelType || '';
+      state.watchAdd.levelValue = (levelValue != null) ? String(levelValue) : '';
+      switchTab('positions');
+    };
+
+    window.watchRemove = async function (id) {
+      try { await watchDeleteApi(id); } catch (e) { /* best-effort */ }
+      state.watchMenu = null;
+      state.watchlistData = null;
+      await loadWatchlist(true);
+      renderWatchlistSection();
+    };
+
+    function watchKebabHtml(entry) {
+      const isOpen = state.watchMenu === entry.id;
+      const menu = isOpen ? `
+        <div class="mt-2 pt-2 border-t border-slate-700 flex justify-end gap-3 text-[11px] font-semibold">
+          <button onclick="watchRenew('${entry.id}')" class="text-sky-400 hover:text-sky-300">Renew</button>
+          <button onclick="watchEditLevel('${escapeHtml(entry.ticker)}','${entry.level_type || ''}',${entry.level_value != null ? entry.level_value : 'null'})" class="text-slate-300 hover:text-slate-100">Edit level</button>
+          <button onclick="watchRemove('${entry.id}')" class="text-red-400 hover:text-red-300">Remove</button>
+        </div>` : '';
+      return `<button onclick="__toggleWatchMenu('${entry.id}')" class="text-slate-500 hover:text-slate-300 text-[17px] leading-none px-1.5">⋯</button>${menu}`;
+    }
+
+    // THE CARD — the taste core (build spec §4c). `pub` may be null (freshly added, no
+    // morning row yet). entry.prior_high/prior_low/atr/sma20/sma50 may be null (no EOD bar
+    // yet) — both cases render the "adding" state (no bar to read yet).
+    function watchCardHtml(entry, pub) {
+      const ticker = entry.ticker;
+      const noBarYet = !pub || entry.prior_high == null;
+      const meta = (!noBarYet && pub) ? (MORNING_STATUS_META[pub.status] || null) : null;
+      const stripe = meta ? meta.stripe : 'border-slate-600';
+
+      const picksRow = ws4FindPicksRow(ticker);
+      const lr = picksRow ? computeLaunchReady(picksRow) : null;
+      const lrChip = lr ? `<span class="text-[0.55rem] px-1 rounded font-bold ml-1 ${lr.cls}" title="Launch-ready: overhead supply vs. 52-week high + short-term extension">${lr.label}</span>` : '';
+      const grp = (pub && pub.group) ? `<span class="text-xs text-slate-500">· ${escapeHtml(pub.group)}</span>` : '';
+      const pill = meta
+        ? `<span class="text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${meta.pill}">${meta.label}</span>`
+        : `<span class="text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-400">Adding</span>`;
+
+      const header = `
+        <div class="flex justify-between items-center">
+          <span><span class="font-bold text-sm tracking-wide">${escapeHtml(ticker)}</span>${lrChip} ${grp}</span>${pill}
+        </div>`;
+
+      const sessionsLeft = parseInt(entry.sessions_remaining, 10);
+      const expiring = !isNaN(sessionsLeft) && sessionsLeft <= WATCHLIST_EXPIRING_AT;
+      const leftLabel = !isNaN(sessionsLeft)
+        ? `<span class="text-[10.5px] ${expiring ? 'text-amber-400' : 'text-slate-500'}"><b class="${expiring ? 'text-amber-400' : 'text-slate-400'} tabular-nums">${sessionsLeft}</b> morning${sessionsLeft === 1 ? '' : 's'} left</span>`
+        : '';
+
+      if (noBarYet) {
+        const footer = `
+          <div class="flex items-center gap-2 mt-3 pt-2.5 border-t border-slate-700">
+            ${leftLabel}<span class="flex-1"></span>${watchKebabHtml(entry)}
+          </div>`;
+        return `
+          <div class="bg-slate-800 border border-slate-700 border-l-4 border-slate-600 rounded-lg px-3.5 py-3">
+            ${header}
+            <div class="text-xs text-slate-400 mt-1.5">Added — first morning check lands tomorrow AM after tonight's data run.</div>
+            ${footer}
+          </div>`;
+      }
+
+      const useReclaim = pub.status === 'reclaim' && entry.sma50 != null;
+      let body;
+      if (useReclaim) {
+        body = _mKv('Ref (50MA)', _mNum(entry.sma50))
+             + _mKv('Day low', `${_mNum(pub.low)} <span class="text-red-400">▼ under</span>`)
+             + _mKv('Now', `<span class="text-emerald-400">${_mNum(pub.price)} — back above</span>`);
+      } else {
+        const now = `${_mNum(pub.price)} · ${_mChange(pub.change)}`;
+        const atr = morningAtrLabel(pub.atr_from_lod);
+        const atrRow = atr
+          ? `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">ATR from day low</span><span class="${atr.cls} font-medium tabular-nums">${atr.text}</span></div>`
+          : '';
+        body = _mKv('Trigger (prior high)', _mNum(pub.trigger)) + _mKv('Now', now) + atrRow;
+      }
+
+      const yourLevel = watchYourLevelHtml(entry, pub);
+
+      const gaugeCollapsed = !!state.watchGauge[ticker];
+      const gaugeInner = watchGaugeHtml(entry, pub);
+      const gaugeToggle = gaugeInner ? `
+        <div class="mt-1">
+          <button id="watch-gauge-toggle-${escapeHtml(ticker)}" class="text-[11px] font-semibold text-sky-400 hover:text-sky-300" onclick="__toggleWatchGauge('${ticker.replace(/'/g, "\\'")}')">${gaugeCollapsed ? '▸ Show levels' : '▾ Hide levels'}</button>
+          <div id="watch-gauge-panel-${escapeHtml(ticker)}">${gaugeCollapsed ? '' : gaugeInner}</div>
+        </div>` : '';
+
+      const footer = `
+        <div class="flex items-center gap-2 mt-3 pt-2.5 border-t border-slate-700">
+          ${leftLabel}<span class="flex-1"></span>
+          <button onclick="watchGraduate('${entry.id}','${escapeHtml(ticker)}')" class="py-1.5 px-3 rounded-lg text-[11px] font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400">I took it →</button>
+          ${watchKebabHtml(entry)}
+        </div>`;
+
+      return `
+        <div class="bg-slate-800 border border-slate-700 border-l-4 ${stripe} rounded-lg px-3.5 py-3">
+          ${header}
+          ${body}
+          ${yourLevel}
+          ${gaugeToggle}
+          ${watchChartAffordance(ticker)}
+          ${footer}
+        </div>`;
+    }
+
     function renderMorning() {
       const el = document.getElementById('morning-list');
       if (!el) return;
 
-      const rows = state.morningData;
+      // WS5 §8b P3: morning_latest.csv now also carries list_category='watchlist' rows (the
+      // public system-read side of personal watch entries). Those feed renderWatchlistSection()
+      // instead — exclude them here so a watched ticker doesn't also show up in the picks list.
+      const rows = (state.morningData || []).filter(r => (r.list_category || '') !== 'watchlist');
       if (!rows || rows.length === 0) {
         el.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">No morning check yet — this runs ~10:05 ET on trading days, tagging yesterday\'s picks with what the open did to each setup.</p>';
         return;
@@ -6173,6 +6748,7 @@
         loadTaxonomy(force),
         loadPicks(force),
         loadMorning(force),
+        loadWatchlist(force).catch(() => {}), // WS5 §8b P3: best-effort, must not block the picks morning render
         new Promise(r => setTimeout(r, minMs)),
       ]);
       // AI JSON is keyed by the latest data date — derive it after CSVs are loaded
