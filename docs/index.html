@@ -400,6 +400,9 @@
     // WS3 morning status (ADR-013). Provisional session store, keyed (date, ticker). Separate
     // from the settled EOD picks file — a 10:05 ET snapshot, never mixed into picks_latest.csv.
     const MORNING_URL   = `${BASE}/picks/sessions/morning_latest.csv`;
+    // WS3b pre-close status (issue #268). Same provisional store family as morning, keyed
+    // (date, ticker), session=pre_close — a ~15:30 ET last-half-hour read of the same setups.
+    const PRECLOSE_URL  = `${BASE}/picks/sessions/pre_close_latest.csv`;
     const WORKER_URL = 'https://finviz-ticker-lookup.salmonbaby8.workers.dev';
     // WS5 phase 1 (#309): finviz-positions worker (D1-backed trade lifecycle store, auth
     // via bearer token — see worker-positions/README.md). Endpoint + localStorage key, not
@@ -463,6 +466,12 @@
       aiData: null,
       picksData: null,   // rows from picks_latest.csv; null = not yet loaded
       morningData: null, // rows from picks/sessions/morning_latest.csv (WS3); null = not yet loaded
+      preCloseData: null, // rows from picks/sessions/pre_close_latest.csv (WS3b, #268); null = not loaded
+      // WS3b (#268): which session read the Morning tab shows. Resolved to the freshest
+      // available read on each render until the user toggles (morningViewUserSet). Governs
+      // the picks confirmation list only — the watchlist section stays on the morning feed.
+      morningView: 'morning',      // 'morning' | 'preclose'
+      morningViewUserSet: false,
       // WS4 Phase B (ADR-014) trade-ticket UI state, keyed by ticker. Survives renderMorning()
       // re-renders (module-level, not rebuilt each render). { expanded, stopBasis, priceOverride }.
       // priceOverride is a string (raw input value) so an in-progress edit ("61" typed toward
@@ -1469,6 +1478,19 @@
         state.morningData = res.data || [];
       } catch (e) {
         state.morningData = [];
+      }
+    }
+
+    // WS3b pre-close status (issue #268). Same provisional store family as morning,
+    // session=pre_close. A 404 (pre-first-run, or a non-trading day where the 15:30 ET
+    // job exits without writing) is normal and degrades to the empty state, never an error.
+    async function loadPreClose(force = false) {
+      if (!force && state.preCloseData !== null) return;
+      try {
+        const res = await fetchCSV(PRECLOSE_URL, force);
+        state.preCloseData = res.data || [];
+      } catch (e) {
+        state.preCloseData = [];
       }
     }
 
@@ -5250,7 +5272,7 @@
     // affected spans in place (no full renderMorning() — keeps typing smooth per ADR-014
     // Phase B spec). Called on every price/risk input event.
     window.ws4Recompute = function (ticker) {
-      const r = (state.morningData || []).find(x => x.ticker === ticker);
+      const r = activeSessionRows().find(x => x.ticker === ticker);
       if (!r) return;
       const ts = ws4GetTicket(ticker);
       const picksRow = ws4FindPicksRow(ticker);
@@ -5518,7 +5540,7 @@
     // snapshot price, prior_low stop, ws4RiskDefault()). Returns { ok:false, error } if the
     // inputs don't support a sane trade (no price/stop, or stop already through entry).
     function ws5BuildPayload(ticker) {
-      const r = (state.morningData || []).find(x => x.ticker === ticker);
+      const r = activeSessionRows().find(x => x.ticker === ticker);
       if (!r) return { ok: false, error: "Open the trade ticket and set your fill + stop first" };
       const ts = ws4GetTicket(ticker);
       const picksRow = ws4FindPicksRow(ticker);
@@ -5638,7 +5660,7 @@
       if (!card || card.mode !== 'confirm' || card.submitting) return;
       card.submitting = true;
       renderMorning();
-      const r = (state.morningData || []).find(x => x.ticker === ticker);
+      const r = activeSessionRows().find(x => x.ticker === ticker);
       try {
         await posApi('/positions', { method: 'POST', body: card.payload });
         // Keep the existing `taken:` marker driving card ✓ state (additive, Decision 5) —
@@ -6692,45 +6714,127 @@
         </div>`;
     }
 
+    // WS3b (#268) — the Morning tab is session-aware: it renders either the ~10:05 ET morning
+    // read or the ~15:30 ET pre-close read, chosen by a toggle. These helpers back that.
+
+    // Rows for the currently-shown session read (the picks confirmation list). The watchlist
+    // section deliberately stays on the morning feed and does NOT use this.
+    function activeSessionRows() {
+      return (state.morningView === 'preclose' ? state.preCloseData : state.morningData) || [];
+    }
+
+    // Default to the freshest available read (by collected_at) until the user toggles. Before
+    // ~15:30 ET only the morning file exists, so morning shows; once the pre-close file lands
+    // it is the newer one and wins — matching "into the close" being the later decision point.
+    function freshestSessionView() {
+      const m = (state.morningData || [])[0];
+      const p = (state.preCloseData || [])[0];
+      if (p && (!m || String(p.collected_at || '') >= String(m.collected_at || ''))) return 'preclose';
+      return 'morning';
+    }
+
+    // Pre-close display handling for `gapped_through` (correctness note, ADR-013): a gap-through
+    // is a morning-open concept (a big up-gap right at 09:30). By ~15:30 it is meaningless — a
+    // name trading above its trigger is simply confirmed. Remap it to `triggered` for DISPLAY
+    // only; the engine (pick_status.py) is untouched and the morning view shows the real status.
+    function sessionDisplayRow(r) {
+      if (state.morningView === 'preclose' && r.status === 'gapped_through') {
+        return { ...r, status: 'triggered' };
+      }
+      return r;
+    }
+
+    window.__setMorningView = function (v) {
+      if (v !== 'morning' && v !== 'preclose') return;
+      state.morningView = v;
+      state.morningViewUserSet = true;
+      renderMorning();
+    };
+
+    // Session-specific copy. Morning answers "did it survive the open?"; pre-close answers
+    // "is it confirming into the close?" — the moment the entry decision is actually made.
+    const MORNING_SESSION_COPY = {
+      morning: {
+        banner: 'Morning prices are mid-session reads. Nothing here changes your EOD data.',
+        empty: 'No morning check yet — this runs ~10:05 ET on trading days, tagging yesterday\'s picks with what the open did to each setup.',
+      },
+      preclose: {
+        banner: 'Pre-close read — are today\'s setups confirming into the close? Prices are a mid-session snapshot ~30 min before the bell. Nothing here changes your EOD data.',
+        empty: 'No pre-close check yet — this runs ~15:30 ET on trading days, showing which of today\'s setups are confirming into the close.',
+      },
+    };
+
+    // Statuses that count as "the setup is working" for the pre-close "since AM" delta chip.
+    const MORNING_BULLISH_STATUSES = new Set(['triggered', 'reclaim']);
+
     function renderMorning() {
       const el = document.getElementById('morning-list');
       if (!el) return;
 
-      // WS5 §8b P3: morning_latest.csv now also carries list_category='watchlist' rows (the
-      // public system-read side of personal watch entries). Those feed renderWatchlistSection()
-      // instead — exclude them here so a watched ticker doesn't also show up in the picks list.
-      const rows = (state.morningData || []).filter(r => (r.list_category || '') !== 'watchlist');
+      if (!state.morningViewUserSet) state.morningView = freshestSessionView();
+      const view = state.morningView;
+      const copy = MORNING_SESSION_COPY[view] || MORNING_SESSION_COPY.morning;
+
+      // Session toggle (segmented-pill pattern, matches the Picks All/Focus toggle). Governs the
+      // picks confirmation read only; always rendered — even in the empty state — so the user can
+      // switch to the read that does have data.
+      const seg = (v, label) => {
+        const on = view === v;
+        return `<button id="morning-toggle-${v}" class="px-3 py-1 text-xs rounded-full font-medium ${on ? 'bg-slate-600 text-white' : 'bg-slate-700 text-slate-400'}" onclick="__setMorningView('${v}')">${label}</button>`;
+      };
+      const toggle = `<div class="flex items-center gap-1 mb-3"><span class="text-xs text-slate-500 mr-1">Read:</span>${seg('morning', 'Morning')}${seg('preclose', 'Pre-close')}</div>`;
+
+      // WS5 §8b P3: exclude watchlist rows (they feed renderWatchlistSection()).
+      const rows = activeSessionRows().filter(r => (r.list_category || '') !== 'watchlist');
       if (!rows || rows.length === 0) {
-        el.innerHTML = '<p class="text-slate-400 text-sm text-center py-8">No morning check yet — this runs ~10:05 ET on trading days, tagging yesterday\'s picks with what the open did to each setup.</p>';
+        el.innerHTML = toggle + `<p class="text-slate-400 text-sm text-center py-8">${copy.empty}</p>`;
         return;
       }
 
       // Provisional chrome is non-negotiable (ADR-011): timestamp + banner + amber tint so a
-      // mid-session read is never mistaken for settled EOD data. Reuses freshnessLabel for the
-      // date/time exactly like the other tabs.
+      // mid-session read is never mistaken for settled EOD data.
       const fresh = freshnessLabel(rows[0].date, rows[0].collected_at);
       const header = `
         <div class="mb-3">
           <div class="text-xs ${fresh.cls}">Snapshot ${fresh.text} · <span class="text-amber-400 font-medium">provisional — not settled</span></div>
           <div class="mt-2 text-xs text-amber-400 bg-amber-500/10 border border-dashed border-amber-500/40 rounded-lg px-3 py-2">
-            Morning prices are mid-session reads. Nothing here changes your EOD data.
+            ${copy.banner}
           </div>
         </div>`;
 
-      // Actionability sort (ADR/mock), stable ticker tiebreak within a status bucket.
+      // Pre-close only: index the morning read by ticker so each card can show a "since AM"
+      // delta chip — did the setup hold from the open into the close? (the surface's payoff).
+      const isPre = view === 'preclose';
+      const morningByTicker = {};
+      if (isPre) (state.morningData || []).forEach(m => { morningByTicker[m.ticker] = m; });
+      const deltaChip = (r0) => {
+        if (!isPre) return '';
+        const m = morningByTicker[r0.ticker];
+        if (!m) return ''; // no morning row → no comparison, silence = no signal
+        const wasBull = MORNING_BULLISH_STATUSES.has(m.status);
+        const nowBull = MORNING_BULLISH_STATUSES.has(sessionDisplayRow(r0).status);
+        if (nowBull && wasBull)  return `<span class="text-[0.55rem] px-1 rounded font-bold ml-1 bg-emerald-500/15 text-emerald-400">held since AM</span>`;
+        if (nowBull && !wasBull) return `<span class="text-[0.55rem] px-1 rounded font-bold ml-1 bg-emerald-500/15 text-emerald-400">firmed up</span>`;
+        if (!nowBull && wasBull) return `<span class="text-[0.55rem] px-1 rounded font-bold ml-1 bg-red-500/15 text-red-400">faded from AM</span>`;
+        return '';
+      };
+
+      // Actionability sort (ADR/mock), stable ticker tiebreak within a status bucket. Sort on the
+      // display status so a pre-close gapped→triggered remap buckets with the other triggers.
       const sorted = [...rows].sort((a, b) => {
-        const oa = (MORNING_STATUS_META[a.status] || MORNING_STATUS_META.no_quote).order;
-        const ob = (MORNING_STATUS_META[b.status] || MORNING_STATUS_META.no_quote).order;
+        const oa = (MORNING_STATUS_META[sessionDisplayRow(a).status] || MORNING_STATUS_META.no_quote).order;
+        const ob = (MORNING_STATUS_META[sessionDisplayRow(b).status] || MORNING_STATUS_META.no_quote).order;
         return oa - ob || String(a.ticker).localeCompare(String(b.ticker));
       });
 
-      const cards = sorted.map(r => {
+      const cards = sorted.map(r0 => {
+        const r = sessionDisplayRow(r0);
         const meta = MORNING_STATUS_META[r.status] || MORNING_STATUS_META.no_quote;
         const grp = r.group ? `<span class="text-xs text-slate-500">· ${r.group}</span>` : '';
         // GH #305: overhead-supply chip, joined off the prior-EOD picks_latest row via the
-        // same ws4FindPicksRow() the trade ticket already uses (morning_latest.csv itself
-        // carries neither 52W High nor atr_ext_50) — reuses computeLaunchReady() as-is, so
-        // a morning name with no EOD match just renders no chip (silence = no signal).
+        // same ws4FindPicksRow() the trade ticket already uses (session store itself carries
+        // neither 52W High nor atr_ext_50) — reuses computeLaunchReady() as-is, so a name with
+        // no EOD match just renders no chip (silence = no signal).
         const picksRow = ws4FindPicksRow(r.ticker);
         const launchReady = picksRow ? computeLaunchReady(picksRow) : null;
         const launchReadyChip = launchReady
@@ -6739,14 +6843,14 @@
         return `
           <div class="bg-slate-800 border border-slate-700 border-l-4 ${meta.stripe} rounded-lg px-3.5 py-3">
             <div class="flex justify-between items-center">
-              <span><span class="font-bold text-sm tracking-wide">${r.ticker}</span>${launchReadyChip} ${grp}</span>
+              <span><span class="font-bold text-sm tracking-wide">${r.ticker}</span>${launchReadyChip}${deltaChip(r0)} ${grp}</span>
               <span class="text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${meta.pill}">${meta.label}</span>
             </div>
             ${morningCardBody(r)}
           </div>`;
       }).join('');
 
-      el.innerHTML = header + cards;
+      el.innerHTML = toggle + header + cards;
     }
 
     async function loadAndRender(force = false, minMs = 0) {
@@ -6757,6 +6861,7 @@
         loadTaxonomy(force),
         loadPicks(force),
         loadMorning(force),
+        loadPreClose(force), // WS3b (#268): the ~15:30 ET read for the Morning tab session toggle
         loadWatchlist(force).catch(() => {}), // WS5 §8b P3: best-effort, must not block the picks morning render
         new Promise(r => setTimeout(r, minMs)),
       ]);
@@ -6798,7 +6903,7 @@
       });
       if (!state.data[state.group].snap
           || (tab === 'picks' && state.picksData === null)
-          || (tab === 'morning' && state.morningData === null)) {
+          || (tab === 'morning' && (state.morningData === null || state.preCloseData === null))) {
         loadAndRender();
       } else {
         render();

@@ -153,6 +153,30 @@ export const JOB_SCHEDULE = [
     gated: true,
   },
   {
+    name: 'preclose_status',
+    workflow: 'preclose_status',
+    weekdays: [1, 2, 3, 4, 5], // Mon-Fri
+    hour: 15,
+    minute: 30,
+    windowMinutes: DISPATCH_WINDOW_MINUTES,
+    // WS3b (issue #268, planning/ws3b-preclose-surface-spec.md): the pre-close
+    // "confirming into the close" read — a last-half-hour status pass over
+    // today's picks via collect_morning.py --session pre_close, writing the
+    // provisional data/picks/sessions/pre_close{,_latest}.csv store. 15:30 ET
+    // (owner-set 2026-08-17) leaves a genuine last-half-hour window before the
+    // 16:00 close. Must stay in sync with session_config.py
+    // SESSIONS["pre_close"].capture_et.
+    //
+    // NOT the same job as `collect_preclose` above (15:50 ET) — that is WS1's
+    // unrelated settled-data backstop dispatching collect.yml for the #259
+    // picks gate and is untouched by this entry. Distinctly named
+    // (`preclose_status`, KV key `last_dispatch_preclose_status`, its own
+    // `workflow` -> collect_preclose_status.yml) precisely to avoid any
+    // confusion or KV-key collision with that job. Ungated, like
+    // collect_morning — reads the same latest-EOD picks list that already
+    // exists at dispatch time; no same-day upstream job to wait on.
+  },
+  {
     name: 'held',
     workflow: 'held',
     weekdays: [1, 2, 3, 4, 5], // Mon-Fri

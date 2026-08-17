@@ -68,6 +68,17 @@ describe('jobsInWindow — pure, no "already dispatched" awareness', () => {
     expect(jobsInWindow(etNow)).toEqual([]);
   });
 
+  it('returns preclose_status at 15:30 ET on a weekday, and not at other times (WS3b, issue #268)', () => {
+    const atTarget = { hour: 15, minute: 30, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(atTarget)).toEqual(['preclose_status']);
+
+    const before = { hour: 15, minute: 29, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(before)).toEqual([]);
+
+    const after = { hour: 16, minute: 25, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(after)).toEqual([]);
+  });
+
   it('returns collect_morning at 10:05 ET on a weekday (ADR-013 Phase B)', () => {
     const etNow = { hour: 10, minute: 5, weekday: 3, dateStr: '2026-07-15' };
     expect(jobsInWindow(etNow)).toEqual(['collect_morning']);
@@ -112,9 +123,9 @@ describe('jobsInWindow — pure, no "already dispatched" awareness', () => {
     expect(jobsInWindow(etNow)).toEqual(['collect_morning']);
   });
 
-  it('returns collect_preclose at 15:50 ET on a weekday', () => {
+  it('returns collect_preclose AND preclose_status at 15:50 ET on a weekday (windows overlap: preclose_status 15:30-16:00, collect_preclose 15:50-16:20)', () => {
     const etNow = { hour: 15, minute: 50, weekday: 3, dateStr: '2026-07-15' };
-    expect(jobsInWindow(etNow)).toEqual(['collect_preclose']);
+    expect(jobsInWindow(etNow)).toEqual(['collect_preclose', 'preclose_status']);
   });
 
   it('returns collect_eod AND picks at 17:00 ET on a weekday (issue #259: picks shares collect_eod\'s target, gated on dependency not a later fixed time)', () => {

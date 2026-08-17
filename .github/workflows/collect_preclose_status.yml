@@ -1,0 +1,69 @@
+name: Pre-close Status
+# WS3b pre-close confirmation surface (issue #268,
+# planning/ws3b-preclose-surface-spec.md). Thin wrapper around the same
+# session-parameterized scripts/collect_morning.py used by Morning Status —
+# calls it with --session pre_close instead of cloning any logic. Writes the
+# PROVISIONAL store data/picks/sessions/pre_close{,_latest}.csv.
+#
+# PRIMARY scheduler: the Cloudflare `finviz-cron-dispatcher` Worker's in-code
+# `preclose_status` job (worker-cron/src/routing.js JOB_SCHEDULE), firing at
+# 15:30 ET, Mon-Fri, UNGATED — same rationale as collect_morning (ADR-013
+# Decision 6): the input (today's already-committed picks_latest.csv) exists
+# at dispatch time, so there's nothing to dependency-gate on.
+#
+# NOT the same workflow as collect.yml's 15:50 ET `collect_preclose` job —
+# that is WS1's unrelated settled-data backstop for the #259 picks gate and
+# is untouched by this file.
+#
+# TODO(#268): add a healthchecks.io dead-man's-switch once a HEALTHCHECK_URL
+# secret is provisioned for this run (mirrors collect.yml's pattern) — left
+# out for now since it requires a secret/URL not available to this change.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Scrape+parse+log counts without writing the store (verification run)."
+        type: boolean
+        default: false
+permissions:
+  contents: write
+# Shared concurrency group with collect.yml/collect_picks.yml/collect_morning.yml
+# (ADR-008 / G1): all data-writing jobs commit to data/ on the same branch and
+# MUST serialize.
+concurrency:
+  group: finviz-data-commit
+  cancel-in-progress: false
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+jobs:
+  preclose_status:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+      - name: Collect pre-close status
+        id: preclose_status
+        run: python scripts/collect_morning.py --session pre_close ${{ inputs.dry_run && '--dry-run' || '' }}
+      - name: Upload debug HTML on parse failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preclose-status-debug-html
+          path: data/picks/debug_html/
+          if-no-files-found: ignore
+      - name: Commit and push
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/picks/sessions/
+          git diff --cached --quiet || git commit -m "data: pre-close status $(TZ=America/New_York date +%Y-%m-%d)"
+          git pull --rebase
+          git push

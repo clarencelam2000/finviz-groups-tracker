@@ -608,3 +608,44 @@ the surface's payoff — answer "did the setup hold from open into close?" witho
 
 **Next steps:** hand to eng team (paste-note prepared). WS4-C (pre-close trade ticket, ADR-014) is
 blocked-by this and cross-linked in SPRINT — unblocks when the `pre_close` store lands.
+
+---
+
+## 2026-08-17 — WS3b (#268) pre-close confirmation surface: IMPLEMENTED
+
+**Status: safe to close.** Built the full WS3b surface (writer + cron + PWA) on branch
+`claude/issue-268-scoping-spec-ra01f6` / PR #327. Staff-eng drove; Phases A & B via Sonnet
+subagents, Phase C (PWA visual) done in the main loop. Tests kept light per owner.
+
+**What landed (all in PR #327):**
+- **Phase A — writer (`scripts/collect_morning.py`, `session_config.py`):** generalized to
+  `--session {morning,pre_close}` (default morning) — NOT cloned. `session_store_paths()`,
+  session-parameterized `write_store`/`assert_provisional`. `pre_close` capture_et 15:50→**15:30**
+  (triple-doc: session_config comment + README + CLAUDE.md). Morning path byte-identical (8 old
+  tests pass unmodified; +1 pre_close test). 49 pytest green.
+- **Phase B — dispatch (`worker-cron/`):** new ungated `preclose_status` job @ 15:30 ET in
+  `routing.js` JOB_SCHEDULE (own KV key), `index.js` WORKFLOWS map, thin
+  `.github/workflows/collect_preclose_status.yml` → `collect_morning.py --session pre_close`
+  (Option 2: wrapper, not shared-dispatch `inputs` — lower risk). Existing 15:50 `collect_preclose`
+  settled backstop + #259 gate untouched. 93 worker-cron tests green. TODO(#268): healthchecks DMS
+  when a secret is provisioned.
+- **Phase C — PWA (`docs/index.html`):** Morning tab is session-aware — `[Morning · Pre-close]`
+  segmented toggle, defaults to freshest read (`freshestSessionView` by collected_at, so morning
+  before ~15:30 / pre-close after). Session-specific "into the close" copy + banner. Pre-close-only
+  `held/firmed up/faded since AM` delta chips (join morning⋈pre_close on ticker). `gapped_through`
+  remapped to `triggered` for DISPLAY at pre-close (`sessionDisplayRow`; engine pure). Ticket /
+  take-it / chart helpers now read `activeSessionRows()` so the expanded ticket uses the shown
+  session's prices. Release triplet `2026.08.17.1` + sw.js v68→v69. JS syntax-checked, releases
+  test green.
+
+**Verification:** releases.json valid + `test_guide_releases.py` green; inline-script syntax check
+clean; worker-cron 93 + collect_morning 49 pytest green. Did NOT run Playwright PWA tests (cloud
+Chromium-revision gap + owner's "don't over-invest in tests" — the surface mirrors the shipped
+morning render 1:1 and was syntax-verified).
+
+**Follow-ups:** (1) WS4-C (pre-close trade ticket) is likely satisfied for free — the ticket already
+renders on pre-close actionable cards via the session-generic helpers; verify once the 15:30 store
+has live rows, then close. (2) healthchecks DMS on `collect_preclose_status.yml` (TODO in the yml).
+(3) #261 (WS2) can be closed for hygiene — `pre_close` is fully wired now. (4) First live 15:30 run
+happens on the next trading day via the Cloudflare dispatcher; no data exists until then (404 → empty
+state is expected and handled).

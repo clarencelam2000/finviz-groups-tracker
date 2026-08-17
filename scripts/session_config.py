@@ -54,8 +54,14 @@ SESSIONS: dict[str, Session] = {
     # a real intraday High/Low range to read rather than a one-tick open print. Matches the
     # collect_morning cron target in worker-cron/src/routing.js (keep the two in sync).
     MORNING: Session(key=MORNING, label="Morning", capture_et="10:05", settled=False),
-    # 15:50 ET matches the existing collect_preclose cron target (CLAUDE.md § Automation).
-    PRE_CLOSE: Session(key=PRE_CLOSE, label="Pre-close", capture_et="15:50", settled=False),
+    # 15:30 ET (owner-set 2026-08-17, WS3b/issue #268) — a provisional pre-close
+    # confirmation read: the last half-hour of the session, ~30 min before the 16:00
+    # close, giving the state machine one more real intraday read before the close
+    # print. This is DISTINCT from the existing settled `collect_preclose` backstop
+    # cron job (still 15:50 ET, CLAUDE.md § Automation) — that job dispatches the
+    # unrelated #259 settled-data picks gate and is untouched by this change; do not
+    # conflate the two 15-something ET times.
+    PRE_CLOSE: Session(key=PRE_CLOSE, label="Pre-close", capture_et="15:30", settled=False),
 }
 
 # The existing snapshots/deltas/picks files carry eod semantics unchanged — Option C:
