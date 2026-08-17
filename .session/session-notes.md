@@ -512,3 +512,65 @@ minimal frozen-positions read-back + release triplet + Playwright. Then owner ro
 
 **Note:** this session-notes commit must land on default via a merged PR to be visible next session
 (branch-commit-discipline § "Session notes MUST land on default").
+
+---
+
+## 2026-08-17 — WS5 §8b P3: personal watchlist PWA (#319)
+
+**Status: safe to close once the PR is open + Playwright validated.** Staff-eng session driving P3 —
+the taste-heavy PWA phase. P1 (worker/D1) + P2 (`pick_status.py` reclaim + `collect_morning.py` union)
+were already merged as #322; this session built P3 only, in `docs/index.html` + release/docs/tests.
+
+**Orchestration:** lead wrote the authoritative P3 build spec (the v2 mock
+`planning/mocks/ws5-watchlist-directions.html` translated into the PWA's slate/sky/violet Tailwind
+idiom as exact code — kept in scratchpad, not committed; the brief is the durable design authority).
+Three Sonnet subagents against that spec (≤2 parallel), every line lead-reviewed:
+(A) full `docs/index.html` build; (B) release triplet + `docs/CLAUDE.md` + README constants;
+(C) `tests/test_pwa_watchlist.py` + tests.yml ignore. Lead reviewed A's diff by hand and fixed one
+UX bug (see below).
+
+**What landed (P3):**
+- **Morning "Your watchlist" section** (`renderWatchlistSection` + `watchCardHtml`) above the picks
+  list. v2-mock card: header (ticker + launch-ready chip via `computeLaunchReady` + group + status
+  pill), morning-read rows with NO header word (brief §2 option a: `Trigger (prior high)/Now/ATR from
+  day low`; reclaim variant shows `Ref (50MA)/Day low/Now — back above`), violet **Your level** block
+  (`watchYourLevel` computed CLIENT-SIDE — level_value never leaves owner-bearer path), on-by-default
+  **collapsible levels gauge** (`watchGaugeHtml`, DOM-patched toggle), independent chart toggle,
+  footer `N mornings left · I took it → · ⋯` (kebab Renew/Edit level/Remove). Expired entries in a
+  collapsed bin. Adding-state for a watch with no EOD bar yet.
+- **Positions "＋ Add to watchlist"** collapsible sibling to the §8a manual-entry expander (separate
+  `state.watchAdd`), ticker + optional segmented level (Above/Below/20MA/50MA; price input only for
+  Above/Below) → `POST /watchlist`. Morning quick-add deep-links here (`watchQuickAdd`).
+- **Graduation:** "I took it →" prefills the §8a manual-entry ticket (`graduateWatchId`); on a
+  confirmed `POST /positions` the client `DELETE`s the watch entry.
+- **Integration fixes P2 exposed:** `MORNING_STATUS_META` gains a `reclaim` entry; `renderMorning`
+  now filters `list_category==='watchlist'` rows out of the picks list (they feed the new section).
+- **Worker client:** `loadWatchlist`/`watchAddApi`/`watchPatchApi`/`watchDeleteApi` over `posApi`
+  (owner bearer, 401→sign-in). GET returns `{watchlist:[…]}` incl. `prior_high/prior_low/atr/sma20/
+  sma50` refs (null until first EOD bar).
+- **Release triplet** `2026.08.17` / sw.js `v67→v68`; 3 PWA display constants documented 3-places
+  (`WATCHLIST_TTL_SESSIONS`/`WATCHLIST_EXPIRING_AT`/`WATCHLIST_GAUGE_PAD`); `docs/CLAUDE.md` watchlist
+  section. `tests/test_pwa_watchlist.py` + tests.yml `--ignore` entry.
+
+**Lead review fix (not a spec deviation):** `watchAddSubmit` reset to `watchAddDefault()` (open:false)
+on success, so the "Saved to your watchlist" confirmation — rendered only in the expanded form — never
+showed. Fixed to keep the collapsible open on success.
+
+**Lead taste-calls flagged for owner (none re-open locked brief §2):**
+1. Signed-out "Your watchlist" = sign-in prompt, no public preview (avoids leaking which tickers are
+   watched; private levels are behind owner auth anyway).
+2. Dropped the mock's separate `▾ Trade ticket` footer toggle — "I took it →" is the single
+   graduation path into the §8a ticket (which IS the trade ticket; stop/size required at entry).
+3. Kebab "Edit level" reuses the add form (re-POST upserts renew+edit) rather than a bespoke inline
+   editor.
+4. Watch card uses "ATR from day low" copy (v2-mock-faithful) vs the picks card's "ATR from LoD".
+Minor deferral: graduation does not yet prefill the entry hint from an above/below level (spec §4c-vi
+"optional") — tracked as a nice-to-have.
+
+**Verification:** `node --check` on the extracted inline script passes after lead edits;
+`test_guide_releases.py` green (release triplet consistent). Playwright validation of
+`test_pwa_watchlist.py` via the chromium symlink harness is the remaining pre-merge step.
+
+**Next steps:** validate Playwright locally; open the P3 PR (ready-for-review). Then WS5 phase 4 (VAPID
+push, reuse `distil`) and the deferred watchlist follow-ups (fully-private morning store, multi-day
+reclaim, picks opting into reclaim).

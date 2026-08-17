@@ -404,6 +404,13 @@ These constants control when visual indicators appear or change state. All are n
 | `ARIEL_ATR_PCT_CEIL_SOFT` | `9.0` | Ariel match: above this ATR/Price % the daily-move gate is excluded entirely (too volatile). |
 | `ARIEL_GROWTH_MIN_FULL` | `25` | Ariel match: EPS YoY TTM AND Sales YoY TTM must each be at or above this % for the growth gate to fully qualify. |
 | `ARIEL_GROWTH_MIN_SOFT` | `15` | Ariel match: soft-qualify floor for EPS YoY TTM AND Sales YoY TTM — either metric below this fails the growth gate outright. |
+| `WATCHLIST_TTL_SESSIONS` | `10` | Personal watchlist (WS5 §8b): display-only mirror of the worker's `WATCHLIST_TTL_SESSIONS` — drives the watch card's "N mornings left" readout. The worker (`worker-positions`) owns the real `sessions_remaining` counter; see its README for the source-of-truth constant. |
+| `WATCHLIST_EXPIRING_AT` | `1` | Personal watchlist: `sessions_remaining <=` this shows the amber "expiring" cue on a watch card's footer. |
+| `WATCHLIST_GAUGE_PAD` | `0.08` | Personal watchlist: fraction of the price domain padded on each end of a watch card's levels gauge, so end markers aren't clipped. |
+
+> The worker-side `WATCHLIST_TTL_SESSIONS` (source of truth for `sessions_remaining`) and
+> `WATCHLIST_PURGE_DAYS` (expired-entry retention) are documented in
+> `worker-positions/README.md` § Configurable parameters, not duplicated here.
 
 > The Guide's **legend** renders these thresholds live (read from JS scope), so the in-app explanation can never drift from the numbers above.
 
