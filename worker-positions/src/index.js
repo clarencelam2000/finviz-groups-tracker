@@ -4,7 +4,7 @@
 // Design: planning/trade-lifecycle-engine.md; ADR-012. Auth seam: src/auth.js (see README § Auth).
 
 import { authenticate, authenticateService, login } from "./auth.js";
-import { validateCreatePayload, buildPositionRow, insertPosition, listPositions } from "./positions.js";
+import { validateCreatePayload, buildPositionRow, insertPosition, listPositions, ALL_STATES } from "./positions.js";
 import { validateIngestBatch, ingestQuotes, heldTickers } from "./quotes.js";
 import { sweep } from "./sweep.js";
 import { applyTransition } from "./transitions.js";
@@ -218,10 +218,19 @@ export async function handleRequest(request, env) {
   }
 
   if (pathname === "/positions" && method === "GET") {
-    const state = url.searchParams.get("state");
+    // Accepts repeated params (?state=open&state=managing) and/or a comma-separated value
+    // (?state=open,managing,closing) — merged and deduped. No `state` (or all-empty) = all states,
+    // matching the old single-`state` behavior. Unknown values 400 rather than silently returning
+    // zero rows (a typo shouldn't look identical to "no live positions").
+    const rawStates = url.searchParams.getAll("state").flatMap((s) => s.split(","));
+    const states = [...new Set(rawStates.map((s) => s.trim()).filter((s) => s.length > 0))];
+    const unknown = states.filter((s) => !ALL_STATES.includes(s));
+    if (unknown.length > 0) {
+      return json({ error: `unknown state(s): ${unknown.join(", ")}` }, 400, request, env);
+    }
     let rows;
     try {
-      rows = await listPositions(env.POSITIONS_DB, auth.user_id, state || null);
+      rows = await listPositions(env.POSITIONS_DB, auth.user_id, states);
     } catch (e) {
       return json({ error: "read failed" }, 500, request, env);
     }
