@@ -485,9 +485,10 @@
       ws5Card: {},
       // WS5 Positions tab (read-only, phase 1): null = not yet fetched this session (or
       // signed out); [] = signed in with zero open positions; array = non-closed positions
-      // (state in open/managing/closing — see posLoadPositions) from GET /positions (unfiltered,
-      // then filtered client-side). Reset to null on sign-in/sign-out so a switch always
-      // re-fetches fresh state.
+      // (state in open/managing/closing — see posLoadPositions) from GET
+      // /positions?state=open,managing,closing (server-side filter, worker-positions PR #333;
+      // client-side POS_VISIBLE_STATES filter kept as defense-in-depth). Reset to null on
+      // sign-in/sign-out so a switch always re-fetches fresh state.
       positionsData: null,
       // true when the last posLoadPositions() fetch failed for a reason other than 401
       // (network error, 5xx) — distinguishes "fetch failed" from "genuinely zero positions"
@@ -5717,15 +5718,19 @@
     // Positions the engine has advanced past their first bar move to 'managing' (src/advance.js
     // OPEN_TO_MANAGING), and positions with a signaled-but-unconfirmed exit ('closing') are both
     // still live trades from the user's perspective — only 'closed' should drop off this tab.
-    // Fetching unfiltered (no ?state=) and filtering client-side avoids a second round trip and
-    // matches worker-positions' single-exact-match `state` query param (no OR support server-side).
+    // worker-positions PR #333 added multi-state server-side filtering (`?state=a,b,c`, a
+    // parameterized IN clause) specifically so this list doesn't have to fetch a user's entire
+    // trade history to render the handful of live positions — see that PR for why the original
+    // fix here (unfiltered fetch + client-side-only filter) was a payload-growth problem.
     const POS_VISIBLE_STATES = new Set(['open', 'managing', 'closing']);
 
     async function posLoadPositions() {
       state.positionsError = false;
       try {
-        const data = await posApi('/positions', { method: 'GET' });
+        const data = await posApi('/positions?state=' + [...POS_VISIBLE_STATES].join(','), { method: 'GET' });
         const all = (data && data.positions) || [];
+        // Client-side filter kept as defense-in-depth (e.g. a future worker-side state this
+        // build doesn't know about yet) — no longer load-bearing for excluding 'closed'.
         state.positionsData = all.filter(p => POS_VISIBLE_STATES.has(p.state));
       } catch (e) {
         if (e && e.unauth) {

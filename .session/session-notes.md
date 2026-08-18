@@ -6,6 +6,52 @@
 
 ---
 
+## 2026-08-18 — WS5-6: PWA switched to the multi-state /positions filter (follow-up to PR #333)
+
+**Status: safe to close.** Closes out the review chain started on PR #331: doc fix → PR #331
+(merged) → backend multi-state filter → PR #333 (merged, deploy independently verified) → this
+PR, the PWA half.
+
+**Verification before starting:** did not take "merged and deployed" on the user's word alone —
+`git log` confirmed PR #333's merge commit on `origin/claude/elegant-babbage-hlxnfy`, and a direct
+Cloudflare API query (`GET .../workers/scripts`) showed `finviz-positions` `modified_on` ~22
+seconds after the merge commit's timestamp — the new worker code is genuinely live, not just a
+green CI checkmark (same discipline as the 2026-08-16 PR #322 entry below).
+
+**What changed:** `posLoadPositions()` (`docs/index.html`) now calls
+`GET /positions?state=open,managing,closing` instead of an unfiltered fetch. `POS_VISIBLE_STATES`
+client-side filtering stays (defense-in-depth against a future worker-side state this build
+doesn't know about) but is no longer what excludes `closed` positions from the payload — the
+server does that now, so a user with a year of trade history no longer re-transfers all of it on
+every Positions tab load. `docs/CLAUDE.md` and README's `POS_VISIBLE_STATES` rows updated to
+describe the dual role. WS5-6 marked done in SPRINT.md.
+
+**Release triplet: judged N/A, not skipped by omission.** This is a pure payload-efficiency
+change — the set of positions rendered and how they look is identical before/after; nothing new
+is visible or actionable for the user. The repo's release-triplet rule is scoped to user-facing
+changes, and the "housekeeping PRs skip it" carve-out doesn't quite fit either (this isn't a typo
+fix), so calling it out explicitly here rather than silently leaving `releases.json`/`sw.js`
+untouched.
+
+**Not independently Playwright-verified in this session** — `playwright` isn't installed in this
+sandbox (`ModuleNotFoundError`) and installing it is the known cloud-session gap documented in
+`knowledge/investigations/playwright-cloud-session-testing.md`. Did check: (1) `node --check` on
+the extracted `<script>` block — no syntax errors; (2) `tests/test_pwa_positions.py`'s existing
+mock intercepts `**/positions**` (wildcard), so the added query string doesn't break its route
+matching, and its mock server doesn't itself filter by the `state` param (returns all seeded rows
+regardless) — the existing `test_managing_and_closing_positions_still_render` test still exercises
+the real code path (client-side filter) and should still pass unmodified, but this was reasoned
+through, not run. **Recommend the owner (or a session with Playwright available) run
+`python3 -m pytest tests/test_pwa_positions.py -v` before/shortly after this merges** as the one
+gap in this chain's verification.
+
+**Next steps:** none outstanding from this specific thread. The advisor's other note — that
+WS5-5's grace window will eventually need a shape this plain state param can't express, and that
+pagination is the more durable long-term fix — is already captured in PR #333's description and
+SPRINT WS5-5; no new tracking needed here.
+
+---
+
 ## 2026-08-18 — GET /positions multi-state filter (backend-only, follow-up to PR #331)
 
 **Status: safe to close.** Reviewed PR #331 (Positions tab empty-state fix), pushed a small

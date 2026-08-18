@@ -62,7 +62,7 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `WATCHLIST_TTL_SESSIONS` | `10` | Watch card "N mornings left" — display-only mirror of the worker's `WATCHLIST_TTL_SESSIONS` (worker-positions), which owns the real `sessions_remaining` counter. |
 | `WATCHLIST_EXPIRING_AT` | `1` | Watch card footer: `sessions_remaining <= this` shows the amber "expiring" cue (e.g. "1 morning left" in amber). |
 | `WATCHLIST_GAUGE_PAD` | `0.08` | Fraction of the price domain padded on each end of a watch card's levels gauge so end markers (prior high/low, your level) aren't clipped at the track edges. |
-| `POS_VISIBLE_STATES` | `{'open','managing','closing'}` | Positions tab: worker `state` values that still render as a card (client-side filter over the unfiltered `GET /positions` response — the worker's `state` query param is a single exact match, no OR support). Only `closed` drops off. |
+| `POS_VISIBLE_STATES` | `{'open','managing','closing'}` | Positions tab: worker `state` values that render as a card. Also the server-side filter value (`?state=open,managing,closing`, worker-positions PR #333's multi-state `IN` clause) — the client-side check is now defense-in-depth, not load-bearing. Only `closed` drops off. |
 | `POS_STATE_BADGE` | see code | Positions tab: small uppercase badge on `managing`/`closing` cards (`closing` = amber "exit pending"); `open` gets no badge. |
 
 ## Watchlist (Morning + Positions, WS5 §8b)
@@ -128,13 +128,19 @@ the empty state — a 404 is expected, never an error.
 ## Positions tab (WS5 phase 1, #309)
 
 Read-only. Signed out → a passphrase sign-in card (`posLogin` → `POST /auth/login` → bearer token in
-`localStorage['fv_pos_token']`). Signed in → `GET /positions` (unfiltered) renders frozen
-position cards (entry/stop/risk/qty) for `state` in `open`/`managing`/`closing`
-(`POS_VISIBLE_STATES`, filtered client-side — only `closed` drops off). This was fixed 2026-08-17:
-the original phase-1 code queried `?state=open` only, which predates the phase-3a `advance()`
-engine's `open → managing` auto-transition (`src/advance.js`, first successful advance with no
-exit signal) — once the daily sweep (held-feed job, 17:30 ET) advances a position past day one, it
-silently vanished from the tab even though it was still a live trade. `managing`/`closing` cards
+`localStorage['fv_pos_token']`). Signed in → `GET /positions?state=open,managing,closing` renders
+frozen position cards (entry/stop/risk/qty) for `state` in `open`/`managing`/`closing`
+(`POS_VISIBLE_STATES`, also re-checked client-side as defense-in-depth — only `closed` drops off).
+This was fixed 2026-08-17: the original phase-1 code queried `?state=open` only, which predates the
+phase-3a `advance()` engine's `open → managing` auto-transition (`src/advance.js`, first successful
+advance with no exit signal) — once the daily sweep (held-feed job, 17:30 ET) advances a position
+past day one, it silently vanished from the tab even though it was still a live trade. The initial
+fix (PR #331) fetched unfiltered and filtered entirely client-side, because `worker-positions`'s
+`state` param only supported a single exact match at the time — that meant re-transferring a user's
+**entire** trade history (every `closed` position ever logged) on every tab load.
+`worker-positions` PR #333 added multi-state server-side filtering (`?state=a,b,c`, a parameterized
+`IN` clause), and this PR (WS5-6) switched the PWA to use it — payload is proportional to live
+positions again, not total history. `managing`/`closing` cards
 get a small badge (`POS_STATE_BADGE`) since there's no confirmation-strip UI yet for `closing`
 (exit signaled, awaiting the owner's confirm/revert) — that's phase 4 in
 `worker-positions/CLAUDE.md`. No stop management or alerts yet beyond what the engine already
