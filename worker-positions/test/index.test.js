@@ -111,6 +111,75 @@ describe("create + list", () => {
   });
 });
 
+describe("GET /positions state filtering", () => {
+  it("no ?state= returns every state, matching pre-filter behavior", async () => {
+    const token = await mintToken(env, "owner");
+    env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "open" });
+    env.POSITIONS_DB._seedPosition({ ticker: "MSFT", state: "managing" });
+    env.POSITIONS_DB._seedPosition({ ticker: "TSLA", state: "closing" });
+    env.POSITIONS_DB._seedPosition({ ticker: "NVDA", state: "closed" });
+    const res = await handleRequest(req("/positions", { token }), env);
+    expect((await res.json()).positions).toHaveLength(4);
+  });
+
+  it("a single state filters exactly like before (?state=open)", async () => {
+    const token = await mintToken(env, "owner");
+    env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "open" });
+    env.POSITIONS_DB._seedPosition({ ticker: "MSFT", state: "closed" });
+    const res = await handleRequest(req("/positions?state=open", { token }), env);
+    const { positions } = await res.json();
+    expect(positions).toHaveLength(1);
+    expect(positions[0].ticker).toBe("AAPL");
+  });
+
+  it("comma-separated states return the union, excluding closed", async () => {
+    const token = await mintToken(env, "owner");
+    env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "open" });
+    env.POSITIONS_DB._seedPosition({ ticker: "MSFT", state: "managing" });
+    env.POSITIONS_DB._seedPosition({ ticker: "TSLA", state: "closing" });
+    env.POSITIONS_DB._seedPosition({ ticker: "NVDA", state: "closed" });
+    const res = await handleRequest(req("/positions?state=open,managing,closing", { token }), env);
+    const tickers = (await res.json()).positions.map((p) => p.ticker).sort();
+    expect(tickers).toEqual(["AAPL", "MSFT", "TSLA"]);
+  });
+
+  it("repeated ?state= params are equivalent to comma-separated", async () => {
+    const token = await mintToken(env, "owner");
+    env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "open" });
+    env.POSITIONS_DB._seedPosition({ ticker: "MSFT", state: "managing" });
+    const res = await handleRequest(req("/positions?state=open&state=managing", { token }), env);
+    const tickers = (await res.json()).positions.map((p) => p.ticker).sort();
+    expect(tickers).toEqual(["AAPL", "MSFT"]);
+  });
+
+  it("dedupes repeated/comma-duplicated values", async () => {
+    const token = await mintToken(env, "owner");
+    env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "open" });
+    const res = await handleRequest(req("/positions?state=open,open&state=open", { token }), env);
+    expect((await res.json()).positions).toHaveLength(1);
+  });
+
+  it("an unknown state value is a 400, not an empty result", async () => {
+    const token = await mintToken(env, "owner");
+    env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "open" });
+    const res = await handleRequest(req("/positions?state=bogus", { token }), env);
+    expect(res.status).toBe(400);
+    const badMixed = await handleRequest(req("/positions?state=open,bogus", { token }), env);
+    expect(badMixed.status).toBe(400);
+  });
+
+  it("multi-state filtering still respects the user_id tenant boundary", async () => {
+    const tokenOwner = await mintToken(env, "owner");
+    const tokenOther = await mintToken(env, "someone_else");
+    env.POSITIONS_DB._seedPosition({ user_id: "owner", ticker: "AAPL", state: "open" });
+    env.POSITIONS_DB._seedPosition({ user_id: "someone_else", ticker: "MSFT", state: "open" });
+    const res = await handleRequest(req("/positions?state=open,managing,closing", { token: tokenOther }), env);
+    const { positions } = await res.json();
+    expect(positions).toHaveLength(1);
+    expect(positions[0].ticker).toBe("MSFT");
+  });
+});
+
 describe("WS5 phase 2 — held-tickers feed machine routes", () => {
   const ingestReq = (path, { method = "GET", body } = {}) => {
     const headers = { authorization: `Bearer ${INGEST_TOKEN}` };

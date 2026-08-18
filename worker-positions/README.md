@@ -105,7 +105,7 @@ by construction (the engine runs exactly when fresh bars exist) and keeps us cle
 | `GET` | `/health` | none | liveness |
 | `POST` | `/auth/login` | passphrase in body | exchange the login passphrase for a bearer token |
 | `POST` | `/positions` | Bearer | create a position (one **lot**) + its `entered` event — the ticker-generic "I took it" write path (§ 8a) |
-| `GET` | `/positions?state=` | Bearer | list the caller's positions, newest first (optional state filter) |
+| `GET` | `/positions?state=` | Bearer | list the caller's positions, newest first. `state` is optional and accepts one or more values — repeated (`?state=open&state=managing`) and/or comma-separated (`?state=open,managing,closing`) are both accepted and merged; omitted/empty = all states. An unrecognized state value 400s rather than silently returning zero rows. |
 | `GET` | `/held-tickers` | Service token | WS5 phase 2: the union of open/managing/closing tickers the held feed must scrape (`{ tickers: [...] }`) |
 | `POST` | `/ingest/quotes` | Service token | WS5 phase 2: append-only batch write of a day's scraped bars into `ticker_quotes` (`{ trade_date, collected_at, quotes:[...] }` → `{ written }`) |
 | `POST` | `/advance?dry_run=1` | Service token **or** Bearer | WS5 phase 3b: run the daily engine sweep over stored bars. Service caller gets **counts only**; the owner bearer additionally gets per-position `results`. |

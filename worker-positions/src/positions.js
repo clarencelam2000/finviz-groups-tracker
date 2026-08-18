@@ -8,6 +8,12 @@ import { etDateStr, isoUtc } from "./time.js";
 export const STOP_BASES = ["prior_day_low", "todays_low", "20ma", "50ma", "manual"];
 const TICKER_RE = /^[A-Z][A-Z0-9.\-]{0,9}$/; // 1–10 chars, letters/digits/./-, starts with a letter.
 
+// Every value the `state` column can hold. Kept separate from quotes.js's HELD_STATES (which
+// happens to equal LIVE_STATES today but answers a different question — "should we poll a quote
+// for it" — and will diverge once WS5-5's closed-position grace window ships).
+export const ALL_STATES = ["open", "managing", "closing", "closed"];
+export const LIVE_STATES = ["open", "managing", "closing"];
+
 function isFiniteNumber(x) {
   return typeof x === "number" && Number.isFinite(x);
 }
@@ -144,12 +150,21 @@ export async function insertPosition(db, row) {
   return row;
 }
 
-// List a user's positions, newest first. `state` optionally filters (e.g. 'open'); omitted = all.
-// ALWAYS scoped by user_id — the app-layer tenant boundary (D1 has no RLS; ADR-012).
+// List a user's positions, newest first. `state` optionally filters — a single state string, an
+// array of states (IN clause), or omitted/empty for all. ALWAYS scoped by user_id — the app-layer
+// tenant boundary (D1 has no RLS; ADR-012). Callers are responsible for validating `state` values
+// against ALL_STATES before calling (see index.js) — this function trusts its input.
 export async function listPositions(db, user_id, state = null) {
-  const stmt = state
-    ? db.prepare("SELECT * FROM positions WHERE user_id = ? AND state = ? ORDER BY opened_at DESC").bind(user_id, state)
-    : db.prepare("SELECT * FROM positions WHERE user_id = ? ORDER BY opened_at DESC").bind(user_id);
+  const states = state == null ? [] : Array.isArray(state) ? state : [state];
+  let stmt;
+  if (states.length === 0) {
+    stmt = db.prepare("SELECT * FROM positions WHERE user_id = ? ORDER BY opened_at DESC").bind(user_id);
+  } else {
+    const marks = states.map(() => "?").join(", ");
+    stmt = db
+      .prepare(`SELECT * FROM positions WHERE user_id = ? AND state IN (${marks}) ORDER BY opened_at DESC`)
+      .bind(user_id, ...states);
+  }
   const { results } = await stmt.all();
   return results.map((r) => ({ ...r, meta: safeParse(r.meta) }));
 }

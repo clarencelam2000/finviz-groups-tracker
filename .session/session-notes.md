@@ -6,6 +6,54 @@
 
 ---
 
+## 2026-08-18 — GET /positions multi-state filter (backend-only, follow-up to PR #331)
+
+**Status: safe to close.** Reviewed PR #331 (Positions tab empty-state fix), pushed a small
+doc-only follow-up directly onto its branch (README.md + docs/CLAUDE.md rows for the
+`POS_VISIBLE_STATES`/`POS_STATE_BADGE` constants it introduced but hadn't documented — merged as
+part of #331), then scoped the larger finding into its own backend-only PR (this one).
+
+**Finding:** PR #331 fixed the Positions tab dropping `managing`/`closing` positions by having the
+PWA call `GET /positions` **unfiltered** and filter client-side (`POS_VISIBLE_STATES`), because
+`listPositions()`'s `state` query param only supported a single exact match — no way to ask for
+"open OR managing OR closing" server-side. That means every load re-transfers a user's **entire**
+trade history (all `closed` positions ever logged), not just the handful of live ones.
+
+**What landed (this PR, backend-only):**
+- `worker-positions/src/positions.js`: `listPositions()` now accepts a single state, an array of
+  states (→ parameterized `state IN (?, ?, ?)`), or nothing (all states) — same function, no new
+  caller signature to remember. New `ALL_STATES`/`LIVE_STATES` exports. Deliberately did **not**
+  reuse `quotes.js`'s `HELD_STATES` (same values today, different question — "should we poll a
+  quote" vs "should the tab show it" — will diverge once WS5-5's grace window ships).
+- `worker-positions/src/index.js`: `GET /positions?state=` now accepts repeated params
+  (`?state=open&state=managing`) and/or comma-separated (`?state=open,managing,closing`), dedupes,
+  and 400s on an unrecognized state value instead of silently returning zero rows.
+- 7 new tests in `test/index.test.js` (union filtering, repeated-vs-comma equivalence, dedup,
+  unknown-state 400, tenant-scoping still enforced on the multi-state path). 216/216 passing.
+- README.md § Endpoints row updated for the new query-param shape.
+
+**Deliberately NOT in this PR — the PWA change.** Got an Opus-advisor adversarial review of the
+plan first, which flagged a real deploy-ordering hazard: the worker auto-deploys on merge
+(`deploy-workers.yml`) but the PWA is a cached GitHub-Pages page behind a service worker, so if the
+PWA shipped `?state=open,managing,closing` *before* this worker change is live, the old worker
+would exact-match on that literal string, match nothing, and the Positions tab would go **empty**
+— a fail-closed regression on live trades, worse than the bug PR #331 just fixed. Sequencing:
+confirm this worker PR is merged AND deployed (check `deploy-workers.yml`'s run + Cloudflare's
+`workers/scripts` `modified_on`, same verification pattern as the 2026-08-16 entry below) before
+opening the PWA follow-up that switches `posLoadPositions()` off the unfiltered fetch.
+
+**Next steps (not yet tracked as a SPRINT/issue item — do so before/with the PWA follow-up PR):**
+1. Confirm this PR merges + deploys (verify against Cloudflare, not just green CI).
+2. Open the PWA follow-up: `posLoadPositions()` → `/positions?state=open,managing,closing`; keep
+   `POS_VISIBLE_STATES` as cheap defense-in-depth. Touches `docs/index.html` → triggers the
+   release-triplet rule (`releases.json` + `sw.js` bump in the same PR).
+3. Advisor flagged that WS5-5 (closed-position grace window, already tracked) will need
+   `state IN (...) OR (closed AND recently)` — not expressible via this plain state-list param —
+   so this IN-clause shape is a stepping stone, not the final shape. Consider `?limit=`/pagination
+   as the more durable general fix once WS5-5 lands, rather than continuing to grow the state DSL.
+
+---
+
 ## 2026-08-16 — PR #322 ops-verification: migration applied, deploy confirmed, bars claim corrected
 
 **Status: safe to close — all four ops items resolved or explicitly flagged as needing a weekday
