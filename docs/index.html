@@ -484,8 +484,9 @@
       // (plain button). Cleared on Cancel or a successful POST.
       ws5Card: {},
       // WS5 Positions tab (read-only, phase 1): null = not yet fetched this session (or
-      // signed out); [] = signed in with zero open positions; array = open positions from
-      // GET /positions?state=open. Reset to null on sign-in/sign-out so a switch always
+      // signed out); [] = signed in with zero open positions; array = non-closed positions
+      // (state in open/managing/closing — see posLoadPositions) from GET /positions (unfiltered,
+      // then filtered client-side). Reset to null on sign-in/sign-out so a switch always
       // re-fetches fresh state.
       positionsData: null,
       // true when the last posLoadPositions() fetch failed for a reason other than 401
@@ -5713,11 +5714,19 @@
       renderPositions();
     };
 
+    // Positions the engine has advanced past their first bar move to 'managing' (src/advance.js
+    // OPEN_TO_MANAGING), and positions with a signaled-but-unconfirmed exit ('closing') are both
+    // still live trades from the user's perspective — only 'closed' should drop off this tab.
+    // Fetching unfiltered (no ?state=) and filtering client-side avoids a second round trip and
+    // matches worker-positions' single-exact-match `state` query param (no OR support server-side).
+    const POS_VISIBLE_STATES = new Set(['open', 'managing', 'closing']);
+
     async function posLoadPositions() {
       state.positionsError = false;
       try {
-        const data = await posApi('/positions?state=open', { method: 'GET' });
-        state.positionsData = (data && data.positions) || [];
+        const data = await posApi('/positions', { method: 'GET' });
+        const all = (data && data.positions) || [];
+        state.positionsData = all.filter(p => POS_VISIBLE_STATES.has(p.state));
       } catch (e) {
         if (e && e.unauth) {
           // A 401 already cleared the token (posApi) — reset to null so the signed-out
@@ -5739,10 +5748,19 @@
     // management yet, so they're always equal today, but the read prefers the "current"
     // fields so this doesn't silently go stale once phase 3 ships stop/partial-exit
     // management.
+    // 'open' shows no badge (default/expected state); the other two visible states get a small
+    // cue since phase 1 has no confirmation-strip UI yet (worker-positions/CLAUDE.md phase 4) —
+    // a 'closing' position is a signaled-but-unconfirmed exit and needs the owner's attention.
+    const POS_STATE_BADGE = {
+      managing: '<span class="text-[10px] uppercase tracking-wide text-slate-500 ml-1.5">managing</span>',
+      closing: '<span class="text-[10px] uppercase tracking-wide text-amber-400 ml-1.5">exit pending</span>',
+    };
+
     function posCardHtml(p) {
       const ticker = escapeHtml(p.ticker || '');
       const source = escapeHtml((p.meta && p.meta.source) || p.source || 'manual');
       const entryDate = escapeHtml(p.entry_date || p.created_at || '');
+      const stateBadge = POS_STATE_BADGE[p.state] || '';
       const entry = parseFloat(p.entry_price);
       const stop = parseFloat(p.current_stop != null ? p.current_stop : p.initial_stop);
       const qty = parseFloat(p.remaining_qty != null ? p.remaining_qty : p.initial_qty);
@@ -5752,7 +5770,7 @@
       return `
         <div class="bg-slate-800 border border-slate-700 rounded-lg px-3.5 py-3">
           <div class="flex justify-between items-center">
-            <span><span class="font-bold text-sm tracking-wide">${ticker}</span> <span class="text-xs text-slate-500">· ${source} · ${entryDate}</span></span>
+            <span><span class="font-bold text-sm tracking-wide">${ticker}</span> <span class="text-xs text-slate-500">· ${source} · ${entryDate}</span>${stateBadge}</span>
           </div>
           ${_mKv('Entry', '$' + (isNaN(entry) ? '—' : entry.toFixed(2)))}
           ${_mKv('Stop', '$' + (isNaN(stop) ? '—' : stop.toFixed(2)) + ' (' + escapeHtml(basisLabel) + ')')}
