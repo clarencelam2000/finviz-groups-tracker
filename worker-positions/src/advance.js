@@ -24,6 +24,12 @@ export const ENGINE_CONFIG = Object.freeze({
   // R-multiple at which profit_floor ratchets up to entry (breakeven). Owner: +1R exactly, not a
   // price-buffer variant (§6, alignment 2026-08-10).
   BREAKEVEN_R: 1.0,
+  // Price basis the breakeven ratchet keys on: 'high' = ratchet the moment the intraday HIGH tags
+  // +BREAKEVEN_R ("if it was ever +1R in hand, never give it all back"); 'close' = only when the
+  // daily CLOSE confirms +1R (spike-and-fade never protected). Owner: 'high' (2026-08-19, issue
+  // #335 — NVT tagged +1R at 177.38, closed a nickel short at 177.21, gapped down next day to a
+  // ~−1R loss a close-based floor never protected). Flip to 'close' here to restore the old behavior.
+  BREAKEVEN_TRIGGER: "high",
   // Widen the trail from the 20MA to the 50MA once the 50MA has risen above entry. Global default;
   // a single position opts out via meta.widen_enabled=false (§6 per-position toggle).
   WIDEN_TRAIL_BASIS: true,
@@ -209,8 +215,10 @@ export function advance(pos, bar, cfg = ENGINE_CONFIG) {
   // ── STILL MANAGING: stop advancement ────────────────────────────────────────────────────────
 
   // Profit floor: monotonic non-decreasing (§4 the ONLY monotonic quantity). Ratchets to entry at
-  // +BREAKEVEN_R — "once past breakeven, never red again".
-  if (rMultiple(next, bar.close) >= cfg.BREAKEVEN_R) {
+  // +BREAKEVEN_R — "once past breakeven, never red again". Keys on BREAKEVEN_TRIGGER's price (high
+  // by default — protects a trade that tagged +1R intraday even if it closed back below; see #335).
+  const bkTriggerPrice = cfg.BREAKEVEN_TRIGGER === "close" ? bar.close : bar.high;
+  if (rMultiple(next, bkTriggerPrice) >= cfg.BREAKEVEN_R) {
     next.profit_floor = Math.max(next.profit_floor, next.entry_price);
   }
 
@@ -260,7 +268,10 @@ export function advance(pos, bar, cfg = ENGINE_CONFIG) {
   // ── EARNINGS guardrail (§4): FLAG only, never auto-exit — the user integrates earnings manually.
   // Refresh days_to_earnings from the bar if the feed derived a fresh value.
   if (isNum(bar.days_to_earnings)) next.days_to_earnings = Math.trunc(bar.days_to_earnings);
-  if (isNum(next.days_to_earnings) && next.days_to_earnings <= cfg.EARNINGS_WARN_SESSIONS) {
+  // Lower bound is load-bearing: parseEarningsToDays returns a SIGNED calendar-day delta that stays
+  // negative for up to 180 days after a PAST earnings date, so without `>= 0` the warning re-fires
+  // every session on an already-reported quarter (issue #335).
+  if (isNum(next.days_to_earnings) && next.days_to_earnings >= 0 && next.days_to_earnings <= cfg.EARNINGS_WARN_SESSIONS) {
     events.push({
       event_type: "note",
       payload: { earnings_warning: true, days_to_earnings: next.days_to_earnings },

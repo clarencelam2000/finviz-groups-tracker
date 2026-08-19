@@ -620,3 +620,48 @@ def test_caution_overlay_shows(server):
         html = page.inner_html("#positions-content")
         assert "1 of 2 closes below the 20MA" in html
         browser.close()
+
+
+def test_earnings_overlay_shows_within_caution_window(server):
+    # Overlay (#335): days_to_earnings within EARNINGS_CAUTION_DAYS renders the calendar flag.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(
+            ticker="ANET", entry_price=100.00, initial_stop=94.00, current_stop=96.00,
+            remaining_qty=50, initial_qty=50, last_close=108.00, days_to_earnings=4,
+        )
+        _mock_worker(page, positions_rows=[row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        assert "Earnings in 4 days" in html
+        assert "📅" in html
+        browser.close()
+
+
+def test_earnings_overlay_hidden_for_past_earnings_date(server):
+    # Overlay (#335): a negative days_to_earnings (past earnings) must never render the flag,
+    # even against an un-fixed engine signal -- the PWA carries its own >= 0 client guard.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(
+            ticker="ANET", entry_price=100.00, initial_stop=94.00, current_stop=96.00,
+            remaining_qty=50, initial_qty=50, last_close=108.00, days_to_earnings=-5,
+        )
+        _mock_worker(page, positions_rows=[row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        assert "📅" not in html
+        assert "Earnings" not in html
+        browser.close()

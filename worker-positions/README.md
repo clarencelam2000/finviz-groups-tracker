@@ -195,6 +195,7 @@ edit `ENGINE_CONFIG` (each has an in-code comment) — no other engine code refe
 | Name | Default | Controls |
 |---|---|---|
 | `BREAKEVEN_R` | `1.0` | R-multiple at which `profit_floor` ratchets up to entry (breakeven). The floor is the only monotonic quantity; `current_stop` is not (the widen lowers it on purpose). |
+| `BREAKEVEN_TRIGGER` | `'high'` | Price basis the breakeven ratchet keys on: `'high'` ratchets the moment the intraday high tags `+BREAKEVEN_R`; `'close'` requires the daily close to confirm it (spike-and-fade unprotected). Owner-set `'high'` 2026-08-19, issue #335. Flip via a per-position `meta.config.BREAKEVEN_TRIGGER` override or by editing the global default. |
 | `WIDEN_TRAIL_BASIS` | `true` | Widen the trail 20MA→50MA once the 50MA rises above entry. Per-position opt-out via `meta.widen_enabled=false`. |
 | `TRIM_START_ATR` | `7` | First whole ATR-extension-from-50MA level that triggers a scale-out trim. |
 | `TRIM_PCT` | `0.10` | Fraction of **remaining** qty trimmed at each newly-crossed whole ATR level (asymptotic — never trims a lot to zero). Idempotent + catch-up-correct via the `highest_trim_atr` ledger. |
