@@ -242,6 +242,156 @@ describe("WS5 phase 2 — held-tickers feed machine routes", () => {
   });
 });
 
+describe("WS5-7 — GET /positions latest-bar join", () => {
+  it("returns the LATEST bar's fields when multiple bars exist for the ticker", async () => {
+    const token = await mintToken(env, "owner");
+    env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "managing" });
+    env.POSITIONS_DB._seedQuote({
+      ticker: "AAPL", trade_date: "2026-08-10", close: 220, open: 218, high: 221, low: 217,
+      change_pct: 1.1, volume: 900000, raw: JSON.stringify({ "Average Volume": "50M" }),
+    });
+    env.POSITIONS_DB._seedQuote({
+      ticker: "AAPL", trade_date: "2026-08-11", close: 225, open: 221, high: 226, low: 220,
+      change_pct: 2.3, volume: 950000, raw: JSON.stringify({ "Average Volume": "51M" }),
+    });
+    const res = await handleRequest(req("/positions", { token }), env);
+    const { positions } = await res.json();
+    expect(positions).toHaveLength(1);
+    const p = positions[0];
+    expect(p.last_bar_date).toBe("2026-08-11"); // the later of the two seeded bars
+    expect(p.last_close).toBe(225);
+    expect(p.last_open).toBe(221);
+    expect(p.last_high).toBe(226);
+    expect(p.last_low).toBe(220);
+    expect(p.last_change_pct).toBe(2.3);
+    expect(p.last_volume).toBe(950000);
+    expect(JSON.parse(p.last_raw)["Average Volume"]).toBe("51M");
+  });
+
+  it("a position with no bar returns null last_* fields, no throw", async () => {
+    const token = await mintToken(env, "owner");
+    env.POSITIONS_DB._seedPosition({ ticker: "ZZZZ", state: "open" });
+    const res = await handleRequest(req("/positions", { token }), env);
+    expect(res.status).toBe(200);
+    const { positions } = await res.json();
+    expect(positions).toHaveLength(1);
+    for (const f of ["last_close", "last_bar_date", "last_open", "last_high", "last_low", "last_change_pct", "last_volume", "last_raw"]) {
+      expect(positions[0][f]).toBeNull();
+    }
+  });
+
+  it("tenant scoping holds on the joined query; a shared ticker's bar is not a cross-tenant leak", async () => {
+    const tokenOwner = await mintToken(env, "owner");
+    const tokenOther = await mintToken(env, "someone_else");
+    env.POSITIONS_DB._seedPosition({ user_id: "owner", ticker: "AAPL", state: "open" });
+    env.POSITIONS_DB._seedQuote({ ticker: "AAPL", trade_date: "2026-08-11", close: 225 });
+    const otherList = await handleRequest(req("/positions", { token: tokenOther }), env);
+    expect((await otherList.json()).positions).toHaveLength(0);
+    const ownerList = await handleRequest(req("/positions", { token: tokenOwner }), env);
+    const { positions } = await ownerList.json();
+    expect(positions).toHaveLength(1);
+    expect(positions[0].last_close).toBe(225); // the public bar still joins for the row's actual owner
+  });
+});
+
+describe("WS5-7 — GET /positions inline events + stop_ack_value", () => {
+  it("attaches a newest-first events array capped at 8, payloads parsed", async () => {
+    const token = await mintToken(env, "owner");
+    const p = env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "managing" });
+    // Seed 10 stop_moved events with increasing ts so newest-first + cap-at-8 is observable.
+    for (let i = 0; i < 10; i++) {
+      await env.POSITIONS_DB
+        .prepare(
+          `INSERT INTO position_events (trade_id, user_id, ts, trade_date, event_type, payload)
+           VALUES (?, ?, ?, ?, 'stop_moved', ?)`
+        )
+        .bind(p.trade_id, "owner", `2026-08-${String(i + 1).padStart(2, "0")}T12:00:00Z`, "2026-08-11", JSON.stringify({ to: 90 + i }))
+        .run();
+    }
+    const res = await handleRequest(req("/positions", { token }), env);
+    const { positions } = await res.json();
+    expect(positions[0].events).toHaveLength(8);
+    expect(positions[0].events[0].payload.to).toBe(99); // newest (i=9) first
+    expect(positions[0].events[7].payload.to).toBe(92); // 8th newest (i=2)
+  });
+
+  it("zero positions skips the events query and does not throw", async () => {
+    const token = await mintToken(env, "owner");
+    const res = await handleRequest(req("/positions", { token }), env);
+    expect(res.status).toBe(200);
+    expect((await res.json()).positions).toEqual([]);
+  });
+
+  it("stop_ack_value is null when no stop_ack event exists", async () => {
+    const token = await mintToken(env, "owner");
+    env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "managing", current_stop: 100 });
+    const res = await handleRequest(req("/positions", { token }), env);
+    const { positions } = await res.json();
+    expect(positions[0].stop_ack_value).toBeNull();
+  });
+});
+
+describe("WS5-7 — POST /positions/:id/ack-stop", () => {
+  it("acks a managing position with current_stop set -> 200, one stop_ack event, reflected in GET /positions", async () => {
+    const token = await mintToken(env, "owner");
+    const p = env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "managing", current_stop: 105 });
+    const res = await handleRequest(req(`/positions/${p.trade_id}/ack-stop`, { method: "POST", token, body: {} }), env);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.ok).toBe(true);
+    expect(body.stop_ack_value).toBe(105);
+    const events = env.POSITIONS_DB._events().filter((e) => e.event_type === "stop_ack");
+    expect(events).toHaveLength(1);
+    expect(JSON.parse(events[0].payload).value).toBe(105);
+
+    const list = await handleRequest(req("/positions", { token }), env);
+    const { positions } = await list.json();
+    expect(positions[0].stop_ack_value).toBe(105);
+  });
+
+  it("idempotent: two acks at the same current_stop produce exactly ONE stop_ack event", async () => {
+    const token = await mintToken(env, "owner");
+    const p = env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "managing", current_stop: 105 });
+    await handleRequest(req(`/positions/${p.trade_id}/ack-stop`, { method: "POST", token, body: {} }), env);
+    await handleRequest(req(`/positions/${p.trade_id}/ack-stop`, { method: "POST", token, body: {} }), env);
+    const events = env.POSITIONS_DB._events().filter((e) => e.event_type === "stop_ack");
+    expect(events).toHaveLength(1);
+  });
+
+  it("after the stop changes, acking again appends a NEW stop_ack event with the new value", async () => {
+    const token = await mintToken(env, "owner");
+    const p = env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "managing", current_stop: 105 });
+    await handleRequest(req(`/positions/${p.trade_id}/ack-stop`, { method: "POST", token, body: {} }), env);
+    // Simulate the engine/owner moving the stop.
+    await env.POSITIONS_DB.prepare("UPDATE positions SET current_stop = ? WHERE trade_id = ?").bind(110, p.trade_id).run();
+    const res = await handleRequest(req(`/positions/${p.trade_id}/ack-stop`, { method: "POST", token, body: {} }), env);
+    expect((await res.json()).stop_ack_value).toBe(110);
+    const events = env.POSITIONS_DB._events().filter((e) => e.event_type === "stop_ack");
+    expect(events).toHaveLength(2);
+
+    const list = await handleRequest(req("/positions", { token }), env);
+    const { positions } = await list.json();
+    expect(positions[0].stop_ack_value).toBe(110); // reflects the newest
+  });
+
+  it("404s on a non-existent / other-user trade_id", async () => {
+    const tokenOwner = await mintToken(env, "owner");
+    const tokenOther = await mintToken(env, "someone_else");
+    const ghost = await handleRequest(req(`/positions/nope/ack-stop`, { method: "POST", token: tokenOwner, body: {} }), env);
+    expect(ghost.status).toBe(404);
+
+    const p = env.POSITIONS_DB._seedPosition({ user_id: "owner", ticker: "AAPL", state: "managing", current_stop: 105 });
+    const wrongUser = await handleRequest(req(`/positions/${p.trade_id}/ack-stop`, { method: "POST", token: tokenOther, body: {} }), env);
+    expect(wrongUser.status).toBe(404);
+  });
+
+  it("401s without an owner bearer (below the auth gate)", async () => {
+    const p = env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "managing", current_stop: 105 });
+    const res = await handleRequest(req(`/positions/${p.trade_id}/ack-stop`, { method: "POST", body: {} }), env);
+    expect(res.status).toBe(401);
+  });
+});
+
 describe("WS5 §8b P1 — personal watchlist routes (issue #319)", () => {
   const ingestReq = (path, { method = "GET", body } = {}) => {
     const headers = { authorization: `Bearer ${INGEST_TOKEN}` };

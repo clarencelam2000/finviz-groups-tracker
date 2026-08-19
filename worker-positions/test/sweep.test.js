@@ -14,6 +14,7 @@ import {
   distinctTradeDates,
   loadClosingPositions,
 } from "../src/sweep.js";
+import { ackStop } from "../src/transitions.js";
 
 // ── Fixture helpers ──────────────────────────────────────────────────────────────────────────
 
@@ -555,5 +556,36 @@ describe("sweep — auto-confirm of stuck closing positions", () => {
     db._seedQuote({ ticker: "VRT", trade_date: "2026-02-12", close: 1 }); // same date, dedup
     db._seedQuote({ ticker: "AAPL", trade_date: "2026-02-11", close: 1 });
     expect(await distinctTradeDates(db)).toEqual(["2026-02-11", "2026-02-12"]);
+  });
+});
+
+// ── WS5-7 persist-disjointness guard: the engine (sweep) path and the ack-stop event path must
+// never touch each other's writes. ackStop() writes NO `positions` column (see its comment in
+// transitions.js); a sweep run must never create, alter, or remove a stop_ack event. ─────────────
+describe("persist-disjointness — sweep vs. ackStop", () => {
+  it("a sweep run leaves an existing stop_ack event untouched and appends none of its own", async () => {
+    const db = makeD1();
+    const p = seedPos(db, { state: "managing", current_stop: 90, last_advanced_date: null });
+    await ackStop(db, { user_id: "owner", trade_id: p.trade_id, now: new Date("2026-08-01T20:00:00Z") });
+    const ackBefore = db._events().filter((e) => e.event_type === "stop_ack");
+    expect(ackBefore).toHaveLength(1);
+
+    // Advance the position through a real bar — this ratchets current_stop, appending its own
+    // (non-ack) events, and updates last_advanced_date.
+    db._seedQuote(quoteRow({ trade_date: "2026-08-02", close: 101, sma20: 95, sma50: 80, low: 99 }));
+    await sweep(db);
+    expect(db._positions()[0].last_advanced_date).toBe("2026-08-02"); // the engine path did run
+
+    const ackAfter = db._events().filter((e) => e.event_type === "stop_ack");
+    expect(ackAfter).toEqual(ackBefore); // byte-identical: sweep touched no stop_ack row
+  });
+
+  it("ackStop writes only position_events — the positions row (all engine + transition columns) is bit-for-bit unchanged", async () => {
+    const db = makeD1();
+    const p = seedPos(db, { state: "managing", current_stop: 90 });
+    const before = db._positions()[0];
+    await ackStop(db, { user_id: "owner", trade_id: p.trade_id, now: new Date("2026-08-01T20:00:00Z") });
+    const after = db._positions()[0];
+    expect(after).toEqual(before); // ackStop appended an event but wrote zero positions columns
   });
 });
