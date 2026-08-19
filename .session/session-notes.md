@@ -6,6 +6,66 @@
 
 ---
 
+## 2026-08-19 — #335 BUILT: breakeven ratchet → intraday high + earnings overlay + negative-days guard
+
+**Status: safe to close once this PR merges.** Staff-eng session picking up the cold-start queue after
+WS5-7 (PR #338) landed. Owner cleared the WS5-7 mock gate (retroactive — WS5-7 already shipped) and
+directed #335 next with an explicit call: **breakeven ratchet on intraday HIGH, not close.** Lead
+owned the decision framing + the overlay visual (no owner mock existed for it) + line-by-line review;
+delegated the boots-on-ground build to a Sonnet subagent against a locked spec
+(`scratchpad/issue-335-spec.md`) and reviewed every line. Branch
+`claude/pr336-mock-approval-plan-xcwxpy` (the designated dev branch), base
+`claude/elegant-babbage-hlxnfy`. Three commits + tracking.
+
+**What landed:**
+- **`feat: ratchet profit_floor on intraday high (BREAKEVEN_TRIGGER)`** — new flippable
+  `BREAKEVEN_TRIGGER: 'high'|'close'` knob in `ENGINE_CONFIG` (default `'high'`, per owner). Ratchet
+  at `advance.js` keys on `bar.high` by default; `'close'` (global or per-position `meta.config`)
+  restores the old behavior. NVT tag-and-fade regression fixture + a knob round-trip test (via
+  `effectiveConfig`, which also proves the §14 override door passes the new key through). Docs 3-places
+  (in-code, README engine-constants table; CLAUDE.md invariants prose verified still accurate). No
+  release triplet — engine-only, no PWA shell change.
+- **`fix: guard earnings_warning against negative days`** — `advance.js` earnings note now requires
+  `days_to_earnings >= 0`. `parseEarningsToDays` returns a signed calendar delta that stays negative
+  for up to 180 days after a past earnings date → the warning was re-firing every session on an
+  already-reported quarter. Tests for −5 (silent), 0 (warns), 4 (warns).
+- **`feat: earnings-approaching overlay on positions card`** — third block in `posOverlaysHtml`
+  (`docs/index.html`), mirroring the trim/caution pattern: amber "📅 Earnings in N days" ≤10 sessions,
+  red ≤3, `today`/`tomorrow` phrasing, flag-only copy ("the engine never auto-exits on earnings").
+  Reuses existing `EARNINGS_CAUTION_DAYS`/`EARNINGS_IMMINENT_DAYS` (no new constant). Carries its own
+  client-side `>= 0` guard → independent of the engine fix, no deploy-ordering hazard. Release triplet
+  `2026.08.19.1` / sw v71→v72; `docs/CLAUDE.md` overlay bullet updated; 2 Playwright tests.
+
+**Verification (independently re-run by lead, not just trusted from subagent):** 234/234 worker-positions
+vitest; 5/5 `test_guide_releases.py`; the 2 new overlay Playwright tests pass via the chromium-symlink
+harness. The 4 failing `test_pwa_positions` "take it"/confirm-click tests are **pre-existing** (subagent
+confirmed via `git stash` — fail identically on unmodified code; same sandbox pointer-click flakiness
+documented in prior WS5 entries), not a regression. Lead caught + fixed a duplicate `browser.close()`
+in the new test and amended it into commit 3.
+
+**Decisions flagged to owner (all reversible, non-blocking):**
+1. **Knob vs. hardcode** — chose the knob defaulting to `'high'` so it's a config flip later, not a
+   code change. Matches the `ENGINE_CONFIG`/`effectiveConfig` pattern.
+2. **Overlay copy/styling is a lead taste call** — the WS5-7 mock omitted earnings, so no owner-approved
+   visual existed. Flag-only voice deliberately (matches the engine's never-auto-exit rule). Easy to
+   restyle or move into Details ▾ if owner prefers.
+3. **High-based is validated on ONE example (NVT), not measured across trade history** — honest gap;
+   the knob keeps it reversible. Offered to quantify tag-and-fade frequency against D1 if owner wants
+   it on record; not done this session.
+
+**Confirmed non-issue:** `persistAdvance` (sweep.js) DOES write `days_to_earnings` back to the row, so
+the overlay reflects live engine state — no staleness follow-up. Did NOT widen the sweep's narrow
+UPDATE column list (nothing needed it).
+
+**Next steps:** merge this PR → `deploy-workers.yml` auto-deploys `worker-positions` (backward-compatible
+knob + guard). Then the remaining cold-start queue: **WS5-4** (VAPID push + `closing` confirmation strip
+— the big one, needs secrets), **WS5-8** (pre-close advisory read — soft-depends on WS5-4's push;
+advisory-only constraint per WS5-7 §8), **WS5-5** (recently-closed grace window, #332, independent PWA-only).
+
+**Note:** this session-notes + SPRINT update rides in this PR so it lands on default when the PR merges.
+
+---
+
 ## 2026-08-19 — WS5-7 BUILT: positions managing-card overhaul (#337, PR #338)
 
 **Status: safe to close once PR #338 merges.** Staff-eng session executing WS5-7 from the cold-start
