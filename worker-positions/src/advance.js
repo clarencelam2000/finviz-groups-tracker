@@ -268,7 +268,10 @@ export function advance(pos, bar, cfg = ENGINE_CONFIG) {
   // ── EARNINGS guardrail (§4): FLAG only, never auto-exit — the user integrates earnings manually.
   // Refresh days_to_earnings from the bar if the feed derived a fresh value.
   if (isNum(bar.days_to_earnings)) next.days_to_earnings = Math.trunc(bar.days_to_earnings);
-  if (isNum(next.days_to_earnings) && next.days_to_earnings <= cfg.EARNINGS_WARN_SESSIONS) {
+  // Lower bound is load-bearing: parseEarningsToDays returns a SIGNED calendar-day delta that stays
+  // negative for up to 180 days after a PAST earnings date, so without `>= 0` the warning re-fires
+  // every session on an already-reported quarter (issue #335).
+  if (isNum(next.days_to_earnings) && next.days_to_earnings >= 0 && next.days_to_earnings <= cfg.EARNINGS_WARN_SESSIONS) {
     events.push({
       event_type: "note",
       payload: { earnings_warning: true, days_to_earnings: next.days_to_earnings },

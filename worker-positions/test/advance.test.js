@@ -245,6 +245,16 @@ describe("advance — earnings guardrail", () => {
     const r = advance(pos(), bar({ days_to_earnings: 40 }));
     expect(r.events.find((e) => e.payload && e.payload.earnings_warning)).toBeFalsy();
   });
+  it("no flag for a PAST earnings date (negative days_to_earnings) — regression for #335", () => {
+    const r = advance(pos(), bar({ days_to_earnings: -5 }));
+    expect(r.events.find((e) => e.event_type === "note" && e.payload.earnings_warning)).toBeFalsy();
+  });
+  it("boundary: days_to_earnings = 0 (earnings today) still warns", () => {
+    const r = advance(pos(), bar({ days_to_earnings: 0 }));
+    const note = r.events.find((e) => e.event_type === "note" && e.payload.earnings_warning);
+    expect(note).toBeTruthy();
+    expect(note.payload.days_to_earnings).toBe(0);
+  });
 });
 
 // ── Lifecycle / idempotency / stale ──────────────────────────────────────────
