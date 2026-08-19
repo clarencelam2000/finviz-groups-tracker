@@ -125,16 +125,74 @@ if state == 'closing':                      hero = exit summary (reason · model
 elif last is null:                          hero = "Planned risk $R×qty · first read tonight" [US-7]
 elif current_stop >= entry:                 hero = "🔒 Risk-free" (+ "· locked +$L" if L>0)   [US-2]
                                             subline = unrealized P&L
+                                            + PENDING-LOCK tag if stop-ack not yet done (below)
 else:                                       hero = unrealized P&L (green/red)                 [US-3]
                                             subline = "Open risk $O to stop"
 ```
 
-Everything in the table §2 is available under **Details ▾** regardless of state (US-8).
+**PENDING-LOCK tag (owner ask).** The "locked +$L" claim is only *true if the user actually raises
+their broker's resting stop* to `current_stop`. Until the stop-moved ack (§6) is recorded, the
+risk-free hero shows a conditional treatment — e.g. `🔒 Risk-free · +$3.55 once you raise your stop`
+or a small amber `Lock pending` chip — flipping to the plain `locked +$3.55` after ack. Same ack
+state drives both this tag and the stop-moved banner: one acknowledgement, both resolve.
+
+**Every number carries its per-share form and its formula.** Dollar totals show the per-share value
+too where it fits (`Open risk $174 ($5.80/sh)`); unrealized P&L is **always** shown (hero subline
+*and* a details row), never omitted on a live card. Under Details, a **"show formulas"** sub-toggle
+(off by default) reveals the arithmetic inline per row — e.g. `Open risk = 148.70 − 142.90 = $5.80/sh
+× 30 = $174`, `1R = 142.78 − 140.48 = $2.30/sh`. This is the audit/learn affordance (owner found the
+literal `148.70 − 142.90 = $5.80/sh` line genuinely useful) and doubles as the "why is this
+risk-free?" explainer, so no separate info button is needed — the stop-moved banner + the formula
+reveal together carry the reasoning.
+
+Everything in the table §2 is available under **Details ▾** regardless of state (US-8), and every
+card's Details shows the **same full row set** (Entry, Stop + true basis, 1R, Open risk, Locked-in
+*or* Unrealized P&L, Qty/remaining, Today's bar, Activity) — no thin/inconsistent Details per state.
 
 **Rounding/format:** dollars `$X` (whole) for totals ≥ $100, `$X.XX` below; per-share always 2dp;
 P&L carries sign and color (`text-emerald-400` / `text-red-400`); risk-free uses emerald.
 
 ---
+
+## 2b. FULL state enumeration (owner asked to double-check — I'd missed three)
+
+Two orthogonal axes: the worker **lifecycle state**, and **overlays** that can decorate a
+`managing`/`open` card. Enumerating both so nothing is unhandled.
+
+**Lifecycle state (worker `state` column):**
+
+| State | On tab? | Card treatment |
+|---|---|---|
+| `open` | yes | Pre-first-sweep. Usually the US-7 "no bar yet → planned risk" path. |
+| `managing` | yes | The everyday card; hero per §2 (risk-free / P&L / underwater). |
+| `closing` | yes | Exit signaled, awaiting confirm (US-6). Reason variants below. |
+| `closed` | **no** (except WS5-5 grace window) | Out of scope here; final outcome card is WS5-5. Enumerated so it's not forgotten. |
+
+**Hero variants within `managing`/`open`** (the six the mock shows): (A) no-bar → planned risk;
+(B) risk-free + locked (`stop > entry`); (C) risk-free at breakeven (`stop == entry`, locked $0 —
+a sub-case of B, same 🔒, no "+$X", NOT a separate code path); (D) up, stop below entry; (E)
+underwater (`last < entry`), stop below entry.
+
+> Note on an impossible combo: **underwater + risk-free can't coexist.** If `stop ≥ entry` and
+> `last < entry` then `last < stop`, which means the stop is already hit → the position is
+> `closing`, not `managing`. So there is no "underwater but risk-free" card. Good invariant to state.
+
+**`closing` reason variants** (all from `exit_reason`, render in plain English):
+`stop_hit`, `gap_down_below_stop`, `close_below_50ma`, `severe_breakdown`, `two_close_below_20ma`.
+Each shows: reason phrase · modeled fill (`expected_exit_price`) · actual close (`at_close`) · R.
+
+**Overlays (decorate a `managing` card; can co-occur) — THE THREE I MISSED:**
+
+| Overlay | Trigger (data) | Card cue |
+|---|---|---|
+| **Stop-moved (pending ack)** | `current_stop != initial_stop` AND no ack for current value | the §6 banner + pending-lock tag |
+| **Partial trim** | `remaining_qty < initial_qty` | "20 of 30 sh · trimmed 10 @ 3× ATR" — the ATR-extension trim ledger (`advance.js`). Qty row must show remaining-of-initial, not a bare number, or the size looks wrong. P&L/risk all use `remaining_qty`. |
+| **Caution (1 close < 20MA)** | `caution_flag >= 1` (counter, not bool — see #335-sibling note) | amber "⚠ 1 of 2 closes below 20MA — exits on the next close below" — a real actionable warning the engine already computes and we currently hide. |
+| **Earnings approaching** | `days_to_earnings` within warn band | "Earnings in N days" badge. **Caveat:** the `earnings_warning` note currently fires on *negative* days-to-earnings (past dates) — see the event log; that's a latent engine bug to fix or guard before surfacing this overlay, else it'll flag already-past earnings. Track alongside #335. |
+
+The trim + caution overlays are the substantive additions from this review; both are already in the
+`advance()` output and D1, just never surfaced. The mock (§9) now includes a trim example and a
+caution example.
 
 ## 3. Card anatomy (managing state, expanded)
 
@@ -148,11 +206,13 @@ P&L carries sign and color (`text-emerald-400` / `text-red-400`); risk-free uses
 │ ⬆ Stop raised 142.78 → 142.90 (20MA)  Aug 18 │  ← STOP-MOVED banner (US-1), only when changed
 │    Update your broker    [ ✓ Updated ]       │     + acknowledge control
 │                                              │
-│ Details ▾                                    │  ← collapsed by default
-│  ├ Entry      $142.78    Qty      30         │
+│ Details ▾            [ show formulas ]        │  ← collapsed by default; formula sub-toggle
+│  ├ Entry      $142.78    Qty     30 of 30    │  ← "N of M" when trimmed (§2b overlay)
 │  ├ Stop       $142.90    (trailed · 20MA)    │  ← true basis, not initial
-│  ├ 1R (init)  $2.30/sh   Open risk  $174     │
-│  ├ Today      148.70  ▲1.7%  (146.66–149.00) │  ← latest bar (US-5)
+│  ├ 1R (init)  $2.30/sh   Open risk $174 ($5.80/sh) │
+│  ├ Unrealized +$177.60   Locked-in +$3.55    │  ← P&L always shown
+│  ├ Today  O148.04 H149.00 L146.66 C148.70 ▲1.7% │  ← full OHLC + %
+│  ├         Vol 4.2M · avg 3.8M               │  ← volume + avg volume (US-5)
 │  └ Activity                                  │  ← from position_events (US-4)
 │     • Stop raised → 142.90 (20MA)   Aug 18   │
 │     • Stop raised → 142.78 (20MA)   Aug 17   │
@@ -232,7 +292,8 @@ or LEFT JOIN to the latest `ticker_quotes` row per ticker:
 SELECT p.*,
        q.close      AS last_close,
        q.trade_date AS last_bar_date,
-       q.high AS last_high, q.low AS last_low, q.change_pct AS last_change_pct
+       q.open AS last_open, q.high AS last_high, q.low AS last_low,
+       q.close AS last_close, q.change_pct AS last_change_pct, q.volume AS last_volume, q.raw AS last_raw
 FROM positions p
 LEFT JOIN ticker_quotes q
   ON q.ticker = p.ticker
@@ -245,6 +306,10 @@ ORDER BY p.opened_at DESC
   user-scoped `positions` filter.
 - Null-safe: a position with no bar yet → `last_close` NULL → US-7 path. Preserve exactly today's
   columns; only add fields (backward-compatible; the PWA reads new fields defensively).
+- **Avg volume** for the "Vol 4.2M · avg 3.8M" row is not a typed column — pull it from the `raw`
+  JSON (`Average Volume`, the 84-col held scrape has it). Either parse `raw` client-side (already
+  returned) or add a typed `avg_volume` projection server-side. Client-side parse is fine (the field
+  is already in the payload once `q.raw` is selected).
 - Activity trail: either (a) return the last N `position_events` inline per position, or (b) a new
   `GET /positions/:id/events`. **Recommend (a)** with a bounded `LIMIT` (e.g. last 8) to avoid an
   N+1 fetch on tab load — the trail is short and always wanted when the card expands. Decide in the
@@ -256,20 +321,26 @@ ORDER BY p.opened_at DESC
 
 ## 6. Stop-moved acknowledgement (US-1) — where does the "✓ Updated" state live?
 
-Three options; pick in impl plan:
+**Owner decision (2026-08-19): cross-device, server-side.** The owner trades on phone *and* laptop,
+so a localStorage ack (per-device) is out — acking on the phone must clear the banner on the laptop.
+So v1 is the server field, not the client shortcut:
 
-- **(A) Client-only (localStorage), recommended for v1.** Key `posStopAck:<trade_id>:<curStop>`.
-  Acknowledging writes the key; the banner shows only when no ack exists for the *current* stop
-  value, so a new move (new `curStop`) re-raises it automatically. Zero backend/schema work, ships
-  with the card. Downside: per-device (ack on phone doesn't clear on laptop) — acceptable for a
-  single-user tool; the engine state is unaffected either way.
-- **(B) Server field** `stop_ack_value` on `positions` — cross-device, but a schema migration +
-  route + the sweep must never clobber it (mirror the persist-column-disjointness rule). Heavier.
-- **(C) None — always show the banner while `current_stop != initial_stop`.** Simplest, but nags
-  forever. Rejected.
+- **`stop_ack_value REAL` on `positions`** (migration `0004_stop_ack.sql`, applied out-of-band like
+  0001–0003). The stop-moved banner + pending-lock tag render whenever
+  `current_stop != initial_stop` AND (`stop_ack_value IS NULL` OR `stop_ack_value != current_stop`).
+  Acking = owner-bearer `POST /positions/<trade_id>/ack-stop` writing `stop_ack_value = current_stop`.
+  A *new* engine stop-move (new `current_stop`) automatically re-raises the banner because the ack
+  value no longer equals the current stop — no separate "unack" step.
+- **Persist-disjointness (load-bearing, mirror the WS5-3b rule):** `stop_ack_value` is a
+  **user-owned** column. The sweep's `persistAdvance()` UPDATE must **never** write it (same
+  discipline as `exit_price`/`closed_at` — see `worker-positions/CLAUDE.md` § sweep). Only the
+  `ack-stop` route writes it. This keeps the "engine trails the stop; user acks separately" loop
+  from clobbering itself. Add a test asserting the sweep leaves `stop_ack_value` untouched.
+- Route lives beside the other owner transitions in `src/transitions.js` (anchored regex, below the
+  owner-auth gate). Tenant-scoped load → 404; CAS on `state` not needed (idempotent write of a value).
 
-**Recommendation: (A) for v1**, note (B) as a follow-up if cross-device ack is wanted. The banner
-copy must name the action ("Update your broker's stop to $142.90"), not just state the fact.
+Banner copy names the action + the number: **"Update your broker's stop to $142.90"**, not just a
+fact. Rejected alternative: always-show-while-moved (option C) — nags forever.
 
 ---
 
@@ -293,13 +364,42 @@ copy must name the action ("Update your broker's stop to $142.90"), not just sta
 
 - **WS5-4 (Phase 4):** confirm-fill / still-holding action buttons on `closing` cards + push.
   WS5-7 makes `closing` *legible*; WS5-4 makes it *actionable*.
-- **WS5-8 (NEW — pre-close advisory read):** a **15:30 ET provisional** evaluation of held
-  positions that *warns* on an intraday exit signal ("OUST trading below your stop, ~30 min left")
-  **without mutating state**. Keeps the 17:30 settled run as source of truth (never reschedule it —
-  `advance()` is defined on settled closes; a provisional bar reverses in the last 30 min). Reuses
-  the existing `pre_close` session infra (WS3b/#268). Independent of WS5-7: the card renders
-  whatever the worker returns, so this adds an advisory layer later with ~zero card rework. **File
-  as its own issue when WS5-7 lands.**
+- **WS5-8 (NEW — pre-close read so the owner can act before the bell).** Owner need: learning at
+  17:30 (after close) that a stop was hit is useless — they want the read at **~15:30–15:45 ET**,
+  with runway to place orders in-hours instead of eating after-hours spreads/slippage. This is a
+  correct, owner-driven requirement; the design below is the honest version (an earlier draft of
+  this section over-claimed "provisional bars reverse" with no data — retracted).
+
+  **What's actually true, precisely:**
+  - **Intraday exits are real at 15:30.** `stop_hit` and `gap_down_below_stop` are events that
+    happened the moment price traded through the level — a 15:30 read of them is not "provisional,"
+    it's a fact. The last 15 min ≈ the close for a swing trade.
+  - **Only close-referenced rules need the final print:** `close_below_50ma` and
+    `two_close_below_20ma` reference the *closing* price. At 15:30 they're a read on the
+    current (near-final) price, which *may* differ slightly from the 16:00 print. Advisory copy
+    should distinguish "your stop is hit right now" (act) from "on track to close below 50MA"
+    (heads-up, may firm up at the bell). No claim about how often it flips — we haven't measured it.
+
+  **The non-obvious engineering catch (this is the part worth remembering):**
+  - **Idempotency collision.** The sweep guards on `last_advanced_date` — a same-day re-run is a
+    no-op. So if a 15:30 run *advanced/mutated* a position, it would stamp today's date and the
+    17:30 settled run would **skip it** → the provisional 15:30 state would stick and the settled
+    close would never be applied. That is the real reason the 15:30 read must be **advisory-only —
+    it computes signals and alerts, writes NO position state, does not stamp `last_advanced_date`.**
+    The 17:30 settled run stays the single writer. (Alternative: teach the guard a provisional-vs-
+    settled distinction so settled supersedes — more complex, not recommended for v1.)
+  - **Held feed timing.** `collect_held.py` scrapes at 17:30. A 15:30 read needs the held tickers
+    scraped at 15:30 too — a new held scrape (a `worker-cron` `JOB_SCHEDULE` entry, **not** a new
+    Cloudflare trigger; the single-trigger dispatcher makes this cheap). The existing `pre_close`
+    (15:30) job scrapes the *picks* universe, not held tickers, so it's a sibling job, not a free
+    ride.
+  - **Soft dependency on WS5-4 (push).** A 15:30 advisory only reaches the owner in-hours if it can
+    *push* — otherwise it just sits in the app until they happen to open it. The in-app surface
+    works without push; the "nudge me at 15:30" half wants VAPID (WS5-4). So WS5-8's full value
+    lands after WS5-4, though the read/compute can be built independently.
+
+  Independent of WS5-7 (the card renders whatever the worker returns → ~zero card rework to add the
+  advisory layer later). **File as its own issue when WS5-7 lands.**
 - **#335:** breakeven ratchet close-vs-high taste call.
 - **Cross-device stop-ack (§6 option B)** — only if the localStorage v1 proves annoying.
 
