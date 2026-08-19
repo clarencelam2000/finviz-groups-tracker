@@ -5815,20 +5815,25 @@
                lockedIn, openRisk, unrealized, plannedRisk, trimmed, acked };
     }
 
-    // Dollar totals: whole $X at/above $100, $X.XX below (spec §2 rounding rule). Assumes v≥0 —
-    // callers that can be negative (unrealized P&L) go through fmtSigned instead.
+    // Dollar totals: show cents ONLY when non-zero (so "$174" but "+$177.60"), thousands-separated
+    // (spec §2 rounding rule — matches the owner-approved mock, where real P&L carries its cents
+    // and round figures don't). Assumes v≥0 — signable figures go through fmtSigned instead.
+    function usdMagnitude(abs) {
+      const r = Math.round(abs * 100) / 100;
+      const hasCents = Math.round(r * 100) % 100 !== 0;
+      return r.toLocaleString('en-US', hasCents
+        ? { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+        : { maximumFractionDigits: 0 });
+    }
     function fmtUsd(v) {
       if (!isFinite(v)) return '—';
-      const abs = Math.abs(v);
-      return '$' + (abs >= 100 ? Math.round(v).toLocaleString('en-US') : v.toFixed(2));
+      return '$' + usdMagnitude(Math.abs(v));
     }
     // Signed dollar figure (unrealized P&L, realized-modeled) — sign always shown, magnitude
-    // follows the same whole-vs-2dp rule as fmtUsd.
+    // follows the same cents-when-present rule as fmtUsd.
     function fmtSigned(v) {
       if (!isFinite(v)) return '—';
-      const sign = v >= 0 ? '+' : '−';
-      const abs = Math.abs(v);
-      return sign + '$' + (abs >= 100 ? Math.round(abs).toLocaleString('en-US') : abs.toFixed(2));
+      return (v >= 0 ? '+' : '−') + '$' + usdMagnitude(Math.abs(v));
     }
     // Per-share figures are always 2dp (spec §2), never the whole-number totals rule.
     function fmtPerSh(v) { return isFinite(v) ? '$' + v.toFixed(2) : '—'; }
