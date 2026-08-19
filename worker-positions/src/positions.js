@@ -4,7 +4,7 @@
 
 import { etDateStr, isoUtc } from "./time.js";
 import { distinctTradeDates, sessionsSince } from "./sweep.js";
-import { ENGINE_CONFIG } from "./advance.js";
+import { effectiveConfig } from "./advance.js";
 
 // Stop bases the WS4 ticket offers, plus 'manual' for the future free-entry form (§ 8a).
 export const STOP_BASES = ["prior_day_low", "todays_low", "20ma", "50ma", "manual"];
@@ -257,7 +257,9 @@ function attachSessionCounts(positions, calendar) {
     const sessions_since_close = p.state === "closed" && closeEtDate ? sessionsSince(calendar, closeEtDate) : null;
     return {
       ...p,
-      auto_confirm_sessions: ENGINE_CONFIG.EXIT_AUTOCONFIRM_SESSIONS,
+      // effectiveConfig(p), not the bare global — a position with a meta.config.EXIT_AUTOCONFIRM_SESSIONS
+      // override must report that override here too, or the countdown would disagree with autoConfirm.
+      auto_confirm_sessions: effectiveConfig(p).EXIT_AUTOCONFIRM_SESSIONS,
       sessions_in_closing,
       sessions_since_close,
     };

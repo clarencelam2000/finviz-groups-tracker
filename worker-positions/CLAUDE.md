@@ -146,7 +146,9 @@ display slice), so it stays correct even if the display cap hides the ack event 
 
 - **`listPositions()` (`src/positions.js`) surfaces three session-calendar fields** (PR after
   WS5-7's `stop_ack_value`, backing the WS5-4a confirmation countdown and WS5-5 closed-history
-  aging): `auto_confirm_sessions` (== `ENGINE_CONFIG.EXIT_AUTOCONFIRM_SESSIONS`, every row),
+  aging): `auto_confirm_sessions` (== `effectiveConfig(pos).EXIT_AUTOCONFIRM_SESSIONS` — the global
+  default, layered with the position's own `meta.config` override when set, same as `autoConfirm`
+  itself reads — every row),
   `sessions_in_closing` (`closing` only), `sessions_since_close` (`closed` only, anchored on
   `closed_at`'s ET date, not `exit_signal_date` — a position can sit in `closing` for several
   sessions before it settles). All three reuse `sweep.js`'s `distinctTradeDates`/`sessionsSince` —

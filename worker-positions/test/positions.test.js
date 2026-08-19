@@ -176,6 +176,16 @@ describe("listPositions — session-calendar fields", () => {
     for (const p of rows) expect(p.auto_confirm_sessions).toBe(ENGINE_CONFIG.EXIT_AUTOCONFIRM_SESSIONS);
   });
 
+  it("auto_confirm_sessions honors a per-position meta.config.EXIT_AUTOCONFIRM_SESSIONS override", async () => {
+    const db = makeD1();
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-02-10" });
+    db._seedPosition({ trade_id: "t-override", ticker: "AAPL", state: "open", meta: JSON.stringify({ config: { EXIT_AUTOCONFIRM_SESSIONS: 2 } }) });
+    db._seedPosition({ trade_id: "t-default", ticker: "AAPL", state: "open" });
+    const rows = await listPositions(db, "owner", null);
+    expect(rows.find((p) => p.trade_id === "t-override").auto_confirm_sessions).toBe(2);
+    expect(rows.find((p) => p.trade_id === "t-default").auto_confirm_sessions).toBe(ENGINE_CONFIG.EXIT_AUTOCONFIRM_SESSIONS);
+  });
+
   it("skips the calendar load entirely on an empty result (no crash on zero positions)", async () => {
     const db = makeD1();
     const rows = await listPositions(db, "owner", null);
