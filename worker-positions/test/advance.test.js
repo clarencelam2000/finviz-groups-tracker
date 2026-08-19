@@ -157,10 +157,33 @@ describe("advance — two-close-below-20MA state", () => {
 
 // ── Stop advancement: breakeven floor, widen, within-basis ratchet ──────────────────────
 describe("advance — stop advancement", () => {
-  it("profit_floor ratchets to entry at +1R (BREAKEVEN_R)", () => {
-    const r = advance(pos(), bar({ close: 110, sma20: 101, sma50: 95, low: 108 }));
+  it("profit_floor ratchets to entry at +1R (BREAKEVEN_R), keyed on the intraday HIGH by default", () => {
+    // high (110) tags +1R even though close (109) alone would not — proves the DEFAULT
+    // BREAKEVEN_TRIGGER='high' basis, not a close-based coincidence (#335).
+    const r = advance(pos(), bar({ close: 109, high: 110, sma20: 101, sma50: 95, low: 108 }));
     expect(r.position.profit_floor).toBe(100); // = entry
     expect(r.position.current_stop).toBeGreaterThanOrEqual(100);
+  });
+  it("BREAKEVEN_TRIGGER='close' override does NOT ratchet on a high-only tag", () => {
+    const p = pos({ meta: { config: { BREAKEVEN_TRIGGER: "close" } } });
+    const cfg = effectiveConfig(p);
+    const r = advance(p, bar({ close: 109, high: 110, sma20: 101, sma50: 95, low: 108 }), cfg);
+    expect(r.position.profit_floor).toBe(90); // unchanged: close (109) is still < entry+1R (110)
+  });
+  it("NVT tag-and-fade: high tags +1R, close does not — DEFAULT cfg still ratchets the floor", () => {
+    // entry 100, initial_stop 95 → R = 5 → +1R = 105. High spikes to 105.5, closes back at 104.
+    const p = pos({ initial_stop: 95, profit_floor: 95, current_stop: 95 });
+    const r = advance(p, bar({ close: 104, high: 105.5, low: 103, sma20: 101, sma50: 95 }));
+    expect(r.position.profit_floor).toBe(100); // = entry, protected despite the close-based fade
+  });
+  it("NVT tag-and-fade with BREAKEVEN_TRIGGER='close' does NOT ratchet (knob round-trip)", () => {
+    const p = pos({
+      initial_stop: 95, profit_floor: 95, current_stop: 95,
+      meta: { config: { BREAKEVEN_TRIGGER: "close" } },
+    });
+    const cfg = effectiveConfig(p);
+    const r = advance(p, bar({ close: 104, high: 105.5, low: 103, sma20: 101, sma50: 95 }), cfg);
+    expect(r.position.profit_floor).toBe(95); // stays at initial — close (104) never reaches +1R (105)
   });
   it("20MA→50MA widen once 50MA > entry (may lower the stop, never below the floor)", () => {
     const p = pos({ profit_floor: 100, current_stop: 100 });

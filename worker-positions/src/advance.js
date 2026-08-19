@@ -24,6 +24,12 @@ export const ENGINE_CONFIG = Object.freeze({
   // R-multiple at which profit_floor ratchets up to entry (breakeven). Owner: +1R exactly, not a
   // price-buffer variant (§6, alignment 2026-08-10).
   BREAKEVEN_R: 1.0,
+  // Price basis the breakeven ratchet keys on: 'high' = ratchet the moment the intraday HIGH tags
+  // +BREAKEVEN_R ("if it was ever +1R in hand, never give it all back"); 'close' = only when the
+  // daily CLOSE confirms +1R (spike-and-fade never protected). Owner: 'high' (2026-08-19, issue
+  // #335 — NVT tagged +1R at 177.38, closed a nickel short at 177.21, gapped down next day to a
+  // ~−1R loss a close-based floor never protected). Flip to 'close' here to restore the old behavior.
+  BREAKEVEN_TRIGGER: "high",
   // Widen the trail from the 20MA to the 50MA once the 50MA has risen above entry. Global default;
   // a single position opts out via meta.widen_enabled=false (§6 per-position toggle).
   WIDEN_TRAIL_BASIS: true,
@@ -209,8 +215,10 @@ export function advance(pos, bar, cfg = ENGINE_CONFIG) {
   // ── STILL MANAGING: stop advancement ────────────────────────────────────────────────────────
 
   // Profit floor: monotonic non-decreasing (§4 the ONLY monotonic quantity). Ratchets to entry at
-  // +BREAKEVEN_R — "once past breakeven, never red again".
-  if (rMultiple(next, bar.close) >= cfg.BREAKEVEN_R) {
+  // +BREAKEVEN_R — "once past breakeven, never red again". Keys on BREAKEVEN_TRIGGER's price (high
+  // by default — protects a trade that tagged +1R intraday even if it closed back below; see #335).
+  const bkTriggerPrice = cfg.BREAKEVEN_TRIGGER === "close" ? bar.close : bar.high;
+  if (rMultiple(next, bkTriggerPrice) >= cfg.BREAKEVEN_R) {
     next.profit_floor = Math.max(next.profit_floor, next.entry_price);
   }
 
