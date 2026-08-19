@@ -370,6 +370,30 @@ one. Full retrospective in that session's chat; the durable rules:
   immediately above; this was found in `env`, not documented anywhere, and cost a full round of
   back-and-forth to discover.
 
+### Don't manufacture objections to the owner's idea (2026-08-19, WS5-8 timing)
+
+The owner floated moving the position sweep to ~30 min before the close so they can act in-hours.
+The response argued against it with a paragraph of confident-sounding but unfounded claims —
+"provisional bars routinely reverse in the last 30 min" (asserted with **zero data**), "false exits
+un-happen and corrupt the R record" (a stop that traded through its level is a real event; it
+doesn't un-happen), "load-bearing" filler, and an ADR citation (ADR-011) used as authority when the
+connection was loose. The owner — who is the domain expert (a swing trader) — was rightly annoyed.
+The durable rules:
+
+- **On the owner's own domain, they're the authority.** For trading-workflow judgments (when they
+  need to act, what "close enough to the close" means), surface real *technical* tradeoffs and then
+  defer — don't invent domain objections to their idea.
+- **Never assert an empirical claim without the data.** "X routinely happens" needs a measurement.
+  If you don't have it, say "I don't know — we'd need to measure," not a number-free assertion
+  dressed as fact. (Same family as the file:line rule above, applied to statistics.)
+- **Don't cite an internal doc/ADR as a rhetorical cudgel.** Citing ADR-011 to sound authoritative
+  when the reader doesn't know what it says, and the link is tenuous, is the "don't dress a claim up
+  as authoritative" anti-pattern in argument form. Explain the actual mechanism plainly or don't cite.
+- **Lead with the real catch, not fluff.** The genuine WS5-8 subtlety was narrow and specific (the
+  sweep's `last_advanced_date` idempotency guard means a mutating 15:30 run makes the 17:30 settled
+  run a no-op → the 15:30 read must be advisory-only). That one sentence was worth more than the
+  whole hand-wavy paragraph. Find the precise technical point; cut everything that's just texture.
+
 ---
 
 - **Starting a session**: This `CLAUDE.md` auto-loads at session start. Also read `.session/session-notes.md` immediately — it holds the last 4 session entries with recent findings, blockers, and next steps. Start the session by summarizing what's in the notes so the user knows you're oriented. Older history is in `.session/archive/session-notes-archive.md` — only read it if the user asks or context demands it.

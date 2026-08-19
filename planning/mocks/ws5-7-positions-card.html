@@ -1,0 +1,271 @@
+<title>WS5-7 Positions Card</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --bg:#0b1220; --panel:#1e293b; --panel2:#0f172a; --border:#334155;
+    --ink:#e2e8f0; --ink-dim:#94a3b8; --ink-faint:#64748b;
+    --sky:#38bdf8; --sky-ink:#082f49;
+    --emerald:#34d399; --emerald-bg:rgba(16,185,129,.12); --emerald-bd:rgba(16,185,129,.4);
+    --red:#f87171; --red-bg:rgba(239,68,68,.10);
+    --amber:#fbbf24; --amber-bg:rgba(245,158,11,.10); --amber-bd:rgba(245,158,11,.45);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;line-height:1.4;padding:28px 16px 80px}
+  .wrap{max-width:1180px;margin:0 auto}
+  .tnum{font-variant-numeric:tabular-nums}
+  h1{font-size:20px;font-weight:700;margin:0 0 4px;letter-spacing:-.01em}
+  .lede{color:var(--ink-dim);font-size:13px;max-width:72ch;margin:0 0 8px}
+  .meta{color:var(--ink-faint);font-size:12px;margin:0 0 22px}
+  .meta code{color:var(--sky);background:var(--panel2);padding:1px 5px;border-radius:4px}
+  h2.sec{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);
+    margin:34px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--border);font-weight:600}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:18px;align-items:start}
+  .frame{display:flex;flex-direction:column;gap:8px}
+  .story{font-size:11.5px;color:var(--ink-dim)}
+  .story b{color:var(--ink)}
+  .tag{display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--sky);border:1px solid var(--border);border-radius:999px;padding:2px 8px;background:var(--panel2)}
+
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:14px 15px}
+  .chead{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+  .tkr{font-weight:700;font-size:14px;letter-spacing:.02em}
+  .csub{color:var(--ink-faint);font-size:12px}
+  .badge{font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-left:auto}
+  .badge.managing{color:var(--ink-faint)} .badge.closing{color:var(--amber)}
+
+  .hero{margin-top:12px}
+  .hero .big{font-size:19px;font-weight:700;letter-spacing:-.01em}
+  .hero .sub{font-size:12.5px;color:var(--ink-dim);margin-top:3px}
+  .pos{color:var(--emerald)} .neg{color:var(--red)} .amberc{color:var(--amber)}
+  .lock{display:inline-flex;align-items:center;gap:6px;background:var(--emerald-bg);
+    border:1px solid var(--emerald-bd);color:var(--emerald);border-radius:8px;padding:6px 10px;font-weight:700;font-size:14px}
+  .lock.pending{background:var(--amber-bg);border-color:var(--amber-bd);color:var(--amber)}
+  .pendchip{display:inline-block;margin-left:6px;font-size:10px;font-weight:700;text-transform:uppercase;
+    letter-spacing:.05em;color:var(--amber);border:1px solid var(--amber-bd);border-radius:999px;padding:1px 7px;vertical-align:middle}
+  .caution{margin-top:10px;background:var(--amber-bg);border:1px solid var(--amber-bd);border-radius:8px;
+    padding:7px 10px;font-size:12px;color:var(--amber);font-weight:600}
+
+  .moved{margin-top:12px;background:var(--sky-ink);border:1px solid #0369a1;border-radius:9px;padding:9px 11px}
+  .moved .row1{display:flex;align-items:center;gap:7px;font-size:12.5px;color:#bae6fd;font-weight:600;flex-wrap:wrap}
+  .moved .arrow{color:var(--sky);font-size:14px}
+  .moved .row2{display:flex;justify-content:space-between;align-items:center;margin-top:8px;gap:8px}
+  .moved .cta{font-size:12px;color:#7dd3fc}
+  .ack{font-size:11px;font-weight:700;color:var(--sky-ink);background:var(--sky);border:none;border-radius:6px;padding:5px 10px;cursor:pointer}
+  .ackd{font-size:11px;color:var(--emerald);font-weight:600}
+
+  .details{margin-top:12px;border-top:1px solid var(--border);padding-top:10px}
+  .details>summary{font-size:12px;color:var(--ink-dim);cursor:pointer;list-style:none;user-select:none;display:flex;justify-content:space-between;align-items:center}
+  .details>summary::-webkit-details-marker{display:none}
+  .details>summary .lbl::before{content:"▸ ";color:var(--ink-faint)}
+  .details[open]>summary .lbl::before{content:"▾ "}
+  .fxwrap{font-size:11px;color:var(--ink-faint);display:inline-flex;align-items:center;gap:5px;cursor:pointer}
+  .kv{display:flex;justify-content:space-between;font-size:12px;margin-top:7px}
+  .kv .k{color:var(--ink-faint)} .kv .v{color:var(--ink);font-weight:500}
+  .formula{display:none;font-size:11px;color:var(--sky);margin-top:2px;text-align:right}
+  .card:has(.fx:checked) .formula{display:block}
+  .bar{font-size:11.5px;color:var(--ink-dim);margin-top:9px;padding-top:9px;border-top:1px dashed var(--border);line-height:1.7}
+  .act{margin-top:9px;padding-top:9px;border-top:1px dashed var(--border)}
+  .act .h{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-faint);margin-bottom:5px}
+  .act .e{display:flex;justify-content:space-between;font-size:11.5px;color:var(--ink-dim);margin-top:3px;gap:10px}
+  .act .e .d{color:var(--ink-faint);white-space:nowrap}
+  .note{font-size:11.5px;color:var(--ink-faint);margin-top:10px;font-style:italic}
+  .ba{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:740px}
+  .ba .lab{font-size:11px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px;font-weight:700}
+  .ba .lab.b{color:var(--red)} .ba .lab.a{color:var(--emerald)}
+  .callout{background:var(--red-bg);border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:2px 6px;color:var(--red);font-size:11px}
+  @media(max-width:700px){.ba{grid-template-columns:1fr}}
+</style>
+
+<div class="wrap">
+  <h1>WS5-7 · Positions managing-card overhaul</h1>
+  <p class="lede">Mock v2 for owner approval — incorporates review feedback (per-share + unrealized P&amp;L +
+  inline formulas + OHLCV, cross-device stop-ack, pending-lock tag, and the trim / caution overlays that were
+  missing). Real values from live positions (EOG / NVT); other states illustrative and labelled.</p>
+  <p class="meta">Spec: <code>planning/ws5-7-positions-managing-card.md</code> · Issue #337 · tap <b>show formulas</b> inside any Details.</p>
+
+  <h2 class="sec">The fix, head to head — EOG (real, entered 2026-08-14)</h2>
+  <div class="ba">
+    <div>
+      <div class="lab b">Today (broken)</div>
+      <div class="card">
+        <div class="chead"><span class="tkr">EOG</span><span class="csub">· picks · entered 2026-08-14</span><span class="badge managing">managing</span></div>
+        <div class="kv"><span class="k">Entry</span><span class="v tnum">$142.78</span></div>
+        <div class="kv"><span class="k">Stop</span><span class="v tnum">$142.90 <span style="color:var(--ink-faint)">(Prior low)</span></span></div>
+        <div class="kv"><span class="k">Risk/sh</span><span class="v tnum"><span class="callout">−$0.12</span></span></div>
+        <div class="kv"><span class="k">Qty</span><span class="v tnum">30</span></div>
+        <div class="kv"><span class="k">Open risk</span><span class="v tnum"><span class="callout">−$3.55</span></span></div>
+      </div>
+      <p class="note">"Prior low" is wrong (it trailed on the 20MA); −$3.55 is the locked-in gain, sign-flipped.</p>
+    </div>
+    <div>
+      <div class="lab a">WS5-7 (fixed)</div>
+      <div class="card">
+        <div class="chead"><span class="tkr">EOG</span><span class="csub">· picks · entered 2026-08-14</span><span class="badge managing">managing</span></div>
+        <div class="hero"><span class="lock pending">🔒 Risk-free · +$3.55 once you raise your stop</span><span class="pendchip">lock pending</span><div class="sub pos">+$177.60 unrealized</div></div>
+        <div class="moved">
+          <div class="row1"><span>⬆ Stop raised</span><span class="tnum">142.78</span><span class="arrow">→</span><span class="tnum">142.90</span><span style="color:#7dd3fc">(trailed · 20MA)</span></div>
+          <div class="row2"><span class="cta">Update your broker's stop to $142.90</span><button class="ack" onclick="this.closest('.card').querySelector('.lock').className='lock';this.closest('.card').querySelector('.lock').textContent='🔒 Risk-free · locked +$3.55';this.closest('.card').querySelector('.pendchip').remove();this.closest('.moved').querySelector('.row2').innerHTML='<span class=ackd>✓ Updated — synced across devices</span>'">✓ Updated</button></div>
+        </div>
+        <details class="details">
+          <summary><span class="lbl">Details</span><label class="fxwrap"><input class="fx" type="checkbox"> show formulas</label></summary>
+          <div class="kv"><span class="k">Entry</span><span class="v tnum">$142.78</span></div>
+          <div class="kv"><span class="k">Stop</span><span class="v tnum">$142.90 <span style="color:var(--ink-faint)">(trailed · 20MA)</span></span></div>
+          <div class="kv"><span class="k">1R (initial)</span><span class="v tnum">$2.30/sh</span></div><div class="formula">142.78 − 140.48 = $2.30/sh</div>
+          <div class="kv"><span class="k">Open risk</span><span class="v tnum">$174 ($5.80/sh)</span></div><div class="formula">148.70 − 142.90 = $5.80/sh × 30 = $174</div>
+          <div class="kv"><span class="k">Unrealized P&amp;L</span><span class="v tnum pos">+$177.60</span></div><div class="formula">(148.70 − 142.78) × 30 = +$177.60</div>
+          <div class="kv"><span class="k">Locked-in</span><span class="v tnum pos">+$3.55</span></div><div class="formula">(142.90 − 142.78) × 30 = +$3.55</div>
+          <div class="kv"><span class="k">Qty</span><span class="v tnum">30 of 30</span></div>
+          <div class="bar tnum">Today &nbsp;O 148.04 &nbsp;H 149.00 &nbsp;L 146.66 &nbsp;C 148.70 &nbsp;<span class="pos">▲1.7%</span><br>Vol 4.2M · avg 3.8M</div>
+          <div class="act"><div class="h">Activity</div>
+            <div class="e"><span>Stop raised → 142.90 (20MA)</span><span class="d">Aug 18</span></div>
+            <div class="e"><span>Stop raised → 142.78 (20MA)</span><span class="d">Aug 17</span></div>
+            <div class="e"><span>Entered @ 142.78 · 30 sh</span><span class="d">Aug 14</span></div>
+          </div>
+        </details>
+      </div>
+      <p class="note">Tap <b>✓ Updated</b> to see the lock resolve (ack is server-side → syncs phone ↔ laptop). Tap <b>show formulas</b>.</p>
+    </div>
+  </div>
+
+  <h2 class="sec">Every state (6 heroes + 2 overlays)</h2>
+  <div class="grid">
+
+    <div class="frame">
+      <span class="tag">US-2 · risk-free + locked</span>
+      <div class="card">
+        <div class="chead"><span class="tkr">EOG</span><span class="csub">· picks</span><span class="badge managing">managing</span></div>
+        <div class="hero"><span class="lock">🔒 Risk-free · locked +$3.55</span><div class="sub pos">+$177.60 unrealized</div></div>
+        <details class="details"><summary><span class="lbl">Details</span><label class="fxwrap"><input class="fx" type="checkbox"> show formulas</label></summary>
+          <div class="kv"><span class="k">Entry / Stop</span><span class="v tnum">142.78 / 142.90 (20MA)</span></div>
+          <div class="kv"><span class="k">Open risk</span><span class="v tnum">$174 ($5.80/sh)</span></div><div class="formula">148.70 − 142.90 = $5.80 × 30</div>
+          <div class="kv"><span class="k">Unrealized P&amp;L</span><span class="v tnum pos">+$177.60</span></div>
+          <div class="kv"><span class="k">Qty</span><span class="v tnum">30 of 30</span></div>
+          <div class="bar tnum">O148.04 H149.00 L146.66 C148.70 <span class="pos">▲1.7%</span> · Vol 4.2M/3.8M</div>
+        </details>
+      </div>
+      <p class="story"><b>Acked state.</b> Once the broker stop is raised, the pending tag is gone and it reads plainly "locked".</p>
+    </div>
+
+    <div class="frame">
+      <span class="tag">US-2 · risk-free at breakeven</span>
+      <div class="card">
+        <div class="chead"><span class="tkr">DEMO</span><span class="csub">· picks</span><span class="badge managing">managing</span></div>
+        <div class="hero"><span class="lock">🔒 Risk-free</span><div class="sub pos">+$210 unrealized</div></div>
+        <details class="details"><summary><span class="lbl">Details</span><label class="fxwrap"><input class="fx" type="checkbox"> show formulas</label></summary>
+          <div class="kv"><span class="k">Entry / Stop</span><span class="v tnum">80.00 / 80.00 (20MA)</span></div>
+          <div class="kv"><span class="k">Locked-in</span><span class="v tnum">$0 (breakeven)</span></div>
+          <div class="kv"><span class="k">Open risk</span><span class="v tnum">$210 ($3.50/sh)</span></div>
+          <div class="kv"><span class="k">Unrealized P&amp;L</span><span class="v tnum pos">+$210</span></div>
+        </details>
+      </div>
+      <p class="story">Stop <b>exactly at entry</b> → locked $0, so just the 🔒, no "+$X". Same code path as locked, sub-case. <i>Illustrative.</i></p>
+    </div>
+
+    <div class="frame">
+      <span class="tag">US-3 · up · stop below entry</span>
+      <div class="card">
+        <div class="chead"><span class="tkr">ANET</span><span class="csub">· picks</span><span class="badge managing">managing</span></div>
+        <div class="hero"><div class="big pos tnum">+$400 unrealized</div><div class="sub tnum">Open risk $600 ($12/sh) to stop</div></div>
+        <div class="moved">
+          <div class="row1"><span>⬆ Stop raised</span><span class="tnum">94.00</span><span class="arrow">→</span><span class="tnum">96.00</span><span style="color:#7dd3fc">(20MA)</span></div>
+          <div class="row2"><span class="cta">Update your broker's stop to $96.00</span><span class="ackd">✓ Updated Aug 18</span></div>
+        </div>
+        <details class="details"><summary><span class="lbl">Details</span><label class="fxwrap"><input class="fx" type="checkbox"> show formulas</label></summary>
+          <div class="kv"><span class="k">Entry / Stop</span><span class="v tnum">100.00 / 96.00 (20MA)</span></div>
+          <div class="kv"><span class="k">1R (initial)</span><span class="v tnum">$6.00/sh</span></div><div class="formula">100.00 − 94.00 = $6.00/sh</div>
+          <div class="kv"><span class="k">Open risk</span><span class="v tnum">$600 ($12/sh)</span></div><div class="formula">108.00 − 96.00 = $12 × 50</div>
+          <div class="kv"><span class="k">Unrealized P&amp;L</span><span class="v tnum pos">+$400</span></div>
+          <div class="kv"><span class="k">Qty</span><span class="v tnum">50 of 50</span></div>
+          <div class="bar tnum">O104 H108 L103 C108 <span class="pos">▲3.8%</span> · Vol 2.1M/1.9M</div>
+        </details>
+      </div>
+      <p class="story">Winning but stop still below entry — lead with P&amp;L + what's at stake. Now with full Details + acked banner. <i>Illustrative.</i></p>
+    </div>
+
+    <div class="frame">
+      <span class="tag">US-3 · underwater</span>
+      <div class="card">
+        <div class="chead"><span class="tkr">CRWD</span><span class="csub">· picks</span><span class="badge managing">managing</span></div>
+        <div class="hero"><div class="big neg tnum">−$100 unrealized</div><div class="sub tnum">Open risk $60 ($1.50/sh) to stop</div></div>
+        <details class="details"><summary><span class="lbl">Details</span><label class="fxwrap"><input class="fx" type="checkbox"> show formulas</label></summary>
+          <div class="kv"><span class="k">Entry / Stop</span><span class="v tnum">50.00 / 46.00 (prior low)</span></div>
+          <div class="kv"><span class="k">1R (initial)</span><span class="v tnum">$4.00/sh</span></div>
+          <div class="kv"><span class="k">Open risk</span><span class="v tnum">$60 ($1.50/sh)</span></div><div class="formula">47.50 − 46.00 = $1.50 × 40</div>
+          <div class="kv"><span class="k">Unrealized P&amp;L</span><span class="v tnum neg">−$100</span></div><div class="formula">(47.50 − 50.00) × 40 = −$100</div>
+          <div class="kv"><span class="k">Qty</span><span class="v tnum">40 of 40</span></div>
+          <div class="bar tnum">O49 H49.5 L47.2 C47.50 <span class="neg">▼2.1%</span> · Vol 5.0M/4.4M</div>
+        </details>
+      </div>
+      <p class="story">Down, stop unchanged (no false "stop moved" banner). Full Details, same row set as every card. <i>Illustrative.</i></p>
+    </div>
+
+    <div class="frame">
+      <span class="tag">US-6 · exit pending (→ WS5-4)</span>
+      <div class="card">
+        <div class="chead"><span class="tkr">NVT</span><span class="csub">· picks</span><span class="badge closing">exit pending</span></div>
+        <div class="hero"><div class="big amberc" style="font-size:15px">⚠ Exit signal · stop hit</div><div class="sub tnum">Modeled fill $167.44 · closed 164.63 · <span class="neg">−$63.83 (−1.0R)</span></div></div>
+        <div class="note">Confirm your fill / "still holding" arrives with alerts (WS5-4). This card just makes the state legible.</div>
+        <details class="details"><summary><span class="lbl">Details</span><label class="fxwrap"><input class="fx" type="checkbox"> show formulas</label></summary>
+          <div class="kv"><span class="k">Entry / Stop</span><span class="v tnum">172.35 / 167.44</span></div>
+          <div class="kv"><span class="k">Realized (modeled)</span><span class="v tnum neg">−$63.83 (−1.0R)</span></div><div class="formula">(167.44 − 172.35) × 13 = −$63.83</div>
+          <div class="act"><div class="h">Activity</div>
+            <div class="e"><span>Exit signal · stop hit → 167.44</span><span class="d">Aug 18</span></div>
+            <div class="e"><span>Entered @ 172.35 · 13 sh</span><span class="d">Aug 14</span></div>
+          </div>
+        </details>
+      </div>
+      <p class="story">No dead "exit pending" with zero context — reason + modeled fill + real close, in words. Real NVT data.</p>
+    </div>
+
+    <div class="frame">
+      <span class="tag">US-7 · just logged, no bar</span>
+      <div class="card">
+        <div class="chead"><span class="tkr">TT</span><span class="csub">· manual · entered today</span></div>
+        <div class="hero"><div class="big tnum" style="font-size:15px;color:var(--ink)">Planned risk $69</div><div class="sub">First engine read after tonight's close</div></div>
+        <details class="details"><summary><span class="lbl">Details</span><label class="fxwrap"><input class="fx" type="checkbox"> show formulas</label></summary>
+          <div class="kv"><span class="k">Entry / Stop</span><span class="v tnum">88.00 / 85.70</span></div>
+          <div class="kv"><span class="k">1R (initial)</span><span class="v tnum">$2.30/sh</span></div><div class="formula">88.00 − 85.70 = $2.30 × 30 = $69</div>
+          <div class="kv"><span class="k">Qty</span><span class="v tnum">30 of 30</span></div>
+        </details>
+      </div>
+      <p class="story">Null-safe: no live price yet → planned risk only, honest "pending first read". No NaN, no fake $0. <i>Illustrative.</i></p>
+    </div>
+
+    <div class="frame">
+      <span class="tag">OVERLAY · partial trim (was missing)</span>
+      <div class="card">
+        <div class="chead"><span class="tkr">VRT</span><span class="csub">· picks</span><span class="badge managing">managing</span></div>
+        <div class="hero"><div class="big pos tnum">+$520 unrealized</div><div class="sub tnum">Open risk $180 ($9/sh) to stop</div></div>
+        <div class="caution" style="color:var(--sky);background:var(--sky-ink);border-color:#0369a1">✂ Trimmed 10 sh @ 3× ATR · Aug 17 — 20 of 30 held</div>
+        <details class="details"><summary><span class="lbl">Details</span><label class="fxwrap"><input class="fx" type="checkbox"> show formulas</label></summary>
+          <div class="kv"><span class="k">Entry / Stop</span><span class="v tnum">60.00 / 62.00 (20MA)</span></div>
+          <div class="kv"><span class="k">Qty</span><span class="v tnum">20 of 30 <span style="color:var(--ink-faint)">(trimmed 10)</span></span></div><div class="formula">open risk uses remaining 20, not 30</div>
+          <div class="kv"><span class="k">Unrealized P&amp;L</span><span class="v tnum pos">+$520</span></div>
+        </details>
+      </div>
+      <p class="story"><b>ATR-extension trim</b> — the engine already sells into strength; the card must show "N of M" or the size looks wrong. All risk/P&amp;L uses remaining qty. <i>Illustrative.</i></p>
+    </div>
+
+    <div class="frame">
+      <span class="tag">OVERLAY · caution 1-of-2 (was missing)</span>
+      <div class="card">
+        <div class="chead"><span class="tkr">SMCI</span><span class="csub">· picks</span><span class="badge managing">managing</span></div>
+        <div class="hero"><div class="big pos tnum">+$140 unrealized</div><div class="sub tnum">Open risk $220 ($5.50/sh) to stop</div></div>
+        <div class="caution">⚠ 1 of 2 closes below the 20MA — exits on the next close below</div>
+        <details class="details"><summary><span class="lbl">Details</span><label class="fxwrap"><input class="fx" type="checkbox"> show formulas</label></summary>
+          <div class="kv"><span class="k">Entry / Stop</span><span class="v tnum">40.00 / 34.50</span></div>
+          <div class="kv"><span class="k">Unrealized P&amp;L</span><span class="v tnum pos">+$140</span></div>
+          <div class="act"><div class="h">Activity</div><div class="e"><span>Close below 20MA (1/2)</span><span class="d">Aug 18</span></div></div>
+        </details>
+      </div>
+      <p class="story"><b>Soft-exit warning</b> the engine computes (`caution_flag`) and we currently hide. One more close below the 20MA and it exits. <i>Illustrative.</i></p>
+    </div>
+
+  </div>
+
+  <p class="meta" style="margin-top:34px">Hero rules (spec §2): <code>closing</code> → exit summary · no bar → planned risk ·
+  <code>stop ≥ entry</code> → 🔒 risk-free (pending-lock until you raise the broker stop, then "locked +$L") · else → P&amp;L + open risk.
+  Overlays (trim / caution / earnings) decorate any managing card. Full enumeration: spec §2b. Ack is server-side → cross-device (spec §6).</p>
+</div>
