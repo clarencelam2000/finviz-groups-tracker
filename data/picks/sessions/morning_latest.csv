@@ -1,101 +1,92 @@
 date,session,collected_at,ticker,group,list_category,trigger,stop,atr,price,open,high,low,change,status,atr_from_lod
-2026-08-18,morning,2026-08-18T14:07:06Z,ABVX,Biotechnology,accel,123.42,118.72,5.42,119.36,120.0,121.25,119.0,-1.13,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,AER,Rental & Leasing Services,leaders,152.82,150.25,3.82,150.98,150.77,151.64,150.58,0.35,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,AKAM,Software - Infrastructure,leaders,125.58,121.57,6.07,120.3,121.62,123.79,118.92,-2.17,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,ANET,Computer Hardware,rs_new_high,202.26,198.34,9.94,195.74,196.26,197.99,194.27,-3.0,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,APH,Electronic Components,rs_new_high,172.06,166.45,6.46,161.68,167.78,166.38,160.67,-5.38,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,ARW,Electronics & Computer Distribution,leaders,221.04,213.81,8.44,210.5,214.85,215.62,208.84,-4.48,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,ARWR,Biotechnology,accel,88.94,86.26,3.71,87.26,88.19,88.35,86.68,-1.62,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,ASML,Semiconductor Equipment & Materials,rs_new_high,1896.35,1860.12,71.5,1797.7,1809.1,1820.41,1793.27,-4.54,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,ASX,Semiconductors,rs_new_high,40.29,38.7,2.19,36.55,37.03,37.18,36.41,-8.42,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,AVGO,Semiconductors,rs_new_high,399.36,391.31,16.01,379.23,384.16,385.78,378.35,-3.36,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,AVT,Electronics & Computer Distribution,leaders,99.01,95.73,3.72,93.72,96.93,96.93,93.33,-4.98,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,BBIO,Biotechnology,accel,80.42,78.12,3.01,81.97,80.53,82.38,80.2,2.6,gapped_through,0.5880398671096333
-2026-08-18,morning,2026-08-18T14:07:06Z,CAMT,Semiconductor Equipment & Materials,rs_new_high,178.02,167.95,11.4,161.04,163.12,164.58,160.48,-6.26,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,CGNX,Scientific & Technical Instruments,rs_new_high,67.33,64.88,3.29,63.41,64.77,65.04,63.39,-4.79,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,CGON,Biotechnology,accel,77.42,73.87,3.37,76.83,76.2,77.5,75.83,-0.36,failed_breakout,
-2026-08-18,morning,2026-08-18T14:07:06Z,CLF,Steel,leaders,12.36,11.6,0.62,11.83,12.17,12.3,11.85,-3.9,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,CMC,Metal Fabrication,leaders,72.82,70.81,2.21,70.18,72.01,72.1,70.18,-3.51,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,CNX,Oil & Gas E&P,emerging,36.0,34.9,0.95,35.65,35.72,35.92,35.34,0.89,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,COHR,Scientific & Technical Instruments,rs_new_high,362.32,330.24,34.53,315.25,324.89,329.44,312.25,-10.24,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,CRDO,Semiconductors,rs_new_high,286.24,272.3,22.38,257.23,267.41,269.33,255.18,-9.05,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,CRWD,Software - Infrastructure,leaders,219.18,213.01,9.03,212.67,212.98,216.0,211.14,-0.58,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,DBX,Software - Infrastructure,leaders,34.02,33.29,1.34,34.05,33.45,34.22,33.41,2.01,triggered,0.47761194029850784
-2026-08-18,morning,2026-08-18T14:07:06Z,DELL,Computer Hardware,rs_new_high,496.86,469.05,32.34,479.92,466.16,489.89,469.73,0.02,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,ECG,Engineering & Construction,emerging,145.99,142.7,8.05,135.61,139.07,138.01,135.25,-5.43,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,EME,Engineering & Construction,emerging,864.83,840.29,31.17,835.76,843.11,843.56,827.61,-3.1,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,ENTG,Semiconductor Equipment & Materials,rs_new_high,166.2,160.95,9.78,152.93,153.23,155.27,153.01,-6.23,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,EOG,Oil & Gas E&P,emerging,146.22,142.31,3.96,147.95,148.04,148.78,146.66,1.23,gapped_through,0.32575757575757375
-2026-08-18,morning,2026-08-18T14:07:06Z,FANG,Oil & Gas E&P,emerging,206.65,201.84,6.06,208.23,208.93,209.5,206.47,0.94,gapped_through,0.29042904290428895
-2026-08-18,morning,2026-08-18T14:07:06Z,FIX,Engineering & Construction,emerging,1883.7,1791.72,99.02,1784.99,1817.58,1815.07,1765.95,-5.11,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,FLR,Engineering & Construction,emerging,55.08,52.61,2.52,52.82,53.66,53.67,52.55,-3.51,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,FORM,Semiconductor Equipment & Materials,rs_new_high,139.8,133.19,9.79,125.94,129.48,129.57,124.51,-8.84,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,FTNT,Software - Infrastructure,leaders,160.43,155.57,6.53,157.41,156.03,159.5,155.85,1.0,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,GATX,Rental & Leasing Services,leaders,183.57,178.95,4.32,179.68,182.2,182.2,182.2,-0.53,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,GDDY,Software - Infrastructure,leaders,95.37,92.3,5.21,97.0,94.09,97.65,94.17,5.01,triggered,0.5431861804222645
-2026-08-18,morning,2026-08-18T14:07:06Z,GEN,Software - Infrastructure,leaders,28.25,27.38,0.99,27.84,27.77,27.96,27.64,1.57,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,GGB,Steel,leaders,4.81,4.73,0.14,4.78,4.79,4.83,4.78,-0.31,failed_breakout,
-2026-08-18,morning,2026-08-18T14:07:06Z,HAL,Oil & Gas Equipment & Services,emerging,34.82,34.17,1.0,35.05,35.0,35.27,34.8,0.92,gapped_through,0.25
-2026-08-18,morning,2026-08-18T14:07:06Z,HNGE,Health Information Services,leaders,89.75,86.45,4.31,87.75,86.52,88.63,85.01,-0.14,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,HPQ,Computer Hardware,rs_new_high,29.84,29.14,1.34,29.98,29.68,30.02,29.57,1.97,triggered,0.30597014925373145
-2026-08-18,morning,2026-08-18T14:07:06Z,HQY,Health Information Services,leaders,103.61,101.58,3.01,103.87,102.36,104.0,101.73,1.5,triggered,0.7109634551495019
-2026-08-18,morning,2026-08-18T14:07:06Z,HRI,Rental & Leasing Services,leaders,176.0,171.13,7.65,170.27,167.6,170.99,168.0,-1.64,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,INCY,Biotechnology,accel,124.06,119.64,3.76,124.21,124.45,124.71,123.56,0.58,gapped_through,0.17287234042552965
-2026-08-18,morning,2026-08-18T14:07:06Z,IONQ,Computer Hardware,rs_new_high,47.21,44.85,3.06,45.44,44.3,46.45,43.6,-2.99,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,IOT,Software - Infrastructure,leaders,39.92,38.04,2.22,40.48,39.5,40.79,39.29,3.8,triggered,0.536036036036035
-2026-08-18,morning,2026-08-18T14:07:06Z,JAZZ,Biotechnology,accel,248.52,243.16,7.12,251.66,248.73,252.64,248.73,1.33,gapped_through,0.41151685393258525
-2026-08-18,morning,2026-08-18T14:07:06Z,JBL,Electronic Components,rs_new_high,372.23,364.7,15.46,351.22,358.7,360.75,345.63,-5.05,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,KGS,Oil & Gas Equipment & Services,emerging,66.17,64.99,2.93,65.29,65.56,66.43,65.25,-1.26,failed_breakout,
-2026-08-18,morning,2026-08-18T14:07:06Z,LFUS,Electronic Components,rs_new_high,476.3,458.26,19.18,448.15,461.22,460.7,450.0,-5.01,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,LRCX,Semiconductor Equipment & Materials,rs_new_high,345.28,333.4,21.49,320.83,324.31,329.07,320.56,-6.69,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,MDGL,Biotechnology,accel,527.22,506.85,23.2,527.26,524.87,532.86,524.5,0.46,triggered,0.11896551724137892
-2026-08-18,morning,2026-08-18T14:07:06Z,MGY,Oil & Gas E&P,emerging,26.89,26.28,0.89,26.9,27.3,27.35,26.66,0.41,gapped_through,0.2696629213483128
-2026-08-18,morning,2026-08-18T14:07:06Z,MLI,Metal Fabrication,leaders,67.11,65.71,1.8,64.7,65.71,65.55,64.46,-2.9,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,MPWR,Semiconductors,rs_new_high,1448.76,1411.6,80.15,1330.25,1366.37,1376.53,1329.13,-6.06,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,MRNA,Biotechnology,accel,65.53,62.91,3.74,63.44,63.01,64.37,62.47,-1.59,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,MTSI,Semiconductors,rs_new_high,330.99,319.78,19.35,304.79,311.56,313.43,303.72,-6.94,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,MU,Semiconductors,rs_new_high,1036.13,995.26,72.16,956.5,957.0,978.67,952.51,-5.46,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,MXL,Semiconductors,rs_new_high,89.0,83.74,8.28,76.99,78.84,80.66,76.4,-9.17,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,NBIS,Software - Infrastructure,leaders,280.83,263.82,25.74,265.86,268.6,274.8,262.26,-1.11,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,NE,Oil & Gas Drilling,emerging,45.49,44.8,1.5,45.44,45.5,45.58,45.13,0.57,gapped_through,0.20666666666666345
-2026-08-18,morning,2026-08-18T14:07:06Z,NET,Software - Infrastructure,leaders,315.35,303.99,16.69,304.46,303.77,309.96,301.83,-0.83,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,NOVT,Scientific & Technical Instruments,rs_new_high,168.9,162.85,7.12,162.53,165.8,166.65,162.06,-3.69,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,NVDA,Semiconductors,rs_new_high,227.92,224.86,6.65,219.86,220.45,221.64,219.33,-2.29,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,OKTA,Software - Infrastructure,leaders,149.84,142.6,7.1,144.02,143.68,146.61,143.0,0.54,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,ONTO,Semiconductor Equipment & Materials,rs_new_high,353.84,336.87,24.74,323.74,334.61,335.58,323.17,-7.81,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,OXY,Oil & Gas E&P,emerging,59.14,58.06,1.64,59.39,59.82,60.15,59.04,0.59,gapped_through,0.21341463414634235
-2026-08-18,morning,2026-08-18T14:07:06Z,PANW,Software - Infrastructure,leaders,386.0,372.3,15.03,373.92,371.31,378.0,368.25,-0.49,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,PCVX,Biotechnology,accel,60.29,57.34,2.34,60.25,59.97,60.86,59.97,0.05,failed_breakout,
-2026-08-18,morning,2026-08-18T14:07:06Z,PLXS,Electronic Components,rs_new_high,276.1,267.56,12.32,258.88,268.19,267.33,257.54,-5.59,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,QRVO,Semiconductors,rs_new_high,98.82,95.94,2.97,94.26,95.0,95.91,93.46,-1.86,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,RAL,Electronic Components,rs_new_high,72.89,71.89,2.61,70.28,71.24,70.65,69.61,-2.35,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,RELY,Software - Infrastructure,leaders,26.5,26.0,1.16,26.47,26.07,26.6,25.94,0.63,failed_breakout,
-2026-08-18,morning,2026-08-18T14:07:06Z,RGTI,Computer Hardware,rs_new_high,18.95,18.21,1.18,18.22,17.56,18.64,17.53,-2.41,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,ROAD,Engineering & Construction,emerging,122.63,119.44,5.72,118.01,119.84,119.92,117.99,-2.03,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,ROIV,Biotechnology,accel,37.19,35.65,1.24,36.02,35.91,36.36,35.9,-0.6,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,RPRX,Biotechnology,accel,59.49,58.18,1.4,60.23,59.74,60.42,59.73,1.32,gapped_through,0.35714285714285715
-2026-08-18,morning,2026-08-18T14:07:06Z,RS,Steel,leaders,428.73,420.67,10.19,417.42,432.65,427.48,417.42,-2.48,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,RYTM,Biotechnology,accel,117.18,114.44,4.85,116.44,115.25,116.45,114.87,0.87,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,SITM,Semiconductors,rs_new_high,754.99,724.25,50.75,692.55,710.41,725.0,690.13,-7.59,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,SKHY,Semiconductors,rs_new_high,178.43,169.57,14.29,161.1,161.76,163.86,159.27,-6.0,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,SLAB,Semiconductors,rs_new_high,219.48,218.55,1.23,218.58,218.94,218.93,218.65,-0.32,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,SLB,Oil & Gas Equipment & Services,emerging,54.0,53.08,1.59,54.04,54.21,54.58,53.9,0.33,gapped_through,0.08805031446540916
-2026-08-18,morning,2026-08-18T14:07:06Z,SNDK,Computer Hardware,rs_new_high,1827.99,1698.0,169.28,1669.29,1677.54,1724.08,1649.0,-6.58,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,SNX,Electronics & Computer Distribution,leaders,264.87,257.71,8.33,260.58,259.49,263.33,256.58,-1.25,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,STLD,Steel,leaders,259.04,250.02,8.17,251.51,256.1,256.31,251.1,-2.58,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,STX,Computer Hardware,rs_new_high,1013.99,978.63,71.88,932.16,934.99,961.27,926.04,-6.3,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,SUN,Oil & Gas Refining & Marketing,leaders,75.95,74.74,2.07,76.02,75.63,76.17,75.49,1.41,triggered,0.25603864734299575
-2026-08-18,morning,2026-08-18T14:07:06Z,SUNB,Rental & Leasing Services,leaders,85.21,82.97,2.87,81.96,81.76,83.04,81.75,-1.41,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,SWKS,Semiconductors,rs_new_high,70.33,67.61,2.97,65.51,66.95,67.43,64.83,-3.28,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,SYRE,Biotechnology,accel,104.96,102.26,5.7,104.95,102.46,105.35,101.44,0.33,failed_breakout,
-2026-08-18,morning,2026-08-18T14:07:06Z,TDY,Scientific & Technical Instruments,rs_new_high,685.73,670.69,17.0,669.33,671.42,671.44,663.14,-1.17,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,TEM,Health Information Services,leaders,52.8,50.61,3.29,50.44,50.25,51.1,49.8,-2.32,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,TER,Semiconductor Equipment & Materials,rs_new_high,444.17,420.22,29.1,407.57,419.37,424.76,405.5,-8.03,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,TSEM,Semiconductors,rs_new_high,277.88,263.42,22.46,245.03,249.94,252.9,244.54,-7.09,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,TSM,Semiconductors,rs_new_high,435.71,426.8,14.0,415.2,416.97,419.63,414.05,-3.66,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,TWLO,Software - Infrastructure,leaders,240.0,228.18,13.39,238.69,231.0,239.43,229.23,4.41,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,URI,Rental & Leasing Services,leaders,1176.44,1150.0,33.9,1149.82,1153.74,1156.78,1142.27,-1.29,invalidated,
-2026-08-18,morning,2026-08-18T14:07:06Z,VIST,Oil & Gas E&P,emerging,72.69,71.0,2.89,71.17,73.52,73.52,70.8,-1.37,gapped_through,0.12802768166090123
-2026-08-18,morning,2026-08-18T14:07:06Z,VRTX,Biotechnology,accel,517.84,502.53,15.36,520.95,519.56,524.21,517.86,1.05,gapped_through,0.20117187500000208
-2026-08-18,morning,2026-08-18T14:07:06Z,WFRD,Oil & Gas Equipment & Services,emerging,95.71,92.48,3.51,92.92,93.68,94.62,92.75,-0.17,setting_up,
-2026-08-18,morning,2026-08-18T14:07:06Z,XYZ,Software - Infrastructure,leaders,81.83,79.96,2.75,80.67,79.33,80.93,79.13,0.58,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,ABBV,Drug Manufacturers - General,accel,259.18,252.41,6.02,265.03,260.73,266.41,259.85,2.36,gapped_through,0.8604651162790615
+2026-08-19,morning,2026-08-19T14:10:05Z,ANET,Computer Hardware,leaders,197.99,189.67,10.1,186.84,195.5,195.5,186.73,-3.28,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,AR,Oil & Gas E&P,emerging,37.31,36.63,1.13,37.46,37.54,37.58,37.22,1.12,gapped_through,0.21238938053097522
+2026-08-19,morning,2026-08-19T14:10:05Z,ARGX,Biotechnology,rs_new_high,1009.74,980.45,34.76,1021.93,1021.01,1029.97,1012.54,2.91,gapped_through,0.2701380897583425
+2026-08-19,morning,2026-08-19T14:10:05Z,ARWR,Biotechnology,rs_new_high,88.35,85.98,3.64,88.98,89.03,90.0,88.28,1.23,gapped_through,0.1923076923076931
+2026-08-19,morning,2026-08-19T14:10:05Z,ATI,Metal Fabrication,leaders,230.62,224.35,9.4,218.23,226.21,226.45,217.7,-3.64,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,AVT,Electronics & Computer Distribution,leaders,96.93,91.56,3.96,89.75,94.0,94.35,89.74,-3.91,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,BBIO,Biotechnology,rs_new_high,83.95,80.1,3.09,84.01,84.35,85.52,83.93,1.24,gapped_through,0.025889967637539903
+2026-08-19,morning,2026-08-19T14:10:05Z,BIIB,Drug Manufacturers - General,accel,214.07,210.01,6.29,219.26,215.33,220.12,215.07,3.16,gapped_through,0.666136724960254
+2026-08-19,morning,2026-08-19T14:10:05Z,BKNG,Travel Services,leaders,211.64,204.81,7.05,214.4,208.2,215.19,208.0,2.95,triggered,0.9078014184397172
+2026-08-19,morning,2026-08-19T14:10:05Z,BMRN,Biotechnology,rs_new_high,68.26,66.84,1.97,68.92,68.22,69.33,67.75,2.88,triggered,0.5939086294416253
+2026-08-19,morning,2026-08-19T14:10:05Z,BMY,Drug Manufacturers - General,accel,66.38,65.0,1.65,68.36,66.78,68.54,66.62,3.5,gapped_through,1.0545454545454516
+2026-08-19,morning,2026-08-19T14:10:05Z,CCEP,Beverages - Non-Alcoholic,accel,108.25,106.54,2.36,108.25,107.97,108.59,107.71,0.7,triggered,0.22881355932203656
+2026-08-19,morning,2026-08-19T14:10:05Z,CELH,Beverages - Non-Alcoholic,accel,30.51,29.44,1.77,31.41,30.01,31.44,29.88,5.03,triggered,0.8644067796610175
+2026-08-19,morning,2026-08-19T14:10:05Z,CGON,Biotechnology,rs_new_high,77.5,75.31,3.29,78.81,77.8,79.15,77.0,3.3,gapped_through,0.5501519756838913
+2026-08-19,morning,2026-08-19T14:10:05Z,CHRD,Oil & Gas E&P,emerging,145.53,141.26,5.01,147.41,144.8,147.9,144.51,2.41,triggered,0.5788423153692627
+2026-08-19,morning,2026-08-19T14:10:05Z,CLF,Steel,leaders,12.3,11.75,0.62,12.16,12.01,12.39,11.93,2.32,failed_breakout,
+2026-08-19,morning,2026-08-19T14:10:05Z,CMC,Metal Fabrication,leaders,72.1,69.93,2.25,72.03,71.82,72.59,71.32,1.48,failed_breakout,
+2026-08-19,morning,2026-08-19T14:10:05Z,CNX,Oil & Gas E&P,emerging,35.98,35.27,0.93,36.01,35.82,36.09,35.53,1.8,triggered,0.5161290322580612
+2026-08-19,morning,2026-08-19T14:10:05Z,COKE,Beverages - Non-Alcoholic,accel,190.35,186.35,7.29,191.05,188.93,192.41,188.93,1.27,triggered,0.2908093278463655
+2026-08-19,morning,2026-08-19T14:10:05Z,CPAY,Software - Infrastructure,leaders,416.3,406.82,11.45,410.65,407.33,412.3,406.2,0.94,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,CRWD,Software - Infrastructure,leaders,216.05,209.07,8.89,197.95,212.9,213.98,197.75,-7.03,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,CRWV,Software - Infrastructure,leaders,102.38,93.15,8.86,89.75,94.29,94.38,89.5,-3.67,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,DBX,Software - Infrastructure,leaders,34.56,33.31,1.33,34.28,33.89,34.65,33.88,1.23,failed_breakout,
+2026-08-19,morning,2026-08-19T14:10:05Z,DELL,Computer Hardware,leaders,489.98,458.5,32.27,432.03,467.89,471.75,431.61,-7.81,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,DVN,Oil & Gas E&P,emerging,48.43,47.73,1.34,48.53,48.22,48.89,48.12,1.46,triggered,0.30597014925373406
+2026-08-19,morning,2026-08-19T14:10:05Z,EOG,Oil & Gas E&P,emerging,149.0,146.66,3.88,150.68,149.86,151.08,148.75,1.33,gapped_through,0.4974226804123729
+2026-08-19,morning,2026-08-19T14:10:05Z,EXPE,Travel Services,leaders,327.89,316.74,12.57,332.14,324.13,332.09,323.23,3.34,triggered,0.7088305489260117
+2026-08-19,morning,2026-08-19T14:10:05Z,FANG,Oil & Gas E&P,emerging,210.41,206.47,5.92,211.57,211.35,213.75,210.55,0.74,gapped_through,0.17229729729729423
+2026-08-19,morning,2026-08-19T14:10:05Z,FTNT,Software - Infrastructure,leaders,159.97,155.7,6.37,151.87,157.02,158.49,151.85,-3.89,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,GDDY,Software - Infrastructure,leaders,97.65,94.09,5.21,98.6,95.72,98.74,95.87,2.92,triggered,0.5239923224568118
+2026-08-19,morning,2026-08-19T14:10:05Z,GEN,Software - Infrastructure,leaders,27.96,27.59,0.96,27.75,27.6,27.93,27.56,0.38,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,GGB,Steel,leaders,4.84,4.65,0.15,4.75,4.72,4.79,4.72,1.74,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,GILD,Drug Manufacturers - General,accel,143.89,139.54,3.88,148.7,145.22,148.97,144.3,3.67,gapped_through,1.1340206185566952
+2026-08-19,morning,2026-08-19T14:10:05Z,GPN,Software - Infrastructure,leaders,93.05,90.36,3.31,92.36,90.64,92.37,90.38,2.2,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,HCC,Coking Coal,accel,98.76,96.42,4.0,102.71,99.84,103.28,99.79,5.08,gapped_through,0.7299999999999969
+2026-08-19,morning,2026-08-19T14:10:05Z,HNGE,Health Information Services,leaders,89.96,85.01,4.35,88.73,89.25,90.7,87.77,0.56,failed_breakout,
+2026-08-19,morning,2026-08-19T14:10:05Z,HPQ,Computer Hardware,leaders,30.31,29.57,1.31,30.1,29.85,30.46,29.85,0.47,failed_breakout,
+2026-08-19,morning,2026-08-19T14:10:05Z,HQY,Health Information Services,leaders,104.02,101.73,2.96,103.76,103.41,103.98,103.07,0.94,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,IBRX,Biotechnology,rs_new_high,7.83,7.54,0.41,8.05,8.06,8.27,8.02,4.28,gapped_through,0.07317073170731984
+2026-08-19,morning,2026-08-19T14:10:05Z,INCY,Biotechnology,rs_new_high,124.74,123.23,3.6,126.17,125.07,126.21,124.75,2.18,gapped_through,0.39444444444444493
+2026-08-19,morning,2026-08-19T14:10:05Z,INSM,Biotechnology,rs_new_high,128.93,126.39,5.74,128.99,129.85,130.95,128.14,0.41,gapped_through,0.14808362369338374
+2026-08-19,morning,2026-08-19T14:10:05Z,IOT,Software - Infrastructure,leaders,40.79,39.29,2.19,40.1,39.72,40.59,39.58,1.3,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,JAZZ,Biotechnology,rs_new_high,256.41,248.73,7.18,254.03,255.1,256.92,253.57,0.38,failed_breakout,
+2026-08-19,morning,2026-08-19T14:10:05Z,JNJ,Drug Manufacturers - General,accel,271.73,266.33,5.86,275.53,271.11,276.47,270.56,1.63,triggered,0.8481228668941929
+2026-08-19,morning,2026-08-19T14:10:05Z,KO,Beverages - Non-Alcoholic,accel,88.96,87.88,1.59,89.98,88.66,90.11,88.61,1.31,triggered,0.861635220125789
+2026-08-19,morning,2026-08-19T14:10:05Z,KSPI,Software - Infrastructure,leaders,99.34,96.48,2.94,100.36,98.4,100.38,98.4,2.31,triggered,0.6666666666666645
+2026-08-19,morning,2026-08-19T14:10:05Z,KYMR,Biotechnology,rs_new_high,122.14,118.09,4.86,124.45,123.02,124.98,121.82,2.53,gapped_through,0.5411522633744875
+2026-08-19,morning,2026-08-19T14:10:05Z,LLY,Drug Manufacturers - General,accel,1228.47,1194.01,40.46,1287.68,1248.5,1292.65,1242.5,5.05,gapped_through,1.1166584280771148
+2026-08-19,morning,2026-08-19T14:10:05Z,MDGL,Biotechnology,rs_new_high,533.68,514.57,22.91,536.69,528.99,536.81,528.41,2.35,triggered,0.3614142295940675
+2026-08-19,morning,2026-08-19T14:10:05Z,MGY,Oil & Gas E&P,emerging,27.35,26.66,0.88,27.57,27.15,27.72,27.15,2.49,triggered,0.47727272727272924
+2026-08-19,morning,2026-08-19T14:10:05Z,MLI,Metal Fabrication,leaders,65.71,64.11,1.85,64.62,64.61,64.85,64.24,0.22,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,MMYT,Travel Services,leaders,60.44,58.92,2.63,62.11,60.05,62.11,59.96,4.42,triggered,0.8174904942965774
+2026-08-19,morning,2026-08-19T14:10:05Z,MNST,Beverages - Non-Alcoholic,accel,47.54,45.78,1.24,47.67,47.28,47.79,47.24,0.61,triggered,0.34677419354838684
+2026-08-19,morning,2026-08-19T14:10:05Z,MRK,Drug Manufacturers - General,accel,137.98,134.88,3.24,151.34,146.85,151.41,144.9,11.96,gapped_through,1.9876543209876534
+2026-08-19,morning,2026-08-19T14:10:05Z,MRNA,Biotechnology,rs_new_high,64.46,62.13,3.64,148.46,116.05,149.37,114.46,135.8,gapped_through,9.340659340659345
+2026-08-19,morning,2026-08-19T14:10:05Z,MT,Steel,leaders,73.08,71.21,1.99,72.83,73.45,73.52,72.57,1.15,gapped_through,0.13065326633166086
+2026-08-19,morning,2026-08-19T14:10:05Z,MTDR,Oil & Gas E&P,emerging,57.46,55.75,2.01,57.82,57.24,58.19,57.52,1.01,triggered,0.14925373134328218
+2026-08-19,morning,2026-08-19T14:10:05Z,NBIS,Software - Infrastructure,leaders,274.8,244.78,26.05,215.87,232.21,236.19,215.25,-13.11,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,NE,Oil & Gas Drilling,rs_new_high,45.59,45.13,1.42,46.04,45.66,46.52,45.79,1.75,gapped_through,0.17605633802816903
+2026-08-19,morning,2026-08-19T14:10:05Z,NET,Software - Infrastructure,leaders,309.96,297.63,16.38,286.14,300.51,301.17,286.14,-5.05,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,NUE,Steel,leaders,271.72,263.23,7.65,265.13,268.17,269.96,262.59,0.36,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,NVS,Drug Manufacturers - General,accel,155.1,153.38,2.77,158.57,156.46,158.89,156.19,2.6,gapped_through,0.8592057761732835
+2026-08-19,morning,2026-08-19T14:10:05Z,OKTA,Software - Infrastructure,leaders,146.61,142.13,6.91,138.1,144.54,145.54,137.89,-4.05,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,OVV,Oil & Gas E&P,emerging,65.43,63.89,1.88,65.99,65.8,66.29,65.51,1.48,gapped_through,0.2553191489361648
+2026-08-19,morning,2026-08-19T14:10:05Z,OXY,Oil & Gas E&P,emerging,60.15,59.04,1.6,60.35,60.02,60.54,59.75,0.92,triggered,0.3750000000000009
+2026-08-19,morning,2026-08-19T14:10:05Z,PANW,Software - Infrastructure,leaders,378.04,368.0,14.67,353.64,374.67,376.43,353.22,-5.48,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,PCVX,Biotechnology,rs_new_high,60.86,59.5,2.27,62.49,61.56,62.87,60.94,4.51,gapped_through,0.6828193832599138
+2026-08-19,morning,2026-08-19T14:10:05Z,PR,Oil & Gas E&P,emerging,22.74,22.15,0.66,22.69,22.51,22.75,22.47,1.54,failed_breakout,
+2026-08-19,morning,2026-08-19T14:10:05Z,PRAX,Biotechnology,rs_new_high,375.0,365.05,19.46,371.54,377.31,377.31,365.64,0.46,gapped_through,0.3031860226104848
+2026-08-19,morning,2026-08-19T14:10:05Z,RELY,Software - Infrastructure,leaders,26.68,25.41,1.17,25.11,25.6,25.51,24.92,-1.3,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,RGTI,Computer Hardware,leaders,18.64,17.52,1.18,16.98,17.36,17.82,16.8,-4.13,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,RIG,Oil & Gas Drilling,rs_new_high,5.99,5.79,0.23,5.86,5.9,5.94,5.84,0.69,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,ROIV,Biotechnology,rs_new_high,37.46,35.86,1.26,36.97,37.83,37.95,36.92,-1.08,gapped_through,0.039682539682537425
+2026-08-19,morning,2026-08-19T14:10:05Z,RPRX,Biotechnology,rs_new_high,60.42,59.65,1.37,60.92,60.12,60.92,59.75,2.06,triggered,0.8540145985401472
+2026-08-19,morning,2026-08-19T14:10:05Z,RRC,Oil & Gas E&P,emerging,40.09,39.33,1.08,40.42,40.24,40.5,40.03,1.4,gapped_through,0.3611111111111116
+2026-08-19,morning,2026-08-19T14:10:05Z,RS,Steel,leaders,432.62,415.81,10.67,424.77,426.0,426.4,422.44,0.8,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,RYTM,Biotechnology,rs_new_high,117.16,114.32,4.71,117.34,116.41,118.31,115.26,1.81,triggered,0.441613588110403
+2026-08-19,morning,2026-08-19T14:10:05Z,SMCI,Computer Hardware,leaders,38.16,36.22,2.56,36.06,37.14,37.49,36.05,-3.61,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,SNX,Electronics & Computer Distribution,leaders,264.17,256.58,8.28,250.77,259.87,259.79,251.29,-3.48,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,SRRK,Biotechnology,rs_new_high,54.78,51.91,2.36,55.36,55.71,56.13,54.48,1.18,gapped_through,0.3728813559322045
+2026-08-19,morning,2026-08-19T14:10:05Z,STLD,Steel,leaders,257.21,249.09,8.23,249.85,252.69,252.56,247.3,0.02,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,STX,Computer Hardware,leaders,961.27,898.68,73.61,856.53,914.77,912.89,856.49,-5.22,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,SUN,Oil & Gas Refining & Marketing,leaders,77.32,75.49,2.09,77.5,77.7,77.97,77.17,0.54,gapped_through,0.15789473684210445
+2026-08-19,morning,2026-08-19T14:10:05Z,SYRE,Biotechnology,rs_new_high,108.62,101.44,5.81,105.83,109.44,110.01,104.47,-1.85,gapped_through,0.2340791738382099
+2026-08-19,morning,2026-08-19T14:10:05Z,TWLO,Software - Infrastructure,leaders,239.43,229.02,13.21,222.35,232.12,234.48,222.65,-4.2,invalidated,
+2026-08-19,morning,2026-08-19T14:10:05Z,VAL,Oil & Gas Drilling,rs_new_high,88.92,86.16,3.39,86.95,86.91,88.19,86.43,0.67,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,VIST,Oil & Gas E&P,emerging,73.52,69.6,2.96,70.51,71.0,71.74,70.1,1.1,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,VRSN,Software - Infrastructure,leaders,280.42,274.58,8.94,278.15,276.81,279.18,277.23,0.51,setting_up,
+2026-08-19,morning,2026-08-19T14:10:05Z,VRTX,Biotechnology,rs_new_high,533.78,517.34,15.56,542.23,537.47,543.96,532.88,2.66,gapped_through,0.6008997429305927
+2026-08-19,morning,2026-08-19T14:10:05Z,XYZ,Software - Infrastructure,leaders,81.5,79.05,2.72,80.97,80.0,80.96,79.39,1.94,setting_up,
