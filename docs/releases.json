@@ -1,6 +1,17 @@
 {
-  "current": "2026.08.19",
+  "current": "2026.08.19.1",
   "releases": [
+    {
+      "version": "2026.08.19.1",
+      "date": "2026-08-19",
+      "title": "Earnings-approaching flag on positions",
+      "tag": "feature",
+      "tab": "positions",
+      "notes": [
+        "A managing position now shows a calendar flag when earnings are within 10 trading days (red within 3).",
+        "Flag-only — the engine never auto-exits on earnings; you decide your exposure."
+      ]
+    },
     {
       "version": "2026.08.19",
       "date": "2026-08-19",

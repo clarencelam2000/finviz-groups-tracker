@@ -169,9 +169,10 @@ zero. See `planning/ws5-7-positions-managing-card.md` §2 for the formula table.
 - **Overlays** (decorate a `managing`/`open` card, can co-occur): partial trim
   (`remaining_qty < initial_qty` — "✂ Trimmed N sh @ M× ATR · date — Q of I held") and caution
   (`caution_flag >= 1`, an integer counter, not a bool — "⚠ N of 2 closes below the 20MA — exits on
-  the next close below"). **Earnings overlay is deliberately NOT built** — the underlying
-  `days_to_earnings` engine signal has a known negative-days bug (see the spec doc §2b); do not add
-  an earnings badge until that's fixed.
+  the next close below"). Earnings (`days_to_earnings` within `EARNINGS_CAUTION_DAYS`=10, red within
+  `EARNINGS_IMMINENT_DAYS`=3; its own `>= 0` client guard so a past-earnings date never shows even if
+  the engine signal regresses — the engine-side negative-days guard fix is #335 / advance.js).
+  Flag-only copy, mirroring the engine's never-auto-exit-on-earnings rule.
 - **Out of scope here (tracked separately):** confirm-fill / still-holding action buttons on
   `closing` cards + push notifications are WS5-4 — this overhaul only makes `closing` *legible*
   ("Confirm your fill / still holding arrives with alerts (WS5-4)" note), not actionable.

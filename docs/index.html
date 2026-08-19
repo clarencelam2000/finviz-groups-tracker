@@ -5988,7 +5988,7 @@
         </div>`;
     }
 
-    // ── Overlays (Task 5, spec §2b — trim + caution; earnings deliberately NOT built) ───
+    // ── Overlays (spec §2b — trim + caution + earnings (#335)) ───
     function posOverlaysHtml(p, d) {
       let html = '';
       if (d.trimmed) {
@@ -6009,6 +6009,17 @@
       if (p.caution_flag >= 1) {
         html += `<div class="mt-2.5 bg-amber-500/10 border border-amber-500/40 rounded-lg px-2.5 py-2 text-xs text-amber-400 font-semibold">
           ⚠ ${p.caution_flag} of 2 closes below the 20MA — exits on the next close below
+        </div>`;
+      }
+      if (isFinite(p.days_to_earnings) && p.days_to_earnings >= 0 && p.days_to_earnings <= EARNINGS_CAUTION_DAYS) {
+        const dte = p.days_to_earnings;
+        const when = dte === 0 ? 'today' : dte === 1 ? 'tomorrow' : `in ${dte} days`;
+        const imminent = dte <= EARNINGS_IMMINENT_DAYS;
+        const cls = imminent
+          ? 'bg-red-500/10 border-red-500/40 text-red-400'
+          : 'bg-amber-500/10 border-amber-500/40 text-amber-400';
+        html += `<div class="mt-2.5 ${cls} border rounded-lg px-2.5 py-2 text-xs font-semibold">
+          📅 Earnings ${when} — flag only; the engine never auto-exits on earnings
         </div>`;
       }
       return html;
