@@ -6,6 +6,62 @@
 
 ---
 
+## 2026-08-19 — WS5-7 BUILT: positions managing-card overhaul (#337, PR #338)
+
+**Status: safe to close once PR #338 merges.** Staff-eng session executing WS5-7 from the cold-start
+spec. Lead owned design/taste/review + the mock (visual authority) + all adjudication; delegated both
+boots-on-ground builds to Sonnet subagents against lead-authored locked specs
+(`scratchpad/pr1-backend-spec.md`, `pr2-pwa-spec.md`) and reviewed every line. **PR #338 open**
+(draft→ready), base `claude/elegant-babbage-hlxnfy`, branch `claude/pr336-cold-start-ws5-7-6sihe8`.
+
+**Owner decision that reshaped the spec (mid-session): ack storage.** Spec §6 originally planned a
+new `stop_ack_value` column + `0004_stop_ack.sql` migration. Owner pushed back ("we're changing the
+top-level DB for one small field?"). Lead re-checked the schema: `position_events.event_type` is free
+TEXT (no CHECK constraint), and the ack IS "a thing the user did" — exactly what the append-only
+ledger is for. **Reframed to: ack = a `stop_ack` event row. No migration, no new column.** Cleaner
+(disjoint from both write paths by construction — shares no row), and removed the owner-gated live-D1
+migration step entirely. Spec §6/§8/§9's "localStorage v1" lines were already stale (superseded by the
+cross-device server-side decision); the final design is server-side event-based.
+
+**What landed (PR #338):**
+- **Backend (`worker-positions/`, 4 commits, 229 vitest):** `listPositions()` LEFT JOINs the latest
+  `ticker_quotes` bar (null-safe, tenant-safe) + bounded inline `events` (≤8) + computed
+  `stop_ack_value` (from the FULL per-trade history, robust to the display cap) in one grouped query.
+  `POST /positions/:id/ack-stop` (`src/transitions.js::ackStop`) — event-only, idempotent, writes NO
+  positions column. Two persist-disjointness guard tests (sweep never touches a `stop_ack` event; ack
+  never touches the positions row).
+- **PWA (`docs/index.html`, 4 commits + 2 lead fixups):** pure `posDerive(p)` (the whole bug fix — no
+  negative risk, floored open-risk/locked-in), state heroes (risk-free/locked w/ pending-lock chip,
+  planned-risk US-7, P&L, closing exit-summary), stop-moved banner sourced from the `stop_moved`
+  event payload `{from,to,basis}` (NOT initial_stop), cross-device ack via `posAckStop`, Details ▾ +
+  `:has()`-driven formula reveal + OHLCV + activity trail, trim + caution overlays. Release
+  `2026.08.19` / sw v70→v71 / `docs/CLAUDE.md`. 8 Playwright hero-state tests.
+- **Lead override of a subagent call:** dollar totals now show cents only when non-zero ($174 but
+  +$177.60) — the subagent's spec-literal "whole ≥$100" rule would've shown the real +$177.60 P&L as
+  +$178; the owner-approved mock keeps the cents. Fixed the formatters + synced spec §2.
+
+**Earnings overlay DEFERRED (lead scope call, owner OK'd):** NOT built — mock omits it AND the
+`days_to_earnings`/`earnings_warning` engine signal fires on negative (past) dates. Tracked in 4
+places: spec §2b, `.session/SPRINT.md` (#335 row), issue #335 (to add), PR #338 "Deferred". Fix the
+negative-days guard first, then the overlay is a small `posOverlaysHtml` add.
+
+**Verification (honest, all env-gaps identified against base commit):** backend 229/229 vitest; PWA
+8/8 new hero tests via the chromium-1117 symlink harness; 682 non-collect pytest pass; release guard
+5/5. The 4 failing `test_pwa_positions` "take it"/confirm click tests + 18 `test_collect_*` failures
+are **all pre-existing** — verified the 4 fail identically on base `477fd5f`; the 18 are sandbox dep
+gaps (`bs4`/`pytz`/`lxml` not installed here; CI has them). None touch WS5-7 code.
+
+**Decision flagged: ONE PR, not two.** Told owner "two PRs, backend first" initially; revised to one
+PR on the designated branch because (a) branch is designated, and (b) the card is null-safe, so the
+fail-closed deploy-ordering hazard that forced the WS5-6 split doesn't apply here.
+
+**Next steps:** flip #338 to ready (done this session) → owner review/merge → `deploy-workers.yml`
+auto-deploys `worker-positions` (backward-compatible). Then: file the WS5-8 issue (already
+SPRINT-tracked, line 51); #335 (breakeven ratchet + earnings-overlay bundle); WS5-4 (closing action
+strip + push). Ack is event-based so nothing to apply out-of-band.
+
+---
+
 ## 2026-08-19 — Positions tab data-integrity riff → WS5-7 spec + mock, WS5-8, #335
 
 **Status: safe to close. No production code shipped — this was a design/scoping session.** PR #336
