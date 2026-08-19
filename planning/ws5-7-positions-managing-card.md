@@ -149,8 +149,11 @@ Everything in the table §2 is available under **Details ▾** regardless of sta
 card's Details shows the **same full row set** (Entry, Stop + true basis, 1R, Open risk, Locked-in
 *or* Unrealized P&L, Qty/remaining, Today's bar, Activity) — no thin/inconsistent Details per state.
 
-**Rounding/format:** dollars `$X` (whole) for totals ≥ $100, `$X.XX` below; per-share always 2dp;
-P&L carries sign and color (`text-emerald-400` / `text-red-400`); risk-free uses emerald.
+**Rounding/format:** dollar totals show cents **only when non-zero** — `$174` but `+$177.60` —
+thousands-separated (matches the owner-approved mock, where real P&L keeps its cents and round
+figures drop the `.00`; supersedes an earlier "whole ≥ $100" draft that would have shown the real
+`+$177.60` as `+$178`). Per-share always 2dp; P&L carries sign and color (`text-emerald-400` /
+`text-red-400`); risk-free uses emerald.
 
 ---
 
@@ -188,7 +191,7 @@ Each shows: reason phrase · modeled fill (`expected_exit_price`) · actual clos
 | **Stop-moved (pending ack)** | `current_stop != initial_stop` AND no ack for current value | the §6 banner + pending-lock tag |
 | **Partial trim** | `remaining_qty < initial_qty` | "20 of 30 sh · trimmed 10 @ 3× ATR" — the ATR-extension trim ledger (`advance.js`). Qty row must show remaining-of-initial, not a bare number, or the size looks wrong. P&L/risk all use `remaining_qty`. |
 | **Caution (1 close < 20MA)** | `caution_flag >= 1` (counter, not bool — see #335-sibling note) | amber "⚠ 1 of 2 closes below 20MA — exits on the next close below" — a real actionable warning the engine already computes and we currently hide. |
-| **Earnings approaching** | `days_to_earnings` within warn band | "Earnings in N days" badge. **Caveat:** the `earnings_warning` note currently fires on *negative* days-to-earnings (past dates) — see the event log; that's a latent engine bug to fix or guard before surfacing this overlay, else it'll flag already-past earnings. Track alongside #335. |
+| **Earnings approaching** | `days_to_earnings` within warn band | **NOT built in WS5-7 — deferred to #335.** "Earnings in N days" badge. **Why deferred:** the `earnings_warning` note currently fires on *negative* days-to-earnings (past dates) — see the event log; that latent engine bug (the negative-days guard) must be fixed before this overlay is surfaced, else it flags already-past earnings. Bundled with the #335 breakeven-ratchet taste call; also tracked in `.session/SPRINT.md`. |
 
 The trim + caution overlays are the substantive additions from this review; both are already in the
 `advance()` output and D1, just never surfaced. The mock (§9) now includes a trim example and a

@@ -33,6 +33,22 @@
        computed font-size under 16px (ticker/search/guide-search are text-sm,
        i.e. 14px). Forcing 16px while focused avoids the zoom. */
     input:focus, textarea:focus, select:focus { font-size: 16px; }
+
+    /* WS5-7 Positions managing-card — mirrors planning/mocks/ws5-7-positions-card.html.
+       Prefixed pos- to avoid colliding with existing PWA classes. Tailwind's Play CDN can't
+       express the `:has()`-driven "show formulas" reveal as utility classes, so it lives here. */
+    .pos-lock { display: inline-flex; align-items: center; gap: 6px; border-radius: 8px; padding: 6px 10px; font-weight: 700; font-size: 14px; }
+    .pos-moved { margin-top: 12px; border-radius: 9px; padding: 9px 11px; }
+    .pos-details { margin-top: 12px; border-top: 1px solid rgb(51 65 85); padding-top: 10px; }
+    .pos-details > summary { font-size: 12px; color: rgb(148 163 184); cursor: pointer; list-style: none; user-select: none; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .pos-details > summary::-webkit-details-marker { display: none; }
+    .pos-details > summary .pos-lbl::before { content: "▸ "; color: rgb(100 116 139); }
+    .pos-details[open] > summary .pos-lbl::before { content: "▾ "; }
+    .pos-fxwrap { font-size: 11px; color: rgb(100 116 139); display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+    .pos-formula { display: none; font-size: 11px; color: #38bdf8; margin-top: 2px; text-align: right; }
+    .pos-card:has(.pos-fx:checked) .pos-formula { display: block; }
+    .pos-bar { font-size: 11.5px; color: rgb(203 213 225); margin-top: 9px; padding-top: 9px; border-top: 1px dashed rgb(51 65 85); line-height: 1.7; }
+    .pos-act { margin-top: 9px; padding-top: 9px; border-top: 1px dashed rgb(51 65 85); }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
@@ -494,6 +510,14 @@
       // (network error, 5xx) — distinguishes "fetch failed" from "genuinely zero positions"
       // so renderPositions doesn't show the empty-state copy for a real outage.
       positionsError: false,
+      // WS5-7 — per-trade_id ephemeral UI state for the stop-moved "✓ Updated" ack POST
+      // (posAckStop). true while the POST is in flight (disables the button, no double-submit);
+      // cleared on success (server response drives the resolved state via stop_ack_value) or on
+      // failure (see posAckError). Module-level, survives renderPositions() re-renders.
+      posAckBusy: {},
+      // trade_id -> small inline error string shown under a banner whose ack POST failed for a
+      // reason other than 401 (which routes through the usual signed-out flow instead).
+      posAckError: {},
       // WS5 §8a — manual "log a position on any ticker" form on the Positions tab.
       // Survives renderPositions() re-renders (module-level, not rebuilt each render), same
       // convention as morningTicket/ws5Card. `confirm` mirrors ws5Card's freeze-confirm step
@@ -5761,27 +5785,399 @@
       closing: '<span class="text-[10px] uppercase tracking-wide text-amber-400 ml-1.5">exit pending</span>',
     };
 
+    // ── WS5-7 Positions managing-card overhaul (planning/ws5-7-positions-managing-card.md,
+    // mock planning/mocks/ws5-7-positions-card.html) ────────────────────────────────────
+    //
+    // posDerive(p) is the whole bug fix: it replaces the phase-1 `riskShare = entry - stop`
+    // math (negative once the engine trails the stop past entry — EOG showed "Risk/sh −$0.12",
+    // "Open risk −$3.55", which is the LOCKED-IN GAIN with its sign flipped) with per-share-
+    // first, floored-at-zero dollar figures. Pure/synchronous/DOM-free — the extraction target
+    // for unit tests (see tests/test_pwa_positions.py's arithmetic-regression cases).
+    function posDerive(p) {
+      const entry     = parseFloat(p.entry_price);
+      const initStop  = parseFloat(p.initial_stop);
+      const curStop   = parseFloat(p.current_stop != null ? p.current_stop : p.initial_stop);
+      const qty       = parseFloat(p.remaining_qty != null ? p.remaining_qty : p.initial_qty);
+      const initQty   = parseFloat(p.initial_qty != null ? p.initial_qty : p.remaining_qty);
+      const last      = (p.last_close != null) ? parseFloat(p.last_close) : NaN;
+      const oneR      = (isFinite(entry) && isFinite(initStop)) ? entry - initStop : NaN;   // per-share 1R
+      const stopMoved = isFinite(curStop) && isFinite(initStop) && Math.abs(curStop - initStop) > 1e-9;
+      const riskFree  = isFinite(entry) && isFinite(curStop) && curStop >= entry;
+      const hasLast   = isFinite(last);
+      const lockedIn  = riskFree ? Math.max(curStop - entry, 0) * qty : 0;                   // $ total, floored ≥0
+      const openRisk  = hasLast ? Math.max(last - curStop, 0) * qty : NaN;                   // $ total, floored ≥0
+      const unrealized= hasLast ? (last - entry) * qty : NaN;                                // $ total, signed
+      const plannedRisk = (isFinite(oneR) && isFinite(qty)) ? oneR * qty : NaN;              // US-7 fallback
+      const trimmed   = isFinite(initQty) && isFinite(qty) && qty < initQty - 1e-9;
+      const acked     = (p.stop_ack_value != null) && isFinite(curStop)
+                        && Math.abs(parseFloat(p.stop_ack_value) - curStop) < 1e-9;
+      return { entry, initStop, curStop, qty, initQty, last, oneR, stopMoved, riskFree, hasLast,
+               lockedIn, openRisk, unrealized, plannedRisk, trimmed, acked };
+    }
+
+    // Dollar totals: show cents ONLY when non-zero (so "$174" but "+$177.60"), thousands-separated
+    // (spec §2 rounding rule — matches the owner-approved mock, where real P&L carries its cents
+    // and round figures don't). Assumes v≥0 — signable figures go through fmtSigned instead.
+    function usdMagnitude(abs) {
+      const r = Math.round(abs * 100) / 100;
+      const hasCents = Math.round(r * 100) % 100 !== 0;
+      return r.toLocaleString('en-US', hasCents
+        ? { minimumFractionDigits: 2, maximumFractionDigits: 2 }
+        : { maximumFractionDigits: 0 });
+    }
+    function fmtUsd(v) {
+      if (!isFinite(v)) return '—';
+      return '$' + usdMagnitude(Math.abs(v));
+    }
+    // Signed dollar figure (unrealized P&L, realized-modeled) — sign always shown, magnitude
+    // follows the same cents-when-present rule as fmtUsd.
+    function fmtSigned(v) {
+      if (!isFinite(v)) return '—';
+      return (v >= 0 ? '+' : '−') + '$' + usdMagnitude(Math.abs(v));
+    }
+    // Per-share figures are always 2dp (spec §2), never the whole-number totals rule.
+    function fmtPerSh(v) { return isFinite(v) ? '$' + v.toFixed(2) : '—'; }
+    // Compact volume (4.2M / 380K) — matches the mock's "Vol 4.2M · avg 3.8M" style.
+    function fmtVol(n) {
+      if (!isFinite(n)) return '—';
+      const abs = Math.abs(n);
+      if (abs >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+      if (abs >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+      return String(Math.round(n));
+    }
+    // "Average Volume" rides p.last_raw (the full Finviz scrape JSON) as whatever string Finviz
+    // itself renders (often already "3.8M") — pass through as-is; only reach for fmtVol() on a
+    // bare numeric value. Defensive: last_raw may be "{}" or absent.
+    function posAvgVolumeLabel(p) {
+      let raw = null;
+      try { raw = JSON.parse(p.last_raw || '{}'); } catch (e) { raw = {}; }
+      const v = raw && raw['Average Volume'];
+      if (v == null || v === '') return null;
+      if (typeof v === 'number') return fmtVol(v);
+      const n = parseFloat(v);
+      // Already human-formatted (e.g. "3.8M") if it doesn't parse as a bare number.
+      return (isFinite(n) && String(n) === String(v).trim()) ? fmtVol(n) : String(v);
+    }
+    // "Mon DD" — used across the stop-moved ack date and the activity trail. Parsed as UTC
+    // midnight so a YYYY-MM-DD calendar date never shifts a day under a negative-offset zone.
+    function posFmtDate(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr + 'T00:00:00Z');
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    }
+    function posBasisLabel(basisKey) { return POS_STOP_BASIS_LABEL[basisKey] || basisKey || 'Manual'; }
+    function posNewestEvent(p, type) {
+      return (p.events || []).find(e => e.event_type === type) || null; // events arrive newest-first
+    }
+
+    // ── Hero (Task 2, spec §2 / mock "Every state") ─────────────────────────────────────
+    function posHeroHtml(p, d) {
+      if (p.state === 'closing') return posClosingHeroHtml(p, d);
+
+      if (!d.hasLast) {
+        return `
+          <div class="pos-hero mt-3">
+            <div class="text-[15px] font-bold text-slate-100 tabular-nums">Planned risk ${fmtUsd(d.plannedRisk)}</div>
+            <div class="text-xs text-slate-400 mt-1">First engine read after tonight's close</div>
+          </div>`;
+      }
+
+      const unrealizedCls = d.unrealized >= 0 ? 'text-emerald-400' : 'text-red-400';
+      const unrealizedRow = `<div class="text-xs ${unrealizedCls} mt-1 tabular-nums">${fmtSigned(d.unrealized)} unrealized</div>`;
+
+      if (d.riskFree) {
+        let lockLine;
+        if (d.lockedIn > 0 && d.acked) {
+          lockLine = `<span class="pos-lock bg-emerald-500/10 border border-emerald-500/40 text-emerald-400">🔒 Risk-free · locked ${fmtSigned(d.lockedIn)}</span>`;
+        } else if (d.lockedIn > 0) {
+          lockLine = `<span class="pos-lock bg-amber-500/10 border border-amber-500/40 text-amber-400">🔒 Risk-free · ${fmtSigned(d.lockedIn)} once you raise your stop</span>`
+                   + `<span class="inline-block ml-1.5 text-[10px] font-bold uppercase tracking-wide text-amber-400 border border-amber-500/40 rounded-full px-1.5 py-0.5 align-middle">lock pending</span>`;
+        } else {
+          lockLine = `<span class="pos-lock bg-emerald-500/10 border border-emerald-500/40 text-emerald-400">🔒 Risk-free</span>`;
+        }
+        return `<div class="pos-hero mt-3">${lockLine}${unrealizedRow}</div>`;
+      }
+
+      const perShareOpenRisk = (isFinite(d.last) && isFinite(d.curStop)) ? Math.max(d.last - d.curStop, 0) : NaN;
+      return `
+        <div class="pos-hero mt-3">
+          <div class="text-[19px] font-bold ${unrealizedCls} tabular-nums">${fmtSigned(d.unrealized)} unrealized</div>
+          <div class="text-xs text-slate-400 mt-1 tabular-nums">Open risk ${fmtUsd(d.openRisk)} (${fmtPerSh(perShareOpenRisk)}/sh) to stop</div>
+        </div>`;
+    }
+
+    // 'closing' reason enum -> plain-English phrase (advance.js exit-check reasons).
+    const POS_EXIT_REASON_LABEL = {
+      stop_hit: 'stop hit',
+      gap_down_below_stop: 'gap down below stop',
+      close_below_50ma: 'closed below 50MA',
+      close_below_20ma: 'closed below 20MA',
+      severe_breakdown: 'severe breakdown',
+      two_close_below_20ma: '2 closes below 20MA',
+    };
+
+    // US-6 exit-summary hero (spec Task 5). reason/expected come off the position row itself;
+    // the actual close comes off the newest exit_signal EVENT payload (advance.js emits
+    // {reason, expected_exit_price, at_close} on the bar that signals — recent enough on a
+    // 'closing' position to sit comfortably inside the 8-event display cap). If that event is
+    // somehow missing, degrade to omitting "closed $X" rather than showing NaN.
+    function posClosingHeroHtml(p, d) {
+      const reasonKey = p.exit_reason;
+      const reasonLabel = POS_EXIT_REASON_LABEL[reasonKey] || (reasonKey ? escapeHtml(reasonKey) : 'exit signaled');
+      const expected = parseFloat(p.expected_exit_price);
+      const exitEvent = posNewestEvent(p, 'exit_signal');
+      const atClose = exitEvent ? parseFloat(exitEvent.payload && exitEvent.payload.at_close) : NaN;
+
+      const rDollar = (isFinite(expected) && isFinite(d.entry) && isFinite(d.qty)) ? (expected - d.entry) * d.qty : NaN;
+      const rMultiple = (isFinite(rDollar) && isFinite(d.plannedRisk) && d.plannedRisk !== 0) ? rDollar / d.plannedRisk : NaN;
+      const rCls = isFinite(rDollar) && rDollar < 0 ? 'text-red-400' : 'text-emerald-400';
+      const rPart = isFinite(rDollar)
+        ? `<span class="${rCls}">${fmtSigned(rDollar)} (${isFinite(rMultiple) ? (rMultiple >= 0 ? '+' : '−') + Math.abs(rMultiple).toFixed(1) + 'R' : '—'})</span>`
+        : '—';
+      const closedPart = isFinite(atClose) ? ` · closed ${fmtPerSh(atClose)}` : '';
+
+      return `
+        <div class="pos-hero mt-3">
+          <div class="text-[15px] font-bold text-amber-400">⚠ Exit signal · ${reasonLabel}</div>
+          <div class="text-xs text-slate-400 mt-1 tabular-nums">Modeled fill ${isFinite(expected) ? fmtPerSh(expected) : '—'}${closedPart} · ${rPart}</div>
+        </div>
+        <div class="text-[11.5px] text-slate-500 mt-2.5 italic">Confirm your fill / still holding arrives with alerts (WS5-4). This card just makes the state legible.</div>`;
+    }
+
+    // ── Stop-moved banner + cross-device ack (Task 3, spec §6) ──────────────────────────
+    // Renders whenever the position has ANY stop_moved event, sourced from that event's own
+    // payload {from,to,basis} — never from initial_stop — so the banner can't lie about what
+    // actually happened. acked (posDerive) drives both this banner's row2 AND the hero's
+    // pending-lock chip: one server-side acknowledgement, both resolve together.
+    function posStopMovedHtml(p, d) {
+      const ev = posNewestEvent(p, 'stop_moved');
+      if (!ev) return '';
+      const payload = ev.payload || {};
+      const from = parseFloat(payload.from);
+      const to = parseFloat(payload.to);
+      const basisLabel = posBasisLabel(payload.basis);
+      const tradeId = escapeHtml(p.trade_id || '');
+      const busy = !!state.posAckBusy[p.trade_id];
+      const err = state.posAckError[p.trade_id];
+
+      let row2;
+      if (d.acked) {
+        const ackEvent = posNewestEvent(p, 'stop_ack');
+        const ackDate = ackEvent ? posFmtDate(ackEvent.trade_date) : '';
+        row2 = `<span class="text-xs text-emerald-400 font-semibold">✓ Updated${ackDate ? ' ' + escapeHtml(ackDate) : ''}</span>`;
+      } else {
+        row2 = `
+          <span class="text-xs text-sky-300">Update your broker's stop to ${isFinite(to) ? fmtPerSh(to) : '—'}</span>
+          <button onclick="posAckStop('${tradeId}')" ${busy ? 'disabled' : ''}
+                  class="text-[11px] font-bold text-sky-950 bg-sky-400 hover:bg-sky-300 disabled:opacity-60 rounded-md px-2.5 py-1">
+            ${busy ? 'Updating…' : '✓ Updated'}
+          </button>`;
+      }
+      const errRow = err ? `<div class="text-[11px] text-red-400 mt-1.5">${escapeHtml(err)}</div>` : '';
+
+      return `
+        <div class="pos-moved mt-3 bg-sky-950/70 border border-sky-700">
+          <div class="flex items-center gap-1.5 text-[12.5px] font-semibold text-sky-200 flex-wrap">
+            <span>⬆ Stop raised</span><span class="tabular-nums">${isFinite(from) ? from.toFixed(2) : '—'}</span>
+            <span class="text-sky-400">→</span><span class="tabular-nums">${isFinite(to) ? to.toFixed(2) : '—'}</span>
+            <span class="text-sky-300">(${escapeHtml(basisLabel)})</span>
+          </div>
+          <div class="flex justify-between items-center gap-2 mt-2">${row2}</div>
+          ${errRow}
+        </div>`;
+    }
+
+    // ── Overlays (Task 5, spec §2b — trim + caution; earnings deliberately NOT built) ───
+    function posOverlaysHtml(p, d) {
+      let html = '';
+      if (d.trimmed) {
+        const trimEvent = posNewestEvent(p, 'partial_exit');
+        const trimQty = Math.round(d.initQty - d.qty);
+        if (trimEvent && trimEvent.payload) {
+          const atAtr = trimEvent.payload.at_atr;
+          const trimDate = posFmtDate(trimEvent.trade_date);
+          html += `<div class="mt-2.5 bg-sky-950/70 border border-sky-700 rounded-lg px-2.5 py-2 text-xs text-sky-300">
+            ✂ Trimmed ${trimQty} sh${isFinite(parseFloat(atAtr)) ? ' @ ' + atAtr + '× ATR' : ''}${trimDate ? ' · ' + escapeHtml(trimDate) : ''} — ${Math.round(d.qty)} of ${Math.round(d.initQty)} held
+          </div>`;
+        } else {
+          html += `<div class="mt-2.5 bg-sky-950/70 border border-sky-700 rounded-lg px-2.5 py-2 text-xs text-sky-300">
+            ✂ Trimmed ${trimQty} sh — ${Math.round(d.qty)} of ${Math.round(d.initQty)} held
+          </div>`;
+        }
+      }
+      if (p.caution_flag >= 1) {
+        html += `<div class="mt-2.5 bg-amber-500/10 border border-amber-500/40 rounded-lg px-2.5 py-2 text-xs text-amber-400 font-semibold">
+          ⚠ ${p.caution_flag} of 2 closes below the 20MA — exits on the next close below
+        </div>`;
+      }
+      return html;
+    }
+
+    // ── Details ▾ (Task 4, spec §2/§3 — same full row set on every card) ───────────────
+    function posDetailsHtml(p, d) {
+      const rows = [];
+      rows.push(_mKv('Entry', fmtPerSh(d.entry)));
+
+      const stopBasis = d.stopMoved
+        ? 'trailed · ' + posBasisLabel((posNewestEvent(p, 'stop_moved') || {}).payload && posNewestEvent(p, 'stop_moved').payload.basis || p.stop_basis)
+        : posBasisLabel(p.stop_basis);
+      rows.push(_mKv('Stop', fmtPerSh(d.curStop) + ' <span class="text-slate-500">(' + escapeHtml(stopBasis) + ')</span>'));
+
+      if (isFinite(d.oneR)) {
+        rows.push(_mKv('1R (initial)', fmtPerSh(d.oneR) + '/sh'));
+        rows.push(`<div class="pos-formula">${d.entry.toFixed(2)} − ${d.initStop.toFixed(2)} = ${fmtPerSh(d.oneR)}/sh</div>`);
+      }
+
+      if (d.hasLast) {
+        const perShare = Math.max(d.last - d.curStop, 0);
+        rows.push(_mKv('Open risk', fmtUsd(d.openRisk) + ' (' + fmtPerSh(perShare) + '/sh)'));
+        rows.push(`<div class="pos-formula">${d.last.toFixed(2)} − ${d.curStop.toFixed(2)} = ${fmtPerSh(perShare)}/sh × ${Math.round(d.qty)} = ${fmtUsd(d.openRisk)}</div>`);
+
+        const uCls = d.unrealized >= 0 ? 'text-emerald-400' : 'text-red-400';
+        rows.push(_mKv('Unrealized P&amp;L', `<span class="${uCls}">${fmtSigned(d.unrealized)}</span>`));
+        rows.push(`<div class="pos-formula">(${d.last.toFixed(2)} − ${d.entry.toFixed(2)}) × ${Math.round(d.qty)} = ${fmtSigned(d.unrealized)}</div>`);
+      }
+
+      if (d.riskFree) {
+        const lockedLabel = d.lockedIn > 0 ? `<span class="text-emerald-400">${fmtSigned(d.lockedIn)}</span>` : '$0 (breakeven)';
+        rows.push(_mKv('Locked-in', lockedLabel));
+        rows.push(`<div class="pos-formula">(${d.curStop.toFixed(2)} − ${d.entry.toFixed(2)}) × ${Math.round(d.qty)}</div>`);
+      }
+
+      if (p.state === 'closing') {
+        const expected = parseFloat(p.expected_exit_price);
+        if (isFinite(expected) && isFinite(d.entry) && isFinite(d.qty)) {
+          const rDollar = (expected - d.entry) * d.qty;
+          const rMultiple = (isFinite(d.plannedRisk) && d.plannedRisk !== 0) ? rDollar / d.plannedRisk : NaN;
+          const rCls = rDollar >= 0 ? 'text-emerald-400' : 'text-red-400';
+          const rLabel = `${fmtSigned(rDollar)} (${isFinite(rMultiple) ? (rMultiple >= 0 ? '+' : '−') + Math.abs(rMultiple).toFixed(1) + 'R' : '—'})`;
+          rows.push(_mKv('Realized (modeled)', `<span class="${rCls}">${rLabel}</span>`));
+          rows.push(`<div class="pos-formula">(${expected.toFixed(2)} − ${d.entry.toFixed(2)}) × ${Math.round(d.qty)} = ${fmtSigned(rDollar)}</div>`);
+        }
+      }
+
+      const qtyLabel = d.trimmed
+        ? `${Math.round(d.qty)} of ${Math.round(d.initQty)} <span class="text-slate-500">(trimmed ${Math.round(d.initQty - d.qty)})</span>`
+        : `${isFinite(d.qty) ? Math.round(d.qty) : '—'} of ${isFinite(d.initQty) ? Math.round(d.initQty) : '—'}`;
+      rows.push(_mKv('Qty', qtyLabel));
+
+      const bar = posTodayBarHtml(p, d);
+      const activity = posActivityHtml(p);
+
+      return `
+        <details class="pos-details">
+          <summary>
+            <span class="pos-lbl">Details</span>
+            <label class="pos-fxwrap"><input class="pos-fx" type="checkbox"> show formulas</label>
+          </summary>
+          ${rows.join('')}
+          ${bar}
+          ${activity}
+        </details>`;
+    }
+
+    // "Today  O148.04 H149.00 L146.66 C148.70 ▲1.7%" + "Vol 4.2M · avg 3.8M" — omitted entirely
+    // when there's no last bar yet (US-7).
+    function posTodayBarHtml(p, d) {
+      if (!d.hasLast) return '';
+      const o = parseFloat(p.last_open), h = parseFloat(p.last_high), l = parseFloat(p.last_low);
+      const chg = parseFloat(p.last_change_pct);
+      const chgCls = isFinite(chg) ? (chg >= 0 ? 'text-emerald-400' : 'text-red-400') : '';
+      const chgLabel = isFinite(chg) ? `<span class="${chgCls}">${chg >= 0 ? '▲' : '▼'}${Math.abs(chg).toFixed(1)}%</span>` : '';
+      const vol = parseFloat(p.last_volume);
+      const avgVol = posAvgVolumeLabel(p);
+      const volLine = isFinite(vol)
+        ? `Vol ${fmtVol(vol)}${avgVol ? ' · avg ' + escapeHtml(avgVol) : ''}`
+        : '';
+      return `
+        <div class="pos-bar tabular-nums">
+          Today &nbsp;O${isFinite(o) ? o.toFixed(2) : '—'} &nbsp;H${isFinite(h) ? h.toFixed(2) : '—'} &nbsp;L${isFinite(l) ? l.toFixed(2) : '—'} &nbsp;C${d.last.toFixed(2)} &nbsp;${chgLabel}
+          ${volLine ? '<br>' + volLine : ''}
+        </div>`;
+    }
+
+    // event_type -> plain-English phrase (mock "Activity" examples). Unknown types fall back to
+    // a generic capitalized line rather than being silently dropped.
+    function posEventPhrase(ev) {
+      const payload = ev.payload || {};
+      switch (ev.event_type) {
+        case 'stop_moved':
+          return `Stop raised → ${isFinite(parseFloat(payload.to)) ? parseFloat(payload.to).toFixed(2) : '—'} (${escapeHtml(posBasisLabel(payload.basis))})`;
+        case 'entered':
+          return `Entered @ ${isFinite(parseFloat(payload.entry_price)) ? parseFloat(payload.entry_price).toFixed(2) : '—'} · ${isFinite(parseFloat(payload.qty)) ? Math.round(payload.qty) : '—'} sh`;
+        case 'exit_signal':
+          return `Exit signal · ${escapeHtml(POS_EXIT_REASON_LABEL[payload.reason] || payload.reason || 'signaled')} → ${isFinite(parseFloat(payload.expected_exit_price)) ? parseFloat(payload.expected_exit_price).toFixed(2) : '—'}`;
+        case 'caution':
+          return `Close below 20MA (${escapeHtml(String(payload.closes_below_20ma != null ? payload.closes_below_20ma : '?'))}/2)`;
+        case 'stop_ack':
+          return `You updated your broker stop → ${isFinite(parseFloat(payload.value)) ? parseFloat(payload.value).toFixed(2) : '—'}`;
+        case 'partial_exit':
+          return `Trimmed ${isFinite(parseFloat(payload.qty)) ? Math.round(payload.qty) : '—'} @ ${payload.at_atr != null ? escapeHtml(String(payload.at_atr)) : '—'}× ATR`;
+        default:
+          return escapeHtml((ev.event_type || 'event').replace(/_/g, ' '));
+      }
+    }
+
+    function posActivityHtml(p) {
+      const events = p.events || [];
+      if (events.length === 0) return '';
+      const rows = events.map(ev => `
+        <div class="pos-act-e flex justify-between gap-2.5 text-[11.5px] text-slate-400 mt-1">
+          <span>${posEventPhrase(ev)}</span><span class="text-slate-500 whitespace-nowrap">${escapeHtml(posFmtDate(ev.trade_date))}</span>
+        </div>`).join('');
+      return `
+        <div class="pos-act">
+          <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-1">Activity</div>
+          ${rows}
+        </div>`;
+    }
+
+    // Owner-bearer stop-ack POST (spec §6) — cross-device by design (server-side stop_ack_value,
+    // NOT localStorage: the owner trades on phone and laptop, so acking on one must clear the
+    // banner on the other). One acknowledgement resolves BOTH the stop-moved banner's row2 AND
+    // the hero's pending-lock chip, since both derive from posDerive's `acked`.
+    window.posAckStop = async function (tradeId) {
+      if (state.posAckBusy[tradeId]) return; // guard against double-tap double-submit
+      state.posAckBusy[tradeId] = true;
+      delete state.posAckError[tradeId];
+      renderPositions();
+      try {
+        const resp = await posApi('/positions/' + encodeURIComponent(tradeId) + '/ack-stop', { method: 'POST' });
+        const ackedValue = (resp && resp.stop_ack_value != null) ? resp.stop_ack_value : null;
+        const row = (state.positionsData || []).find(x => x.trade_id === tradeId);
+        if (row) {
+          // Optimistic local update — a full re-fetch would also pick this up, but resolving
+          // the chip/banner immediately avoids a visible flash back to "pending" on re-render.
+          row.stop_ack_value = ackedValue != null ? ackedValue : row.current_stop;
+        }
+      } catch (e) {
+        if (e && e.unauth) {
+          state.positionsData = null; // posApi already cleared the token; fall back to sign-in
+        } else {
+          state.posAckError[tradeId] = "Couldn't update — try again";
+        }
+      } finally {
+        delete state.posAckBusy[tradeId];
+        renderPositions();
+      }
+    };
+
     function posCardHtml(p) {
       const ticker = escapeHtml(p.ticker || '');
       const source = escapeHtml((p.meta && p.meta.source) || p.source || 'manual');
       const entryDate = escapeHtml(p.entry_date || p.created_at || '');
       const stateBadge = POS_STATE_BADGE[p.state] || '';
-      const entry = parseFloat(p.entry_price);
-      const stop = parseFloat(p.current_stop != null ? p.current_stop : p.initial_stop);
-      const qty = parseFloat(p.remaining_qty != null ? p.remaining_qty : p.initial_qty);
-      const basisLabel = POS_STOP_BASIS_LABEL[p.stop_basis] || p.stop_basis || 'Manual';
-      const riskShare = (!isNaN(entry) && !isNaN(stop)) ? entry - stop : NaN;
-      const openRisk = (!isNaN(riskShare) && !isNaN(qty)) ? riskShare * qty : NaN;
+      const d = posDerive(p);
       return `
-        <div class="bg-slate-800 border border-slate-700 rounded-lg px-3.5 py-3">
+        <div class="pos-card bg-slate-800 border border-slate-700 rounded-lg px-3.5 py-3">
           <div class="flex justify-between items-center">
             <span><span class="font-bold text-sm tracking-wide">${ticker}</span> <span class="text-xs text-slate-500">· ${source} · ${entryDate}</span>${stateBadge}</span>
           </div>
-          ${_mKv('Entry', '$' + (isNaN(entry) ? '—' : entry.toFixed(2)))}
-          ${_mKv('Stop', '$' + (isNaN(stop) ? '—' : stop.toFixed(2)) + ' (' + escapeHtml(basisLabel) + ')')}
-          ${_mKv('Risk/sh', isNaN(riskShare) ? '—' : '$' + riskShare.toFixed(2))}
-          ${_mKv('Qty', isNaN(qty) ? '—' : String(qty))}
-          ${_mKv('Open risk', isNaN(openRisk) ? '—' : '$' + openRisk.toFixed(2))}
+          ${posHeroHtml(p, d)}
+          ${p.state !== 'closing' ? posStopMovedHtml(p, d) : ''}
+          ${p.state !== 'closing' ? posOverlaysHtml(p, d) : ''}
+          ${posDetailsHtml(p, d)}
         </div>`;
     }
 
@@ -5826,8 +6222,8 @@
           <div class="text-sm font-semibold text-slate-100">Open positions</div>
           <button onclick="posSignOut()" class="text-xs text-slate-400 hover:text-slate-200 underline">Sign out</button>
         </div>
-        <div class="text-[11px] text-amber-400 bg-amber-500/10 border border-dashed border-amber-500/40 rounded-lg px-3 py-2 mb-3">
-          Phase 1: these are the trades you've logged. Daily stop management &amp; alerts arrive with the lifecycle engine.
+        <div class="text-[11px] text-slate-400 bg-slate-800/60 border border-dashed border-slate-600 rounded-lg px-3 py-2 mb-3">
+          The engine trails your stops nightly. When a stop moves, update your broker's resting order and tap ✓ Updated.
         </div>`;
 
       const rows = state.positionsData || [];

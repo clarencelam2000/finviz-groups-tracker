@@ -150,23 +150,99 @@ export async function insertPosition(db, row) {
   return row;
 }
 
+// EVENTS_DISPLAY_CAP: how many of a position's newest position_events ride inline in the
+// GET /positions response's `events` array (WS5-7 managing-card overhaul). Purely a payload-size
+// cap for the card's inline activity list — it does NOT bound what stop_ack_value is computed
+// from (see attachEventsAndAck below, which reads the FULL per-trade event list before slicing).
+// Raise it if the card ever wants a longer inline history; no schema impact either way.
+const EVENTS_DISPLAY_CAP = 8;
+
+// The latest-bar LEFT JOIN this module adds to every listPositions() query (both the no-state and
+// state-filtered branches). `ticker_quotes` is user-less/public (migration 0002) so joining it
+// inside the already user_id-scoped `positions` query leaks nothing across tenants — the row set
+// is still fully bounded by `p.user_id = ?`. Null-safe by construction: a ticker with zero bars
+// yields a LEFT JOIN miss, so every `last_*` column comes back NULL, never a throw.
+const LATEST_BAR_JOIN = `
+  LEFT JOIN ticker_quotes q
+    ON q.ticker = p.ticker
+   AND q.trade_date = (SELECT MAX(trade_date) FROM ticker_quotes q2 WHERE q2.ticker = p.ticker)
+`;
+const LATEST_BAR_COLS = `
+  q.close AS last_close, q.trade_date AS last_bar_date,
+  q.open AS last_open, q.high AS last_high, q.low AS last_low,
+  q.change_pct AS last_change_pct, q.volume AS last_volume, q.raw AS last_raw
+`;
+
 // List a user's positions, newest first. `state` optionally filters — a single state string, an
 // array of states (IN clause), or omitted/empty for all. ALWAYS scoped by user_id — the app-layer
 // tenant boundary (D1 has no RLS; ADR-012). Callers are responsible for validating `state` values
 // against ALL_STATES before calling (see index.js) — this function trusts its input.
+//
+// WS5-7: each row is additionally augmented with the latest ticker_quotes bar (last_*, null-safe),
+// a bounded inline `events` array, and a computed `stop_ack_value` — see attachEventsAndAck().
 export async function listPositions(db, user_id, state = null) {
   const states = state == null ? [] : Array.isArray(state) ? state : [state];
   let stmt;
   if (states.length === 0) {
-    stmt = db.prepare("SELECT * FROM positions WHERE user_id = ? ORDER BY opened_at DESC").bind(user_id);
+    stmt = db
+      .prepare(
+        `SELECT p.*, ${LATEST_BAR_COLS}
+         FROM positions p
+         ${LATEST_BAR_JOIN}
+         WHERE p.user_id = ?
+         ORDER BY p.opened_at DESC`
+      )
+      .bind(user_id);
   } else {
     const marks = states.map(() => "?").join(", ");
     stmt = db
-      .prepare(`SELECT * FROM positions WHERE user_id = ? AND state IN (${marks}) ORDER BY opened_at DESC`)
+      .prepare(
+        `SELECT p.*, ${LATEST_BAR_COLS}
+         FROM positions p
+         ${LATEST_BAR_JOIN}
+         WHERE p.user_id = ? AND p.state IN (${marks})
+         ORDER BY p.opened_at DESC`
+      )
       .bind(user_id, ...states);
   }
   const { results } = await stmt.all();
-  return results.map((r) => ({ ...r, meta: safeParse(r.meta) }));
+  const positions = results.map((r) => ({ ...r, meta: safeParse(r.meta) }));
+  return attachEventsAndAck(db, user_id, positions);
+}
+
+// Attach a bounded, newest-first `events` array and a computed `stop_ack_value` to each position,
+// in ONE grouped query (no N+1 — a single `trade_id IN (...)` fetch for every position passed in).
+async function attachEventsAndAck(db, user_id, positions) {
+  if (positions.length === 0) return positions;
+
+  const marks = positions.map(() => "?").join(", ");
+  const { results: eventRows } = await db
+    .prepare(
+      `SELECT trade_id, ts, trade_date, event_type, payload
+       FROM position_events
+       WHERE user_id = ? AND trade_id IN (${marks})
+       ORDER BY ts DESC`
+    )
+    .bind(user_id, ...positions.map((p) => p.trade_id))
+    .all();
+
+  // Group by trade_id. Rows already arrive newest-first (ORDER BY ts DESC), so both the display
+  // slice and the stop_ack_value scan below can walk each group in order without re-sorting.
+  const byTrade = new Map();
+  for (const row of eventRows) {
+    const parsed = { ...row, payload: safeParse(row.payload) };
+    if (!byTrade.has(row.trade_id)) byTrade.set(row.trade_id, []);
+    byTrade.get(row.trade_id).push(parsed);
+  }
+
+  return positions.map((p) => {
+    const all = byTrade.get(p.trade_id) || [];
+    // stop_ack_value is derived from the FULL ordered list, not the capped display slice below —
+    // a trade with >8 non-ack events since the last ack must not hide/stale-ify the ack value.
+    const latestAck = all.find((e) => e.event_type === "stop_ack");
+    const stop_ack_value = latestAck && typeof latestAck.payload.value === "number" ? latestAck.payload.value : null;
+    return { ...p, events: all.slice(0, EVENTS_DISPLAY_CAP), stop_ack_value };
+  });
 }
 
 function safeParse(s) {

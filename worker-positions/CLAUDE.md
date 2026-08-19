@@ -132,6 +132,18 @@ Three things to internalize before editing the transitions:
 The PWA client that calls these routes (confirmation strip, editable Confirm-fill) is phase-4 work;
 3b-ii ships the routes + tests only. Tracked: SPRINT WS5-3b-ii.
 
+**`ack-stop` (WS5-7) is an event-only owner action, not a fifth transition.** `POST
+/positions/<trade_id>/ack-stop` (`src/transitions.js::ackStop`) records that the owner raised their
+broker's resting stop to match the position's current `current_stop`. It does **not** go through
+`applyTransition`/`persistTransition` — it writes NO `positions` column at all, only appending a
+`stop_ack` event to `position_events`. That makes it disjoint from both existing write paths by
+construction (not just by convention like `TRANSITION_COLS` vs. the sweep's UPDATE list): there is no
+column list to keep out of sync because there is no column write. `stop_ack` is a new
+`position_events.event_type` — no migration needed, since `event_type` has no CHECK constraint (see
+migration 0001). `GET /positions` (`src/positions.js::listPositions`) surfaces the latest ack as
+`stop_ack_value`, computed from the full per-trade event history (not the capped inline `events`
+display slice), so it stays correct even if the display cap hides the ack event itself.
+
 ## The watchlist: `src/watchlist.js` (WS5 §8b, P1)
 
 A **private, user-scoped** membership+level+TTL store for tickers the owner is tracking ahead of

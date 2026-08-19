@@ -121,6 +121,48 @@ export async function persistTransition(db, { trade_id, user_id, expectedState, 
   return { applied };
 }
 
+// ── ackStop(db, {...}) — WS5-7 owner "✓ Updated" tap, event-only, NOT a transition. ────────────────
+// Records that the owner raised their broker's resting stop to the position's CURRENT stop. This is
+// deliberately NOT routed through applyTransition/persistTransition: it writes NO `positions` column
+// (unlike every transition above, which writes exactly TRANSITION_COLS), so it can never clobber
+// either the engine's write path (sweep.js's persistAdvance, which owns current_stop/profit_floor/
+// trail_basis/etc) or persistTransition's own columns — it shares no row with either. It only ever
+// APPENDS a single `stop_ack` event to the append-only position_events ledger (a new event_type; no
+// migration needed, event_type has no CHECK constraint — see CLAUDE.md § the owner transitions).
+// Idempotent: a repeated tap while current_stop hasn't moved does not append a duplicate event, so
+// mashing the button doesn't spam the activity trail.
+export async function ackStop(db, { user_id, trade_id, now = new Date() }) {
+  const pos = await loadPosition(db, user_id, trade_id); // user-scoped -> null 404s (no existence leak)
+  if (!pos) return { error: "not found", status: 404 };
+  const value = pos.current_stop;
+  if (!isNum(value)) {
+    return { error: "position has no current_stop to acknowledge", status: 409 };
+  }
+  const now_iso = isoUtc(now);
+  const trade_date = etDateStr(now);
+  // Guarded insert: only append if the newest stop_ack for this trade isn't already this value.
+  // Keeps the activity trail clean on repeated taps. (Append-only; corrections are new events.)
+  await db
+    .prepare(
+      `INSERT INTO position_events (trade_id, user_id, ts, trade_date, event_type, payload)
+       SELECT ?, ?, ?, ?, 'stop_ack', ?
+       WHERE NOT EXISTS (
+         SELECT 1 FROM position_events
+         WHERE trade_id = ? AND user_id = ? AND event_type = 'stop_ack'
+           AND json_extract(payload, '$.value') = ?
+           AND ts = (SELECT MAX(ts) FROM position_events
+                     WHERE trade_id = ? AND user_id = ? AND event_type = 'stop_ack')
+       )`
+    )
+    .bind(
+      trade_id, user_id, now_iso, trade_date,
+      JSON.stringify({ value, basis: pos.trail_basis ?? null }),
+      trade_id, user_id, value, trade_id, user_id
+    )
+    .run();
+  return { ok: true, stop_ack_value: value };
+}
+
 // ── applyTransition(db, {...}) — the route handler's single entry point. ─────────────────────────
 // Returns { position } on success (meta as an object, matching /positions), or { error, status } on
 // a precondition failure (404 not found, 409 wrong state / lost CAS race, 400 bad input). PURE of

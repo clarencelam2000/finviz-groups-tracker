@@ -7,7 +7,7 @@ import { authenticate, authenticateService, login } from "./auth.js";
 import { validateCreatePayload, buildPositionRow, insertPosition, listPositions, ALL_STATES } from "./positions.js";
 import { validateIngestBatch, ingestQuotes, heldTickers } from "./quotes.js";
 import { sweep } from "./sweep.js";
-import { applyTransition } from "./transitions.js";
+import { applyTransition, ackStop } from "./transitions.js";
 import {
   validateAddPayload,
   validatePatchPayload,
@@ -27,7 +27,7 @@ const WATCHLIST_ID_PATH = /^\/watchlist\/(\d+)$/;
 // Owner exit-transition actions (WS5 phase 3b-ii). The path is /positions/<trade_id>/<action>; the
 // trade_id is identity (in the path), not payload — the editable fill / corrected price ride in the
 // body. Anchored ^…$ so it can never shadow the exact /positions collection routes above it.
-const TRANSITION_PATH = /^\/positions\/([^/]+)\/(confirm-exit|still-holding|correct-exit|reopen)$/;
+const TRANSITION_PATH = /^\/positions\/([^/]+)\/(confirm-exit|still-holding|correct-exit|reopen|ack-stop)$/;
 
 // ── CORS ──────────────────────────────────────────────────────────────────────────────────────
 // The PWA is a cross-origin GitHub-Pages page, so every response needs CORS headers scoped to the
@@ -301,11 +301,12 @@ export async function handleRequest(request, env) {
     return json({ ok: true }, 200, request, env);
   }
 
-  // ── Owner exit-transition routes — WS5 phase 3b-ii (SPRINT WS5-3b-ii) ───────────────────────────
-  // POST /positions/<trade_id>/{confirm-exit|still-holding|correct-exit|reopen}. Owner-bearer only
-  // (the machine service token gets no say over a human's exit fill), so these correctly sit BELOW
-  // the owner-auth gate above. applyTransition() owns the load → precondition → pure-fn → CAS-persist
-  // pipeline; here we only parse the body and map its typed result to a Response.
+  // ── Owner exit-transition + ack-stop routes — WS5 phase 3b-ii / WS5-7 ───────────────────────────
+  // POST /positions/<trade_id>/{confirm-exit|still-holding|correct-exit|reopen|ack-stop}. Owner-
+  // bearer only (the machine service token gets no say over a human's exit fill or stop ack), so
+  // these correctly sit BELOW the owner-auth gate above. applyTransition() owns the load ->
+  // precondition -> pure-fn -> CAS-persist pipeline for the first four; here we only parse the body
+  // and map its typed result to a Response. ack-stop is handled separately below — see its comment.
   const tx = pathname.match(TRANSITION_PATH);
   if (tx && method === "POST") {
     let trade_id;
@@ -323,6 +324,20 @@ export async function handleRequest(request, env) {
         return json({ error: "invalid JSON" }, 400, request, env);
       }
     }
+    // ack-stop is event-only (no positions-column write; see transitions.js's ackStop comment) —
+    // it does NOT go through applyTransition/persistTransition, which write TRANSITION_COLS and
+    // enforce state preconditions that don't apply to a plain activity-log append. Branch first.
+    if (action === "ack-stop") {
+      let result;
+      try {
+        result = await ackStop(env.POSITIONS_DB, { user_id: auth.user_id, trade_id });
+      } catch (e) {
+        return json({ error: "ack failed" }, 500, request, env);
+      }
+      if (result.error) return json({ error: result.error }, result.status, request, env);
+      return json({ ok: true, stop_ack_value: result.stop_ack_value }, 200, request, env);
+    }
+
     let result;
     try {
       result = await applyTransition(env.POSITIONS_DB, { user_id: auth.user_id, trade_id, action, body });

@@ -1,6 +1,21 @@
 {
-  "current": "2026.08.17.2",
+  "current": "2026.08.19",
   "releases": [
+    {
+      "version": "2026.08.19",
+      "date": "2026-08-19",
+      "title": "Positions: the engine's daily work, visible",
+      "tag": "feature",
+      "tab": "positions",
+      "notes": [
+        "Fixed a bug where a winning trade could show negative risk once its stop moved past entry — risk and locked-in gains are now always shown correctly, never flipped or negative.",
+        "New 🔒 Risk-free hero once your stop reaches entry, with the locked-in $ amount and unrealized P&L at a glance.",
+        "When the engine raises your stop, a new alert shows the old and new value and prompts you to update your broker's resting order — tap ✓ Updated once you have (syncs across your devices).",
+        "Details now show the formulas behind every number (tap \"show formulas\"), today's O/H/L/C/volume bar, and a plain-English activity trail of everything the engine has done.",
+        "Partial-trim and \"caution\" (close below the 20MA) states are now visible on the card instead of hidden.",
+        "Exit-pending cards now explain why (stop hit, closed below the 50MA, etc.) with the modeled fill and actual close."
+      ]
+    },
     {
       "version": "2026.08.17.2",
       "date": "2026-08-17",

@@ -64,6 +64,7 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `WATCHLIST_GAUGE_PAD` | `0.08` | Fraction of the price domain padded on each end of a watch card's levels gauge so end markers (prior high/low, your level) aren't clipped at the track edges. |
 | `POS_VISIBLE_STATES` | `{'open','managing','closing'}` | Positions tab: worker `state` values that render as a card. Also the server-side filter value (`?state=open,managing,closing`, worker-positions PR #333's multi-state `IN` clause) — the client-side check is now defense-in-depth, not load-bearing. Only `closed` drops off. |
 | `POS_STATE_BADGE` | see code | Positions tab: small uppercase badge on `managing`/`closing` cards (`closing` = amber "exit pending"); `open` gets no badge. |
+| `POS_EXIT_REASON_LABEL` | see code | Positions tab managing card (WS5-7): maps `advance()`'s exit-check reason enum (`stop_hit`, `gap_down_below_stop`, `close_below_50ma`, `close_below_20ma`, `severe_breakdown`, `two_close_below_20ma`) to the plain-English phrase shown in the `closing` hero and Activity trail. |
 
 ## Watchlist (Morning + Positions, WS5 §8b)
 
@@ -125,28 +126,63 @@ the empty state — a 404 is expected, never an error.
   now written only after a confirmed 201 (see `ws5ConfirmTakeIt`). `window.__morningTookIt` was
   removed; the writer is now `window.ws5TakeIt` → `ws5ConfirmTakeIt`.
 
-## Positions tab (WS5 phase 1, #309)
+## Positions tab (WS5-7 managing-card overhaul, issue #337)
 
-Read-only. Signed out → a passphrase sign-in card (`posLogin` → `POST /auth/login` → bearer token in
-`localStorage['fv_pos_token']`). Signed in → `GET /positions?state=open,managing,closing` renders
-frozen position cards (entry/stop/risk/qty) for `state` in `open`/`managing`/`closing`
+Signed out → a passphrase sign-in card (`posLogin` → `POST /auth/login` → bearer token in
+`localStorage['fv_pos_token']`). Signed in → `GET /positions?state=open,managing,closing` renders a
+state-driven **managing card** (`posCardHtml` → `posDerive` + `posHeroHtml`/`posStopMovedHtml`/
+`posOverlaysHtml`/`posDetailsHtml`/`posActivityHtml`) for `state` in `open`/`managing`/`closing`
 (`POS_VISIBLE_STATES`, also re-checked client-side as defense-in-depth — only `closed` drops off).
-This was fixed 2026-08-17: the original phase-1 code queried `?state=open` only, which predates the
-phase-3a `advance()` engine's `open → managing` auto-transition (`src/advance.js`, first successful
-advance with no exit signal) — once the daily sweep (held-feed job, 17:30 ET) advances a position
-past day one, it silently vanished from the tab even though it was still a live trade. The initial
-fix (PR #331) fetched unfiltered and filtered entirely client-side, because `worker-positions`'s
-`state` param only supported a single exact match at the time — that meant re-transferring a user's
-**entire** trade history (every `closed` position ever logged) on every tab load.
-`worker-positions` PR #333 added multi-state server-side filtering (`?state=a,b,c`, a parameterized
-`IN` clause), and this PR (WS5-6) switched the PWA to use it — payload is proportional to live
-positions again, not total history. `managing`/`closing` cards
-get a small badge (`POS_STATE_BADGE`) since there's no confirmation-strip UI yet for `closing`
-(exit signaled, awaiting the owner's confirm/revert) — that's phase 4 in
-`worker-positions/CLAUDE.md`. No stop management or alerts yet beyond what the engine already
-writes. Auth is a worker-native bearer token (not Cloudflare Access — the PWA is a cross-origin
-GitHub-Pages page); the whole auth surface is the swap seam `worker-positions/src/auth.js`.
-See `worker-positions/README.md` and ADR-012 for the backend contract.
+Design authority: `planning/ws5-7-positions-managing-card.md`, mock
+`planning/mocks/ws5-7-positions-card.html`.
+
+This replaced the phase-1 read-only card (fixed 2026-08-19), whose `risk = entry − current_stop`
+math went to `$0` or **negative** once the engine trailed the stop to/past entry — the negative
+number was literally the locked-in gain with its sign flipped. `posDerive(p)` (pure, DOM-free,
+unit-tested) is the whole fix: per-share first, then × `remaining_qty`, every $ figure floored at
+zero. See `planning/ws5-7-positions-managing-card.md` §2 for the formula table.
+
+- **Hero (collapsed card), priority order:** `closing` → exit-summary hero (reason · modeled fill ·
+  closed · R); no `last_close` yet → neutral "Planned risk $X · first read tonight" (US-7,
+  null-safe, never NaN/fake $0); `current_stop >= entry_price` → 🔒 Risk-free (locked `+$L` once
+  acked, an amber "lock pending" chip + conditional copy until then, plain 🔒 alone at exact
+  breakeven); else → P&L hero (`±$unrealized`, colored) + "Open risk $O ($/sh) to stop" subline.
+- **Stop-moved banner + cross-device ack.** Renders whenever the position has a `stop_moved` event
+  (sourced from that event's own `payload {from,to,basis}`, never `initial_stop`, so it can't
+  misreport what happened). Un-acked → CTA + **✓ Updated** button → `posAckStop(tradeId)` →
+  owner-bearer `POST /positions/<trade_id>/ack-stop` (`worker-positions/src/transitions.js::ackStop`,
+  documented in `worker-positions/CLAUDE.md`). Acked → resolved "✓ Updated" text. The ack is
+  **server-side by design** (`stop_ack_value` on the position row) — the owner trades on phone and
+  laptop, so a localStorage ack (per-device) would desync between them. `posDerive`'s `acked` flag
+  drives BOTH this banner's row2 AND the hero's pending-lock chip — one acknowledgement, both
+  resolve together. A new engine stop-move automatically re-raises the banner (the acked value no
+  longer matches `current_stop`) — no separate "unack" step.
+- **Details ▾** (collapsed by default, same full row set on every card regardless of state — no
+  thin/inconsistent Details): Entry, Stop (true basis — `trailed · <label>` when the stop has
+  moved, not the stale initial `stop_basis`), 1R (initial), Open risk, Unrealized P&L (always shown
+  on a live card), Locked-in (risk-free cards only), Qty (`N of M`, `(trimmed X)` when trimmed),
+  today's O/H/L/C/%/volume bar (`avg` parsed defensively from `last_raw`'s `"Average Volume"` JSON
+  field), and an Activity trail from `p.events` (newest-first, human-readable, dated). A **"show
+  formulas"** checkbox in the summary reveals the arithmetic behind each row inline
+  (`.pos-fx`/`.pos-formula`, CSS `:has()`-driven — see the `<style>` block; Tailwind's Play CDN
+  can't express that selector as utility classes).
+- **Overlays** (decorate a `managing`/`open` card, can co-occur): partial trim
+  (`remaining_qty < initial_qty` — "✂ Trimmed N sh @ M× ATR · date — Q of I held") and caution
+  (`caution_flag >= 1`, an integer counter, not a bool — "⚠ N of 2 closes below the 20MA — exits on
+  the next close below"). **Earnings overlay is deliberately NOT built** — the underlying
+  `days_to_earnings` engine signal has a known negative-days bug (see the spec doc §2b); do not add
+  an earnings badge until that's fixed.
+- **Out of scope here (tracked separately):** confirm-fill / still-holding action buttons on
+  `closing` cards + push notifications are WS5-4 — this overhaul only makes `closing` *legible*
+  ("Confirm your fill / still holding arrives with alerts (WS5-4)" note), not actionable.
+- Backend fields consumed (all null-safe, `worker-positions` GET `/positions`): `last_close`,
+  `last_bar_date`, `last_open/high/low`, `last_change_pct`, `last_volume`, `last_raw` (JSON string),
+  `events` (≤8, newest-first, `payload` pre-parsed to an object), `stop_ack_value` (server-computed
+  from the full per-trade event history, robust to the 8-event display cap — use this for ack
+  state, never re-derive it from the capped `events` array).
+- Auth is a worker-native bearer token (not Cloudflare Access — the PWA is a cross-origin
+  GitHub-Pages page); the whole auth surface is the swap seam `worker-positions/src/auth.js`.
+  See `worker-positions/README.md` and ADR-012 for the backend contract.
 
 ### Manual entry: "log a position on any ticker" (WS5 §8a)
 
