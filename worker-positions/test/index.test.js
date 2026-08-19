@@ -180,6 +180,37 @@ describe("GET /positions state filtering", () => {
   });
 });
 
+describe("GET /positions ?closed_within_sessions= validation", () => {
+  it("rejects a non-integer, zero, and a negative value with 400", async () => {
+    const token = await mintToken(env, "owner");
+    for (const bad of ["abc", "0", "-1", "1.5"]) {
+      const res = await handleRequest(req(`/positions?closed_within_sessions=${bad}`, { token }), env);
+      expect(res.status).toBe(400);
+    }
+  });
+
+  it("a valid positive integer passes through (200) and bounds returned closed rows", async () => {
+    const token = await mintToken(env, "owner");
+    for (const d of ["2026-02-01", "2026-02-02", "2026-02-03", "2026-02-04", "2026-02-05"]) {
+      env.POSITIONS_DB._seedQuote({ ticker: "AAPL", trade_date: d });
+    }
+    env.POSITIONS_DB._seedPosition({ ticker: "VRT", state: "closed", closed_at: "2026-02-01T18:00:00Z" }); // sessions_since_close = 4
+    env.POSITIONS_DB._seedPosition({ ticker: "NVDA", state: "closed", closed_at: "2026-02-04T18:00:00Z" }); // sessions_since_close = 1
+    const res = await handleRequest(req("/positions?state=closed&closed_within_sessions=2", { token }), env);
+    expect(res.status).toBe(200);
+    const { positions } = await res.json();
+    expect(positions.map((p) => p.ticker)).toEqual(["NVDA"]);
+  });
+
+  it("absent param applies no filter (unchanged behavior)", async () => {
+    const token = await mintToken(env, "owner");
+    env.POSITIONS_DB._seedQuote({ ticker: "AAPL", trade_date: "2026-02-01" });
+    env.POSITIONS_DB._seedPosition({ ticker: "VRT", state: "closed", closed_at: "2026-02-01T18:00:00Z" });
+    const res = await handleRequest(req("/positions?state=closed", { token }), env);
+    expect((await res.json()).positions).toHaveLength(1);
+  });
+});
+
 describe("WS5 phase 2 — held-tickers feed machine routes", () => {
   const ingestReq = (path, { method = "GET", body } = {}) => {
     const headers = { authorization: `Bearer ${INGEST_TOKEN}` };

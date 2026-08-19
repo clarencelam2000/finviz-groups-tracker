@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { validateCreatePayload, buildPositionRow, STOP_BASES } from "../src/positions.js";
+import { validateCreatePayload, buildPositionRow, STOP_BASES, listPositions } from "../src/positions.js";
 import { etDateStr } from "../src/time.js";
+import { ENGINE_CONFIG } from "../src/advance.js";
+import { makeD1 } from "./helpers/d1.js";
 
 const good = { ticker: "aapl", entry_price: 100, initial_stop: 95, qty: 10, stop_basis: "20ma" };
 
@@ -110,5 +112,103 @@ describe("buildPositionRow", () => {
     expect(row.entry_date).toBe("2026-08-01");
     expect(row.opened_at).toBe("2026-08-13T18:00:00.000Z"); // real creation time, NOT backdated
     expect(row.opened_at).not.toBe(row.entry_date);
+  });
+});
+
+// ── listPositions — session-calendar fields + closed_within_sessions (this PR) ─────────────────
+// The calendar is the global union of ticker_quotes.trade_date (distinctTradeDates, sweep.js), so
+// any ticker's seeded bars advance it — tests below seed onto a shared "SPY"-style ticker for
+// clarity, matching the "union across all held tickers" doc comment on distinctTradeDates.
+describe("listPositions — session-calendar fields", () => {
+  it("computes sessions_in_closing for a closing position via the seeded calendar; null otherwise", async () => {
+    const db = makeD1();
+    // Calendar: 02-10 (signal date, also the max date so far) plus two LATER sessions.
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-02-10" });
+    db._seedPosition({ trade_id: "t-signal-is-max", ticker: "VRT", state: "closing", exit_signal_date: "2026-02-10" });
+    db._seedPosition({ trade_id: "t-open", ticker: "AAPL", state: "open" });
+
+    let rows = await listPositions(db, "owner", null);
+    const closingAtMax = rows.find((p) => p.trade_id === "t-signal-is-max");
+    const openRow = rows.find((p) => p.trade_id === "t-open");
+    expect(closingAtMax.sessions_in_closing).toBe(0); // signal date IS the max calendar date
+    expect(openRow.sessions_in_closing).toBeNull(); // non-closing state
+
+    // Add two later sessions -> sessions_in_closing should now read 2.
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-02-11" });
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-02-12" });
+    rows = await listPositions(db, "owner", null);
+    expect(rows.find((p) => p.trade_id === "t-signal-is-max").sessions_in_closing).toBe(2);
+  });
+
+  it("computes sessions_since_close off closed_at's ET date; null for non-closed; strictly-after (just-closed -> 0)", async () => {
+    const db = makeD1();
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-02-10" });
+    // closed_at is ISO-UTC late in the day; its ET date is still 2026-02-10 (before 5pm ET rollover).
+    db._seedPosition({ trade_id: "t-just-closed", ticker: "VRT", state: "closed", closed_at: "2026-02-10T18:00:00Z" });
+    db._seedPosition({ trade_id: "t-open", ticker: "AAPL", state: "open" });
+
+    let rows = await listPositions(db, "owner", null);
+    expect(rows.find((p) => p.trade_id === "t-just-closed").sessions_since_close).toBe(0); // strictly-after: 0 on close day
+    expect(rows.find((p) => p.trade_id === "t-open").sessions_since_close).toBeNull();
+
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-02-11" });
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-02-12" });
+    rows = await listPositions(db, "owner", null);
+    expect(rows.find((p) => p.trade_id === "t-just-closed").sessions_since_close).toBe(2);
+  });
+
+  it("sessions_since_close is null when closed_at is null even for a closed position", async () => {
+    const db = makeD1();
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-02-10" });
+    db._seedPosition({ trade_id: "t-no-closed-at", ticker: "VRT", state: "closed", closed_at: null });
+    const rows = await listPositions(db, "owner", null);
+    expect(rows.find((p) => p.trade_id === "t-no-closed-at").sessions_since_close).toBeNull();
+  });
+
+  it("auto_confirm_sessions equals ENGINE_CONFIG.EXIT_AUTOCONFIRM_SESSIONS on every row regardless of state", async () => {
+    const db = makeD1();
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-02-10" });
+    db._seedPosition({ trade_id: "t1", ticker: "AAPL", state: "open" });
+    db._seedPosition({ trade_id: "t2", ticker: "AAPL", state: "closing", exit_signal_date: "2026-02-10" });
+    db._seedPosition({ trade_id: "t3", ticker: "AAPL", state: "closed", closed_at: "2026-02-10T18:00:00Z" });
+    const rows = await listPositions(db, "owner", null);
+    expect(rows).toHaveLength(3);
+    for (const p of rows) expect(p.auto_confirm_sessions).toBe(ENGINE_CONFIG.EXIT_AUTOCONFIRM_SESSIONS);
+  });
+
+  it("skips the calendar load entirely on an empty result (no crash on zero positions)", async () => {
+    const db = makeD1();
+    const rows = await listPositions(db, "owner", null);
+    expect(rows).toEqual([]);
+  });
+
+  it("existing 3-arg callers (no opts) still work unchanged", async () => {
+    const db = makeD1();
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-02-10" });
+    db._seedPosition({ trade_id: "t1", ticker: "AAPL", state: "open" });
+    const rows = await listPositions(db, "owner", "open"); // no 4th arg at all
+    expect(rows).toHaveLength(1);
+    expect(rows[0].auto_confirm_sessions).toBe(ENGINE_CONFIG.EXIT_AUTOCONFIRM_SESSIONS);
+  });
+});
+
+describe("listPositions — closed_within_sessions bound", () => {
+  it("drops a closed position beyond the bound, keeps one within it, never touches non-closed states", async () => {
+    const db = makeD1();
+    // Calendar spans 02-01 .. 02-05, so a position closed on 02-01 has sessions_since_close = 4
+    // (02-02..02-05) and one closed on 02-04 has sessions_since_close = 1 (02-05).
+    for (const d of ["2026-02-01", "2026-02-02", "2026-02-03", "2026-02-04", "2026-02-05"]) {
+      db._seedQuote({ ticker: "AAPL", trade_date: d });
+    }
+    db._seedPosition({ trade_id: "t-old", ticker: "VRT", state: "closed", closed_at: "2026-02-01T18:00:00Z" });
+    db._seedPosition({ trade_id: "t-recent", ticker: "NVDA", state: "closed", closed_at: "2026-02-04T18:00:00Z" });
+    db._seedPosition({ trade_id: "t-open", ticker: "AAPL", state: "open" });
+
+    const rows = await listPositions(db, "owner", null, { closedWithinSessions: 2 });
+    const ids = rows.map((p) => p.trade_id).sort();
+    expect(ids).toEqual(["t-open", "t-recent"]); // t-old (4 sessions) dropped, t-open (non-closed) kept
+
+    const unfiltered = await listPositions(db, "owner", null); // absent opts = no filtering
+    expect(unfiltered).toHaveLength(3);
   });
 });
