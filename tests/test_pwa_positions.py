@@ -77,11 +77,17 @@ def _base_routes(page):
 
 
 def _mock_worker(page, login_ok=True, positions_rows=None, capture=None,
-                  ack_capture=None, ack_status=200):
+                  ack_capture=None, ack_status=200,
+                  confirm_capture=None, confirm_status=200,
+                  still_capture=None, still_status=200, get_capture=None):
     """Intercept every finviz-positions.* call. `capture` (if given) is a list that POST
     /positions bodies get appended to, so tests can assert on the exact payload sent.
     `ack_capture` (if given) is a list that POST /positions/:id/ack-stop trade_ids get
-    appended to (WS5-7), so tests can assert the ✓ Updated button actually fired the call."""
+    appended to (WS5-7), so tests can assert the ✓ Updated button actually fired the call.
+    `confirm_capture`/`still_capture` (WS5-4a) are lists that POST
+    /positions/:id/confirm-exit / /positions/:id/still-holding calls get appended to —
+    (trade_id, body) tuples for confirm, plain trade_ids for still-holding. `get_capture` (if
+    given) gets one entry appended per GET /positions, so tests can assert a re-fetch happened."""
     if positions_rows is None:
         positions_rows = []
 
@@ -100,6 +106,8 @@ def _mock_worker(page, login_ok=True, positions_rows=None, capture=None,
             route.fulfill(status=201, body=json.dumps({"position": {"id": "p1"}}),
                           content_type="application/json")
         else:  # GET
+            if get_capture is not None:
+                get_capture.append(True)
             route.fulfill(status=200, body=json.dumps({"positions": positions_rows}),
                           content_type="application/json")
 
@@ -114,15 +122,39 @@ def _mock_worker(page, login_ok=True, positions_rows=None, capture=None,
             route.fulfill(status=ack_status, body=json.dumps({"error": "boom"}),
                           content_type="application/json")
 
+    def handle_confirm(route, request):
+        trade_id = request.url.rstrip("/").split("/")[-2]  # .../positions/<id>/confirm-exit
+        if confirm_capture is not None:
+            confirm_capture.append((trade_id, json.loads(request.post_data or "{}")))
+        if confirm_status == 200:
+            route.fulfill(status=200, body=json.dumps({"position": {"trade_id": trade_id, "state": "closed"}}),
+                          content_type="application/json")
+        else:
+            route.fulfill(status=confirm_status, body=json.dumps({"error": "boom"}),
+                          content_type="application/json")
+
+    def handle_still(route, request):
+        trade_id = request.url.rstrip("/").split("/")[-2]  # .../positions/<id>/still-holding
+        if still_capture is not None:
+            still_capture.append(trade_id)
+        if still_status == 200:
+            route.fulfill(status=200, body=json.dumps({"position": {"trade_id": trade_id, "state": "managing"}}),
+                          content_type="application/json")
+        else:
+            route.fulfill(status=still_status, body=json.dumps({"error": "boom"}),
+                          content_type="application/json")
+
     # Path-based globs: only the finviz-positions worker uses these paths, and a "**/host.*/exact"
     # glob does not reliably match a multi-label workers.dev host (the trailing-`**` positions
     # pattern did, the exact /auth/login one did not). Path-only is unambiguous here.
     page.route("**/auth/login", handle_login)
-    # WS5-7: the ack-stop stub MUST be registered BEFORE the broader "**/positions**" glob below —
-    # Playwright matches routes in registration order, and the positions glob would otherwise
-    # swallow the POST .../ack-stop request into handle_positions (which only knows about the
-    # plain POST /positions "create" shape).
+    # WS5-7/WS5-4a: the more specific action stubs MUST be registered BEFORE the broader
+    # "**/positions**" glob below — Playwright matches routes in registration order, and the
+    # positions glob would otherwise swallow these POSTs into handle_positions (which only knows
+    # about the plain POST /positions "create" shape).
     page.route("**/positions/*/ack-stop", lambda r: handle_ack(r, r.request))
+    page.route("**/positions/*/confirm-exit", lambda r: handle_confirm(r, r.request))
+    page.route("**/positions/*/still-holding", lambda r: handle_still(r, r.request))
     page.route("**/positions**", lambda r: handle_positions(r, r.request))
 
 
@@ -524,17 +556,19 @@ def test_underwater_no_false_stop_moved_banner(server):
         browser.close()
 
 
-def test_closing_exit_summary_hero(server):
-    # US-6: closing/stop_hit -- exit reason + modeled fill + actual close, no WS5-4 action buttons.
+def test_closing_position_shows_in_strip_not_as_card(server):
+    # WS5-4a: a 'closing' position is hoisted into the confirmation strip and never renders as
+    # a regular card (no posCardHtml source/date line for it). Collapsed by default.
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
         _base_routes(page)
         row = _pos_row(
-            ticker="NVT", entry_price=172.35, initial_stop=167.44, current_stop=167.44,
+            trade_id="t1", ticker="NVT", entry_price=172.35, initial_stop=167.44, current_stop=167.44,
             remaining_qty=13, initial_qty=13, state="closing",
             exit_reason="stop_hit", expected_exit_price=167.44, last_close=164.63,
+            exit_signal_date="2026-08-14", auto_confirm_sessions=5, sessions_in_closing=2,
             events=[{"trade_id": "t1", "ts": "2026-08-18T21:00:00Z", "trade_date": "2026-08-18",
                      "event_type": "exit_signal",
                      "payload": {"reason": "stop_hit", "expected_exit_price": 167.44, "at_close": 164.63}}],
@@ -545,11 +579,182 @@ def test_closing_exit_summary_hero(server):
         page.wait_for_timeout(500)
 
         html = page.inner_html("#positions-content")
-        assert "Exit signal" in html and "stop hit" in html
-        assert "Modeled fill $167.44" in html
-        assert "closed $164.63" in html or "closed 164.63" in html
-        assert "Confirm — log it" not in html
-        assert "Confirm fill" not in html and "Still holding" not in html
+        assert "Needs your confirmation" in html
+        assert "NVT" in html and "stop hit" in html
+        assert "· picks · 2026-08-14" not in html, "closing rows must not render via posCardHtml"
+        assert "No other open positions" in html
+        assert "Confirm this fill" not in html, "collapsed strip must not show item-level actions"
+        browser.close()
+
+
+# ── WS5-4a confirmation strip (planning/mocks/ws5-needs-confirmation-surface.html States A/B/C,
+# posConfirmStripHtml/posStripItemHtml/posConfirmExit/posStillHolding) ─────────────────────────
+
+def test_confirm_strip_collapsed_with_two_items_summary(server):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        rows = [
+            _pos_row(trade_id="t1", ticker="NVT", state="closing", exit_reason="stop_hit",
+                     expected_exit_price=167.44, exit_signal_date="2026-08-14",
+                     auto_confirm_sessions=5, sessions_in_closing=2),
+            _pos_row(trade_id="t2", ticker="OUST", state="closing", exit_reason="gap_down_below_stop",
+                     expected_exit_price=12.30, exit_signal_date="2026-08-15",
+                     auto_confirm_sessions=5, sessions_in_closing=1),
+        ]
+        _mock_worker(page, positions_rows=rows)
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        assert "Needs your confirmation" in html
+        assert "2 · show" in html
+        assert "NVT" in html and "stop hit" in html
+        assert "OUST" in html and "gap-down" in html
+        assert "Confirm this fill" not in html and "Still holding" not in html
+        browser.close()
+
+
+def test_confirm_strip_absent_with_zero_closing(server):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(ticker="AXON", state="managing")
+        _mock_worker(page, positions_rows=[row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        assert "Needs your confirmation" not in html
+        assert "confirm-strip" not in html
+        assert "AXON" in html
+        browser.close()
+
+
+def test_confirm_strip_expanded_item_shows_full_detail(server):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(
+            trade_id="t1", ticker="NVT", entry_price=172.35, initial_stop=167.44,
+            current_stop=167.44, remaining_qty=13, initial_qty=13, state="closing",
+            exit_reason="stop_hit", expected_exit_price=167.44,
+            exit_signal_date="2026-08-14", auto_confirm_sessions=5, sessions_in_closing=2,
+        )
+        _mock_worker(page, positions_rows=[row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        page.click("text=Needs your confirmation")
+        page.wait_for_timeout(300)
+
+        html = page.inner_html("#positions-content")
+        assert "stop hit" in html
+        assert "Expected fill $167.44" in html
+        fill_input = page.locator("#pos-fill-t1")
+        assert fill_input.input_value() == "167.44", "actual-fill input must be pre-filled with expected_exit_price"
+        assert "in 3 session" in html  # auto_confirm_sessions(5) - sessions_in_closing(2) = 3
+        assert "Confirm this fill" in html
+        assert "Still holding" in html
+        browser.close()
+
+
+def test_confirm_exit_edited_fill_sent_as_exit_price(server):
+    # An edited actual-fill is sent as exit_price, and the client re-fetches on success.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(
+            trade_id="t1", ticker="NVT", state="closing", exit_reason="stop_hit",
+            expected_exit_price=167.44, exit_signal_date="2026-08-14",
+            auto_confirm_sessions=5, sessions_in_closing=2,
+        )
+        confirm_capture = []
+        get_capture = []
+        _mock_worker(page, positions_rows=[row], confirm_capture=confirm_capture, get_capture=get_capture)
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+        page.click("text=Needs your confirmation")
+        page.wait_for_timeout(300)
+
+        page.fill("#pos-fill-t1", "165.10")
+        gets_before = len(get_capture)
+        page.click("button:has-text('Confirm this fill')")
+        page.wait_for_timeout(500)
+
+        assert len(confirm_capture) == 1
+        trade_id, body = confirm_capture[0]
+        assert trade_id == "t1"
+        assert body.get("exit_price") == pytest.approx(165.10), "edited fill must be sent as exit_price"
+        assert len(get_capture) > gets_before, "a successful confirm must re-fetch positions"
+        browser.close()
+
+
+def test_confirm_exit_unedited_omits_exit_price(server):
+    # An unedited fill omits exit_price entirely so the server defaults to expected_exit_price.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(
+            trade_id="t1", ticker="NVT", state="closing", exit_reason="stop_hit",
+            expected_exit_price=167.44, exit_signal_date="2026-08-14",
+            auto_confirm_sessions=5, sessions_in_closing=2,
+        )
+        confirm_capture = []
+        _mock_worker(page, positions_rows=[row], confirm_capture=confirm_capture)
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+        page.click("text=Needs your confirmation")
+        page.wait_for_timeout(300)
+
+        page.click("button:has-text('Confirm this fill')")
+        page.wait_for_timeout(500)
+
+        assert len(confirm_capture) == 1
+        trade_id, body = confirm_capture[0]
+        assert trade_id == "t1"
+        assert "exit_price" not in body, "an un-edited fill must omit exit_price"
+        browser.close()
+
+
+def test_still_holding_posts_to_still_holding_route(server):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(
+            trade_id="t1", ticker="NVT", state="closing", exit_reason="stop_hit",
+            expected_exit_price=167.44, exit_signal_date="2026-08-14",
+            auto_confirm_sessions=5, sessions_in_closing=2,
+        )
+        still_capture = []
+        _mock_worker(page, positions_rows=[row], still_capture=still_capture)
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+        page.click("text=Needs your confirmation")
+        page.wait_for_timeout(300)
+
+        page.click("button:has-text('Still holding')")
+        page.wait_for_timeout(500)
+
+        assert still_capture == ["t1"], "Still holding must POST /positions/t1/still-holding"
         browser.close()
 
 
