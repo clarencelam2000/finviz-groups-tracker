@@ -6,6 +6,76 @@
 
 ---
 
+## 2026-08-19 — Positions tab data-integrity riff → WS5-7 spec + mock, WS5-8, #335
+
+**Status: safe to close. No production code shipped — this was a design/scoping session.** PR #336
+(open, ready) carries all tracking + specs; **merge it to land on default**. Owner reviewed the
+WS5-7 mock twice; v2 incorporates all feedback. Build of WS5-7 is gated on final owner mock sign-off.
+
+**What triggered it:** owner reported the Positions tab looked broken (EOG showing −$3.55 "open
+risk", stops changing between two screenshots, "not much I can do"). Queried **live D1
+`finviz-positions`** directly (Cloudflare API, `CLOUDFLARE_API_TOKEN`/`_ACCOUNT_ID` in env — no
+OAuth). **Finding: the `advance()` engine is 100% correct** — every decision verified against the
+bars (OUST gap-down exit 45.09, NVT stop-hit 167.44, EOG stop trailed to 142.90 locking a gain).
+All the problems are **presentation + a missing action surface** on the phase-1 read-only card that
+never got upgraded when phases 2–3 (feed + engine) went live and started mutating rows on the 17:30
+ET sweep. The two screenshots differed because the sweep ran (21:31 UTC = 14:31 PT) between them.
+
+**What landed (all on PR #336, branch `claude/tab-data-integrity-issues-xrk3gb`):**
+- **`planning/ws5-7-positions-managing-card.md`** — full cold-pickup spec (issue #337). Fixes: risk
+  math `entry−current_stop` goes $0/negative once the stop trails past entry (the −$3.55 is the
+  locked-in gain sign-flipped); lying stop-basis label; user never told the stop moved → can't
+  update their broker; no engine visibility; stale banner. Reframe around **last price** (4 numbers),
+  **state-driven hero** (🔒 risk-free / P&L / underwater), `posDerive()` pure fn, small `GET
+  /positions` `last_close` join, **cross-device server-side stop-ack** (`0004_stop_ack.sql`), **full
+  state enumeration** incl. the **trim + caution overlays I'd first missed** (both already in
+  `advance()` output, just hidden), pending-lock tag, inline formula reveal, OHLCV.
+- **`planning/mocks/ws5-7-positions-card.html`** (v2) — 8 states + EOG before/after on real values.
+  Artifact: https://claude.ai/code/artifact/40d898df-f50a-4f7d-91d1-6b9c2de99144
+- **Issue #337** WS5-7 (high pri); **#335** breakeven ratchet close-vs-high (NVT example).
+- **SPRINT rows:** WS5-7, WS5-8 (new), WS5-BREAKEVEN-RATCHET.
+- **CLAUDE.md takeaway** (verification-discipline §, 2026-08-19): don't manufacture objections to the
+  owner's domain calls; never assert empirical claims ("bars routinely reverse") without data; don't
+  cite ADRs as rhetorical authority; lead with the real technical catch not fluff. (Owner rightly
+  peeved at a hand-wavy timing paragraph — the honest version is now in WS5-7 §8 / WS5-8.)
+
+**Owner decisions captured:** cross-device (not localStorage) stop-ack; pending-lock tag (the
+"locked +$X" is only true once they raise the broker stop); risk-free tone approved; formula reveal
+replaces a separate info button; don't reshow the whole 4-number table (hero + Details ▾).
+
+### COLD-START PICKUP INSTRUCTIONS — all items from this session, suggested order
+
+> Each block is self-sufficient. Read the named spec section first; it has the before/after code.
+
+1. **WS5-7 — Positions managing-card overhaul (#337) — HIGHEST, do first.** Read
+   `planning/ws5-7-positions-managing-card.md` end-to-end (it's the authority). Build order in its §9:
+   (a) backend `GET /positions` last-bar join + bounded events (`worker-positions/src/positions.js`
+   `listPositions()` @157, currently `SELECT *`; tests `test/positions.test.js`) + `0004_stop_ack.sql`
+   + `POST /positions/:id/ack-stop` in `src/transitions.js` (sweep must NEVER write `stop_ack_value` —
+   mirror the persist-disjointness rule in `worker-positions/CLAUDE.md` § sweep); (b) refactor
+   `posCardHtml` (`docs/index.html` @5764) into pure `posDerive(p)` + state-hero renderers per §4;
+   (c) stop-moved banner + pending-lock + ack; (d) Details/OHLCV/activity/formula-reveal; (e) trim +
+   caution overlays (§2b); (f) banner rewrite + **release triplet** (`releases.json`+`sw.js`) + docs +
+   `tests/test_pwa_positions.py` fixtures per hero state (add to `tests.yml --ignore` if new file).
+   Gate: owner mock sign-off first.
+2. **WS5-4 — Phase 4 push + `closing` confirmation strip.** The exit-confirmation action surface
+   (confirm-fill / still-holding, routes already exist in `src/transitions.js`) + VAPID (reuse
+   sibling `distil` worker). Mock `planning/mocks/ws5-needs-confirmation-surface.html`, design
+   `planning/trade-lifecycle-engine.md` §8. Shares the WS5-7 backend last-bar join. Do after WS5-7.
+3. **WS5-8 — Pre-close read (~15:30–15:45 ET) so owner can act before the bell.** File the issue when
+   WS5-7 lands. **Critical design constraint (WS5-7 §8):** the 15:30 read MUST be **advisory-only —
+   no state write, no `last_advanced_date` stamp** — else it makes the 17:30 settled sweep a no-op
+   (idempotency guard). Needs a 15:30 held scrape (new `worker-cron` `JOB_SCHEDULE` entry, not a new
+   CF trigger). Soft-depends on WS5-4 for the push half. Do after WS5-4.
+4. **#335 — breakeven ratchet close-vs-high (owner taste call).** `advance.js:213` ratchets on close;
+   NVT gave back ~1R. Small change (`bar.high` or a `BREAKEVEN_TRIGGER` knob) once owner decides.
+   Also fix the **negative-`days_to_earnings` earnings_warning bug** noted in WS5-7 §2b (fires on past
+   earnings) — bundle or track separately. Non-blocking; do when convenient.
+5. **WS5-5 — recently-closed grace window (#332, pre-existing).** Show closed positions for a bounded
+   window before they vanish. Independent; do anytime. `docs/index.html` only.
+
+---
+
 ## 2026-08-18 — WS5-6: PWA switched to the multi-state /positions filter (follow-up to PR #333)
 
 **Status: safe to close.** Closes out the review chain started on PR #331: doc fix → PR #331
