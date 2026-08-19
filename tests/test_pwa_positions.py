@@ -76,9 +76,12 @@ def _base_routes(page):
                lambda r: r.fulfill(body='{"sectors":{}}', content_type="application/json"))
 
 
-def _mock_worker(page, login_ok=True, positions_rows=None, capture=None):
+def _mock_worker(page, login_ok=True, positions_rows=None, capture=None,
+                  ack_capture=None, ack_status=200):
     """Intercept every finviz-positions.* call. `capture` (if given) is a list that POST
-    /positions bodies get appended to, so tests can assert on the exact payload sent."""
+    /positions bodies get appended to, so tests can assert on the exact payload sent.
+    `ack_capture` (if given) is a list that POST /positions/:id/ack-stop trade_ids get
+    appended to (WS5-7), so tests can assert the ✓ Updated button actually fired the call."""
     if positions_rows is None:
         positions_rows = []
 
@@ -100,10 +103,26 @@ def _mock_worker(page, login_ok=True, positions_rows=None, capture=None):
             route.fulfill(status=200, body=json.dumps({"positions": positions_rows}),
                           content_type="application/json")
 
+    def handle_ack(route, request):
+        trade_id = request.url.rstrip("/").split("/")[-2]  # .../positions/<id>/ack-stop
+        if ack_capture is not None:
+            ack_capture.append(trade_id)
+        if ack_status == 200:
+            route.fulfill(status=200, body=json.dumps({"ok": True, "stop_ack_value": None}),
+                          content_type="application/json")
+        else:
+            route.fulfill(status=ack_status, body=json.dumps({"error": "boom"}),
+                          content_type="application/json")
+
     # Path-based globs: only the finviz-positions worker uses these paths, and a "**/host.*/exact"
     # glob does not reliably match a multi-label workers.dev host (the trailing-`**` positions
     # pattern did, the exact /auth/login one did not). Path-only is unambiguous here.
     page.route("**/auth/login", handle_login)
+    # WS5-7: the ack-stop stub MUST be registered BEFORE the broader "**/positions**" glob below —
+    # Playwright matches routes in registration order, and the positions glob would otherwise
+    # swallow the POST .../ack-stop request into handle_positions (which only knows about the
+    # plain POST /positions "create" shape).
+    page.route("**/positions/*/ack-stop", lambda r: handle_ack(r, r.request))
     page.route("**/positions**", lambda r: handle_positions(r, r.request))
 
 
@@ -364,4 +383,240 @@ def test_positions_load_error_shows_retry(server):
         assert "Couldn't load positions" in html
         assert "Try again" in html
         assert "No open positions" not in html, "a fetch error must not read as an empty portfolio"
+        browser.close()
+
+
+# ── WS5-7 managing-card overhaul (planning/ws5-7-positions-managing-card.md, mock
+# planning/mocks/ws5-7-positions-card.html) — posDerive/posHeroHtml/posStopMovedHtml/
+# posDetailsHtml/posOverlaysHtml, replacing the phase-1 frozen read-only card tested above. ──
+
+def _pos_row(**overrides):
+    """A managing-state position row with every WS5-7 backend field defaulted to something
+    inert. Tests override only the fields the scenario needs."""
+    row = {
+        "trade_id": "t1", "ticker": "EOG", "entry_price": 142.78, "initial_stop": 140.48,
+        "current_stop": 140.48, "remaining_qty": 30, "initial_qty": 30,
+        "stop_basis": "prior_day_low", "entry_date": "2026-08-14",
+        "meta": {"source": "picks"}, "state": "managing",
+        "last_close": None, "last_bar_date": None, "last_open": None, "last_high": None,
+        "last_low": None, "last_change_pct": None, "last_volume": None, "last_raw": "{}",
+        "events": [], "stop_ack_value": None,
+        "exit_reason": None, "expected_exit_price": None, "caution_flag": 0,
+    }
+    row.update(overrides)
+    return row
+
+
+def test_risk_free_locked_pending_ack(server):
+    # US-1/US-2 (EOG-like): stop trailed above entry via a stop_moved event, not yet acked.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(
+            current_stop=142.90, last_close=148.70,
+            events=[{"trade_id": "t1", "ts": "2026-08-18T21:00:00Z", "trade_date": "2026-08-18",
+                     "event_type": "stop_moved",
+                     "payload": {"from": 142.78, "to": 142.90, "basis": "20ma"}}],
+            stop_ack_value=None,
+        )
+        ack_capture = []
+        _mock_worker(page, positions_rows=[row], ack_capture=ack_capture)
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        assert "Risk-free" in html
+        assert "once you raise your stop" in html
+        assert "lock pending" in html
+        assert "Stop raised" in html and "142.78" in html and "142.90" in html
+        assert "✓ Updated" in html
+        assert "-$" not in html and "−$" not in html, "no card may render negative risk"
+
+        page.click("button:has-text('✓ Updated')")
+        page.wait_for_timeout(400)
+        assert ack_capture == ["t1"], "the ✓ Updated button must POST /positions/t1/ack-stop"
+        browser.close()
+
+
+def test_risk_free_locked_acked(server):
+    # Same position, already acked server-side (stop_ack_value == current_stop) — plain "locked",
+    # no pending chip, banner resolved.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(
+            current_stop=142.90, last_close=148.70,
+            events=[{"trade_id": "t1", "ts": "2026-08-18T21:00:00Z", "trade_date": "2026-08-18",
+                     "event_type": "stop_moved",
+                     "payload": {"from": 142.78, "to": 142.90, "basis": "20ma"}}],
+            stop_ack_value=142.90,
+        )
+        _mock_worker(page, positions_rows=[row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        # (142.90 - 142.78) * 30 = 3.60. NOTE: the WS5-7 mock's head-to-head example shows
+        # "+$3.55" for this exact scenario, which does not match its own stated formula
+        # (142.90 - 142.78) x 30 = 3.60 -- flagged to the lead as a mock arithmetic slip; the
+        # implementation (posDerive) follows the spec's formula literally, so this test pins
+        # the mathematically-correct figure instead of reproducing the mock's typo.
+        assert "locked +$3.60" in html
+        assert "lock pending" not in html
+        assert "once you raise your stop" not in html
+        assert "✓ Updated" in html
+        assert "-$" not in html and "−$" not in html
+        browser.close()
+
+
+def test_up_stop_below_entry_pnl_hero(server):
+    # US-3: winning but stop still below entry — P&L hero + "Open risk ... to stop" subline.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(
+            ticker="ANET", entry_price=100.00, initial_stop=94.00, current_stop=96.00,
+            remaining_qty=50, initial_qty=50, last_close=108.00,
+        )
+        _mock_worker(page, positions_rows=[row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        assert "+$400 unrealized" in html
+        assert "Open risk" in html and "to stop" in html
+        assert "Risk-free" not in html
+        browser.close()
+
+
+def test_underwater_no_false_stop_moved_banner(server):
+    # US-3 underwater: last < entry, stop unchanged (no stop_moved event) -> no banner, red P&L,
+    # and NO negative open-risk figure (the phase-1 bug this whole overhaul fixes).
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(
+            ticker="CRWD", entry_price=50.00, initial_stop=46.00, current_stop=46.00,
+            remaining_qty=40, initial_qty=40, last_close=47.50,
+        )
+        _mock_worker(page, positions_rows=[row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        assert "unrealized" in html
+        assert "−$100" in html  # fmtSigned uses U+2212 MINUS SIGN, not ASCII hyphen
+        assert "Stop raised" not in html, "stop never moved -- no stop-moved banner"
+        assert "Open risk $60" in html
+        assert "-$60" not in html and "−$60" not in html, "open risk must never render negative"
+        browser.close()
+
+
+def test_closing_exit_summary_hero(server):
+    # US-6: closing/stop_hit -- exit reason + modeled fill + actual close, no WS5-4 action buttons.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(
+            ticker="NVT", entry_price=172.35, initial_stop=167.44, current_stop=167.44,
+            remaining_qty=13, initial_qty=13, state="closing",
+            exit_reason="stop_hit", expected_exit_price=167.44, last_close=164.63,
+            events=[{"trade_id": "t1", "ts": "2026-08-18T21:00:00Z", "trade_date": "2026-08-18",
+                     "event_type": "exit_signal",
+                     "payload": {"reason": "stop_hit", "expected_exit_price": 167.44, "at_close": 164.63}}],
+        )
+        _mock_worker(page, positions_rows=[row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        assert "Exit signal" in html and "stop hit" in html
+        assert "Modeled fill $167.44" in html
+        assert "closed $164.63" in html or "closed 164.63" in html
+        assert "Confirm — log it" not in html
+        assert "Confirm fill" not in html and "Still holding" not in html
+        browser.close()
+
+
+def test_no_last_bar_planned_risk_hero(server):
+    # US-7: brand-new position, no ticker_quotes bar yet -- planned-risk hero, no NaN/fake $0.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(
+            ticker="TT", entry_price=88.00, initial_stop=85.70, current_stop=85.70,
+            remaining_qty=30, initial_qty=30, meta={"source": "manual"},
+        )
+        _mock_worker(page, positions_rows=[row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        assert "Planned risk $69" in html
+        assert "first engine read" in html.lower()
+        assert "NaN" not in html
+        browser.close()
+
+
+def test_trimmed_overlay_shows_n_of_m(server):
+    # Overlay: partial ATR-extension trim -- Qty row reads "N of M", trim line rendered.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(
+            ticker="VRT", entry_price=60.00, initial_stop=58.00, current_stop=62.00,
+            remaining_qty=20, initial_qty=30, last_close=86.00,
+            events=[{"trade_id": "t1", "ts": "2026-08-17T21:00:00Z", "trade_date": "2026-08-17",
+                     "event_type": "partial_exit",
+                     "payload": {"qty": 10, "at_atr": 3, "price": 86.00, "remaining_qty": 20}}],
+        )
+        _mock_worker(page, positions_rows=[row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        assert "20 of 30" in html
+        assert "Trimmed" in html and "held" in html
+        browser.close()
+
+
+def test_caution_overlay_shows(server):
+    # Overlay: caution_flag counter -> soft-exit warning surfaced (was hidden pre-WS5-7).
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(
+            ticker="SMCI", entry_price=40.00, initial_stop=34.50, current_stop=34.50,
+            remaining_qty=25, initial_qty=25, last_close=43.50, caution_flag=1,
+        )
+        _mock_worker(page, positions_rows=[row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        assert "1 of 2 closes below the 20MA" in html
         browser.close()
