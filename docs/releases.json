@@ -1,6 +1,18 @@
 {
-  "current": "2026.08.19.1",
+  "current": "2026.08.19.2",
   "releases": [
+    {
+      "version": "2026.08.19.2",
+      "date": "2026-08-19",
+      "title": "Confirm exits from the Positions tab",
+      "tag": "feature",
+      "tab": "positions",
+      "notes": [
+        "Positions awaiting your confirmation now surface in a \"Needs your confirmation\" strip at the top of the tab — nothing to miss, nothing scattered among your other cards.",
+        "Confirm your actual fill (pre-filled with the modeled price, editable) or tap Still holding to reject the exit and keep managing the position.",
+        "A countdown shows how many sessions remain before the position auto-closes at the modeled price if you don't confirm."
+      ]
+    },
     {
       "version": "2026.08.19.1",
       "date": "2026-08-19",

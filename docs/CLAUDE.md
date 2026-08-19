@@ -63,8 +63,9 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `WATCHLIST_EXPIRING_AT` | `1` | Watch card footer: `sessions_remaining <= this` shows the amber "expiring" cue (e.g. "1 morning left" in amber). |
 | `WATCHLIST_GAUGE_PAD` | `0.08` | Fraction of the price domain padded on each end of a watch card's levels gauge so end markers (prior high/low, your level) aren't clipped at the track edges. |
 | `POS_VISIBLE_STATES` | `{'open','managing','closing'}` | Positions tab: worker `state` values that render as a card. Also the server-side filter value (`?state=open,managing,closing`, worker-positions PR #333's multi-state `IN` clause) — the client-side check is now defense-in-depth, not load-bearing. Only `closed` drops off. |
-| `POS_STATE_BADGE` | see code | Positions tab: small uppercase badge on `managing`/`closing` cards (`closing` = amber "exit pending"); `open` gets no badge. |
-| `POS_EXIT_REASON_LABEL` | see code | Positions tab managing card (WS5-7): maps `advance()`'s exit-check reason enum (`stop_hit`, `gap_down_below_stop`, `close_below_50ma`, `close_below_20ma`, `severe_breakdown`, `two_close_below_20ma`) to the plain-English phrase shown in the `closing` hero and Activity trail. |
+| `POS_STATE_BADGE` | see code | Positions tab: small uppercase badge on `managing` cards; `open` gets no badge. `closing` no longer has an entry — WS5-4a hoists `closing` rows out of the card list into the confirmation strip, so they never reach this lookup. |
+| `POS_EXIT_REASON_LABEL` | see code | Positions tab (WS5-7 / WS5-4a): maps `advance()`'s exit-check reason enum (`stop_hit`, `gap_down_below_stop`, `close_below_50ma`, `close_below_20ma`, `severe_breakdown`, `two_close_below_20ma`) to the plain-English phrase shown in the confirmation strip's expanded reason pill and the Activity trail. |
+| `POS_EXIT_REASON_SHORT` | see code | Positions tab (WS5-4a): terse companion to `POS_EXIT_REASON_LABEL` for the confirmation strip's collapsed one-line summary (e.g. `stop_hit` → "stop hit", `gap_down_below_stop` → "gap-down"). |
 
 ## Watchlist (Morning + Positions, WS5 §8b)
 
@@ -142,11 +143,12 @@ number was literally the locked-in gain with its sign flipped. `posDerive(p)` (p
 unit-tested) is the whole fix: per-share first, then × `remaining_qty`, every $ figure floored at
 zero. See `planning/ws5-7-positions-managing-card.md` §2 for the formula table.
 
-- **Hero (collapsed card), priority order:** `closing` → exit-summary hero (reason · modeled fill ·
-  closed · R); no `last_close` yet → neutral "Planned risk $X · first read tonight" (US-7,
-  null-safe, never NaN/fake $0); `current_stop >= entry_price` → 🔒 Risk-free (locked `+$L` once
-  acked, an amber "lock pending" chip + conditional copy until then, plain 🔒 alone at exact
-  breakeven); else → P&L hero (`±$unrealized`, colored) + "Open risk $O ($/sh) to stop" subline.
+- **Hero (collapsed card), priority order:** no `last_close` yet → neutral "Planned risk $X ·
+  first read tonight" (US-7, null-safe, never NaN/fake $0); `current_stop >= entry_price` → 🔒
+  Risk-free (locked `+$L` once acked, an amber "lock pending" chip + conditional copy until
+  then, plain 🔒 alone at exact breakeven); else → P&L hero (`±$unrealized`, colored) + "Open
+  risk $O ($/sh) to stop" subline. `closing` never reaches this hero — see the confirmation
+  strip below.
 - **Stop-moved banner + cross-device ack.** Renders whenever the position has a `stop_moved` event
   (sourced from that event's own `payload {from,to,basis}`, never `initial_stop`, so it can't
   misreport what happened). Un-acked → CTA + **✓ Updated** button → `posAckStop(tradeId)` →
@@ -173,9 +175,29 @@ zero. See `planning/ws5-7-positions-managing-card.md` §2 for the formula table.
   `EARNINGS_IMMINENT_DAYS`=3; its own `>= 0` client guard so a past-earnings date never shows even if
   the engine signal regresses — the engine-side negative-days guard fix is #335 / advance.js).
   Flag-only copy, mirroring the engine's never-auto-exit-on-earnings rule.
-- **Out of scope here (tracked separately):** confirm-fill / still-holding action buttons on
-  `closing` cards + push notifications are WS5-4 — this overhaul only makes `closing` *legible*
-  ("Confirm your fill / still holding arrives with alerts (WS5-4)" note), not actionable.
+- **Confirmation strip (WS5-4a, issue #264/#268, design authority
+  `planning/mocks/ws5-needs-confirmation-surface.html` States A/B/C,
+  `planning/trade-lifecycle-engine.md` §8):** `closing` positions no longer render as cards at
+  all — `renderPositions()` partitions the fetch into `closingRows`/`cardRows` and hoists
+  `closingRows` into `posConfirmStripHtml()`, a collapsed-by-default red-accented strip above
+  the (subtly dimmed) card list. Zero `closing` rows → zero pixels (State A). Collapsed (State
+  B, default): one header line (`● Needs your confirmation` + count + `show ▾`) plus a terse
+  one-line summary (`POS_EXIT_REASON_SHORT`, e.g. "NVT stop hit · OUST gap-down"). Expanded
+  (State C, `posStripItemHtml()` per item, sorted oldest `exit_signal_date` first — "order =
+  urgency"): reason pill (`POS_EXIT_REASON_LABEL`), modeled fill + R, an editable actual-fill
+  input pre-filled with `expected_exit_price` (stashed to `state.posConfirmFill` on `oninput`,
+  no re-render — focus-preserving, same discipline as `manualRecompute`), an auto-close
+  countdown from `auto_confirm_sessions − sessions_in_closing` (omitted entirely, never "NaN",
+  when either field is missing), and the two actions: **Confirm this fill →**
+  (`window.posConfirmExit` → `POST /positions/<id>/confirm-exit`, sending `exit_price` only if
+  the user edited the field — an unedited fill lets the server default to
+  `expected_exit_price`) and **Still holding** (`window.posStillHolding` → `POST
+  /positions/<id>/still-holding`). Both re-fetch via `posLoadPositions()` on success rather than
+  hand-mutating state — the closed/reopened row simply drops out of (or changes state within)
+  the next `open,managing,closing` fetch.
+- **Out of scope here (tracked separately):** the OS/app-icon push badge is WS5-4b. The
+  auto-closed-unconfirmed-but-still-correctable list (owner-decided 3-session grace window) is
+  WS5-5 — it needs `closed` rows in the `GET /positions` fetch, which this PR does not add.
 - Backend fields consumed (all null-safe, `worker-positions` GET `/positions`): `last_close`,
   `last_bar_date`, `last_open/high/low`, `last_change_pct`, `last_volume`, `last_raw` (JSON string),
   `events` (≤8, newest-first, `payload` pre-parsed to an object), `stop_ack_value` (server-computed
