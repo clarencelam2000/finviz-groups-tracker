@@ -518,6 +518,20 @@
       // trade_id -> small inline error string shown under a banner whose ack POST failed for a
       // reason other than 401 (which routes through the usual signed-out flow instead).
       posAckError: {},
+      // WS5-4a — "needs your confirmation" strip (planning/mocks/ws5-needs-confirmation-surface.html).
+      // false = collapsed (default); flipped by posToggleStrip(). Module-level, not per-item.
+      posStripExpanded: false,
+      // trade_id -> true while a confirm-exit/still-holding POST is in flight (disables both
+      // buttons on that strip item, same convention as posAckBusy).
+      posConfirmBusy: {},
+      // trade_id -> inline error string for a failed confirm-exit/still-holding POST (mirrors
+      // posAckError).
+      posConfirmError: {},
+      // trade_id -> the user's edited actual-fill string, stashed by the strip item's oninput
+      // handler WITHOUT a re-render (focus-preserving, same discipline as manualRecompute).
+      // Absent/empty = unedited -> posConfirmExit sends no exit_price (server defaults to
+      // expected_exit_price).
+      posConfirmFill: {},
       // WS5 §8a — manual "log a position on any ticker" form on the Positions tab.
       // Survives renderPositions() re-renders (module-level, not rebuilt each render), same
       // convention as morningTicket/ws5Card. `confirm` mirrors ws5Card's freeze-confirm step
@@ -5777,12 +5791,11 @@
     // management yet, so they're always equal today, but the read prefers the "current"
     // fields so this doesn't silently go stale once phase 3 ships stop/partial-exit
     // management.
-    // 'open' shows no badge (default/expected state); the other two visible states get a small
-    // cue since phase 1 has no confirmation-strip UI yet (worker-positions/CLAUDE.md phase 4) —
-    // a 'closing' position is a signaled-but-unconfirmed exit and needs the owner's attention.
+    // 'open' shows no badge (default/expected state). 'closing' no longer needs an entry here —
+    // WS5-4a hoists closing positions into the confirmation strip (posConfirmStripHtml), so a
+    // 'closing' row never reaches posCardHtml/this lookup at all.
     const POS_STATE_BADGE = {
       managing: '<span class="text-[10px] uppercase tracking-wide text-slate-500 ml-1.5">managing</span>',
-      closing: '<span class="text-[10px] uppercase tracking-wide text-amber-400 ml-1.5">exit pending</span>',
     };
 
     // ── WS5-7 Positions managing-card overhaul (planning/ws5-7-positions-managing-card.md,
@@ -5872,9 +5885,10 @@
     }
 
     // ── Hero (Task 2, spec §2 / mock "Every state") ─────────────────────────────────────
+    // 'closing' never reaches this function — WS5-4a hoists closing positions out of the card
+    // list entirely into the confirmation strip (posConfirmStripHtml/posStripItemHtml), which
+    // has its own reason/modeled-fill/R rendering; see docs/CLAUDE.md § Positions tab.
     function posHeroHtml(p, d) {
-      if (p.state === 'closing') return posClosingHeroHtml(p, d);
-
       if (!d.hasLast) {
         return `
           <div class="pos-hero mt-3">
@@ -5917,33 +5931,17 @@
       two_close_below_20ma: '2 closes below 20MA',
     };
 
-    // US-6 exit-summary hero (spec Task 5). reason/expected come off the position row itself;
-    // the actual close comes off the newest exit_signal EVENT payload (advance.js emits
-    // {reason, expected_exit_price, at_close} on the bar that signals — recent enough on a
-    // 'closing' position to sit comfortably inside the 8-event display cap). If that event is
-    // somehow missing, degrade to omitting "closed $X" rather than showing NaN.
-    function posClosingHeroHtml(p, d) {
-      const reasonKey = p.exit_reason;
-      const reasonLabel = POS_EXIT_REASON_LABEL[reasonKey] || (reasonKey ? escapeHtml(reasonKey) : 'exit signaled');
-      const expected = parseFloat(p.expected_exit_price);
-      const exitEvent = posNewestEvent(p, 'exit_signal');
-      const atClose = exitEvent ? parseFloat(exitEvent.payload && exitEvent.payload.at_close) : NaN;
-
-      const rDollar = (isFinite(expected) && isFinite(d.entry) && isFinite(d.qty)) ? (expected - d.entry) * d.qty : NaN;
-      const rMultiple = (isFinite(rDollar) && isFinite(d.plannedRisk) && d.plannedRisk !== 0) ? rDollar / d.plannedRisk : NaN;
-      const rCls = isFinite(rDollar) && rDollar < 0 ? 'text-red-400' : 'text-emerald-400';
-      const rPart = isFinite(rDollar)
-        ? `<span class="${rCls}">${fmtSigned(rDollar)} (${isFinite(rMultiple) ? (rMultiple >= 0 ? '+' : '−') + Math.abs(rMultiple).toFixed(1) + 'R' : '—'})</span>`
-        : '—';
-      const closedPart = isFinite(atClose) ? ` · closed ${fmtPerSh(atClose)}` : '';
-
-      return `
-        <div class="pos-hero mt-3">
-          <div class="text-[15px] font-bold text-amber-400">⚠ Exit signal · ${reasonLabel}</div>
-          <div class="text-xs text-slate-400 mt-1 tabular-nums">Modeled fill ${isFinite(expected) ? fmtPerSh(expected) : '—'}${closedPart} · ${rPart}</div>
-        </div>
-        <div class="text-[11.5px] text-slate-500 mt-2.5 italic">Confirm your fill / still holding arrives with alerts (WS5-4). This card just makes the state legible.</div>`;
-    }
+    // 'closing' short reason (WS5-4a confirmation-strip collapsed summary line, e.g.
+    // "NVT stop hit · OUST gap-down") — a terse companion to POS_EXIT_REASON_LABEL, which is
+    // used verbatim for the expanded strip item's reason pill.
+    const POS_EXIT_REASON_SHORT = {
+      stop_hit: 'stop hit',
+      gap_down_below_stop: 'gap-down',
+      close_below_50ma: 'below 50MA',
+      close_below_20ma: 'below 20MA',
+      severe_breakdown: 'breakdown',
+      two_close_below_20ma: '2x below 20MA',
+    };
 
     // ── Stop-moved banner + cross-device ack (Task 3, spec §6) ──────────────────────────
     // Renders whenever the position has ANY stop_moved event, sourced from that event's own
@@ -6174,6 +6172,195 @@
       }
     };
 
+    // ── WS5-4a confirmation strip (planning/mocks/ws5-needs-confirmation-surface.html States
+    // A/B/C, planning/trade-lifecycle-engine.md §8) ─────────────────────────────────────────
+    // 'closing' positions no longer render as cards at all (see posCardHtml/renderPositions
+    // below) — they're hoisted here, sorted oldest-exit-signal-first ("order = urgency", the
+    // item closest to auto-confirming sits on top), collapsed by default behind a single
+    // ~64px header, expandable to one actionable item per position.
+    function posConfirmStripHtml(closingRows) {
+      if (!closingRows || closingRows.length === 0) return '';
+      const sorted = closingRows.slice().sort((a, b) => {
+        const ad = a.exit_signal_date || '', bd = b.exit_signal_date || '';
+        if (!ad && !bd) return 0;
+        if (!ad) return 1;   // null/empty dates sort last
+        if (!bd) return -1;
+        return ad < bd ? -1 : ad > bd ? 1 : 0;
+      });
+      const expanded = !!state.posStripExpanded;
+
+      const headerHtml = `
+        <div class="flex items-center justify-between px-3 py-2.5 cursor-pointer" onclick="posToggleStrip()">
+          <span class="flex items-center gap-2 text-[12.5px] font-bold text-red-400">● Needs your confirmation</span>
+          <span class="text-xs text-red-400">${expanded ? 'hide ▴' : sorted.length + ' · show ▾'}</span>
+        </div>`;
+
+      let bodyHtml;
+      if (!expanded) {
+        const summary = sorted.map(p => {
+          const ticker = escapeHtml(p.ticker || '');
+          const short = POS_EXIT_REASON_SHORT[p.exit_reason]
+            || (p.exit_reason ? escapeHtml(p.exit_reason.replace(/_/g, ' ')) : 'exit signaled');
+          return `<b class="text-slate-100">${ticker}</b> ${short}`;
+        }).join(' · ');
+        bodyHtml = `<div class="text-xs text-slate-400 px-3 pb-2.5">${summary}</div>`;
+      } else {
+        bodyHtml = sorted.map(posStripItemHtml).join('');
+      }
+
+      return `<div class="confirm-strip mb-3 rounded-lg overflow-hidden border border-red-500/40 bg-red-500/5">${headerHtml}${bodyHtml}</div>`;
+    }
+
+    window.posToggleStrip = function () {
+      state.posStripExpanded = !state.posStripExpanded;
+      renderPositions();
+    };
+
+    // Stashes an in-progress actual-fill edit WITHOUT a re-render (focus-preserving, same
+    // discipline as manualRecompute's id-patch handlers). Exposed on window (not an inline
+    // `state.posConfirmFill[...] = ...` attribute) because inline event-handler attributes run
+    // in the global scope and can't see `state`, which is closed over inside this script's IIFE.
+    window.posSetConfirmFill = function (tradeId, value) {
+      state.posConfirmFill[tradeId] = value;
+    };
+
+    // One expanded strip item: ticker + exit-signal date, reason pill, expected (modeled) fill
+    // + R, an editable actual-fill input pre-filled with expected_exit_price, an honest
+    // auto-close countdown, and the two actions. Mirrors posStopMovedHtml's busy/err handling.
+    function posStripItemHtml(p) {
+      const d = posDerive(p);
+      const ticker = escapeHtml(p.ticker || '');
+      const tradeId = escapeHtml(p.trade_id || '');
+      const reasonKey = p.exit_reason;
+      const reasonLabel = POS_EXIT_REASON_LABEL[reasonKey] || (reasonKey ? escapeHtml(reasonKey) : 'exit signaled');
+      const signalDate = p.exit_signal_date ? posFmtDate(p.exit_signal_date) : '';
+      const expected = parseFloat(p.expected_exit_price);
+
+      // Reason · modeled fill · R — same math as the retired posClosingHeroHtml.
+      const rDollar = (isFinite(expected) && isFinite(d.entry) && isFinite(d.qty)) ? (expected - d.entry) * d.qty : NaN;
+      const rMultiple = (isFinite(rDollar) && isFinite(d.plannedRisk) && d.plannedRisk !== 0) ? rDollar / d.plannedRisk : NaN;
+      const rCls = isFinite(rDollar) && rDollar < 0 ? 'text-red-400' : 'text-emerald-400';
+      const rPart = isFinite(rDollar)
+        ? `<span class="${rCls}">${fmtSigned(rDollar)} (${isFinite(rMultiple) ? (rMultiple >= 0 ? '+' : '−') + Math.abs(rMultiple).toFixed(1) + 'R' : '—'})</span>`
+        : '—';
+
+      // Honest auto-close countdown — never render "NaN"/"undefined" when the session-calendar
+      // fields are missing (silence-is-no-signal); see worker-positions README's
+      // auto_confirm_sessions/sessions_in_closing doc.
+      const auto = Number(p.auto_confirm_sessions);
+      const inClosing = Number(p.sessions_in_closing);
+      const remaining = (isFinite(auto) && isFinite(inClosing)) ? Math.max(0, auto - inClosing) : NaN;
+      let countdownHtml = '';
+      if (isFinite(remaining)) {
+        const copy = remaining > 0
+          ? `Auto-closes at the modeled price in ${remaining} session${remaining === 1 ? '' : 's'} if not confirmed.`
+          : 'Auto-closes at the next sweep if not confirmed.';
+        countdownHtml = `<div class="text-[11.5px] text-amber-400 mt-1.5">${copy}</div>`;
+      }
+
+      const busy = !!state.posConfirmBusy[p.trade_id];
+      const err = state.posConfirmError[p.trade_id];
+      // Prefer the user's in-progress edit (survives a strip re-render, e.g. expand/collapse)
+      // over the modeled price.
+      const fillVal = (state.posConfirmFill[p.trade_id] != null)
+        ? state.posConfirmFill[p.trade_id]
+        : (isFinite(expected) ? expected.toFixed(2) : '');
+      const inputId = 'pos-fill-' + tradeId;
+      const errRow = err ? `<div class="text-[11px] text-red-400 mt-1.5">${escapeHtml(err)}</div>` : '';
+
+      return `
+        <div class="cs-item border-t border-red-500/20 px-3 py-2.5">
+          <div class="flex justify-between items-center">
+            <span><span class="font-bold text-sm tracking-wide">${ticker}</span> <span class="text-xs text-slate-500">· exit signalled${signalDate ? ' ' + signalDate : ''}</span></span>
+            <span class="text-[10.5px] font-bold uppercase tracking-wide bg-red-500/15 text-red-400 rounded-full px-2 py-0.5">${reasonLabel}</span>
+          </div>
+          <div class="text-xs text-slate-400 mt-1.5 tabular-nums">Expected fill ${isFinite(expected) ? fmtPerSh(expected) : '—'} · ${rPart}</div>
+          <div class="flex items-center justify-between gap-2 mt-2">
+            <span class="text-xs font-semibold text-slate-200">Your actual fill</span>
+            <input id="${inputId}" type="number" step="0.01" value="${escapeHtml(String(fillVal))}"
+                   oninput="posSetConfirmFill('${tradeId}', this.value)"
+                   class="tabular-nums text-sm text-slate-100 bg-sky-500/10 border border-sky-500 rounded-md px-2 py-1 w-24 text-right" />
+          </div>
+          <div class="text-[11px] text-slate-500 mt-1">Pre-filled with the modeled price — overwrite if your real fill differed.</div>
+          ${countdownHtml}
+          ${errRow}
+          <div class="flex gap-2 mt-2.5">
+            <button onclick="posConfirmExit('${tradeId}')" ${busy ? 'disabled' : ''}
+                    class="flex-1 text-xs font-bold text-sky-950 bg-sky-400 hover:bg-sky-300 disabled:opacity-60 rounded-md px-2.5 py-1.5">
+              ${busy ? 'Confirming…' : 'Confirm this fill →'}
+            </button>
+            <button onclick="posStillHolding('${tradeId}')" ${busy ? 'disabled' : ''}
+                    class="flex-1 text-xs font-semibold text-slate-300 border border-slate-600 hover:border-slate-500 disabled:opacity-60 rounded-md px-2.5 py-1.5">
+              ${busy ? '…' : 'Still holding'}
+            </button>
+          </div>
+        </div>`;
+    }
+
+    // Owner-bearer confirm-exit POST (spec §5) — closing -> closed at the confirmed fill. An
+    // edited actual-fill is sent as exit_price; unedited/empty sends none, so the server default
+    // (expected_exit_price) applies rather than this client re-sending the modeled price itself.
+    window.posConfirmExit = async function (tradeId) {
+      if (state.posConfirmBusy[tradeId]) return; // guard against double-tap double-submit
+      state.posConfirmBusy[tradeId] = true;
+      delete state.posConfirmError[tradeId];
+      renderPositions();
+
+      const raw = state.posConfirmFill[tradeId];
+      let body = {};
+      if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+        const n = parseFloat(raw);
+        if (!isFinite(n) || n <= 0) {
+          state.posConfirmError[tradeId] = 'Enter a valid fill price';
+          delete state.posConfirmBusy[tradeId];
+          renderPositions();
+          return;
+        }
+        body = { exit_price: n };
+      }
+
+      try {
+        await posApi('/positions/' + encodeURIComponent(tradeId) + '/confirm-exit', { method: 'POST', body });
+        // Simplest correct refresh: the position is now 'closed', so a re-fetch drops it out of
+        // the open,managing,closing set and it vanishes from the strip (PR C surfaces it in the
+        // grace list). Never hand-mutate state into a fake closed card.
+        delete state.posConfirmFill[tradeId];
+        delete state.posConfirmBusy[tradeId];
+        await posLoadPositions(); // re-renders on completion
+      } catch (e) {
+        if (e && e.unauth) {
+          state.positionsData = null; // posApi already cleared the token; fall back to sign-in
+        } else {
+          state.posConfirmError[tradeId] = "Couldn't confirm — try again";
+        }
+        delete state.posConfirmBusy[tradeId];
+        renderPositions();
+      }
+    };
+
+    // Owner-bearer still-holding POST (spec §5) — closing -> managing; the position reappears
+    // as a regular card once the strip drops it.
+    window.posStillHolding = async function (tradeId) {
+      if (state.posConfirmBusy[tradeId]) return;
+      state.posConfirmBusy[tradeId] = true;
+      delete state.posConfirmError[tradeId];
+      renderPositions();
+      try {
+        await posApi('/positions/' + encodeURIComponent(tradeId) + '/still-holding', { method: 'POST' });
+        delete state.posConfirmFill[tradeId];
+        delete state.posConfirmBusy[tradeId];
+        await posLoadPositions();
+      } catch (e) {
+        if (e && e.unauth) {
+          state.positionsData = null;
+        } else {
+          state.posConfirmError[tradeId] = "Couldn't update — try again";
+        }
+        delete state.posConfirmBusy[tradeId];
+        renderPositions();
+      }
+    };
+
     function posCardHtml(p) {
       const ticker = escapeHtml(p.ticker || '');
       const source = escapeHtml((p.meta && p.meta.source) || p.source || 'manual');
@@ -6186,8 +6373,8 @@
             <span><span class="font-bold text-sm tracking-wide">${ticker}</span> <span class="text-xs text-slate-500">· ${source} · ${entryDate}</span>${stateBadge}</span>
           </div>
           ${posHeroHtml(p, d)}
-          ${p.state !== 'closing' ? posStopMovedHtml(p, d) : ''}
-          ${p.state !== 'closing' ? posOverlaysHtml(p, d) : ''}
+          ${posStopMovedHtml(p, d)}
+          ${posOverlaysHtml(p, d)}
           ${posDetailsHtml(p, d)}
         </div>`;
     }
@@ -6244,7 +6431,25 @@
         return;
       }
 
-      el.innerHTML = manualEntryHtml() + watchAddHtml() + header + `<div class="space-y-2">${rows.map(posCardHtml).join('')}</div>`;
+      // WS5-4a — 'closing' positions are hoisted into the confirmation strip and no longer
+      // render as cards (planning/mocks/ws5-needs-confirmation-surface.html States B/C).
+      const closingRows = rows.filter(p => p.state === 'closing');
+      const cardRows = rows.filter(p => p.state !== 'closing');
+      const strip = posConfirmStripHtml(closingRows);
+
+      let cardsHtml;
+      if (cardRows.length === 0) {
+        // All open positions are awaiting confirmation — the strip IS the content; don't show
+        // the "no open positions" empty state (that reads as an empty portfolio, not this).
+        cardsHtml = strip ? `<p class="text-slate-500 text-xs text-center py-4">No other open positions</p>` : '';
+      } else {
+        const list = `<div class="space-y-2">${cardRows.map(posCardHtml).join('')}</div>`;
+        // A light dim on the managing/open list when the strip has items (mock State B/C) — the
+        // strip is the thing needing attention; the card list recedes without going illegible.
+        cardsHtml = strip ? `<div class="opacity-70">${list}</div>` : list;
+      }
+
+      el.innerHTML = manualEntryHtml() + watchAddHtml() + header + strip + cardsHtml;
       manualRecompute();
     }
 
