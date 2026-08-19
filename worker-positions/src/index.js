@@ -228,9 +228,23 @@ export async function handleRequest(request, env) {
     if (unknown.length > 0) {
       return json({ error: `unknown state(s): ${unknown.join(", ")}` }, 400, request, env);
     }
+
+    // Optional bound on returned `closed` rows by sessions-since-close (WS5-6 closed-history
+    // payload guard). Absent/empty = no filter, matching current PWA behavior unchanged. Must be a
+    // positive integer — same "reject, don't silently ignore" stance as the unknown-state check above.
+    const rawClosedWithin = url.searchParams.get("closed_within_sessions");
+    let closedWithinSessions;
+    if (rawClosedWithin != null && rawClosedWithin !== "") {
+      const n = Number(rawClosedWithin);
+      if (!Number.isInteger(n) || n <= 0) {
+        return json({ error: "closed_within_sessions must be a positive integer" }, 400, request, env);
+      }
+      closedWithinSessions = n;
+    }
+
     let rows;
     try {
-      rows = await listPositions(env.POSITIONS_DB, auth.user_id, states);
+      rows = await listPositions(env.POSITIONS_DB, auth.user_id, states, { closedWithinSessions });
     } catch (e) {
       return json({ error: "read failed" }, 500, request, env);
     }

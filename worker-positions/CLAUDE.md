@@ -144,6 +144,20 @@ migration 0001). `GET /positions` (`src/positions.js::listPositions`) surfaces t
 `stop_ack_value`, computed from the full per-trade event history (not the capped inline `events`
 display slice), so it stays correct even if the display cap hides the ack event itself.
 
+- **`listPositions()` (`src/positions.js`) surfaces three session-calendar fields** (PR after
+  WS5-7's `stop_ack_value`, backing the WS5-4a confirmation countdown and WS5-5 closed-history
+  aging): `auto_confirm_sessions` (== `effectiveConfig(pos).EXIT_AUTOCONFIRM_SESSIONS` — the global
+  default, layered with the position's own `meta.config` override when set, same as `autoConfirm`
+  itself reads — every row),
+  `sessions_in_closing` (`closing` only), `sessions_since_close` (`closed` only, anchored on
+  `closed_at`'s ET date, not `exit_signal_date` — a position can sit in `closing` for several
+  sessions before it settles). All three reuse `sweep.js`'s `distinctTradeDates`/`sessionsSince` —
+  the same global session clock `autoConfirm` itself uses — loaded ONCE per `listPositions()` call,
+  never re-implemented. `GET /positions?closed_within_sessions=N` filters returned `closed` rows on
+  `sessions_since_close` (a positive-integer 4th `opts` arg on `listPositions`); no SQL-side row cap
+  was added (see the in-code comment above `listPositions` for why a per-state SQL LIMIT doesn't fit
+  the shared query shape cleanly) — the session filter is the actual payload bound.
+
 ## The watchlist: `src/watchlist.js` (WS5 §8b, P1)
 
 A **private, user-scoped** membership+level+TTL store for tickers the owner is tracking ahead of

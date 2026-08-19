@@ -3,6 +3,8 @@
 // DB-touching code. Design: planning/trade-lifecycle-engine.md § 3, § 4, § 8a; ADR-012.
 
 import { etDateStr, isoUtc } from "./time.js";
+import { distinctTradeDates, sessionsSince } from "./sweep.js";
+import { effectiveConfig } from "./advance.js";
 
 // Stop bases the WS4 ticket offers, plus 'manual' for the future free-entry form (§ 8a).
 export const STOP_BASES = ["prior_day_low", "todays_low", "20ma", "50ma", "manual"];
@@ -180,7 +182,21 @@ const LATEST_BAR_COLS = `
 //
 // WS5-7: each row is additionally augmented with the latest ticker_quotes bar (last_*, null-safe),
 // a bounded inline `events` array, and a computed `stop_ack_value` — see attachEventsAndAck().
-export async function listPositions(db, user_id, state = null) {
+//
+// Session-calendar fields (this PR): each row also gets `auto_confirm_sessions`,
+// `sessions_in_closing`, `sessions_since_close` — see attachSessionCounts() below. `opts.closedWithinSessions`
+// (a positive integer, or omitted/undefined for no filtering) additionally bounds returned `closed`
+// rows to those whose `sessions_since_close` is within that many sessions — see index.js's
+// `?closed_within_sessions=` param, the only current caller.
+//
+// NOTE on unbounded closed history: we deliberately do NOT add a SQL LIMIT/hardcap on closed rows
+// here. A cap correct for mixed-state queries (e.g. `?state=open,closed`) would need to apply only
+// to the closed subset, which the single shared query shape can't express without either a second
+// query or non-trivial SQL — and per the locked spec, correctness/simplicity wins over a clever SQL
+// bound, with timezone-aware session math being SQL-hostile in the first place. The
+// `closed_within_sessions` filter below is the actual bound on payload size for the closed-history
+// use case (WS5-6); an operator-scale pathological history is a future concern, not this PR's.
+export async function listPositions(db, user_id, state = null, opts = {}) {
   const states = state == null ? [] : Array.isArray(state) ? state : [state];
   let stmt;
   if (states.length === 0) {
@@ -206,8 +222,48 @@ export async function listPositions(db, user_id, state = null) {
       .bind(user_id, ...states);
   }
   const { results } = await stmt.all();
-  const positions = results.map((r) => ({ ...r, meta: safeParse(r.meta) }));
-  return attachEventsAndAck(db, user_id, positions);
+  let positions = results.map((r) => ({ ...r, meta: safeParse(r.meta) }));
+  positions = await attachEventsAndAck(db, user_id, positions);
+
+  if (positions.length > 0) {
+    const calendar = await distinctTradeDates(db);
+    positions = attachSessionCounts(positions, calendar);
+  }
+
+  const { closedWithinSessions } = opts;
+  if (closedWithinSessions != null) {
+    positions = positions.filter(
+      (p) => p.state !== "closed" || p.sessions_since_close <= closedWithinSessions
+    );
+  }
+
+  return positions;
+}
+
+// Attach the three session-calendar derived fields (this PR) to every position. PURE given the
+// already-fetched `calendar` (distinctTradeDates' ascending trade_date list) — no DB access here,
+// mirroring attachEventsAndAck's shape but without its query. Reuses `sessionsSince` (sweep.js),
+// the SAME clock `autoConfirm` uses to auto-close a stuck `closing` position — so the client's
+// countdown/age display can never disagree with what the engine itself will do.
+function attachSessionCounts(positions, calendar) {
+  return positions.map((p) => {
+    const sessions_in_closing = p.state === "closing" ? sessionsSince(calendar, p.exit_signal_date) : null;
+    // The close's session anchor is when it SETTLED to closed (closed_at), not when the exit first
+    // signalled (exit_signal_date) — a position can sit in `closing` for several sessions before
+    // confirm/auto-close. closed_at is ISO-UTC; convert to its ET trade-date so it lines up with the
+    // trade_date-keyed calendar. sessionsSince counts strictly-after, so a just-closed position reads
+    // 0 (in grace) and ages up as sessions settle.
+    const closeEtDate = p.state === "closed" && p.closed_at ? etDateStr(new Date(p.closed_at)) : null;
+    const sessions_since_close = p.state === "closed" && closeEtDate ? sessionsSince(calendar, closeEtDate) : null;
+    return {
+      ...p,
+      // effectiveConfig(p), not the bare global — a position with a meta.config.EXIT_AUTOCONFIRM_SESSIONS
+      // override must report that override here too, or the countdown would disagree with autoConfirm.
+      auto_confirm_sessions: effectiveConfig(p).EXIT_AUTOCONFIRM_SESSIONS,
+      sessions_in_closing,
+      sessions_since_close,
+    };
+  });
 }
 
 // Attach a bounded, newest-first `events` array and a computed `stop_ack_value` to each position,
