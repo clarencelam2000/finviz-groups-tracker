@@ -6,6 +6,65 @@
 
 ---
 
+## 2026-08-20 — WS5-4a confirmation strip + WS5-5 recently-closed (PRs #340/#341/#342); WS5-4b handed off
+
+**Status: safe to close after PR #342 merges. WS5-4b (VAPID push) is the ONLY remaining WS5 piece —
+fully handed off in `planning/ws5-4b-vapid-push-handoff.md` (cold-start-ready).** Staff-eng session
+driving the remaining WS5 cold-start queue after WS5-7 (#338) and #335 (#339) landed. Owner cleared
+the (stale) WS5-7 mock gate and directed the exit-confirmation + recently-closed work. Lead owned
+design/taste/sequencing/review + all mocks/specs; delegated every boots-on-ground build to Sonnet
+subagents against lead-authored locked specs (in scratchpad) and reviewed every line. Branch
+`claude/pr336-mock-approval-plan-cx3t8m` (designated), base `claude/elegant-babbage-hlxnfy`.
+
+**Owner-approved decisions this session:** (1) **Split WS5-4** into **4a** (in-app confirmation strip
+— PWA + thin backend, no secrets) and **4b** (VAPID push — greenfield, ops-gated). The design (§8)
+makes the strip the *source of truth* and push only the *nudge*, so 4a delivers the whole exit-safety
+property alone. (2) Countdown computed **server-side** (a client counting calendar days would disagree
+with the engine's session clock). (3) **Lead drives the VAPID keys** (owner has CF creds in env; CEO
+shouldn't hand-gen keypairs). (4) **WS5-5 two-tier**: grace-in-list 2 sessions → lazy Closed section
+60 sessions.
+
+**What landed (3 PRs, disciplined deploy-first ordering — backend deploys before the PWA reads it):**
+- **PR #340 (backend, MERGED + deploy confirmed on Cloudflare):** `GET /positions` exposes
+  `auto_confirm_sessions` / `sessions_in_closing` / `sessions_since_close` (reuse `sweep.js`'s
+  `sessionsSince`/`distinctTradeDates` — the SAME clock `autoConfirm` uses) + bounded
+  `?closed_within_sessions=N`. +10 vitest (244). **Review caught a real bug** (a Claude review commit
+  `8d9b4bf`): `auto_confirm_sessions` must use `effectiveConfig(p)`, not the bare global, so a
+  per-position override is honored — now on default.
+- **PR #341 (WS5-4a strip, MERGED):** `closing` positions hoist into a collapsed "Needs your
+  confirmation" strip (mock `ws5-needs-confirmation-surface.html` A/B/C); expand → editable
+  Confirm-fill (`confirm-exit`) / Still-holding (`still-holding`) + honest countdown; closing rows no
+  longer render as cards. Removed dead `posClosingHeroHtml`/placeholder. Subagent caught+fixed a real
+  runtime bug (inline `oninput` can't see the IIFE-scoped `state` → `window.posSetConfirmFill`).
+  Release `2026.08.19.2` / sw v72→v73. 8 Playwright tests.
+- **PR #342 (WS5-5 grace + Closed, THIS PR — open, ready):** `closed` positions stay in the live list
+  (read-only `posClosedCardHtml`, "closed" badge, realized $/R, "auto" cue) under a "Recently closed"
+  divider for `POS_GRACE_SESSIONS`=2 sessions, then only in a lazy-loaded collapsible **Closed**
+  section (`POS_CLOSED_HISTORY_SESSIONS`=60, `?closed_within_sessions=60`, fetched on first expand,
+  dupe-excluded). Release `2026.08.20.1` / sw v73→v74. 5 Playwright tests. **This session-notes +
+  SPRINT + the WS5-4b handoff ride in this PR so they land on default when #342 merges.**
+
+**Verification (lead re-ran, not just trusted):** #340 244/244 vitest + validated against live D1
+(NVT/OUST `closing`, `sessions_in_closing`=0 → "auto-closes in 5 sessions"); #341/#342 node --check +
+release guard 5/5 + Playwright via the (now unneeded — chromium-1117 present) symlink harness. The 4
+failing `test_pwa_positions` Morning "I took it" tests are **pre-existing** (reproduced at baseline,
+documented across prior WS5 sessions) — NOT regressions.
+
+**Deferred + tracked (SPRINT):** (1) **WS5-4b VAPID push** — the whole handoff is
+`planning/ws5-4b-vapid-push-handoff.md`. (2) **Auto-unconfirmed-correctable strip items** — the mock's
+2nd strip population (`correct-exit` editor on auto-closed positions); needs closed rows in the strip,
+a separable follow-up (SPRINT WS5-5b). (3) **Pre-existing latent bug**: a bare `state.x=` inline
+handler at the `watchAdd` retry button (`docs/index.html`) — same IIFE-scope class as the one fixed in
+#341, untouched to keep PRs scoped (SPRINT WS5-WATCHADD-FIX).
+
+**Next steps:** merge #342 (auto-deploys nothing — PWA-only; just lands on Pages). Then a fresh session
+takes **WS5-4b** from the handoff doc. The two other deferred items are non-blocking backlog.
+
+**Note:** safe to close once #342 merges. **Don't close before #342 merges** — this notes entry, SPRINT,
+and the handoff only reach the next session via that merge to default.
+
+---
+
 ## 2026-08-19 — #335 BUILT: breakeven ratchet → intraday high + earnings overlay + negative-days guard
 
 **Status: safe to close once this PR merges.** Staff-eng session picking up the cold-start queue after
