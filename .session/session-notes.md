@@ -6,10 +6,18 @@
 
 ---
 
-## 2026-08-20 — WS5-8 pre-close read: backend built (PR-1), PWA next (#343)
+## 2026-08-20 — WS5-8 pre-close read: FULLY BUILT (backend + feed + cron + PWA) in PR #345 (#343)
 
-**Status: don't close yet — PR-1 open on `claude/ws5-7-positions-pickup-64506x`, PWA (PR-2) not started;
-owner sign-off pending on the live-D1 migration.** Staff-eng session driving WS5-8 (in-app pre-close
+**Status: safe to close once PR #345 merges.** All of WS5-8 landed on ONE branch/PR
+`claude/ws5-7-positions-pickup-64506x` → #345: backend + 15:40 feed/cron + PWA band. **Live-D1 migration
+`0004_preclose_advisory.sql` applied + verified this session (owner-approved)** via the Cloudflare D1 API —
+table live on `finviz-positions`. Combined into one PR (not the originally-planned PR-1/PR-2 split) because
+everything is on the one designated branch AND it's safe to ship together: migration already applied +
+`posLoadPreclose()` is best-effort (a not-yet-deployed route → band absent, never an error), so the
+fail-closed hazard that split WS5-6 doesn't apply (same call as WS5-7). **PWA verified:** 4/4 preclose
+Playwright (symlink harness), 5/5 release guard, 703 non-Playwright pytest, node --check OK. Release
+`2026.08.20.2` / sw v74→v75. Lead review caught 2 real bugs (backend entry-day false-stop_hit; PWA copy
+hardcoded to 50MA/stop-hit → now signal-accurate). Staff-eng session driving WS5-8 (in-app pre-close
 read). Owner chose **in-app first** over WS5-4b (push) — so v1 delivers "act before the bell" value with
 **no VAPID/secrets/crypto**. Lead owned design/taste/mock/review + caught a real bug; delegated both
 boots-on-ground builds to Sonnet subagents against locked specs (`scratchpad/ws5-8-{worker,feed}-spec.md`)
@@ -51,12 +59,11 @@ v1 scope-creep; v1 leaves a `category` slot.
 99/99 (Node 20). The pre-existing routing tests the feed subagent modified were legit (the 15:40 window
 genuinely overlaps 15:30/15:50 — not green-forcing; verified the diffs).
 
-**Next steps:** (1) **owner sign-off to apply `0004_preclose_advisory.sql` to live D1** (Cloudflare D1 API,
-token in env — same discipline as any prod schema write). (2) Open + merge PR-1 → `deploy-workers.yml`
-auto-deploys the worker; the cron/workflow land on default. (3) **PR-2 (PWA)** — `advisoryBandHtml()` +
-receipt into `renderPositions()` per the mock, amber provisional chrome, release triplet, Playwright.
-Deploy-ordering: PR-1 must deploy before PR-2 reads `GET /positions/preclose`. (4) e2e gated on a live
-weekday 15:40 scrape hitting a held position with a signal (same WS5 data gate).
+**Next steps:** (1) merge PR #345 → `deploy-workers.yml` auto-deploys `finviz-positions` + `worker-cron`;
+the PWA lands on Pages. Migration already applied, so the route works immediately on deploy. (2) e2e gated
+on a live weekday 15:40 scrape hitting a held position with a signal (same WS5 data gate — first real band
+is a live trading day). (3) Then **WS5-8-RECLAIM (#344)** rides this same advisory infra; WS5-4b (push) is
+independent.
 
 **Note:** WS5-4b VAPID handoff still valid but note its reserved `0004` migration number is now taken by
 WS5-8 — bump WS5-4b's push-subscriptions migration to `0005` when that session starts (flagged in SPRINT).
