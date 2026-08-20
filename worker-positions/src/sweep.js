@@ -11,6 +11,7 @@
 import { advance, autoConfirm, normalizeBar, effectiveConfig, ENGINE_CONFIG } from "./advance.js";
 import { persistTransition } from "./transitions.js";
 import { etDateStr, isoUtc } from "./time.js";
+import { dispatchExitPushes } from "./push.js";
 
 // ── Configurable constants (triple-documented: here + README § Configurable parameters +
 // worker-positions/CLAUDE.md — see this repo's 3-places rule, CLAUDE.md § Code quality).
@@ -319,7 +320,10 @@ export async function persistAdvance(db, { trade_id, user_id, expectedLastAdvanc
 }
 
 // ── sweep(db, opts) — the orchestrator. ───────────────────────────────────────────────────────
-export async function sweep(db, { dry_run = false, now = new Date(), cfg } = {}) {
+// `push` (WS5-4b) is `{ vapid, sendPushFn? }` or null/undefined — index.js builds it from env via
+// readVapidConfig(); tests inject a mock sendPushFn directly. See push.js's header for the v1
+// Tier-1-only, data-less scope.
+export async function sweep(db, { dry_run = false, now = new Date(), cfg, push = null } = {}) {
   const now_iso = isoUtc(now);
   const globals = cfg || ENGINE_CONFIG;
   const positions = await loadAdvanceablePositions(db);
@@ -329,6 +333,9 @@ export async function sweep(db, { dry_run = false, now = new Date(), cfg } = {})
   let signalled = 0;
   let unchanged = 0;
   let staleCount = 0;
+  // Tier-1 exit-signal push intents (WS5-4b), collected in the advance loop below and dispatched
+  // AFTER both loops complete — post-commit, best-effort, never inside a persist batch.
+  const exitIntents = [];
 
   for (const pos of positions) {
     // Defensive: a position with no entry_date at all is a data-integrity gap (every position
@@ -403,7 +410,15 @@ export async function sweep(db, { dry_run = false, now = new Date(), cfg } = {})
     } else {
       unchanged++;
     }
-    if (fromState !== "closing" && toState === "closing") signalled++;
+    if (fromState !== "closing" && toState === "closing") {
+      signalled++;
+      // Collect a Tier-1 push intent only for a fresh, real transition — applied === true (it
+      // actually persisted, not a lost CAS race) and !dry_run (a dry run must never fire a push,
+      // same as it never writes).
+      if (applied && !dry_run) {
+        exitIntents.push({ user_id: pos.user_id, trade_id: pos.trade_id, ticker: pos.ticker });
+      }
+    }
     if (outcome.staleBars > 0) staleCount++;
 
     results.push({
@@ -472,6 +487,27 @@ export async function sweep(db, { dry_run = false, now = new Date(), cfg } = {})
     }
   }
 
+  // ── Tier-1 exit push dispatch (WS5-4b) — AFTER both loops, so every per-position D1 batch above
+  // has already committed. Push is best-effort and must NEVER fail the sweep: wrapped in its own
+  // try/catch on top of dispatchExitPushes() never throwing on its own. Skipped entirely in
+  // dry_run (report, don't dispatch) — mirrors the auto-confirm pass's dry_run stance.
+  let pushed = 0;
+  if (!dry_run && push && push.vapid) {
+    try {
+      const pushResult = await dispatchExitPushes(db, {
+        intents: exitIntents,
+        vapid: push.vapid,
+        sendPushFn: push.sendPushFn,
+        now_iso,
+        trade_date: etDateStr(now),
+      });
+      pushed = (pushResult && pushResult.sent) || 0;
+    } catch (e) {
+      // Best-effort: log and move on. A push failure must never fail the sweep.
+      console.error("dispatchExitPushes failed", e);
+    }
+  }
+
   return {
     dry_run,
     positions: positions.length,
@@ -480,6 +516,7 @@ export async function sweep(db, { dry_run = false, now = new Date(), cfg } = {})
     unchanged,
     stale: staleCount,
     auto_confirmed: autoConfirmed,
+    pushed,
     results,
   };
 }

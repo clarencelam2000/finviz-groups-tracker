@@ -13,6 +13,10 @@
 #                                                        #   held-tickers feed (also a GH Actions secret).
 #                                                        #   Distinct from the owner passphrase; least-
 #                                                        #   privilege (read held set + append bars only).
+#        wrangler secret put VAPID_PRIVATE_KEY           # WS5-4b: private half of the VAPID keypair.
+#                                                        #   The PUBLIC key + contact are plain [vars]
+#                                                        #   below (see that block's comment) — only
+#                                                        #   the private key is secret.
 #   Apply the schema (both migrations, in order):
 #        wrangler d1 execute finviz-positions --remote --file migrations/0001_init.sql
 #        wrangler d1 execute finviz-positions --remote --file migrations/0002_ticker_quotes.sql  # phase 2
@@ -25,6 +29,13 @@ compatibility_date = "2024-09-23"
 # plus localhost dev origins used for Playwright/manual testing. Auth is a bearer token (header),
 # not a cookie, so we pin the exact origin and never send Allow-Credentials.
 ALLOWED_ORIGINS = "https://clarencelam2000.github.io,http://localhost:8000,http://127.0.0.1:8000"
+
+# WS5-4b VAPID web-push. Public key is safe to expose (it IS applicationServerKey, shipped to clients);
+# VAPID_PRIVATE_KEY is a Worker secret (set out-of-band, never in this file). VAPID_SUBJECT is the RFC
+# 8292 contact (mailto:). To rotate: regenerate the pair, update the public key here + the PWA constant,
+# and `wrangler secret put VAPID_PRIVATE_KEY`.
+VAPID_PUBLIC_KEY = "BIlHEo6AR0obzj6aFUPsrRxCd_U473Q4EoCzaXPwPqLIH583hyFwiMXH1k8yBElGNwowiR8DKQ-nJ39vETP67yc"
+VAPID_SUBJECT = "mailto:salmonbaby8@gmail.com"
 
 [[d1_databases]]
 binding = "POSITIONS_DB"

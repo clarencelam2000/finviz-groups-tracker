@@ -7,6 +7,7 @@ import { authenticate, authenticateService, login } from "./auth.js";
 import { validateCreatePayload, buildPositionRow, insertPosition, listPositions, ALL_STATES } from "./positions.js";
 import { validateIngestBatch, ingestQuotes, heldTickers } from "./quotes.js";
 import { sweep } from "./sweep.js";
+import { subscribePush, unsubscribePush, readVapidConfig } from "./push.js";
 import { computePreCloseAdvisory, readPreCloseAdvisory } from "./preclose.js";
 import { etDateStr } from "./time.js";
 import { applyTransition, ackStop } from "./transitions.js";
@@ -200,9 +201,13 @@ export async function handleRequest(request, env) {
     if (!service && !owner) return json({ error: "unauthorized" }, 401, request, env);
 
     const dry_run = url.searchParams.get("dry_run") === "1";
+    // WS5-4b: readVapidConfig(env) returns null when VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/
+    // VAPID_SUBJECT aren't all set — sweep() then no-ops push entirely (see push.js). Safe to pass
+    // unconditionally.
+    const push = { vapid: readVapidConfig(env) };
     let result;
     try {
-      result = await sweep(env.POSITIONS_DB, { dry_run });
+      result = await sweep(env.POSITIONS_DB, { dry_run, push });
     } catch (e) {
       // Match the existing error-handling style exactly: never leak exception text to the caller.
       return json({ error: "advance failed" }, 500, request, env);
@@ -277,6 +282,49 @@ export async function handleRequest(request, env) {
       return json({ error: "read failed" }, 500, request, env);
     }
     return json({ positions: rows }, 200, request, env);
+  }
+
+  // ── Owner push-subscription routes — WS5-4b (issue #264 epic) ───────────────────────────────────
+  // Owner-bearer only (private, user-scoped push endpoints — never exposed via GET; the PWA only
+  // needs to subscribe/unsubscribe, never to list its own subscriptions back).
+  if (pathname === "/push/subscribe" && method === "POST") {
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: "invalid JSON" }, 400, request, env);
+    }
+    // Shape matches PushSubscription.toJSON(): { endpoint, keys: { p256dh, auth } }.
+    const endpoint = body && typeof body.endpoint === "string" ? body.endpoint : null;
+    const keys = body && body.keys;
+    const p256dh = keys && typeof keys.p256dh === "string" ? keys.p256dh : null;
+    const authSecret = keys && typeof keys.auth === "string" ? keys.auth : null;
+    if (!endpoint || !p256dh || !authSecret) {
+      return json({ error: "endpoint and keys.p256dh/keys.auth are required" }, 400, request, env);
+    }
+    try {
+      await subscribePush(env.POSITIONS_DB, auth.user_id, { endpoint, p256dh, auth: authSecret });
+    } catch (e) {
+      return json({ error: "write failed" }, 500, request, env);
+    }
+    return json({ ok: true }, 200, request, env);
+  }
+
+  if (pathname === "/push/unsubscribe" && method === "POST") {
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: "invalid JSON" }, 400, request, env);
+    }
+    const endpoint = body && typeof body.endpoint === "string" ? body.endpoint : null;
+    if (!endpoint) return json({ error: "endpoint is required" }, 400, request, env);
+    try {
+      await unsubscribePush(env.POSITIONS_DB, auth.user_id, endpoint);
+    } catch (e) {
+      return json({ error: "write failed" }, 500, request, env);
+    }
+    return json({ ok: true }, 200, request, env);
   }
 
   // ── Owner watchlist routes — WS5 §8b P1 (issue #319) ────────────────────────────────────────────
