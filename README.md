@@ -412,8 +412,10 @@ These constants control when visual indicators appear or change state. All are n
 | `WATCHLIST_TTL_SESSIONS` | `10` | Personal watchlist (WS5 §8b): display-only mirror of the worker's `WATCHLIST_TTL_SESSIONS` — drives the watch card's "N mornings left" readout. The worker (`worker-positions`) owns the real `sessions_remaining` counter; see its README for the source-of-truth constant. |
 | `WATCHLIST_EXPIRING_AT` | `1` | Personal watchlist: `sessions_remaining <=` this shows the amber "expiring" cue on a watch card's footer. |
 | `WATCHLIST_GAUGE_PAD` | `0.08` | Personal watchlist: fraction of the price domain padded on each end of a watch card's levels gauge, so end markers aren't clipped. |
-| `POS_VISIBLE_STATES` | `{'open','managing','closing'}` | Positions tab: which worker `state` values still render as a card. Also the value sent as `GET /positions?state=` (worker-positions PR #333's multi-state filter); the client-side check is kept as defense-in-depth, not load-bearing. Only `closed` drops off the list. |
+| `POS_VISIBLE_STATES` | `{'open','managing','closing'}` | Positions tab: worker `state` values that always render as a live card. Since WS5-5 (#332) the live fetch also pulls `closed` rows bounded by `closed_within_sessions=POS_GRACE_SESSIONS`; the real client-side gate is `posIsLiveVisible(p)`, not a bare `POS_VISIBLE_STATES.has()` check. |
 | `POS_STATE_BADGE` | see code | Positions tab: small uppercase badge shown on `managing` ("managing") and `closing` ("exit pending", amber) cards; `open` shows no badge (default/expected state). |
+| `POS_GRACE_SESSIONS` | `2` | Positions tab (WS5-5, #332): trading sessions a `closed` position keeps showing in the live list (read-only "closed" badge) before it drops to the Closed section only. |
+| `POS_CLOSED_HISTORY_SESSIONS` | `60` | Positions tab (WS5-5): how many trading sessions back the lazy-loaded Closed section fetches once expanded (~3 trading months). |
 
 > The worker-side `WATCHLIST_TTL_SESSIONS` (source of truth for `sessions_remaining`) and
 > `WATCHLIST_PURGE_DAYS` (expired-entry retention) are documented in

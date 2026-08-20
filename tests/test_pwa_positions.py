@@ -27,6 +27,7 @@ import json
 import subprocess
 import time
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 
@@ -107,8 +108,28 @@ def _mock_worker(page, login_ok=True, positions_rows=None, capture=None,
                           content_type="application/json")
         else:  # GET
             if get_capture is not None:
-                get_capture.append(True)
-            route.fulfill(status=200, body=json.dumps({"positions": positions_rows}),
+                # Append the full URL (not just True) so WS5-5 tests can assert on which
+                # query fired (state=closed&closed_within_sessions=... vs the live fetch)
+                # while count-only assertions (len(get_capture) > N) still work unchanged.
+                get_capture.append(request.url)
+            # WS5-5 (#332): honor `state=` and `closed_within_sessions=` so the live grace
+            # fetch and the lazy Closed-section fetch can be exercised against the same
+            # `positions_rows` pool — treat positions_rows as the full backend store (every
+            # state) and filter per-request, same as the real worker-positions query would.
+            qs = parse_qs(urlparse(request.url).query)
+            requested_states = set((qs.get("state", [""])[0]).split(","))
+            within_raw = qs.get("closed_within_sessions", [None])[0]
+            within = int(within_raw) if within_raw not in (None, "") else None
+            filtered = []
+            for p in positions_rows:
+                if p.get("state") not in requested_states:
+                    continue
+                if p.get("state") == "closed" and within is not None:
+                    ssc = p.get("sessions_since_close")
+                    if ssc is None or ssc > within:
+                        continue
+                filtered.append(p)
+            route.fulfill(status=200, body=json.dumps({"positions": filtered}),
                           content_type="application/json")
 
     def handle_ack(route, request):
@@ -869,4 +890,159 @@ def test_earnings_overlay_hidden_for_past_earnings_date(server):
         html = page.inner_html("#positions-content")
         assert "📅" not in html
         assert "Earnings" not in html
+        browser.close()
+
+
+# ── WS5-5 (issue #332) — recently-closed grace window + lazy Closed history section
+# (posIsLiveVisible/posClosedCardHtml/posClosedSectionHtml/posToggleClosed/posLoadClosed). The
+# `?closed_within_sessions=`/`sessions_since_close` contract is already live (PR #340); these
+# tests exercise only the PWA side, via _mock_worker's state/closed_within_sessions filtering. ──
+
+def _closed_row(**overrides):
+    """A settled position: state='closed' plus the WS5-5 fields (sessions_since_close,
+    exit_price, closed_at, confirmation_status). Built on top of _pos_row's defaults."""
+    row = _pos_row(state="closed")
+    row.update({
+        "sessions_since_close": 1,
+        "exit_price": None,
+        "closed_at": "2026-08-18T21:00:00Z",
+        "confirmation_status": "confirmed",
+    })
+    row.update(overrides)
+    return row
+
+
+def test_closed_within_grace_shows_live_beyond_grace_hidden(server):
+    # Case 1: a closed position within POS_GRACE_SESSIONS (2) shows in the live list with a
+    # "closed" badge and its realized-R outcome; one beyond grace does not appear at all.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        grace_row = _closed_row(
+            trade_id="c1", ticker="ZM", entry_price=40.00, initial_stop=38.00,
+            remaining_qty=10, initial_qty=10, exit_price=45.00, sessions_since_close=1,
+        )
+        # (45-40)*10 = +$50 realized; 1R = (40-38)*10 = 20 -> +2.5R
+        beyond_row = _closed_row(
+            trade_id="c2", ticker="OLDX", entry_price=32.00, initial_stop=30.00,
+            remaining_qty=5, initial_qty=5, exit_price=30.00, sessions_since_close=5,
+        )
+        _mock_worker(page, positions_rows=[grace_row, beyond_row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        assert "ZM" in html
+        assert "Recently closed" in html
+        assert "closed" in html  # the muted "closed" badge
+        assert "Exited $45.00" in html
+        assert "+$50" in html and "(+2.5R)" in html
+        assert "OLDX" not in html, "a closed position beyond the grace window must not render live"
+        browser.close()
+
+
+def test_closed_section_collapsed_no_fetch_until_expanded(server):
+    # Case 2: the Closed section is collapsed by default and does not hit the backend until
+    # expanded; expanding fires the 60-session fetch exactly once.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        get_capture = []
+        _mock_worker(page, positions_rows=[], get_capture=get_capture)
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        assert "Closed" in page.inner_html("#positions-content")
+        assert not any("closed_within_sessions=60" in u for u in get_capture), \
+            "the Closed-section 60-session fetch must not fire before the user expands it"
+
+        page.click("[onclick='posToggleClosed()']")
+        page.wait_for_timeout(400)
+
+        matches = [u for u in get_capture if "state=closed" in u and "closed_within_sessions=60" in u]
+        assert len(matches) == 1, f"expected exactly one Closed-section fetch on expand, got {len(matches)}"
+        browser.close()
+
+
+def test_closed_section_excludes_grace_rows_no_dupes(server):
+    # Case 3: expanding renders closed cards from the 60-session fetch, excluding rows already
+    # shown as grace cards in the live list (no dupes).
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        grace_row = _closed_row(trade_id="g1", ticker="GRC1", sessions_since_close=1)
+        hist_row = _closed_row(trade_id="h1", ticker="HIST1", sessions_since_close=10)
+        _mock_worker(page, positions_rows=[grace_row, hist_row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        # GRC1 (within grace) renders once, live-only; HIST1 (beyond grace) is absent pre-expand.
+        html = page.inner_html("#positions-content")
+        assert html.count("GRC1") == 1
+        assert "HIST1" not in html
+
+        page.click("[onclick='posToggleClosed()']")
+        page.wait_for_timeout(400)
+
+        html = page.inner_html("#positions-content")
+        assert "HIST1" in html
+        assert html.count("GRC1") == 1, "a grace-window row must not also be duplicated in the Closed section"
+        browser.close()
+
+
+def test_closed_card_outcome_math_and_auto_cue(server):
+    # Case 4: posClosedCardHtml's realized $/R math and the "auto" confirmation-status cue.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _closed_row(
+            trade_id="a1", ticker="AUTX", entry_price=100.00, initial_stop=95.00,
+            remaining_qty=20, initial_qty=20, exit_price=90.00, sessions_since_close=1,
+            confirmation_status="auto",
+        )
+        # 1R = (100-95)*20 = 100; realized = (90-100)*20 = -$200 -> -2.0R
+        _mock_worker(page, positions_rows=[row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#positions-content")
+        assert "AUTX" in html
+        assert "Exited $90.00" in html
+        assert "−$200" in html, "a loss must render with the U+2212 minus sign, not a hyphen"
+        assert "(−2.0R)" in html
+        assert "auto" in html
+        browser.close()
+
+
+def test_closed_section_empty_history_shows_muted_line(server):
+    # Case 5: expanding with zero closed trades in the lookback window shows the muted
+    # "no closed trades" line, not a blank section.
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        row = _pos_row(ticker="AXON", state="managing")
+        _mock_worker(page, positions_rows=[row])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='positions']")
+        page.wait_for_timeout(500)
+
+        page.click("[onclick='posToggleClosed()']")
+        page.wait_for_timeout(400)
+
+        html = page.inner_html("#positions-content")
+        assert "No closed trades in the last ~3 months." in html
         browser.close()

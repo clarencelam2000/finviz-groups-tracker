@@ -532,6 +532,15 @@
       // Absent/empty = unedited -> posConfirmExit sends no exit_price (server defaults to
       // expected_exit_price).
       posConfirmFill: {},
+      // WS5-5 (#332) — lazy-loaded "Closed" history section (past POS_CLOSED_HISTORY_SESSIONS
+      // sessions), collapsed by default. closedExpanded: user has expanded the section.
+      // closedData: null = not yet fetched (distinct from [] = fetched, genuinely none) — same
+      // null-vs-array convention as positionsData/watchlistData. closedLoading/closedError
+      // mirror positionsError's role for this second, independent fetch.
+      closedExpanded: false,
+      closedData: null,
+      closedLoading: false,
+      closedError: false,
       // WS5 §8a — manual "log a position on any ticker" form on the Positions tab.
       // Survives renderPositions() re-renders (module-level, not rebuilt each render), same
       // convention as morningTicket/ws5Card. `confirm` mirrors ws5Card's freeze-confirm step
@@ -5762,14 +5771,45 @@
     // fix here (unfiltered fetch + client-side-only filter) was a payload-growth problem.
     const POS_VISIBLE_STATES = new Set(['open', 'managing', 'closing']);
 
+    // WS5-5 (issue #332) — recently-closed grace window + lazy Closed history section.
+    // POS_GRACE_SESSIONS: how many trading sessions a freshly-'closed' position keeps showing
+    // in the LIVE positions list (with a "closed" badge, read-only) before it drops to the
+    // Closed section only. Compared against the server's `sessions_since_close` (same session
+    // clock as the auto-confirm countdown, so a weekend can't age a Friday close out early).
+    // Also triple-documented: README.md § PWA display thresholds, docs/CLAUDE.md's threshold
+    // table.
+    const POS_GRACE_SESSIONS = 2;
+    // POS_CLOSED_HISTORY_SESSIONS: how many trading sessions back the lazy-loaded Closed
+    // section fetches (`?closed_within_sessions=60`) once the user expands it. ~3 trading
+    // months — enough history to be useful without hitting the backend on every tab load.
+    const POS_CLOSED_HISTORY_SESSIONS = 60;
+
+    // Live-list visibility predicate (WS5-5): open/managing/closing always show; a 'closed'
+    // row shows only while still within the grace window. sessions_since_close == null (field
+    // missing/not yet computed server-side) is treated as NOT within grace — fail closed, never
+    // guess a stale position is "recent".
+    function posIsLiveVisible(p) {
+      if (POS_VISIBLE_STATES.has(p.state)) return true;
+      return p.state === 'closed' && p.sessions_since_close != null && p.sessions_since_close <= POS_GRACE_SESSIONS;
+    }
+
     async function posLoadPositions() {
       state.positionsError = false;
       try {
-        const data = await posApi('/positions?state=' + [...POS_VISIBLE_STATES].join(','), { method: 'GET' });
+        // WS5-5: also pull 'closed' rows bounded to the grace window (server-side bound via
+        // closed_within_sessions) so a just-closed position still shows where the owner was
+        // managing it, instead of vanishing the instant it settles.
+        const data = await posApi(
+          '/positions?state=' + [...POS_VISIBLE_STATES, 'closed'].join(',')
+          + '&closed_within_sessions=' + POS_GRACE_SESSIONS,
+          { method: 'GET' }
+        );
         const all = (data && data.positions) || [];
         // Client-side filter kept as defense-in-depth (e.g. a future worker-side state this
-        // build doesn't know about yet) — no longer load-bearing for excluding 'closed'.
-        state.positionsData = all.filter(p => POS_VISIBLE_STATES.has(p.state));
+        // build doesn't know about yet) — no longer load-bearing for excluding 'closed'
+        // outright; posIsLiveVisible replaces the old bare POS_VISIBLE_STATES.has() check so a
+        // grace-window 'closed' row (already bounded server-side) isn't re-dropped here.
+        state.positionsData = all.filter(posIsLiveVisible);
       } catch (e) {
         if (e && e.unauth) {
           // A 401 already cleared the token (posApi) — reset to null so the signed-out
@@ -6326,6 +6366,15 @@
         // grace list). Never hand-mutate state into a fake closed card.
         delete state.posConfirmFill[tradeId];
         delete state.posConfirmBusy[tradeId];
+        // WS5-5: the position just became 'closed' — invalidate the lazy Closed-section cache
+        // so the next expand re-fetches and picks up the newly-closed trade (it also appears
+        // immediately as a grace card via the live re-fetch below; this just keeps the Closed
+        // section itself consistent rather than serving a stale snapshot from before the close).
+        state.closedData = null;
+        // If the Closed section is already expanded, posToggleClosed() won't fire again to
+        // pick up the invalidation above — re-fetch directly so it doesn't render a false
+        // "No closed trades" empty state until the user manually collapses/re-expands.
+        if (state.closedExpanded) posLoadClosed();
         await posLoadPositions(); // re-renders on completion
       } catch (e) {
         if (e && e.unauth) {
@@ -6360,6 +6409,57 @@
         renderPositions();
       }
     };
+
+    // WS5-5 (#332) — ONE compact, read-only closed-position card, shared by both the live-list
+    // grace block and the lazy-loaded Closed section (posClosedSectionHtml). A closed position
+    // is settled: no managing hero/stop-banner/overlays and no correct-exit UI (that's the
+    // explicitly-deferred auto-unconfirmed-correctable follow-up, see docs/CLAUDE.md § Positions
+    // tab "Out of scope"). Deliberately dimmer than posCardHtml — slate-800/70 + slate-700/60 vs
+    // posCardHtml's slate-800/slate-700 — it's history, not something to act on. No new colors:
+    // every class here already exists elsewhere on the tab.
+    function posClosedCardHtml(p) {
+      const ticker = escapeHtml(p.ticker || '');
+      const source = escapeHtml((p.meta && p.meta.source) || p.source || 'manual');
+      // closed_at is ISO-UTC (e.g. "2026-08-18T21:00:00Z"); posFmtDate expects a bare
+      // YYYY-MM-DD and appends its own T00:00:00Z, so slice to the date part first.
+      const closedDate = posFmtDate((p.closed_at || '').slice(0, 10));
+      const d = posDerive(p);
+
+      const exitPx = (p.exit_price != null) ? parseFloat(p.exit_price) : parseFloat(p.expected_exit_price);
+      const realized$ = isFinite(exitPx) ? (exitPx - d.entry) * d.qty : NaN;
+      const realizedR = (isFinite(realized$) && isFinite(d.plannedRisk) && d.plannedRisk !== 0)
+        ? realized$ / d.plannedRisk : NaN;
+      const rCls = isFinite(realized$) && realized$ < 0 ? 'text-red-400' : 'text-emerald-400';
+      // Omit any NaN part rather than render "NaN"/"undefined" — same discipline as
+      // posStripItemHtml's rPart.
+      const outcomeParts = [];
+      if (isFinite(exitPx)) outcomeParts.push(`Exited ${fmtPerSh(exitPx)}`);
+      if (isFinite(realized$)) {
+        const rSuffix = isFinite(realizedR) ? ` (${realizedR >= 0 ? '+' : '−'}${Math.abs(realizedR).toFixed(1)}R)` : '';
+        outcomeParts.push(`<span class="${rCls}">${fmtSigned(realized$)}${rSuffix}</span>`);
+      }
+      const outcomeHtml = outcomeParts.length
+        ? `<div class="text-xs text-slate-400 mt-1.5 tabular-nums">${outcomeParts.join(' · ')}</div>`
+        : '';
+
+      const reasonKey = p.exit_reason;
+      const reasonLabel = POS_EXIT_REASON_LABEL[reasonKey] || (reasonKey ? escapeHtml(reasonKey.replace(/_/g, ' ')) : '');
+      const reasonHtml = reasonLabel
+        ? `<div class="text-[10.5px] text-slate-500 uppercase tracking-wide mt-1">${reasonLabel}</div>` : '';
+
+      const autoHtml = p.confirmation_status === 'auto'
+        ? `<span class="text-[10px] uppercase tracking-wide text-amber-400 ml-1.5">auto</span>` : '';
+
+      return `
+        <div class="pos-card bg-slate-800/70 border border-slate-700/60 rounded-lg px-3.5 py-3">
+          <div class="flex justify-between items-center">
+            <span><span class="font-bold text-sm tracking-wide text-slate-300">${ticker}</span> <span class="text-xs text-slate-500">· ${source} · closed ${closedDate}</span>${autoHtml}</span>
+            <span class="text-[10px] uppercase tracking-wide text-slate-500 border border-slate-600 rounded-full px-1.5 py-0.5">closed</span>
+          </div>
+          ${outcomeHtml}
+          ${reasonHtml}
+        </div>`;
+    }
 
     function posCardHtml(p) {
       const ticker = escapeHtml(p.ticker || '');
@@ -6425,33 +6525,121 @@
         </div>`;
 
       const rows = state.positionsData || [];
-      if (rows.length === 0) {
-        el.innerHTML = manualEntryHtml() + watchAddHtml() + header + `<p class="text-slate-400 text-sm text-center py-8">No open positions yet — log one from the Morning tab.</p>`;
-        manualRecompute();
-        return;
-      }
 
       // WS5-4a — 'closing' positions are hoisted into the confirmation strip and no longer
       // render as cards (planning/mocks/ws5-needs-confirmation-surface.html States B/C).
       const closingRows = rows.filter(p => p.state === 'closing');
-      const cardRows = rows.filter(p => p.state !== 'closing');
+      // WS5-5 (#332) — 'closed' rows in this fetch are already bounded to POS_GRACE_SESSIONS
+      // server-side (posLoadPositions' closed_within_sessions param); they render as a distinct
+      // "Recently closed" block after the live cards, not intermixed with them.
+      const graceRows = rows.filter(p => p.state === 'closed');
+      const liveRows = rows.filter(p => p.state === 'open' || p.state === 'managing');
       const strip = posConfirmStripHtml(closingRows);
+      // Always rendered for a signed-in user, even with zero live positions — a fresh account
+      // with no trades yet should still be able to open (empty) Closed history.
+      const closedSection = posClosedSectionHtml();
+
+      if (liveRows.length === 0 && graceRows.length === 0 && closingRows.length === 0) {
+        el.innerHTML = manualEntryHtml() + watchAddHtml() + header
+          + `<p class="text-slate-400 text-sm text-center py-8">No open positions yet — log one from the Morning tab.</p>`
+          + closedSection;
+        manualRecompute();
+        return;
+      }
 
       let cardsHtml;
-      if (cardRows.length === 0) {
+      if (liveRows.length === 0 && graceRows.length === 0) {
         // All open positions are awaiting confirmation — the strip IS the content; don't show
         // the "no open positions" empty state (that reads as an empty portfolio, not this).
         cardsHtml = strip ? `<p class="text-slate-500 text-xs text-center py-4">No other open positions</p>` : '';
       } else {
-        const list = `<div class="space-y-2">${cardRows.map(posCardHtml).join('')}</div>`;
+        const liveList = liveRows.length ? `<div class="space-y-2">${liveRows.map(posCardHtml).join('')}</div>` : '';
+        // A subtle divider above the grace block so it reads as history sitting after the live
+        // list, not intermixed with it.
+        const graceList = graceRows.length ? `
+          <div class="mt-3">
+            <div class="text-[10.5px] uppercase tracking-wide text-slate-500 px-0.5 mb-1.5">Recently closed</div>
+            <div class="space-y-2">${graceRows.map(posClosedCardHtml).join('')}</div>
+          </div>` : '';
+        const combined = liveList + graceList;
         // A light dim on the managing/open list when the strip has items (mock State B/C) — the
         // strip is the thing needing attention; the card list recedes without going illegible.
-        cardsHtml = strip ? `<div class="opacity-70">${list}</div>` : list;
+        cardsHtml = strip ? `<div class="opacity-70">${combined}</div>` : combined;
       }
 
-      el.innerHTML = manualEntryHtml() + watchAddHtml() + header + strip + cardsHtml;
+      el.innerHTML = manualEntryHtml() + watchAddHtml() + header + strip + cardsHtml + closedSection;
       manualRecompute();
     }
+
+    // WS5-5 (#332) — collapsible "Closed" history section (past POS_CLOSED_HISTORY_SESSIONS
+    // sessions), lazy-loaded: the backend is hit only on first expand (posToggleClosed), keeping
+    // the default Positions-tab payload light. Excludes rows already shown as grace cards above
+    // (sessions_since_close <= POS_GRACE_SESSIONS) so nothing double-renders.
+    function posClosedSectionHtml() {
+      const expanded = !!state.closedExpanded;
+      const headerHtml = `
+        <div class="flex items-center justify-between px-3 py-2.5 cursor-pointer" onclick="posToggleClosed()">
+          <span class="text-xs font-semibold text-slate-400">Closed</span>
+          <span class="text-xs text-slate-500">${expanded ? '▴' : '▾'}</span>
+        </div>`;
+
+      let bodyHtml = '';
+      if (expanded) {
+        if (state.closedLoading) {
+          bodyHtml = `<p class="text-slate-500 text-xs text-center py-4">Loading…</p>`;
+        } else if (state.closedError) {
+          bodyHtml = `
+            <div class="flex flex-col items-center text-center py-4 px-3">
+              <p class="text-slate-400 text-xs">Couldn't load closed positions.</p>
+              <button onclick="posLoadClosed()" class="mt-1.5 text-xs text-sky-400 underline">Try again</button>
+            </div>`;
+        } else {
+          const all = state.closedData || [];
+          // Grace-window rows already render in the "Recently closed" block above the strip —
+          // don't repeat them here.
+          const historyRows = all.filter(p => !(p.sessions_since_close != null && p.sessions_since_close <= POS_GRACE_SESSIONS));
+          bodyHtml = historyRows.length
+            ? `<div class="space-y-2 px-3 pb-3">${historyRows.map(posClosedCardHtml).join('')}</div>`
+            : `<p class="text-slate-500 text-xs text-center py-4">No closed trades in the last ~3 months.</p>`;
+        }
+      }
+
+      return `<div class="mt-4 rounded-lg border border-slate-700/60 bg-slate-800/40 overflow-hidden">${headerHtml}${bodyHtml}</div>`;
+    }
+
+    window.posToggleClosed = function () {
+      state.closedExpanded = !state.closedExpanded;
+      if (state.closedExpanded && state.closedData === null && !state.closedLoading) {
+        posLoadClosed(); // fires the lazy fetch; posLoadClosed itself calls renderPositions()
+      }
+      renderPositions();
+    };
+
+    window.posLoadClosed = async function () {
+      if (state.closedLoading) return; // guard against double-tap re-fetch
+      state.closedLoading = true;
+      state.closedError = false;
+      renderPositions();
+      try {
+        const data = await posApi(
+          '/positions?state=closed&closed_within_sessions=' + POS_CLOSED_HISTORY_SESSIONS,
+          { method: 'GET' }
+        );
+        // API returns ORDER BY opened_at DESC; kept as-is (rather than re-sorting by closed_at)
+        // — opened_at desc still reads as "most-recently-active trades first" and avoids an
+        // extra client-side sort for a section that's already the low-frequency lazy path.
+        state.closedData = (data && data.positions) || [];
+      } catch (e) {
+        if (e && e.unauth) {
+          state.positionsData = null; // sign-in fallback, same convention as posLoadPositions
+        } else {
+          state.closedError = true;
+        }
+      } finally {
+        state.closedLoading = false;
+        renderPositions();
+      }
+    };
 
     // ── WS5 §8a — manual "log a position on any ticker" form ────────────────────────────
     // Collapsed-by-default expander at the top of the Positions tab content, signed-in only.

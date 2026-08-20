@@ -1,6 +1,17 @@
 {
-  "current": "2026.08.19.2",
+  "current": "2026.08.20.1",
   "releases": [
+    {
+      "version": "2026.08.20.1",
+      "date": "2026-08-20",
+      "title": "See your recently-closed trades",
+      "tag": "feature",
+      "tab": "positions",
+      "notes": [
+        "A closed position now stays visible for 2 trading sessions right where you were managing it, with a read-only \"closed\" badge and its exit price + realized R.",
+        "A new collapsible \"Closed\" section at the bottom of the tab holds your last ~3 months of closed trades — loaded only when you tap to expand it."
+      ]
+    },
     {
       "version": "2026.08.19.2",
       "date": "2026-08-19",
