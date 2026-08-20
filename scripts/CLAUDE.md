@@ -261,6 +261,16 @@ the planning doc sections cited above, plus ADR-012 §10 Phasing / §11 Decision
   comes from a live Worker query, nothing to dependency-gate on). Dispatches
   `.github/workflows/collect_held.yml`. See root `CLAUDE.md` § Automation.
 - **`--dry-run`:** scrapes + maps + prints row counts, skips the POST.
+- **`--advisory` (WS5-8):** runs the same scrape as a 15:40 ET pre-close advisory read instead
+  of the 17:30 ET settled feed. Same held-set fetch, same scrape, same `build_quote_payload`,
+  but `post_quotes()` targets `POST /positions/preclose-advisory` (via an optional `path=` arg,
+  default `/ingest/quotes`) instead of `/ingest/quotes`, and `main()` skips `trigger_advance()`
+  entirely — `--advisory` implies no `/advance` call, since the advisory endpoint computes its
+  own read and there is nothing to sweep. The advisory endpoint writes NOTHING to D1's
+  `positions`/`ticker_quotes` tables (the entire point — a provisional bar must never land in
+  the same store the 17:30 settled sweep reads, or it would corrupt that sweep). Scheduler: the
+  `held_preclose` job (`worker-cron/src/routing.js` `JOB_SCHEDULE`), 15:40 ET Mon–Fri, ungated,
+  dispatching `.github/workflows/collect_held_preclose.yml`. See root `CLAUDE.md` § Automation.
 
 ## AI capture constants (`scripts/generate_ai.py`)
 

@@ -1,0 +1,56 @@
+name: Collect held — pre-close advisory
+# WS5-8 pre-close held advisory scrape (planning/trade-lifecycle-engine.md §5/§5a/§10/§11
+# extension; LOCKED SPEC ws5-8-feed-spec.md). Scrapes live quotes for the same held-tickers
+# union as collect_held.yml (via the finviz-positions Worker's `/held-tickers` endpoint),
+# but POSTs to the Worker's authenticated `/positions/preclose-advisory` endpoint instead
+# of `/ingest/quotes` — an advisory read that writes NOTHING to D1's positions/ticker_quotes
+# tables, so it is safe to run ahead of the close without disturbing the 17:30 settled feed
+# or triggering an engine sweep (no /advance call).
+#
+# CRITICAL DIFFERENCE from collect_held.yml: this workflow always passes
+# `scripts/collect_held.py --advisory`, which changes the POST target and skips the
+# post-ingest /advance call entirely — there is no sweep to trigger for an advisory-only
+# read. Otherwise identical scrape/setup/auth to collect_held.yml.
+#
+# Writes to D1 over HTTP, NOT to git — no `git commit`/`git push` step and no
+# `finviz-data-commit` concurrency group, same as collect_held.yml.
+#
+# PRIMARY scheduler: the Cloudflare `finviz-cron-dispatcher` Worker's in-code
+# `held_preclose` job (worker-cron/src/routing.js JOB_SCHEDULE), firing at 15:40 ET,
+# Mon-Fri, UNGATED. Dispatched via workflow_dispatch on GitHub's Azure IPs, which pass
+# Finviz's Cloudflare bot-detection; our own Cloudflare Worker's Google Cloud IPs do not
+# (see root CLAUDE.md § Playwright notes).
+#
+# Required secrets (repo owner sets these out of band — NOT touched by wrangler deploy
+# or by this workflow): POSITIONS_WORKER_URL, POSITIONS_INGEST_TOKEN. Both must be
+# configured in the repo's Actions secrets before this workflow can succeed.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Scrape+map+log counts without POSTing to the advisory endpoint."
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  held_preclose:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+      - name: Collect held-tickers pre-close advisory scrape
+        # Same inputs.dry_run ternary pattern as collect_held.yml: a worker-cron
+        # dispatch sends no inputs, so GitHub Actions defaults the unset boolean to
+        # its declared `default` (false) -> a real POST.
+        env:
+          POSITIONS_WORKER_URL: ${{ secrets.POSITIONS_WORKER_URL }}
+          POSITIONS_INGEST_TOKEN: ${{ secrets.POSITIONS_INGEST_TOKEN }}
+        run: python scripts/collect_held.py --advisory ${{ inputs.dry_run && '--dry-run' || '' }}

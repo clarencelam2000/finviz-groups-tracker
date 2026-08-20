@@ -389,7 +389,7 @@ describe('picks dependency gate (#259)', () => {
 describe('JOB_SCHEDULE wiring', () => {
   it('every job in the schedule has a corresponding workflow url in the dispatcher', () => {
     // Indirect check: dispatching each job name must not throw on an unknown workflow.
-    expect(JOB_SCHEDULE.map((j) => j.workflow).every((w) => ['collect', 'picks', 'morning', 'held', 'preclose_status'].includes(w))).toBe(true);
+    expect(JOB_SCHEDULE.map((j) => j.workflow).every((w) => ['collect', 'picks', 'morning', 'held', 'preclose_status', 'held_preclose'].includes(w))).toBe(true);
   });
 });
 

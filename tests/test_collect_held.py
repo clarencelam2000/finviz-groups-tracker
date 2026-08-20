@@ -175,6 +175,146 @@ def test_trigger_advance_returns_none_on_generic_exception(monkeypatch):
     assert result is None
 
 
+def test_post_quotes_advisory_path_posts_to_preclose_advisory_endpoint(monkeypatch):
+    # WS5-8: --advisory routes post_quotes() at the /positions/preclose-advisory endpoint
+    # instead of /ingest/quotes, via the optional `path=` param.
+    import io
+    import json as jsonlib
+
+    captured = {}
+    body = jsonlib.dumps({"written": 2}).encode("utf-8")
+
+    class FakeResp(io.BytesIO):
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        captured["req"] = req
+        return FakeResp(body)
+
+    monkeypatch.setattr(ch.urllib.request, "urlopen", fake_urlopen)
+    payload = {"trade_date": "2026-08-20", "collected_at": "2026-08-20T19:40:00Z", "quotes": []}
+    written = ch.post_quotes("https://example.com", "tok", payload, path=ch.PRECLOSE_ADVISORY_PATH)
+
+    assert written == 2
+    req = captured["req"]
+    assert req.full_url == "https://example.com/positions/preclose-advisory"
+    assert req.get_method() == "POST"
+
+
+def test_post_quotes_default_path_is_ingest_quotes(monkeypatch):
+    # Regression guard: the default (non-advisory) call must still hit /ingest/quotes.
+    import io
+    import json as jsonlib
+
+    captured = {}
+    body = jsonlib.dumps({"written": 1}).encode("utf-8")
+
+    class FakeResp(io.BytesIO):
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(req, timeout=None):
+        captured["req"] = req
+        return FakeResp(body)
+
+    monkeypatch.setattr(ch.urllib.request, "urlopen", fake_urlopen)
+    payload = {"trade_date": "2026-08-20", "collected_at": "2026-08-20T19:40:00Z", "quotes": []}
+    ch.post_quotes("https://example.com", "tok", payload)
+
+    assert captured["req"].full_url == "https://example.com/ingest/quotes"
+
+
+def test_main_advisory_mode_skips_advance_and_posts_advisory_path(monkeypatch, capsys):
+    # WS5-8 HARD INVARIANT: --advisory must POST to /positions/preclose-advisory and
+    # must NOT call trigger_advance (no /advance, no sweep).
+    import sys as sys_mod
+
+    monkeypatch.setattr(ch, "fetch_held_tickers", lambda worker_url, token: ["AAPL"])
+
+    def fake_fetch_ticker_quotes(page, tickers, config, block=None):
+        return [_row(ticker="AAPL")]
+
+    monkeypatch.setattr(ch, "fetch_ticker_quotes", fake_fetch_ticker_quotes)
+
+    posted = {}
+
+    def fake_post_quotes(worker_url, token, payload, path=ch.INGEST_QUOTES_PATH):
+        posted["path"] = path
+        return 1
+
+    monkeypatch.setattr(ch, "post_quotes", fake_post_quotes)
+
+    def fail_trigger_advance(*args, **kwargs):
+        raise AssertionError("trigger_advance must not be called in --advisory mode")
+
+    monkeypatch.setattr(ch, "trigger_advance", fail_trigger_advance)
+
+    class FakeBrowser:
+        def close(self):
+            pass
+
+    class FakeContext:
+        def new_page(self):
+            return object()
+
+    class FakePlaywright:
+        def __enter__(self):
+            class Chromium:
+                def launch(self, headless=True):
+                    return FakeBrowser()
+
+            class P:
+                chromium = Chromium()
+
+            return P()
+
+        def __exit__(self, *a):
+            return False
+
+    class FakeBrowserWithContext(FakeBrowser):
+        def new_context(self, **kwargs):
+            return FakeContext()
+
+    class ChromiumLaunch:
+        def launch(self, headless=True):
+            return FakeBrowserWithContext()
+
+    class PlaywrightP:
+        chromium = ChromiumLaunch()
+
+    class FakeSyncPlaywright:
+        def __enter__(self):
+            return PlaywrightP()
+
+        def __exit__(self, *a):
+            return False
+
+    import types
+    fake_module = types.SimpleNamespace(sync_playwright=lambda: FakeSyncPlaywright())
+    monkeypatch.setitem(sys_mod.modules, "playwright.sync_api", fake_module)
+
+    monkeypatch.setenv("POSITIONS_WORKER_URL", "https://example.com")
+    monkeypatch.setenv("POSITIONS_INGEST_TOKEN", "tok")
+    monkeypatch.setattr(sys_mod, "argv", ["collect_held.py", "--advisory"])
+
+    ch.main()
+
+    assert posted["path"] == ch.PRECLOSE_ADVISORY_PATH
+    out = capsys.readouterr().out
+    assert "advisory" in out.lower()
+
+
 def test_payload_shape_matches_worker_expectation():
     payload = ch.build_quote_payload([_row(), _row(ticker="MSFT")], "2026-08-13", "2026-08-13T21:05:00Z")
     assert isinstance(payload["quotes"], list)

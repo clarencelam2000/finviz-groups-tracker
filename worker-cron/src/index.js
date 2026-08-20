@@ -54,6 +54,10 @@ const WORKFLOWS = {
   // .github/workflows/collect_preclose_status.yml). Distinct from the
   // `collect_preclose` job above, which dispatches the unrelated collect.yml.
   preclose_status: { url: `${REPO_WORKFLOWS_URL}/collect_preclose_status.yml/dispatches` },
+  // WS5-8: ungated, same dispatch shape as `held` — 15:40 ET pre-close advisory read,
+  // POSTs to /positions/preclose-advisory (no D1 positions/ticker_quotes write, no
+  // /advance sweep). See collect_held_preclose.yml.
+  held_preclose: { url: `${REPO_WORKFLOWS_URL}/collect_held_preclose.yml/dispatches` },
 };
 
 function jsonResponse(obj, status = 200) {
