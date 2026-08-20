@@ -7,6 +7,8 @@ import { authenticate, authenticateService, login } from "./auth.js";
 import { validateCreatePayload, buildPositionRow, insertPosition, listPositions, ALL_STATES } from "./positions.js";
 import { validateIngestBatch, ingestQuotes, heldTickers } from "./quotes.js";
 import { sweep } from "./sweep.js";
+import { computePreCloseAdvisory, readPreCloseAdvisory } from "./preclose.js";
+import { etDateStr } from "./time.js";
 import { applyTransition, ackStop } from "./transitions.js";
 import {
   validateAddPayload,
@@ -123,6 +125,32 @@ export async function handleRequest(request, env) {
       return json({ error: "write failed" }, 500, request, env);
     }
     return json({ written, trade_date: v.value.trade_date }, 200, request, env);
+  }
+
+  // ── Pre-close advisory ingest — WS5-8 PR-1a ─────────────────────────────────────────────────────
+  // Service-token, machine route: the 15:40 ET GitHub-Actions job POSTs a provisional bar batch here.
+  // Payload shape is IDENTICAL to /ingest/quotes ({trade_date, collected_at, quotes[]}), so it reuses
+  // the SAME validateIngestBatch(). This route only COMPUTES (calls the pure advance() per position
+  // in memory) and writes to preclose_advisory — it never calls ingestQuotes(), so ticker_quotes is
+  // untouched (HARD INVARIANT: a write here must never make the 17:30 sweep a no-op — see
+  // src/preclose.js header + worker-positions/CLAUDE.md § pre-close advisory).
+  if (pathname === "/positions/preclose-advisory" && method === "POST") {
+    if (!authenticateService(request, env)) return json({ error: "unauthorized" }, 401, request, env);
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return json({ error: "invalid JSON" }, 400, request, env);
+    }
+    const v = validateIngestBatch(body);
+    if (!v.ok) return json({ error: v.error }, 400, request, env);
+    let result;
+    try {
+      result = await computePreCloseAdvisory(env.POSITIONS_DB, { quotes: v.value.rows, trade_date: v.value.trade_date });
+    } catch (e) {
+      return json({ error: "advisory failed" }, 500, request, env);
+    }
+    return json(result, 200, request, env);
   }
 
   // ── Watchlist machine routes — WS5 §8b P1 (issue #319) ──────────────────────────────────────────
@@ -313,6 +341,21 @@ export async function handleRequest(request, env) {
     }
     if (!result.changed) return json({ error: "not found" }, 404, request, env);
     return json({ ok: true }, 200, request, env);
+  }
+
+  // ── Pre-close advisory read — WS5-8 PR-1a ───────────────────────────────────────────────────────
+  // Owner-bearer, exact-path route. Placed BEFORE the TRANSITION_PATH regex below so the literal
+  // "/positions/preclose" can never be mistaken for a /positions/<trade_id>/<action> transition
+  // (mirrors this file's existing shadowing-avoidance convention for WATCHLIST_ID_PATH/TRANSITION_PATH).
+  if (pathname === "/positions/preclose" && method === "GET") {
+    const trade_date = etDateStr(new Date());
+    let row;
+    try {
+      row = await readPreCloseAdvisory(env.POSITIONS_DB, auth.user_id, trade_date);
+    } catch (e) {
+      return json({ error: "read failed" }, 500, request, env);
+    }
+    return json(row || { ran_at: null, n_checked: 0, n_flagged: 0, items: [] }, 200, request, env);
   }
 
   // ── Owner exit-transition + ack-stop routes — WS5 phase 3b-ii / WS5-7 ───────────────────────────
