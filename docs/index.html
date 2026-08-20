@@ -541,6 +541,18 @@
       closedData: null,
       closedLoading: false,
       closedError: false,
+      // WS5-8 (PR-2) — pre-close advisory read (~15:30 ET held scrape, planning/mocks/
+      // ws5-8-preclose-read.html). null = not fetched this session, or ran_at came back null
+      // (no read yet today / signed out) — advisoryBandHtml renders nothing for either. Once
+      // fetched: { ran_at, n_checked, n_flagged, items }. Reset to null on sign-out (posSignOut)
+      // so a switch always re-fetches fresh state, same convention as positionsData.
+      precloseData: null,
+      // true while a posLoadPreclose() fetch is in flight — guards against duplicate concurrent
+      // fetches the same way posLoadPositions's own dedup works (checked before firing).
+      precloseLoading: false,
+      // WS5-8 — amber band collapse state. false = collapsed (default), same convention as
+      // posStripExpanded for the red confirmation strip. Module-level, not per-item.
+      precloseStripExpanded: false,
       // WS5 §8a — manual "log a position on any ticker" form on the Positions tab.
       // Survives renderPositions() re-renders (module-level, not rebuilt each render), same
       // convention as morningTicket/ws5Card. `confirm` mirrors ws5Card's freeze-confirm step
@@ -5742,6 +5754,7 @@
       if (ok) {
         state.positionsData = null;
         state.watchlistData = null;
+        state.precloseData = null;
         renderPositions();
       } else if (errEl) {
         errEl.textContent = 'Wrong passphrase';
@@ -5753,12 +5766,14 @@
       state.positionsData = null;
       state.positionsError = false;
       state.watchlistData = null;
+      state.precloseData = null;
       renderPositions();
     };
 
     window.posRetryLoad = function () {
       state.positionsError = false;
       state.positionsData = null;
+      state.precloseData = null;
       renderPositions();
     };
 
@@ -5822,6 +5837,26 @@
           state.positionsData = null;
           state.positionsError = true;
         }
+      }
+      if (state.tab === 'positions') renderPositions();
+    }
+
+    // WS5-8 (PR-2) — fire-and-forget fetch of the ~15:30 ET pre-close advisory read. Mirrors
+    // posLoadPositions's shape but is deliberately best-effort: ANY failure (network, 401,
+    // 5xx) just leaves precloseData null so advisoryBandHtml renders nothing — this is a bonus
+    // surface layered on top of the positions tab, never allowed to block or error that render.
+    async function posLoadPreclose() {
+      if (state.precloseLoading) return; // dedup concurrent fetches, same convention as posLoadPositions callers
+      state.precloseLoading = true;
+      try {
+        const data = await posApi('/positions/preclose', { method: 'GET' });
+        state.precloseData = (data && data.ran_at) ? data : null;
+      } catch (e) {
+        // 401 (signed out) or network/5xx — either way, no advisory to show. posApi already
+        // cleared the token on a 401; nothing further to do here.
+        state.precloseData = null;
+      } finally {
+        state.precloseLoading = false;
       }
       if (state.tab === 'positions') renderPositions();
     }
@@ -5981,6 +6016,16 @@
       close_below_20ma: 'below 20MA',
       severe_breakdown: 'breakdown',
       two_close_below_20ma: '2x below 20MA',
+    };
+
+    // WS5-8 (PR-2) — pre-close advisory item severity -> pill label/classes (docs/CLAUDE.md
+    // § Pre-close read). 'act' = a real intraday exit signal already fired (stop_hit-shaped);
+    // 'heads_up' = a close-referenced signal (e.g. trending below the 50MA) that's provisional
+    // until the 4:00 close prints. Display strings/classes only, not a numeric threshold — home
+    // is docs/CLAUDE.md, not the README numeric-threshold table (3-places rule, adapted).
+    const POS_PRECLOSE_SEVERITY_META = {
+      act:      { label: 'Act now',   pillCls: 'bg-red-500/15 text-red-400' },
+      heads_up: { label: 'Heads-up',  pillCls: 'bg-amber-500/15 text-amber-400' },
     };
 
     // ── Stop-moved banner + cross-device ack (Task 3, spec §6) ──────────────────────────
@@ -6211,6 +6256,125 @@
         renderPositions();
       }
     };
+
+    // ── WS5-8 (PR-2) pre-close advisory band (planning/mocks/ws5-8-preclose-read.html,
+    // planning/trade-lifecycle-engine.md §5/§5a) ────────────────────────────────────────────
+    // A ~15:30 ET held-scrape read, deliberately AMBER (provisional) and distinct from the
+    // settled RED confirmation strip above — read-only, no confirm/still-holding buttons, and
+    // it writes no position state (never touches last_advanced_date; the 17:30 sweep stays the
+    // sole writer). Mirrors posConfirmStripHtml's collapsible header + collapsed-summary/
+    // expanded-rows shape, but with a third render mode (the calm-day emerald receipt line)
+    // and no strip at all when `ran_at` is null (no read yet today, or signed out).
+    function advisoryBandHtml(preclose) {
+      if (!preclose || !preclose.ran_at) return '';
+
+      const timeStr = posFmtPreclosetime(preclose.ran_at);
+      const items = preclose.items || [];
+
+      if (items.length === 0) {
+        const n = preclose.n_checked || 0;
+        return `<div class="mb-3 rounded-lg border border-emerald-500/28 bg-emerald-500/[.06] px-3 py-2.5 text-xs font-semibold text-emerald-400">
+          ✓ Pre-close checked at ${timeStr} · ${n} position${n === 1 ? '' : 's'} · nothing to act on before the close
+        </div>`;
+      }
+
+      // act before heads_up — the mock's "order = urgency" convention, same idea as the
+      // confirm strip's oldest-exit-signal-first sort.
+      const sorted = items.slice().sort((a, b) => (a.severity === 'act' ? 0 : 1) - (b.severity === 'act' ? 0 : 1));
+      const expanded = !!state.precloseStripExpanded;
+
+      const headerHtml = `
+        <div class="flex items-center justify-between px-3 py-2.5 cursor-pointer" onclick="posTogglePreclose()">
+          <span class="flex items-center gap-2 text-[12.5px] font-bold text-amber-400">● Pre-close read</span>
+          <span class="text-xs text-amber-400">${expanded ? 'hide ▴' : sorted.length + ' · as of ' + timeStr + ' ▾'}</span>
+        </div>
+        <div class="text-[11px] text-slate-500 px-3 -mt-1.5 pb-2">Provisional — firms at the 4:00 close.</div>`;
+
+      let bodyHtml;
+      if (!expanded) {
+        const summary = sorted.map(it => {
+          const ticker = escapeHtml(it.ticker || '');
+          const short = POS_EXIT_REASON_SHORT[it.signal]
+            || (it.signal ? escapeHtml(String(it.signal).replace(/_/g, ' ')) : 'signaled');
+          return `<b class="text-slate-100">${ticker}</b> ${short}`;
+        }).join(' · ');
+        bodyHtml = `<div class="text-xs text-slate-400 px-3 pb-2.5">${summary}</div>`;
+      } else {
+        bodyHtml = sorted.map(posPrecloseItemHtml).join('');
+      }
+
+      return `<div class="mb-3 rounded-lg overflow-hidden border border-amber-500/40 bg-amber-500/[.05]">${headerHtml}${bodyHtml}</div>`;
+    }
+
+    window.posTogglePreclose = function () {
+      state.precloseStripExpanded = !state.precloseStripExpanded;
+      renderPositions();
+    };
+
+    // "as of {H:MM} PM ET" — America/New_York wall-clock formatting of the ran_at ISO timestamp.
+    function posFmtPreclosetime(isoStr) {
+      const d = new Date(isoStr);
+      if (isNaN(d.getTime())) return '—';
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit', hour12: true,
+      }).formatToParts(d);
+      const hour = parts.find(p => p.type === 'hour').value;
+      const minute = parts.find(p => p.type === 'minute').value;
+      const ampm = parts.find(p => p.type === 'dayPeriod').value.toUpperCase();
+      return `${hour}:${minute} ${ampm} ET`;
+    }
+
+    // One expanded band item — pill + copy + aside per the mock, split on severity. `price`/
+    // `ref_level` reuse the same $ formatter as the rest of the Positions tab (fmtPerSh, always
+    // 2dp per-share); a null ref_level omits the "· your stop $Y"/"vs $Y" clause rather than
+    // ever printing "$null".
+    function posPrecloseItemHtml(it) {
+      const ticker = escapeHtml(it.ticker || '');
+      const meta = POS_PRECLOSE_SEVERITY_META[it.severity] || POS_PRECLOSE_SEVERITY_META.heads_up;
+      const price = parseFloat(it.price);
+      const refLevel = it.ref_level != null ? parseFloat(it.ref_level) : NaN;
+      const priceStr = isFinite(price) ? fmtPerSh(price).replace('$', '') : '—';
+      const refStr = isFinite(refLevel) ? fmtPerSh(refLevel).replace('$', '') : null;
+
+      // Copy is signal-specific (not severity-generic) so a two_close_below_20ma or
+      // severe_breakdown never gets mislabeled as a 50MA/stop-hit event. `act` rows lead with the
+      // realized intraday event; `heads_up` rows lead with "on track to …" since the close hasn't
+      // printed. The ref clause is dropped cleanly when ref_level is null (severe_breakdown).
+      const refClause = refStr ? ` <span class="text-slate-400">· ${priceStr} vs ${refStr}</span>` : '';
+      let lineHtml, asideHtml;
+      if (it.severity === 'act') {
+        let lead;
+        if (it.signal === 'stop_hit') {
+          lead = `Stop <span class="tabular-nums font-bold">hit at ${priceStr}</span>`
+            + (refStr ? ` <span class="text-slate-400">· your stop ${refStr}</span>` : '');
+        } else if (it.signal === 'gap_down_below_stop') {
+          lead = `<span class="font-bold">Gapped below your stop</span>` + refClause;
+        } else if (it.signal === 'severe_breakdown') {
+          lead = `<span class="font-bold">Severe 1-day breakdown</span>`
+            + (isFinite(price) ? ` <span class="text-slate-400">· ${priceStr}</span>` : '');
+        } else {
+          lead = `<span class="font-bold">${escapeHtml(POS_EXIT_REASON_LABEL[it.signal] || 'exit signalled')}</span>` + refClause;
+        }
+        lineHtml = lead;
+        asideHtml = `<div class="text-[11px] text-emerald-400 mt-1">Real intraday exit — place your order before the close.</div>`;
+      } else {
+        const phrase = it.signal === 'two_close_below_20ma'
+          ? `On track for a <span class="tabular-nums font-bold">2nd close below the 20MA</span>`
+          : `On track to <span class="tabular-nums font-bold">close below the 50MA</span>`;
+        lineHtml = phrase + refClause;
+        asideHtml = `<div class="text-[11px] text-slate-500 mt-1">Close-referenced — may firm up at the bell. No action required yet.</div>`;
+      }
+
+      return `
+        <div class="border-t border-amber-500/[.16] px-3 py-2.75">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-extrabold text-sm tracking-wide">${ticker}</span>
+            <span class="text-[9.5px] font-extrabold uppercase tracking-wide rounded-full px-2 py-0.5 ${meta.pillCls}">${meta.label}</span>
+          </div>
+          <div class="text-xs text-slate-100 mt-1">${lineHtml}</div>
+          ${asideHtml}
+        </div>`;
+    }
 
     // ── WS5-4a confirmation strip (planning/mocks/ws5-needs-confirmation-surface.html States
     // A/B/C, planning/trade-lifecycle-engine.md §8) ─────────────────────────────────────────
@@ -6512,6 +6676,9 @@
         el.innerHTML = manualEntryHtml() + watchAddHtml() + `<p class="text-slate-400 text-sm text-center py-8">Loading positions…</p>`;
         manualRecompute();
         posLoadPositions();
+        // WS5-8 (PR-2) — kick the pre-close advisory fetch alongside the positions fetch.
+        // Fire-and-forget: posLoadPreclose is entirely best-effort and never blocks this render.
+        if (state.precloseData === null && !state.precloseLoading) posLoadPreclose();
         return;
       }
 
@@ -6567,7 +6734,14 @@
         cardsHtml = strip ? `<div class="opacity-70">${combined}</div>` : combined;
       }
 
-      el.innerHTML = manualEntryHtml() + watchAddHtml() + header + strip + cardsHtml + closedSection;
+      // WS5-8 (PR-2) — advisory/provisional sits above the settled red strip (header, then
+      // amber band, then strip). Only wired into this main loaded branch — the empty-positions
+      // branch above (liveRows/graceRows/closingRows all empty) means no open/managing
+      // positions, so the compute has nothing to have flagged and the band would be absent
+      // there anyway; keeping it out of that branch avoids fetching/rendering a receipt line
+      // for an account with nothing to manage.
+      const advisoryBand = advisoryBandHtml(state.precloseData);
+      el.innerHTML = manualEntryHtml() + watchAddHtml() + header + advisoryBand + strip + cardsHtml + closedSection;
       manualRecompute();
     }
 

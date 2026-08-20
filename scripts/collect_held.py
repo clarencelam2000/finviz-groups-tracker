@@ -26,6 +26,14 @@ to the Worker's `/advance` endpoint to trigger a sweep of the daily trade-lifecy
 over the bars just ingested. Dependency-gated (fires right after fresh bars land), not a
 separate cron. Same service token, no new env vars. Pass `--no-advance` to ingest bars
 without triggering the sweep (a bars-only backfill escape hatch).
+
+WS5-8: pass `--advisory` to run this same scrape as a 15:40 ET pre-close read instead of
+the 17:30 ET settled feed. This POSTs the identical payload shape to the Worker's
+`/positions/preclose-advisory` endpoint instead of `/ingest/quotes` — that endpoint
+computes an advisory read and writes NOTHING to `positions`/`ticker_quotes`, so it is safe
+to run ahead of the close without corrupting the 17:30 settled sweep. `--advisory` implies
+no `/advance` call (there is no sweep to trigger; the advisory endpoint does its own
+compute) — the flag is a superset of `--no-advance`, not a separate on/off axis.
 """
 
 import json
@@ -50,6 +58,9 @@ from collect_morning import (  # noqa: E402  (reuse the shared scrape mechanism 
 HELD_TICKERS_PATH = "/held-tickers"
 INGEST_QUOTES_PATH = "/ingest/quotes"
 ADVANCE_PATH = "/advance"
+# WS5-8: advisory pre-close endpoint. Same payload shape as INGEST_QUOTES_PATH, but the
+# Worker computes an advisory read and writes nothing to positions/ticker_quotes.
+PRECLOSE_ADVISORY_PATH = "/positions/preclose-advisory"
 
 # Finviz label -> ticker_quotes/ingest payload field. "Ticker" is handled separately
 # (used as the row key + skip guard, not a `raw`-adjacent numeric). Kept as a module
@@ -148,9 +159,14 @@ def fetch_held_tickers(worker_url: str, token: str) -> list:
     return data.get("tickers", [])
 
 
-def post_quotes(worker_url: str, token: str, payload: dict) -> int:
-    """POST {worker_url}/ingest/quotes -> written count. Loud exit(1) on any non-200."""
-    url = worker_url.rstrip("/") + INGEST_QUOTES_PATH
+def post_quotes(worker_url: str, token: str, payload: dict, path: str = INGEST_QUOTES_PATH) -> int:
+    """POST {worker_url}{path} -> written count. Loud exit(1) on any non-200.
+
+    `path` defaults to `/ingest/quotes` (the settled feed); WS5-8's `--advisory` mode
+    passes `PRECLOSE_ADVISORY_PATH` instead. Same auth, same UA, same payload builder —
+    only the destination endpoint differs.
+    """
+    url = worker_url.rstrip("/") + path
     body = json.dumps(payload).encode("utf-8")
     try:
         with _authed_request(url, token, method="POST", body=body) as resp:
@@ -158,14 +174,14 @@ def post_quotes(worker_url: str, token: str, payload: dict) -> int:
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace") if exc.fp else ""
-        print(f"POST {INGEST_QUOTES_PATH} failed: HTTP {exc.code} {exc.reason} {detail}", file=sys.stderr)
+        print(f"POST {path} failed: HTTP {exc.code} {exc.reason} {detail}", file=sys.stderr)
         sys.exit(1)
     except Exception as exc:
-        print(f"POST {INGEST_QUOTES_PATH} failed: {exc}", file=sys.stderr)
+        print(f"POST {path} failed: {exc}", file=sys.stderr)
         sys.exit(1)
 
     if status != 200:
-        print(f"POST {INGEST_QUOTES_PATH} returned HTTP {status}", file=sys.stderr)
+        print(f"POST {path} returned HTTP {status}", file=sys.stderr)
         sys.exit(1)
 
     return data.get("written", 0)
@@ -223,6 +239,10 @@ def main() -> None:
     parser.add_argument("--no-advance", action="store_true",
                          help="Ingest bars but skip the post-ingest engine sweep (POST /advance). "
                               "Escape hatch for a bars-only backfill run.")
+    parser.add_argument("--advisory", action="store_true",
+                         help="WS5-8: run the 15:40 ET pre-close advisory scrape. POSTs to "
+                              "/positions/preclose-advisory instead of /ingest/quotes, and never "
+                              "calls /advance (implies --no-advance).")
     args = parser.parse_args()
 
     et = pytz.timezone("America/New_York")
@@ -294,6 +314,16 @@ def main() -> None:
 
     if args.dry_run:
         print("[dry-run] not posting.")
+        return
+
+    if args.advisory:
+        # The advisory endpoint returns {trade_date, users, checked, flagged}, NOT {written} — so
+        # don't print a bar-count here (post_quotes would report 0 and mislead a CI-log reader). The
+        # advisory writes no ticker_quotes rows by design; count of positions read/flagged lives in
+        # the endpoint's own response/logs.
+        post_quotes(worker_url, token, payload, path=PRECLOSE_ADVISORY_PATH)
+        print(f"Posted pre-close advisory scrape for {trade_date} ({len(payload['quotes'])} tickers).")
+        print("Skipping engine sweep (--advisory implies no /advance call).")
         return
 
     written = post_quotes(worker_url, token, payload)

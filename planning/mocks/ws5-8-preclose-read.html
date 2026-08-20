@@ -1,0 +1,200 @@
+<title>Pre-Close Read</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --ground:#020617;         /* slate-950 — app ground */
+    --card:#0f172a;           /* slate-900 */
+    --card-2:#1e293b;         /* slate-800 */
+    --line:#1e293b;
+    --ink:#e2e8f0;            /* slate-200 */
+    --ink-dim:#94a3b8;        /* slate-400 */
+    --ink-mute:#64748b;       /* slate-500 */
+    --amber:#fbbf24;          /* provisional accent */
+    --amber-line:rgba(245,158,11,.40);
+    --amber-fill:rgba(245,158,11,.06);
+    --red:#f87171;            /* settled closing / act-now */
+    --red-line:rgba(239,68,68,.40);
+    --red-fill:rgba(239,68,68,.06);
+    --emerald:#34d399;
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:#0b1220;
+    color:var(--ink);
+    font-family:var(--font);
+    -webkit-font-smoothing:antialiased;
+    padding:28px 16px 60px;
+    display:flex;flex-direction:column;align-items:center;gap:22px;
+  }
+  .wrap{width:100%;max-width:430px}
+  .note{max-width:430px;font-size:12.5px;line-height:1.55;color:var(--ink-dim)}
+  .note b{color:var(--ink)}
+  .note code{background:var(--card-2);padding:1px 5px;border-radius:4px;font-size:11.5px;color:#cbd5e1}
+  .caption{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-mute);margin:0 0 8px 2px;font-weight:700}
+
+  /* phone shell */
+  .phone{background:var(--ground);border:1px solid #111a2e;border-radius:22px;padding:16px 14px 20px;
+         box-shadow:0 24px 60px -20px rgba(0,0,0,.7)}
+  .tabbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;padding:0 2px}
+  .tabbar .t{font-size:13px;color:var(--ink-mute);font-weight:600}
+  .tabbar .t.on{color:var(--ink)}
+  .tabbar .t.on::after{content:"";display:block;height:2px;background:var(--amber);border-radius:2px;margin-top:5px}
+
+  /* generic strip frame */
+  .strip{border-radius:11px;overflow:hidden;margin-bottom:12px}
+  .strip .head{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;cursor:default}
+  .strip .head .lbl{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:800}
+  .strip .head .meta{font-size:11px}
+  .dot{width:7px;height:7px;border-radius:50%}
+
+  /* amber advisory band */
+  .band{border:1px solid var(--amber-line);background:var(--amber-fill)}
+  .band .lbl{color:var(--amber)}
+  .band .meta{color:var(--amber)}
+  .band .sub{padding:0 12px 9px;font-size:11px;color:var(--ink-mute);margin-top:-2px}
+  .band .item{border-top:1px solid rgba(245,158,11,.16);padding:11px 12px}
+  .band .item:first-of-type{border-top:1px solid rgba(245,158,11,.22)}
+
+  .row1{display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .tk{font-weight:800;font-size:14px;letter-spacing:.02em}
+  .sev{font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:2px 8px}
+  .sev.act{background:rgba(239,68,68,.16);color:var(--red)}
+  .sev.heads{background:rgba(245,158,11,.15);color:var(--amber)}
+  .line{font-size:12.5px;line-height:1.5;color:var(--ink);margin-top:5px}
+  .line .num{font-variant-numeric:tabular-nums;font-weight:700}
+  .line .lvl{color:var(--ink-dim)}
+  .aside{font-size:11px;color:var(--ink-mute);margin-top:4px}
+  .aside.go{color:var(--emerald)}
+
+  /* settled red confirmation strip (context, already shipped WS5-4a) */
+  .conf{border:1px solid var(--red-line);background:var(--red-fill)}
+  .conf .lbl{color:var(--red)}
+  .conf .meta{color:var(--red)}
+  .conf .summary{padding:0 12px 10px;font-size:12px;color:var(--ink-dim)}
+  .conf .summary b{color:var(--ink)}
+
+  /* a calm managing card (dimmed context) */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:12px 13px;opacity:.62}
+  .card .ch{display:flex;justify-content:space-between;align-items:baseline}
+  .card .ch .badge{font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-mute);border:1px solid var(--line);border-radius:999px;padding:2px 7px}
+  .card .hero{margin-top:9px;font-size:13px;color:var(--ink-dim)}
+  .card .hero .lock{color:var(--emerald);font-weight:700}
+
+  .receipt{border:1px solid rgba(52,211,153,.28);background:rgba(52,211,153,.06);border-radius:10px;
+           padding:9px 12px;font-size:12px;color:var(--emerald);margin-bottom:12px;font-weight:600}
+  .sechead{font-size:12px;color:var(--ink-dim);margin:2px 2px 9px;font-weight:600}
+  .divider{height:1px;background:var(--line);margin:14px 2px 12px}
+</style>
+
+<div class="wrap note">
+  <p style="margin-top:0"><b>WS5-8 — Pre-close read (in-app).</b> A ~3:32&nbsp;PM&nbsp;ET advisory computed off a
+  15:30 held scrape, so you can place broker orders <b>in-hours</b> instead of learning at 17:30 that a stop was hit.
+  It is <b>read-only</b> — no in-app buttons; the settled confirmation (the red strip) still happens after the close.
+  The band is <b>amber = provisional</b>, deliberately distinct from the settled red strip. Copy splits
+  <b>“stop hit right now → act”</b> from <b>“on track to close below → heads-up, may firm at the bell.”</b>
+  Zero advisories → band not rendered (zero pixels). It writes <b>no</b> position state and never stamps
+  <code>last_advanced_date</code> — the 17:30 sweep stays the sole writer.</p>
+</div>
+
+<div class="wrap">
+  <p class="caption">State C · expanded — the everyday shape</p>
+  <div class="phone">
+    <div class="tabbar">
+      <span class="t">Morning</span><span class="t">Picks</span>
+      <span class="t on">Positions</span><span class="t">Lookup</span><span class="t">Strength</span>
+    </div>
+
+    <!-- Pre-close advisory band -->
+    <div class="strip band">
+      <div class="head">
+        <span class="lbl"><span class="dot" style="background:var(--amber)"></span>Pre-close read</span>
+        <span class="meta">2 · as of 3:32&nbsp;PM ET ▴</span>
+      </div>
+      <div class="sub">Provisional — firms at the 4:00 close. You can act on hit stops now.</div>
+
+      <div class="item">
+        <div class="row1">
+          <span class="tk">NVT</span>
+          <span class="sev act">Act now</span>
+        </div>
+        <div class="line">Stop <span class="num">hit at 167.44</span> <span class="lvl">· your stop 168.00</span></div>
+        <div class="aside go">Real intraday exit — place your order before the close.</div>
+      </div>
+
+      <div class="item">
+        <div class="row1">
+          <span class="tk">EOG</span>
+          <span class="sev heads">Heads-up</span>
+        </div>
+        <div class="line">On track to <span class="num">close below the 50MA</span> <span class="lvl">· 141.80 vs 142.90</span></div>
+        <div class="aside">Close-referenced — may firm up at the bell. No action required yet.</div>
+      </div>
+    </div>
+
+    <!-- Settled confirmation strip (already shipped WS5-4a) shown for contrast -->
+    <div class="strip conf">
+      <div class="head">
+        <span class="lbl"><span class="dot" style="background:var(--red)"></span>Needs your confirmation</span>
+        <span class="meta">1 · show ▾</span>
+      </div>
+      <div class="summary"><b>OUST</b> gap-down &nbsp;·&nbsp; settled, awaiting your fill</div>
+    </div>
+
+    <div class="sechead">Open positions</div>
+    <div class="card">
+      <div class="ch"><span class="tk" style="opacity:.9">AVGO</span><span class="badge">Managing</span></div>
+      <div class="hero"><span class="lock">🔒 Risk-free</span> · locked +$212 · nothing to do before the close</div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <p class="caption">State B · collapsed (default)</p>
+  <div class="phone">
+    <div class="tabbar">
+      <span class="t">Morning</span><span class="t">Picks</span>
+      <span class="t on">Positions</span><span class="t">Lookup</span><span class="t">Strength</span>
+    </div>
+
+    <div class="strip band">
+      <div class="head">
+        <span class="lbl"><span class="dot" style="background:var(--amber)"></span>Pre-close read</span>
+        <span class="meta">2 · show ▾</span>
+      </div>
+      <div class="sub"><b style="color:var(--red)">NVT</b> stop hit &nbsp;·&nbsp; <b style="color:var(--amber)">EOG</b> nearing 50MA</div>
+    </div>
+
+    <div class="sechead">Open positions</div>
+    <div class="card">
+      <div class="ch"><span class="tk" style="opacity:.9">AVGO</span><span class="badge">Managing</span></div>
+      <div class="hero"><span class="lock">🔒 Risk-free</span> · locked +$212</div>
+    </div>
+
+  </div>
+</div>
+
+<div class="wrap">
+  <p class="caption">State A · calm day — the read still ran, so you get a receipt (no flags)</p>
+  <div class="phone">
+    <div class="tabbar">
+      <span class="t">Morning</span><span class="t">Picks</span>
+      <span class="t on">Positions</span><span class="t">Lookup</span><span class="t">Strength</span>
+    </div>
+
+    <div class="receipt">✓ Pre-close checked at 3:40&nbsp;PM ET · 4 positions · nothing to act on before the close</div>
+
+    <div class="sechead">Open positions</div>
+    <div class="card" style="opacity:.85">
+      <div class="ch"><span class="tk" style="opacity:.9">AVGO</span><span class="badge">Managing</span></div>
+      <div class="hero"><span class="lock">🔒 Risk-free</span> · locked +$212</div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap note">
+  <p style="margin-bottom:0"><b>Tracked for a fast-follow (WS5-8b), not v1:</b> tag a <b>reclaim</b> — a held or recently
+  stopped-out position that reclaims the 20/50MA (shakeout-and-reclaim = re-entry candidate). Reuses the existing
+  <code>reclaim</code> engine state; v1’s data model leaves a <code>category</code> slot for it.</p>
+</div>

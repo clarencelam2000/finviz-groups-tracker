@@ -153,7 +153,7 @@ holds the fixed `*/5 * * * *` trigger).
 | Tick interval (`wrangler.toml [triggers] crons`) | `*/5 * * * *` | How often `scheduled()` fires; the grid every `JOB_SCHEDULE` target time must land on (target minutes must be multiples of 5). |
 | `DISPATCH_WINDOW_MINUTES` | `30` | How long after `collect_preclose`/`collect_eod`'s target ET time the tick keeps considering that job due, and the self-heal retry budget for a delayed/skipped Cloudflare tick. |
 | `PICKS_GATE_WINDOW_MINUTES` (`picksGate.js`) | `120` | How long after picks' 17:00 ET target the dependency gate keeps re-checking collect.yml's EOD run status before giving up and recording a `miss`. Wider than `DISPATCH_WINDOW_MINUTES` since it must cover collect_eod's own self-heal window plus its run time, not just one job's normal margin. |
-| `JOB_SCHEDULE[*].hour` / `.minute` | `collect_morning` 10:05, `preclose_status` 15:30, `collect_preclose` 15:50, `collect_eod` 17:00, `picks` 17:00 (ET, gated — see § Picks dependency gate) | Per-job target wall-clock time. |
+| `JOB_SCHEDULE[*].hour` / `.minute` | `collect_morning` 10:05, `preclose_status` 15:30, `held_preclose` 15:40, `collect_preclose` 15:50, `collect_eod` 17:00, `picks` 17:00 (ET, gated — see § Picks dependency gate), `held` 17:30 | Per-job target wall-clock time. |
 | `JOB_SCHEDULE[*].weekdays` | `[1,2,3,4,5]` (Mon–Fri) for all current jobs | ISO weekday gate per job; a future Sunday-only job (e.g. the roadmap's weekly taxonomy check) would use `[7]`. |
 | `JOB_SCHEDULE[*].gated` | `true` for `picks` only | Marks a job as dependency-gated (routed through `runPicksGate` instead of dispatched directly on window-open). `collect_morning` is ungated (ADR-013 Decision 6) — its input (yesterday's committed picks) already exists at dispatch time. |
 
@@ -166,9 +166,11 @@ for configurable constants.
 |-----|-----------------------|---------|
 | `collect_morning` | 10:05 (ungated) | WS3 morning status — tags prior-session picks with a Triggered/Setting-up/Gapped-through/Failed-breakout/Invalidated/No-quote status (ADR-013); dispatches `collect_morning.yml`; KV key `last_dispatch_collect_morning`. 10:05 ET leaves a full 30-min candle after the open. |
 | `preclose_status` | 15:30 (ungated) | WS3b pre-close "confirming into the close" status (issue #268) — same status engine as `collect_morning`, run again with `--session pre_close`; dispatches `collect_preclose_status.yml`; KV key `last_dispatch_preclose_status`. Distinct from `collect_preclose` below. |
+| `held_preclose` | 15:40 (ungated) | WS5-8 pre-close held advisory scrape — same held-tickers union as `held`, but POSTs to the `finviz-positions` Worker's `/positions/preclose-advisory` endpoint (no D1 `positions`/`ticker_quotes` write, no `/advance` sweep); dispatches `collect_held_preclose.yml`; KV key `last_dispatch_held_preclose`. Threads between `preclose_status` and `collect_preclose` so it isn't a simultaneous second Finviz scrape. |
 | `collect_preclose` | 15:50 | pre-close **settled-data** snapshot before the market close (WS1 backstop for the #259 picks gate; unrelated to `preclose_status`) |
 | `collect_eod` | 17:00 | EOD post-close snapshot |
 | `picks` | 17:00 (gated, window through 19:00) | picks selector — dependency-gated on collect_eod's actual run success (issue #259), not a fixed later time; see § Picks dependency gate |
+| `held` | 17:30 (ungated) | WS5 phase 2 settled-EOD held-tickers quote feed — POSTs to `/ingest/quotes` then triggers `/advance`; dispatches `collect_held.yml`; KV key `last_dispatch_held`. |
 
 ## Monitoring and validation
 
@@ -183,7 +185,7 @@ curl https://finviz-cron-dispatcher.salmonbaby8.workers.dev/last
 ```
 
 `/last` returns
-`{last_dispatch: {collect_morning, preclose_status, collect_preclose, collect_eod, held, picks, picks_gate_check, legacy}}`.
+`{last_dispatch: {collect_morning, preclose_status, held_preclose, collect_preclose, collect_eod, held, picks, picks_gate_check, legacy}}`.
 `collect_preclose`/`collect_eod`/`picks` are each a
 `{ts, status, ok, error, job, workflow, ref, etDate}` record written to KV on
 every successful or attempted dispatch (never on a no-op tick).

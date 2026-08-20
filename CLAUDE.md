@@ -213,7 +213,17 @@ All Playwright-in-cloud work should first read
     the same status engine via `scripts/collect_morning.py --session pre_close`, dispatching the
     thin wrapper `collect_preclose_status.yml`, KV key `last_dispatch_preclose_status`; writes the
     provisional `data/picks/sessions/pre_close{,_latest}.csv` store; distinct from, and does not
-    touch, the `collect_preclose` job below), `collect_preclose`
+    touch, the `collect_preclose` job below), `held_preclose`
+    at 15:40 ET (WS5-8 pre-close held advisory scrape, ungated — reuses the same held-tickers
+    union as `held` below via `scripts/collect_held.py --advisory`, but POSTs to the
+    `finviz-positions` Worker's authenticated `POST /positions/preclose-advisory` endpoint
+    instead of `/ingest/quotes`; that endpoint computes an advisory read and writes NOTHING to
+    D1's `positions`/`ticker_quotes` tables, and `--advisory` skips the `/advance` sweep entirely
+    — no state mutation, safe to run ahead of the close. Dispatches `collect_held_preclose.yml`,
+    KV key `last_dispatch_held_preclose`; writes to D1 via HTTP, **not** git, same as `held`
+    below. 15:40 ET threads between `preclose_status` (15:30) and `collect_preclose` (15:50) so
+    it isn't a simultaneous second Finviz scrape, leaving ~20 min runway to place broker orders
+    before the close), `collect_preclose`
     at 15:50 ET (pre-close snapshot, shifted from legacy `:48`), `collect_eod` at 17:00 ET (EOD
     post-close snapshot, shifted from legacy `:01`), `picks` — also targets 17:00 ET, the same as
     `collect_eod`, not a fixed margin after it. The EOD collect run captures the day's final

@@ -1,6 +1,17 @@
 {
-  "current": "2026.08.20.1",
+  "current": "2026.08.20.2",
   "releases": [
+    {
+      "version": "2026.08.20.2",
+      "date": "2026-08-20",
+      "title": "Pre-close read on Positions",
+      "tag": "feature",
+      "tab": "positions",
+      "notes": [
+        "See at ~3:40pm ET which positions are hitting a stop or about to close below a moving average, with time to act before the close.",
+        "Read-only and provisional — it firms up at the settled 4:00 close, where the usual confirmation strip takes over."
+      ]
+    },
     {
       "version": "2026.08.20.1",
       "date": "2026-08-20",

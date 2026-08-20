@@ -123,9 +123,9 @@ describe('jobsInWindow — pure, no "already dispatched" awareness', () => {
     expect(jobsInWindow(etNow)).toEqual(['collect_morning']);
   });
 
-  it('returns collect_preclose AND preclose_status at 15:50 ET on a weekday (windows overlap: preclose_status 15:30-16:00, collect_preclose 15:50-16:20)', () => {
+  it('returns collect_preclose, preclose_status AND held_preclose at 15:50 ET on a weekday (windows overlap: preclose_status 15:30-16:00, held_preclose 15:40-16:10, collect_preclose 15:50-16:20)', () => {
     const etNow = { hour: 15, minute: 50, weekday: 3, dateStr: '2026-07-15' };
-    expect(jobsInWindow(etNow)).toEqual(['collect_preclose', 'preclose_status']);
+    expect(jobsInWindow(etNow)).toEqual(['collect_preclose', 'preclose_status', 'held_preclose']);
   });
 
   it('returns collect_eod AND picks at 17:00 ET on a weekday (issue #259: picks shares collect_eod\'s target, gated on dependency not a later fixed time)', () => {
@@ -180,6 +180,23 @@ describe('jobsInWindow — pure, no "already dispatched" awareness', () => {
 
   it('held is ungated (no `gated` flag), unlike picks', () => {
     const job = JOB_SCHEDULE.find((j) => j.name === 'held');
+    expect(job.gated).toBeUndefined();
+  });
+
+  it('returns preclose_status AND held_preclose at 15:40 ET (preclose_status window still open, held_preclose window just opened)', () => {
+    const etNow = { hour: 15, minute: 40, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsInWindow(etNow)).toEqual(['preclose_status', 'held_preclose']);
+  });
+
+  it('does not fire held_preclose on a weekend even at 15:40 local time', () => {
+    const saturday = { hour: 15, minute: 40, weekday: 6, dateStr: '2026-07-18' };
+    const sunday = { hour: 15, minute: 40, weekday: 7, dateStr: '2026-07-19' };
+    expect(jobsInWindow(saturday)).toEqual([]);
+    expect(jobsInWindow(sunday)).toEqual([]);
+  });
+
+  it('held_preclose is ungated (no `gated` flag)', () => {
+    const job = JOB_SCHEDULE.find((j) => j.name === 'held_preclose');
     expect(job.gated).toBeUndefined();
   });
 });
@@ -247,5 +264,20 @@ describe('jobsForTick — self-healing dispatch (staff amendment on #258)', () =
   it('does not re-dispatch held already recorded as dispatched today', () => {
     const etNow = { hour: 17, minute: 30, weekday: 3, dateStr: '2026-07-15' };
     expect(jobsForTick(etNow, { held: '2026-07-15', picks: '2026-07-15' })).toEqual([]);
+  });
+
+  it('dispatches held_preclose at 15:40 ET when not yet dispatched today (preclose_status already dispatched)', () => {
+    const etNow = { hour: 15, minute: 40, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsForTick(etNow, { preclose_status: '2026-07-15' })).toEqual(['held_preclose']);
+  });
+
+  it('self-heals a delayed held_preclose tick (16:00 ET, 20 min late, still inside window; preclose_status window just closed, collect_preclose window just opened)', () => {
+    const etNow = { hour: 16, minute: 0, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsForTick(etNow, { preclose_status: '2026-07-15' })).toEqual(['collect_preclose', 'held_preclose']);
+  });
+
+  it('does not re-dispatch held_preclose already recorded as dispatched today', () => {
+    const etNow = { hour: 15, minute: 40, weekday: 3, dateStr: '2026-07-15' };
+    expect(jobsForTick(etNow, { held_preclose: '2026-07-15', preclose_status: '2026-07-15' })).toEqual([]);
   });
 });

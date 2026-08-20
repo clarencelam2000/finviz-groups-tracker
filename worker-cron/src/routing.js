@@ -191,6 +191,19 @@ export const JOB_SCHEDULE = [
     // the settled EOD close a beat to land before the held feed scrapes it, without
     // actually depending on collect.yml's run outcome the way `picks` does.
   },
+  {
+    // WS5-8: 15:40 ET pre-close held scrape → POST /positions/preclose-advisory (advisory only, no
+    // sweep, no state write). Threads between preclose_status (15:30 picks) and collect_preclose
+    // (15:50) so it isn't a simultaneous second Finviz scrape; 15:40 is a near-final print with ~20
+    // min runway to place broker orders before the close. Ungated. Distinct name → distinct KV key
+    // last_dispatch_held_preclose (must be unique even though it shares no workflow with `held`).
+    name: 'held_preclose',
+    workflow: 'held_preclose',
+    weekdays: [1, 2, 3, 4, 5],
+    hour: 15,
+    minute: 40,
+    windowMinutes: DISPATCH_WINDOW_MINUTES,
+  },
 ];
 
 function isWithinWindow(job, etNow) {

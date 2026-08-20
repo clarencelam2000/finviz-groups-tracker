@@ -68,6 +68,7 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `POS_CLOSED_HISTORY_SESSIONS` | `60` | Positions tab (WS5-5): how many trading sessions back the lazy-loaded Closed section fetches (`?closed_within_sessions=60`) once expanded — ~3 trading months. |
 | `POS_EXIT_REASON_LABEL` | see code | Positions tab (WS5-7 / WS5-4a): maps `advance()`'s exit-check reason enum (`stop_hit`, `gap_down_below_stop`, `close_below_50ma`, `close_below_20ma`, `severe_breakdown`, `two_close_below_20ma`) to the plain-English phrase shown in the confirmation strip's expanded reason pill and the Activity trail. |
 | `POS_EXIT_REASON_SHORT` | see code | Positions tab (WS5-4a): terse companion to `POS_EXIT_REASON_LABEL` for the confirmation strip's collapsed one-line summary (e.g. `stop_hit` → "stop hit", `gap_down_below_stop` → "gap-down"). |
+| `POS_PRECLOSE_SEVERITY_META` | see code | Positions tab (WS5-8): pre-close advisory band item severity (`act`/`heads_up`) → pill label + Tailwind classes. Display strings/classes, not a numeric threshold — see § Pre-close read below. |
 
 ## Watchlist (Morning + Positions, WS5 §8b)
 
@@ -225,6 +226,45 @@ zero. See `planning/ws5-7-positions-managing-card.md` §2 for the formula table.
 - Auth is a worker-native bearer token (not Cloudflare Access — the PWA is a cross-origin
   GitHub-Pages page); the whole auth surface is the swap seam `worker-positions/src/auth.js`.
   See `worker-positions/README.md` and ADR-012 for the backend contract.
+
+### Pre-close read (WS5-8)
+
+A ~15:40 ET advisory computed off a held scrape, so the owner can place broker orders
+**in-hours** instead of learning at 17:30 that a stop was hit. Design authority:
+`planning/mocks/ws5-8-preclose-read.html`. Source: owner-bearer `GET
+/positions/preclose` on `finviz-positions`, returning `{ ran_at, n_checked, n_flagged,
+items: [{ trade_id, ticker, category:"exit", severity:"act"|"heads_up", signal, price,
+ref_level }] }`. `ran_at: null` means no read ran yet today (or the fetch failed/signed
+out) — a null-safe empty shape.
+
+- **Fetch:** `posLoadPreclose()` mirrors `posLoadPositions()` — fired alongside it from
+  `renderPositions()`'s loading branch (`state.precloseData === null`), deduped by
+  `state.precloseLoading`. Strictly best-effort: ANY failure (network, 401, 5xx) just
+  leaves `state.precloseData = null`, never blocks or errors the positions render. Reset
+  to `null` on sign-in/sign-out/retry (same convention as `positionsData`).
+- **Render (`advisoryBandHtml`, pure function):** three states, mirroring
+  `posConfirmStripHtml`'s collapsible shape but read-only (no confirm/still-holding
+  buttons — those stay on the settled strip) —
+  - `!ran_at` → renders nothing (zero pixels).
+  - `ran_at` set, `items` empty → a single emerald-tinted receipt line: "✓ Pre-close
+    checked at {time} · {n_checked} positions · nothing to act on before the close".
+  - `items` non-empty → the **amber** band (`border-amber-500/40 bg-amber-500/5`,
+    deliberately distinct from the **red** settled confirmation strip), collapsible via
+    `state.precloseStripExpanded` / `window.posTogglePreclose()` (inline handlers go
+    through `window.*`, not a bare `state.x=` attribute — see the `posSetConfirmFill`
+    comment above `posStripItemHtml` for why). Items sort `act` before `heads_up`. Each
+    row: ticker, severity pill (`POS_PRECLOSE_SEVERITY_META`), copy using
+    `POS_EXIT_REASON_SHORT`/reason phrasing, and an aside — green "place your order
+    before the close" for `act`, muted "may firm up at the bell" for `heads_up`.
+    `price`/`ref_level` reuse `fmtPerSh`; a null `ref_level` omits the "· your stop
+    $Y"/"vs $Y" clause rather than printing `$null`.
+- **Slot order:** header → advisory band → the red confirm strip → cards (advisory sits
+  above the settled strip — provisional first, settled second). Only wired into
+  `renderPositions()`'s main loaded branch, not the empty-positions branch — a signed-in
+  user with zero open/managing positions has nothing the compute could have flagged, so
+  the band (or even the calm-day receipt) would be noise there.
+- **Never writes position state** — no `POST`, no `last_advanced_date` stamp. The 17:30
+  settled sweep (`advance()`) stays the sole writer; this is a read-only preview.
 
 ### Manual entry: "log a position on any ticker" (WS5 §8a)
 
