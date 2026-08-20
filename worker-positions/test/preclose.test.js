@@ -176,6 +176,24 @@ describe("computePreCloseAdvisory", () => {
     expect(await readPreCloseAdvisory(db, "someone-else", "2026-08-20")).toBeNull();
   });
 
+  it("9. entry-day guard: a position entered TODAY is counted but never flagged (mirrors the sweep window)", async () => {
+    // The 17:30 sweep never advances a position on its own entry-day bar (barWindowStart's exclusive
+    // floor — the day's low is largely pre-purchase). The advisory MUST mirror that, or it would
+    // surface a false "act — stop hit" the settled engine then never confirms. Here entry_date ==
+    // trade_date, and the bar's low (94) is below the stop (95): a naive compute would flag stop_hit.
+    seedPos(db, { entry_date: "2026-08-20", current_stop: 95 });
+    const result = await computePreCloseAdvisory(db, {
+      quotes: [quote({ close: 100, sma20: 90, sma50: 80, low: 94, open: 101 })],
+      trade_date: "2026-08-20",
+    });
+    // Counted in the book (receipt), but zero flagged — the window guard skipped evaluation.
+    expect(result).toEqual({ trade_date: "2026-08-20", users: 1, checked: 1, flagged: 0 });
+    const row = await readPreCloseAdvisory(db, "owner", "2026-08-20");
+    expect(row.n_checked).toBe(1);
+    expect(row.n_flagged).toBe(0);
+    expect(row.items).toEqual([]);
+  });
+
   it("8. tenancy: the WHERE clause keys on user_id (single-user harness — see auth.js SINGLE_USER_ID)", async () => {
     // This worker is single-user at present (src/auth.js SINGLE_USER_ID = "owner"; makeD1()'s
     // _seedPosition also defaults user_id to "owner"), so seeding a genuinely second, independently
@@ -253,7 +271,9 @@ describe("routes: POST /positions/preclose-advisory + GET /positions/preclose", 
   });
 
   it("end-to-end: POST then GET returns the computed advisory for today's ET date", async () => {
-    env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "open", user_id: "owner", current_stop: 200 }); // guaranteed stop_hit
+    // entry_date in the past (2020) so it's strictly before today's trade_date — the sweep window
+    // guard (barWindowStart) only evaluates a position whose entry_date < the bar's date.
+    env.POSITIONS_DB._seedPosition({ ticker: "AAPL", state: "open", user_id: "owner", entry_date: "2020-01-01", current_stop: 200 }); // guaranteed stop_hit
     // Use TODAY's ET date so the GET (which always reads today) finds the row the POST wrote.
     const today = etDateStr(new Date());
     const body = { ...batchBody, trade_date: today };

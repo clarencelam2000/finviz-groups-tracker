@@ -14,7 +14,7 @@
 // advance.js verbatim — no engine logic is re-implemented here.
 
 import { advance, normalizeBar, effectiveConfig } from "./advance.js";
-import { loadAdvanceablePositions } from "./sweep.js";
+import { loadAdvanceablePositions, barWindowStart } from "./sweep.js";
 
 // Severity classification of an exit reason (advance.js EXIT_REASONS) for the advisory's "act" vs
 // "heads_up" split. "act" = a genuine intraday-real signal (stop hit, a gap, a one-day crash) —
@@ -83,7 +83,17 @@ export async function computePreCloseAdvisory(db, { quotes, trade_date, now = ne
     const userId = pos.user_id;
     if (!byUser.has(userId)) byUser.set(userId, { checked: 0, items: [] });
     const bucket = byUser.get(userId);
-    bucket.checked++;
+    bucket.checked++; // every open/managing position counts toward "your book" (drives the receipt count)
+
+    // Only FLAG positions the 17:30 settled sweep would actually advance on today's bar. The sweep
+    // gates each position on the exclusive window barWindowStart(pos) < trade_date (sweep.js); a
+    // position entered today (or backdated, or already advanced today) is deliberately NOT advanced
+    // on this bar — its entry-day `low` is largely pre-purchase and would fire a FALSE stop_hit. If
+    // the advisory ignored that guard it would surface an "act — stop hit" the settled engine then
+    // never confirms, directly contradicting the 17:30 result. So mirror the same window here: still
+    // count it in the book above, but never evaluate/flag it.
+    const windowStart = barWindowStart(pos);
+    if (!windowStart || !(trade_date > windowStart)) continue;
 
     const quoteRow = byTicker.get((pos.ticker || "").toUpperCase());
     if (!quoteRow) continue; // no matching bar this run — counted, not reported.

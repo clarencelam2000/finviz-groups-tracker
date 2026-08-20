@@ -237,6 +237,13 @@ i.e. the real sweep becomes a no-op for that day. `test/preclose.test.js`'s disj
 `positions`/`ticker_quotes` are byte-identical before and after a compute — that is the test that
 would catch this exact bug, treat it as load-bearing if you touch this file.
 
+**It mirrors the sweep's entry-day window guard** (lead review, PR-1a). It only *flags* a position
+whose `barWindowStart(pos) < trade_date` — the same exclusive floor `sweep()` uses — so a position
+entered today (or backdated, or already advanced today) is counted toward the receipt's book size but
+never evaluated. Without this a 15:40 bar's largely-pre-purchase entry-day `low` would fire a FALSE
+`stop_hit` in the advisory that the 17:30 sweep then never confirms (the sweep excludes the entry-day
+bar), so the advisory would contradict the settled engine. `test/preclose.test.js` #9 pins it.
+
 An exit surfaces as advance.js's single `exit_signal` event (`event_type: "exit_signal"`, the reason
 in `payload.reason` — NOT a reason-named `event_type`); `PRECLOSE_SEVERITY` maps that reason to
 `"act"` (stop_hit/gap_down_below_stop/severe_breakdown — real intraday) or `"heads_up"`
