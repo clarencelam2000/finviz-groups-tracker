@@ -82,6 +82,8 @@
   .card .hero{margin-top:9px;font-size:13px;color:var(--ink-dim)}
   .card .hero .lock{color:var(--emerald);font-weight:700}
 
+  .receipt{border:1px solid rgba(52,211,153,.28);background:rgba(52,211,153,.06);border-radius:10px;
+           padding:9px 12px;font-size:12px;color:var(--emerald);margin-bottom:12px;font-weight:600}
   .sechead{font-size:12px;color:var(--ink-dim);margin:2px 2px 9px;font-weight:600}
   .divider{height:1px;background:var(--line);margin:14px 2px 12px}
 </style>
@@ -149,7 +151,7 @@
 </div>
 
 <div class="wrap">
-  <p class="caption">State B · collapsed (default) &nbsp;/&nbsp; State A · nothing to act on → no band</p>
+  <p class="caption">State B · collapsed (default)</p>
   <div class="phone">
     <div class="tabbar">
       <span class="t">Morning</span><span class="t">Picks</span>
@@ -170,18 +172,29 @@
       <div class="hero"><span class="lock">🔒 Risk-free</span> · locked +$212</div>
     </div>
 
-    <div class="divider"></div>
+  </div>
+</div>
 
-    <div class="sechead" style="color:var(--ink-mute)">On a calm day the band simply isn’t there — the tab opens straight to your cards:</div>
+<div class="wrap">
+  <p class="caption">State A · calm day — the read still ran, so you get a receipt (no flags)</p>
+  <div class="phone">
+    <div class="tabbar">
+      <span class="t">Morning</span><span class="t">Picks</span>
+      <span class="t on">Positions</span><span class="t">Lookup</span><span class="t">Strength</span>
+    </div>
+
+    <div class="receipt">✓ Pre-close checked at 3:40&nbsp;PM ET · 4 positions · nothing to act on before the close</div>
+
+    <div class="sechead">Open positions</div>
     <div class="card" style="opacity:.85">
       <div class="ch"><span class="tk" style="opacity:.9">AVGO</span><span class="badge">Managing</span></div>
-      <div class="hero"><span class="lock">🔒 Risk-free</span> · locked +$212 · <span style="color:var(--ink-mute)">no pre-close flags</span></div>
+      <div class="hero"><span class="lock">🔒 Risk-free</span> · locked +$212</div>
     </div>
   </div>
 </div>
 
 <div class="wrap note">
-  <p><b>Open decision for you (in the plan):</b> band-only (shows only when something needs attention, above) vs.
-  an always-on “read receipt” that also shows a calm <b>✓ Checked at 3:32 — nothing to act on</b> line so you know the
-  read ran. I lean band-only for v1; the receipt is a small follow-up.</p>
+  <p style="margin-bottom:0"><b>Tracked for a fast-follow (WS5-8b), not v1:</b> tag a <b>reclaim</b> — a held or recently
+  stopped-out position that reclaims the 20/50MA (shakeout-and-reclaim = re-entry candidate). Reuses the existing
+  <code>reclaim</code> engine state; v1’s data model leaves a <code>category</code> slot for it.</p>
 </div>
