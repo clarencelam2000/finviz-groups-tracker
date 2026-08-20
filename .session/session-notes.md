@@ -6,6 +6,27 @@
 
 ---
 
+## 2026-08-20 — WS5-8b watchlist stuck on "ADDING": root-caused missing morning env wiring (branch `claude/mornings-watchlist-processing-ll5vs1`)
+
+**Status: safe to close once the PR merges.** Owner reported watch tickers (TSEM/TER/NVT/STX/ARXS/PGY/AMD/ALAB, added Aug 17) pinned at the top of the Morning tab in the optimistic "ADDING" / "10 mornings left" placeholder — never processed after several days — and suspected broader workstream gaps. He was right. Staff-eng session: lead did the diagnosis (live-D1 query + workflow-run audit + synthesis) and owned tracking/PR; delegated the code trace and the fix build to Sonnet subagents against locked specs, reviewed every line.
+
+**Root cause (confirmed, single point of failure):** `.github/workflows/collect_morning.yml`'s "Collect morning status" step had **no `env:` block** — `POSITIONS_WORKER_URL`/`POSITIONS_INGEST_TOKEN` never reached the runner. `collect_morning.py` gates BOTH the WS5-8b watchlist union AND the `/watchlist/tick` TTL decrement on the same `watchlist_configured = bool(url and token)` flag, so every 10:05 ET run silently ran **picks-only** (green exit, only a `print()`). Sibling workflows `collect_held.yml`/`collect_held_preclose.yml` wire these same secrets correctly — this one was missed. **This was a known-and-dropped TODO** flagged in the 2026-08-15 AND 2026-08-16 notes ("confirm collect_morning.yml has these secrets… without them the morning run is picks-only, no error") — never actioned; P1/P2/P3 all shipped but the last prod-wiring step fell through.
+
+**Live-D1 ground truth (`finviz-positions`, direct Cloudflare API):** all 8 tickers still `sessions_remaining=10`, `updated_at==created_at` (never touched); `watchlist_tick_log` **completely empty** (tick never fired); today's `morning_latest.csv` had **zero `list_category='watchlist'` rows**. The worker-side union is healthy — `ticker_quotes` DID have the watch tickers on 8-17/8-18 (held feed's server-side `heldTickers` union works); only the Python morning wiring was broken.
+
+**What landed (branch `claude/mornings-watchlist-processing-ll5vs1`, base `claude/elegant-babbage-hlxnfy`, 2 commits):**
+- `d567b38` `ops:` — add the step-level `env:` block (mirrors `collect_held.yml`) + a header comment documenting the required secrets. Validated as valid YAML.
+- `0bbac1e` `test:` — `test_collect_morning_workflow_wires_positions_secrets` in `tests/test_collect_morning.py`: parses the workflow, finds the `collect_morning.py` step, asserts its `env` wires both `secrets.POSITIONS_*`. Catches this exact regression class. `pytest tests/test_collect_morning.py` → 42 passed.
+- No PWA change / no release triplet: the front-end join logic (`renderWatchlistSection`/`watchCardHtml`, ticker + `list_category==='watchlist'` match against `morning_latest.csv`) is already correct — data just starts flowing on the next scheduled run. No engine/backend logic touched.
+
+**Product calls (lead, flag if owner disagrees):** (1) **No TTL backfill** — the 8 tickers never lost sessions (tick never fired), so they'll get a full, honest 10-morning countdown from the next run; nothing to reset. (2) Tracked two follow-ups rather than widening this PR — **WS5-8b-MONITOR** (make a skipped union loud, not a silent green exit — the deeper class this bug belongs to) and **WS5-HELD-TIMEOUT** (below).
+
+**Second gap found (separate, flagged to owner):** the **Held Feed** run on **Aug 19 was `cancelled`** after ~21 min (hit `timeout-minutes: 20`) → no `ticker_quotes` bars for 8-19, a one-day gap in the advisory/reclaim MA refs. 8-17/8-18 ran in ~1 min each, so the timeout is anomalous, not the norm. Non-blocking; tracked as **WS5-HELD-TIMEOUT**.
+
+**Next steps:** (1) merge the PR → next 10:05 ET `collect_morning` run wires the secrets, unions the 8 watch tickers into `morning_latest.csv`, ticks TTL → the cards flip from "ADDING" to real status with a counting-down "N mornings left." (2) Verify post-merge on the first weekday morning run (check `watchlist_tick_log` gets a row + `morning_latest.csv` has `list_category='watchlist'` rows). (3) Pick up WS5-8b-MONITOR and WS5-HELD-TIMEOUT when convenient.
+
+---
+
 ## 2026-08-20 — WS5-8 pre-close read: FULLY BUILT (backend + feed + cron + PWA) in PR #345 (#343)
 
 **Status: safe to close once PR #345 merges.** All of WS5-8 landed on ONE branch/PR
