@@ -229,7 +229,7 @@ zero. See `planning/ws5-7-positions-managing-card.md` §2 for the formula table.
 
 ### Pre-close read (WS5-8)
 
-A ~15:30 ET advisory computed off a held scrape, so the owner can place broker orders
+A ~15:40 ET advisory computed off a held scrape, so the owner can place broker orders
 **in-hours** instead of learning at 17:30 that a stop was hit. Design authority:
 `planning/mocks/ws5-8-preclose-read.html`. Source: owner-bearer `GET
 /positions/preclose` on `finviz-positions`, returning `{ ran_at, n_checked, n_flagged,

@@ -6336,14 +6336,32 @@
       const priceStr = isFinite(price) ? fmtPerSh(price).replace('$', '') : '—';
       const refStr = isFinite(refLevel) ? fmtPerSh(refLevel).replace('$', '') : null;
 
+      // Copy is signal-specific (not severity-generic) so a two_close_below_20ma or
+      // severe_breakdown never gets mislabeled as a 50MA/stop-hit event. `act` rows lead with the
+      // realized intraday event; `heads_up` rows lead with "on track to …" since the close hasn't
+      // printed. The ref clause is dropped cleanly when ref_level is null (severe_breakdown).
+      const refClause = refStr ? ` <span class="text-slate-400">· ${priceStr} vs ${refStr}</span>` : '';
       let lineHtml, asideHtml;
       if (it.severity === 'act') {
-        lineHtml = `Stop <span class="tabular-nums font-bold">hit at ${priceStr}</span>`
-          + (refStr ? ` <span class="text-slate-400">· your stop ${refStr}</span>` : '');
+        let lead;
+        if (it.signal === 'stop_hit') {
+          lead = `Stop <span class="tabular-nums font-bold">hit at ${priceStr}</span>`
+            + (refStr ? ` <span class="text-slate-400">· your stop ${refStr}</span>` : '');
+        } else if (it.signal === 'gap_down_below_stop') {
+          lead = `<span class="font-bold">Gapped below your stop</span>` + refClause;
+        } else if (it.signal === 'severe_breakdown') {
+          lead = `<span class="font-bold">Severe 1-day breakdown</span>`
+            + (isFinite(price) ? ` <span class="text-slate-400">· ${priceStr}</span>` : '');
+        } else {
+          lead = `<span class="font-bold">${escapeHtml(POS_EXIT_REASON_LABEL[it.signal] || 'exit signalled')}</span>` + refClause;
+        }
+        lineHtml = lead;
         asideHtml = `<div class="text-[11px] text-emerald-400 mt-1">Real intraday exit — place your order before the close.</div>`;
       } else {
-        lineHtml = `On track to <span class="tabular-nums font-bold">close below the 50MA</span>`
-          + (refStr ? ` <span class="text-slate-400">· ${priceStr} vs ${refStr}</span>` : '');
+        const phrase = it.signal === 'two_close_below_20ma'
+          ? `On track for a <span class="tabular-nums font-bold">2nd close below the 20MA</span>`
+          : `On track to <span class="tabular-nums font-bold">close below the 50MA</span>`;
+        lineHtml = phrase + refClause;
         asideHtml = `<div class="text-[11px] text-slate-500 mt-1">Close-referenced — may firm up at the bell. No action required yet.</div>`;
       }
 
