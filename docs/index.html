@@ -5563,7 +5563,12 @@
     // than every call site re-checking resp.status.
     async function posApi(path, opts = {}) {
       const token = posGetToken();
-      const headers = { 'Content-Type': 'application/json' };
+      const headers = {};
+      // Only set Content-Type when a body is actually going out — the worker treats the
+      // presence of this header as "parse the body as JSON" (worker-positions/src/index.js),
+      // so sending it on a bodyless POST (ack-stop, still-holding) makes request.json() throw
+      // on the empty body and 400 before the route's own handler ever runs.
+      if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
       if (token) headers.Authorization = `Bearer ${token}`;
       const resp = await fetch(`${POSITIONS_API}${path}`, {
         method: opts.method || 'GET',

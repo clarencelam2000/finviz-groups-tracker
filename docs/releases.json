@@ -1,6 +1,16 @@
 {
-  "current": "2026.08.20.3",
+  "current": "2026.08.20.4",
   "releases": [
+    {
+      "version": "2026.08.20.4",
+      "date": "2026-08-20",
+      "title": "Fix: stop-ack \"Couldn't update\"",
+      "tag": "fix",
+      "tab": "positions",
+      "notes": [
+        "Tapping ✓ Updated (or Still holding) always failed with \"Couldn't update — try again\" — fixed."
+      ]
+    },
     {
       "version": "2026.08.20.3",
       "date": "2026-08-20",
