@@ -6,6 +6,44 @@
 
 ---
 
+## 2026-08-20 — Positions tab: fix stop-ack "Couldn't update — try again" (branch `claude/position-tab-display-integrity-vcfx19`)
+
+**Status: safe to close once the PR merges.** Owner reported the EOG position card's "✓ Updated"
+button always showing "Couldn't update — try again" right below itself, and the hero's amber
+"🔒 Risk-free · once you raise your stop / LOCK PENDING" chip stuck open even though the stop had
+clearly moved.
+
+**Root cause:** `posApi()` (`docs/index.html`) unconditionally sent `Content-Type:
+application/json` on every request, including bodyless POSTs (`ack-stop`, `still-holding`). The
+worker (`worker-positions/src/index.js` ~line 425) treats that header's presence as "parse the
+body as JSON" and calls `request.json()` before dispatching to the route handler — on an empty
+body that throws and the route returns 400 `"invalid JSON"` before `ackStop()`/`still-holding`
+logic ever runs. Every tap of ✓ Updated (and Still holding, same code path) 400'd. Because the
+banner's error state and the hero's `acked`-derived lock-pending chip both come from `posDerive`'s
+single `acked` flag (`stop_ack_value` never gets set server-side), one root cause explained both
+symptoms in the screenshot.
+
+**Fix:** only set the `Content-Type` header in `posApi()` when `opts.body !== undefined`. One-line
+behavioral fix plus the required `releases.json` entry (`2026.08.20.4`, tag `fix`) + `sw.js` cache
+bump (`v76`→`v77`) in the same PR per the hard rule.
+
+**Data-integrity check (also requested):** hand-verified the EOG card's `posDerive` math
+(`unrealized`, `openRisk`, `lockedIn` against the card's displayed Entry/Stop/Qty/last-close) —
+all three formulas are internally consistent; the sub-cent deltas I found by hand are raw-vs-
+rounded-display precision (curStop/last carry more decimals server-side than the 2dp UI shows),
+not a data bug. No backend data-integrity issue found.
+
+**Tests:** `pytest tests/` (non-Playwright, 704 passed) + `tests/test_pwa_positions.py -k "ack or
+still"` (Playwright, 4 passed, via the documented `/opt/pw-browsers` revision-symlink workaround
+for this sandbox — not committed) + `tests/test_guide_releases.py` (release/cache sync guard, 5
+passed). No test file changes — existing coverage already posts to `ack-stop`/`still-holding` and
+asserts the trade_id captured; it doesn't simulate the worker's real Content-Type/empty-body
+parsing (client-side mock only), which is why this slipped through originally.
+
+**Next steps:** open PR, none outstanding — nothing else in progress on this branch.
+
+---
+
 ## 2026-08-20 — WS5-8b watchlist stuck on "ADDING": root-caused missing morning env wiring (branch `claude/mornings-watchlist-processing-ll5vs1`)
 
 **Status: safe to close once the PR merges.** Owner reported watch tickers (TSEM/TER/NVT/STX/ARXS/PGY/AMD/ALAB, added Aug 17) pinned at the top of the Morning tab in the optimistic "ADDING" / "10 mornings left" placeholder — never processed after several days — and suspected broader workstream gaps. He was right. Staff-eng session: lead did the diagnosis (live-D1 query + workflow-run audit + synthesis) and owned tracking/PR; delegated the code trace and the fix build to Sonnet subagents against locked specs, reviewed every line.
