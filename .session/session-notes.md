@@ -6,6 +6,66 @@
 
 ---
 
+## 2026-08-20 — WS5-8 pre-close read: backend built (PR-1), PWA next (#343)
+
+**Status: don't close yet — PR-1 open on `claude/ws5-7-positions-pickup-64506x`, PWA (PR-2) not started;
+owner sign-off pending on the live-D1 migration.** Staff-eng session driving WS5-8 (in-app pre-close
+read). Owner chose **in-app first** over WS5-4b (push) — so v1 delivers "act before the bell" value with
+**no VAPID/secrets/crypto**. Lead owned design/taste/mock/review + caught a real bug; delegated both
+boots-on-ground builds to Sonnet subagents against locked specs (`scratchpad/ws5-8-{worker,feed}-spec.md`)
+and reviewed every line.
+
+**The feature:** at 15:40 ET a new held scrape POSTs near-final bars to a service-token
+`POST /positions/preclose-advisory`; that endpoint runs the **pure `advance()`** per open/managing held
+position and upserts ONLY the computed advisory into a new `preclose_advisory` D1 table (`0004`). It
+writes NOTHING to `positions`/`ticker_quotes` and never stamps `last_advanced_date` — the 17:30 settled
+sweep stays the sole writer (this disjointness is the whole design; it dodges the idempotency collision
+where a 15:40 mutation would no-op the 17:30 sweep). PWA reads owner-bearer `GET /positions/preclose` →
+amber read-only band splitting **act-now** (stop_hit/gap_down — real intraday) from **heads-up**
+(close_below_50ma/two_close_below_20ma — may firm at bell) + a calm-day **read receipt** (owner wanted
+both). Read-only — no in-app actions; the settled 17:30 confirmation strip stays the sole action surface.
+
+**Owner decisions this session:** (1) in-app first, push (WS5-4b) later. (2) **Timing 15:40 ET** — owner
+flagged the 15:30 `preclose_status` + 15:50 `collect_preclose` collision; 15:40 threads between them
+(no simultaneous 2nd Finviz scrape, near-final print, ~20min runway). (3) **Both band + receipt** in v1.
+(4) Migration IS necessary (PWA reads minutes later; `positions.meta` breaks disjointness, KV needs a
+binding) — one tiny table, applied out-of-band. (5) **Reclaim → WS5-8-RECLAIM (#344)** fast-follow, not
+v1 scope-creep; v1 leaves a `category` slot.
+
+**What landed (PR-1, backend+feed+cron — NOT user-visible, backward-compatible):**
+- **Worker (`worker-positions/`):** `0004_preclose_advisory.sql` + `src/preclose.js`
+  (`computePreCloseAdvisory`/`readPreCloseAdvisory`/`PRECLOSE_SEVERITY`) + `POST
+  /positions/preclose-advisory` (service token) + `GET /positions/preclose` (owner bearer). **260 vitest**
+  (+15). Disjointness test (#5) asserts positions/ticker_quotes byte-identical before/after.
+- **Lead-caught bug:** compute called `advance()` directly, bypassing the sweep's entry-day guard → a
+  position entered TODAY would fire a false `stop_hit` off its pre-purchase low that the 17:30 sweep never
+  confirms. Fixed to mirror `barWindowStart` (still counts toward the receipt, never flagged); regression
+  test #9. Committed as a separate `fix:` on top of the subagent's work.
+- **Feed+cron:** `collect_held.py --advisory` (POSTs to the advisory path, skips `/advance`; `post_quotes`
+  gained an optional `path=`), new `collect_held_preclose.yml` (`workflow_dispatch`-only), `worker-cron`
+  `held_preclose` JOB_SCHEDULE @15:40 (no new CF trigger) + WORKFLOWS map. **14 pytest + 99 worker-cron.**
+  3-places docs (root CLAUDE.md Automation, worker-cron README, scripts/CLAUDE.md). Fixed a misleading
+  "0 row(s)" advisory log line (endpoint returns no `written`).
+
+**Verification (lead re-ran):** worker 260/260 vitest (Node 22); collect_held 14/14 pytest; worker-cron
+99/99 (Node 20). The pre-existing routing tests the feed subagent modified were legit (the 15:40 window
+genuinely overlaps 15:30/15:50 — not green-forcing; verified the diffs).
+
+**Next steps:** (1) **owner sign-off to apply `0004_preclose_advisory.sql` to live D1** (Cloudflare D1 API,
+token in env — same discipline as any prod schema write). (2) Open + merge PR-1 → `deploy-workers.yml`
+auto-deploys the worker; the cron/workflow land on default. (3) **PR-2 (PWA)** — `advisoryBandHtml()` +
+receipt into `renderPositions()` per the mock, amber provisional chrome, release triplet, Playwright.
+Deploy-ordering: PR-1 must deploy before PR-2 reads `GET /positions/preclose`. (4) e2e gated on a live
+weekday 15:40 scrape hitting a held position with a signal (same WS5 data gate).
+
+**Note:** WS5-4b VAPID handoff still valid but note its reserved `0004` migration number is now taken by
+WS5-8 — bump WS5-4b's push-subscriptions migration to `0005` when that session starts (flagged in SPRINT).
+
+**Mock:** `planning/mocks/ws5-8-preclose-read.html` (artifact published this session). Issues: #343
+(WS5-8), #344 (reclaim fast-follow).
+
+---
+
 ## 2026-08-20 — WS5-4a confirmation strip + WS5-5 recently-closed (PRs #340/#341/#342); WS5-4b handed off
 
 **Status: safe to close after PR #342 merges. WS5-4b (VAPID push) is the ONLY remaining WS5 piece —

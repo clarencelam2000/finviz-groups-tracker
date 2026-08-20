@@ -52,7 +52,11 @@ standard ECDSA P-256 pair; generation is a local crypto op, not a Cloudflare API
 
 ## What to build (backend: `worker-positions/`)
 
-1. **Migration `0004_push_subscriptions.sql`** (applied out-of-band, like 0001–0003 — `wrangler deploy`
+> **⚠ Migration number update (2026-08-20):** WS5-8 shipped first and took `0004_preclose_advisory.sql`.
+> Use **`0005_push_subscriptions.sql`** here (not `0004`), and add it to `test/helpers/d1.js`'s
+> `MIGRATIONS` array after `0004`. Everything else below is unchanged.
+
+1. **Migration `0005_push_subscriptions.sql`** (applied out-of-band, like 0001–0004 — `wrangler deploy`
    does NOT run migrations; `test/helpers/d1.js`'s `MIGRATIONS` array runs it in tests). Table:
    `push_subscriptions(id, user_id, endpoint UNIQUE, p256dh, auth, created_at, last_seen_at, [ua])`,
    user-scoped (private, like `watchlist` — mirror that privacy posture, NOT `ticker_quotes`'s public one).
