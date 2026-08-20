@@ -6371,6 +6371,10 @@
         // immediately as a grace card via the live re-fetch below; this just keeps the Closed
         // section itself consistent rather than serving a stale snapshot from before the close).
         state.closedData = null;
+        // If the Closed section is already expanded, posToggleClosed() won't fire again to
+        // pick up the invalidation above — re-fetch directly so it doesn't render a false
+        // "No closed trades" empty state until the user manually collapses/re-expands.
+        if (state.closedExpanded) posLoadClosed();
         await posLoadPositions(); // re-renders on completion
       } catch (e) {
         if (e && e.unauth) {
