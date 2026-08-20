@@ -27,6 +27,9 @@ GitHub-Actions held feed. See README § Auth — the Cloudflare-Access-vs-bearer
    + `src/watchlist.js` + the `/watchlist*` routes + `heldTickers()` union. P2 (`pick_status.py`
    reclaim state + `collect_morning.py` union) and P3 (PWA) are separate, not-yet-started phases —
    see `planning/watchlist-build-brief-8b.md`.
+6. ✅ **Pre-close advisory (WS5-8, PR-1a) — backend done.** `migrations/0004_preclose_advisory.sql` +
+   `src/preclose.js` + `POST /positions/preclose-advisory` (service token) + `GET
+   /positions/preclose` (Bearer). PWA read (PR-1b) is separate, not-yet-started.
 
 ## The engine: `src/advance.js` (phase 3a)
 
@@ -217,6 +220,36 @@ Python (P2, not yet built) and is unioned into `scripts/collect_morning.py`'s sc
 - **Migration 0003 is applied out-of-band**, exactly like 0001/0002 — `wrangler deploy` does not run
   it. `test/helpers/d1.js`'s `MIGRATIONS` array runs it for real in tests (real SQLite, real schema),
   plus `_seedWatchlist()`/`_watchlist()` test-only conveniences mirroring `_seedQuote()`/`_quotes()`.
+
+## The pre-close advisory: `src/preclose.js` (WS5-8)
+
+A 15:40 ET GitHub-Actions job scrapes near-final bars and calls `POST /positions/preclose-advisory`
+(service token). `computePreCloseAdvisory(db, {quotes, trade_date, now})` runs the SAME pure
+`advance(pos, bar, cfg)` the 17:30 sweep uses, but calls it **in memory only** — the returned
+`position` is discarded, never persisted — against each `open`/`managing` position's currently
+persisted state. It writes to exactly ONE new table, `preclose_advisory` (one row per `(user_id,
+trade_date)`, upserted so a self-healing re-dispatch is last-write-wins).
+
+**The disjointness invariant is the whole point.** This module NEVER calls `ingestQuotes()` or
+`persistAdvance()` and never stamps `positions.last_advanced_date` — a write to `ticker_quotes` or
+that column at 15:40 would make the 17:30 settled sweep's `loadBarsAfter()` window already-consumed,
+i.e. the real sweep becomes a no-op for that day. `test/preclose.test.js`'s disjointness test asserts
+`positions`/`ticker_quotes` are byte-identical before and after a compute — that is the test that
+would catch this exact bug, treat it as load-bearing if you touch this file.
+
+An exit surfaces as advance.js's single `exit_signal` event (`event_type: "exit_signal"`, the reason
+in `payload.reason` — NOT a reason-named `event_type`); `PRECLOSE_SEVERITY` maps that reason to
+`"act"` (stop_hit/gap_down_below_stop/severe_breakdown — real intraday) or `"heads_up"`
+(close_below_50ma/two_close_below_20ma — close-referenced, may still firm by the real close).
+`readPreCloseAdvisory(db, user_id, trade_date)` is `GET /positions/preclose`'s (Bearer) read path —
+null-safe empty shape when nothing has run yet today, never a 404.
+
+**Spec deviation, worth knowing if you touch the ingest route:** `validateIngestBatch()`'s output
+puts `trade_date` at the BATCH level, not per-row — each validated `rows[i]` has no `trade_date`
+field (`ingestQuotes()` only stamps it on at INSERT time). `computePreCloseAdvisory` stamps the
+batch's `trade_date` onto each row before calling `normalizeBar()` (which requires `row.trade_date`
+to stay a pure function of the row — see advance.js's own comment on that). Don't be surprised the
+`quotes` param here isn't literally `ticker_quotes`-row-shaped on its own.
 
 ## Tests
 

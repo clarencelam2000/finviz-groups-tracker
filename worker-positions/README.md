@@ -120,6 +120,8 @@ by construction (the engine runs exactly when fresh bars exist) and keeps us cle
 | `DELETE` | `/watchlist/<id>` | Bearer | WS5 §8b P1: remove a watch entry (also called on graduation, right after `POST /positions` succeeds). |
 | `GET` | `/watchlist-tickers` | Service token | WS5 §8b P1: for `scripts/collect_morning.py` — active watch tickers + `level_type` + latest-bar refs. **Omits `level_value`** (privacy — see `src/watchlist.js::watchlistTickerRefs`). |
 | `POST` | `/watchlist/tick` | Service token | WS5 §8b P1: idempotent-per-ET-date TTL decrement + expire + purge (`src/watchlist.js::tickWatchlist`); optional body `{date}` overrides the derived ET date. |
+| `POST` | `/positions/preclose-advisory` | Service token | WS5-8: the 15:40 ET provisional-bar batch (SAME shape as `/ingest/quotes` — `{trade_date, collected_at, quotes:[...]}`, reuses `validateIngestBatch`). Runs the pure `advance()` **in memory only** against each `open`/`managing` position + its matching bar and upserts the classified result into `preclose_advisory`. Never writes `ticker_quotes` or `positions` (`src/preclose.js`). Returns counts only: `{trade_date, users, checked, flagged}`. |
+| `GET` | `/positions/preclose` | Bearer | WS5-8: today's (ET) pre-close advisory read for the caller — `{ran_at, n_checked, n_flagged, items}`. Null-safe: returns the same shape with `ran_at:null` and empty `items` if no advisory has run yet today, never a 404. |
 
 **Two auth paths, one seam.** The interactive `Bearer` rows above are the owner's HMAC login token
 (`authenticate()`); the machine rows use a **separate service token** (`authenticateService()`,
@@ -145,6 +147,24 @@ only runs forward from the next fed bar.
 Validation rejects `initial_stop >= entry_price` (long-only: R = entry − stop must be > 0).
 Each call creates an **independent lot** — "I took it" twice on one ticker makes two rows on purpose
 (§ 3a scale-ins); there is deliberately no `(user_id, ticker)` uniqueness assumption.
+
+## Pre-close advisory (WS5-8)
+
+A 15:40 ET GitHub-Actions job scrapes near-final bars for held tickers and POSTs them to `POST
+/positions/preclose-advisory`. That route runs the **pure** `advance(pos, bar, cfg)` engine against
+each `open`/`managing` position's CURRENT persisted state and the provisional bar — **in memory
+only** — and stores the classified result in a new `preclose_advisory` table (migration 0004,
+applied out-of-band like 0001-0003). It does **not** call `ingestQuotes()` or `persistAdvance()`, so
+`ticker_quotes`/`positions`/`position_events` are byte-identical before and after — the 17:30 settled
+sweep (`src/sweep.js`) stays the sole writer of those three. This is load-bearing: a 15:40 write to
+`ticker_quotes` or `positions.last_advanced_date` would make the 17:30 sweep a no-op.
+
+Each item is `{trade_id, ticker, category:"exit", severity, signal, price, ref_level}`. `severity`
+is `"act"` (a real intraday signal — stop hit/gap/severe breakdown) or `"heads_up"` (a
+close-referenced MA rule that may still firm up by the real close) — see `PRECLOSE_SEVERITY` in
+`src/preclose.js`. `category` is always `"exit"` in v1 (WS5-8b will add `"reclaim"`). `GET
+/positions/preclose` (owner Bearer) reads today's ET-date row, or a null-safe empty shape if no
+15:40 run has landed yet.
 
 ## Auth (§ Auth — the one security decision, owner call 2026-08-13)
 
