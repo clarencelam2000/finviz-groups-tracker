@@ -266,6 +266,31 @@ out) — a null-safe empty shape.
 - **Never writes position state** — no `POST`, no `last_advanced_date` stamp. The 17:30
   settled sweep (`advance()`) stays the sole writer; this is a read-only preview.
 
+### Exit alerts — VAPID web push (WS5-4b)
+
+A quiet, set-once footer affordance on the Positions tab (`#pos-alerts`, `posRenderAlerts()` /
+`posEnableAlerts()` / `posDisableAlerts()`), rendered after the closed section in every signed-in,
+non-transient branch of `renderPositions()` — never above the confirmation strip. **Data-less
+only**: the service worker (`docs/sw.js` `push` handler) shows one generic "Exit signal"
+notification with no payload (no RFC 8291 encryption, no ticker/tier in the push itself) — the
+in-app confirmation strip is the source of truth for WHICH position needs action; there is no
+Tier-2 rich-payload UI. Tapping the notification (`notificationclick`) focuses an existing window
+and `postMessage`s `{type:'OPEN_POSITIONS'}` (handled by the SW-message listener next to
+`SW_RELOAD`), or falls back to `self.clients.openWindow('...#positions')` on a cold start, which
+`index.html`'s boot code picks up via a `location.hash === '#positions'` check and calls
+`switchTab('positions')`.
+
+Subscribe/unsubscribe reuse `posApi` (Bearer + 401 handling) against the backend routes `POST
+/push/subscribe` / `POST /push/unsubscribe` on `finviz-positions` (`worker-positions/`, PR A of
+this workstream — not touched here). `VAPID_PUBLIC_KEY` (near `POSITIONS_API`) must stay in sync
+with the worker's `VAPID_PUBLIC_KEY` secret/var; it's safe to ship client-side (the private key
+never leaves the worker).
+
+**iOS requirement:** Safari supports web push only for a Home-Screen-installed PWA (iOS ≥16.4) —
+in a plain browser tab `window.PushManager` is undefined. `posIsIOS()` + `posIsStandalone()` gate
+the affordance to show "Add to Home Screen first" guidance instead of a dead-end "not supported"
+message in that case.
+
 ### Manual entry: "log a position on any ticker" (WS5 §8a)
 
 Signed-in Positions tab renders a collapsed-by-default expander ("＋ Log a position manually") above
