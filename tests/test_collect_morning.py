@@ -659,3 +659,37 @@ def test_should_tick_watchlist_false_for_pre_close():
 
 def test_should_tick_watchlist_false_for_unknown_session():
     assert cm.should_tick_watchlist("some_future_session") is False
+
+
+# Regression guard (2026-08-20): the "Collect morning status" step in
+# collect_morning.yml had no env: block, so POSITIONS_WORKER_URL/POSITIONS_INGEST_TOKEN
+# were never exported to the runner. collect_morning.py gates both the WS5 §8b
+# watchlist union and the /watchlist/tick TTL decrement on
+# watchlist_configured = bool(worker_url and token), so this silently no-opped every
+# scheduled run. Assert the workflow step wires both secrets so this can't regress
+# without a test failure.
+
+def test_collect_morning_workflow_wires_positions_secrets():
+    import yaml
+
+    workflow_path = (
+        Path(__file__).resolve().parents[1]
+        / ".github"
+        / "workflows"
+        / "collect_morning.yml"
+    )
+    workflow = yaml.safe_load(workflow_path.read_text())
+
+    steps = workflow["jobs"]["morning"]["steps"]
+    morning_steps = [
+        s for s in steps if "collect_morning.py" in s.get("run", "")
+    ]
+    assert len(morning_steps) == 1, "expected exactly one step invoking collect_morning.py"
+    step = morning_steps[0]
+
+    env = step.get("env")
+    assert env is not None, "Collect morning status step is missing an env: block"
+    assert "POSITIONS_WORKER_URL" in env
+    assert "secrets." in env["POSITIONS_WORKER_URL"]
+    assert "POSITIONS_INGEST_TOKEN" in env
+    assert "secrets." in env["POSITIONS_INGEST_TOKEN"]

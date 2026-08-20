@@ -4,6 +4,12 @@ name: Morning Status
 # Failed-breakout/Invalidated/No-quote) via scripts/collect_morning.py, writing the
 # PROVISIONAL store data/picks/sessions/morning{,_latest}.csv.
 #
+# Required secrets (repo owner sets these out of band — NOT touched by wrangler deploy
+# or by this workflow): POSITIONS_WORKER_URL, POSITIONS_INGEST_TOKEN. Both must be
+# configured in the repo's Actions secrets for the WS5 §8b personal-watchlist union
+# and TTL tick to run — without them, collect_morning.py's watchlist_configured gate
+# silently no-ops (watch tickers never get list_category='watchlist', TTL never ticks).
+#
 # PRIMARY scheduler: the Cloudflare `finviz-cron-dispatcher` Worker's in-code
 # `collect_morning` job (worker-cron/src/routing.js JOB_SCHEDULE), firing at 10:05 ET,
 # Mon-Fri, UNGATED (ADR-013 Decision 6 — no picks-style dependency gate: the input,
@@ -60,6 +66,9 @@ jobs:
         # into `run:` (it's substituted before the shell ever sees it, so there is no
         # quoting/injection concern the way there would be with untrusted string
         # inputs) — verified against GitHub's expression docs, not just assumed.
+        env:
+          POSITIONS_WORKER_URL: ${{ secrets.POSITIONS_WORKER_URL }}
+          POSITIONS_INGEST_TOKEN: ${{ secrets.POSITIONS_INGEST_TOKEN }}
         run: python scripts/collect_morning.py ${{ inputs.dry_run && '--dry-run' || '' }}
       - name: Upload debug HTML on parse failure
         if: failure()
