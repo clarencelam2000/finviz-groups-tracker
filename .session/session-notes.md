@@ -25,6 +25,64 @@
 
 **Next steps:** (1) merge the PR → next 10:05 ET `collect_morning` run wires the secrets, unions the 8 watch tickers into `morning_latest.csv`, ticks TTL → the cards flip from "ADDING" to real status with a counting-down "N mornings left." (2) Verify post-merge on the first weekday morning run (check `watchlist_tick_log` gets a row + `morning_latest.csv` has `list_category='watchlist'` rows). (3) Pick up WS5-8b-MONITOR and WS5-HELD-TIMEOUT when convenient.
 
+## 2026-08-20 — WS5-4b VAPID push SHIPPED (v1 Tier-1 data-less): PR #346 (backend, merged+deployed) + PR B (PWA)
+
+**Status: safe to close once PR B (PWA) merges.** WS5-4b was the LAST remaining WS5 piece — the exit
+loop now has a push channel end-to-end. Staff-eng session: lead owned the Tier-1-vs-payload product
+call + the subscribe-affordance UX (wrote it as code) + line-by-line review of both builds; delegated
+both boots-on-ground builds to Sonnet subagents against locked specs (`scratchpad/ws5-4b-{backend,pwa}-spec.md`)
+and reviewed every line. Owner ratified **Tier-1 data-less v1** + granted distil repo access + signed
+off the live secret write in advance + told lead to own the merge. Branch `claude/ws5-positions-tab-y8po9i`.
+
+**The decisive scoping call (owner-ratified): v1 = Tier-1 data-less ONLY.** A data-less push carries no
+`event.data`, so the service worker can only show ONE generic notification — it CANNOT differentiate
+Tier-1 (loud) from Tier-2 (silent) or name the ticker. The whole two-tier §8 design therefore *requires*
+RFC 8291 payload encryption to exist at all; firing generic Tier-2 reminders on a data-less channel would
+cause the exact alert-fatigue §8 avoids. So v1 ships the one high-value nudge ("🚨 exit signal — open to
+confirm", drives to the strip which names the ticker); Tier-2 + earnings + ticker-named payload are a
+tracked fast-follow (#348). This matches distil's own shipped posture. The distil engineer's notes also
+settled the handoff's open question: `web-push` npm can't run on workerd → hand-rolled WebCrypto (ported
+distil's proven `webpush.ts` VAPID signer verbatim; lead round-trip-verified the keypair, 64-byte JOSE
+sig, verify=true).
+
+**What landed — PR #346 (backend, MERGED + deployed + verified live):**
+- `0005_push_subscriptions.sql` (private user-scoped) — **applied to live D1 out-of-band via CF API**
+  (owner sign-off); table+index verified present. `src/push.js` (VAPID JWT signer + `sendPush` ported
+  verbatim; store; `dispatchExitPushes` — never-throws, `push_sent`-event idempotency keyed
+  `(trade_id,trade_date)`, 410/404 self-prune, marker on success only, per-intent try/catch **lead
+  hardening fixup**). Owner-bearer `/push/subscribe`·`/push/unsubscribe`. Sweep collects Tier-1 intent at
+  the `closing` edge (`applied && !dry_run`), dispatches once **post-commit/best-effort** outside any D1
+  batch; adds `pushed` count. `wrangler.toml [vars]` public key+subject; `VAPID_PRIVATE_KEY` live secret.
+  **274 vitest** (260+14). 8/8 CI checks green → merged (#346, commit 5df7961) → `deploy-workers.yml`
+  run #26 success → **verified live on Cloudflare** (`modified_on` 21:08:03Z matches; unauth
+  `POST /push/subscribe` → 401 = route deployed, not 404).
+- **PR B (PWA — THIS session, ready to commit/merge):** quiet set-once footer affordance on Positions
+  (`posRenderAlerts`/`window.posEnableAlerts`/`window.posDisableAlerts`) — the subagent caught+fixed a
+  real IIFE-scope bug via its own Playwright test (inline `onclick` needs `window.*`, same class as the
+  #341 fix). `sw.js` `push`/`notificationclick` (data-less generic notif → focus+`postMessage
+  OPEN_POSITIONS`, or `openWindow('#positions')` cold-start → boot hash-check). iOS install-to-home-screen
+  guidance. Release triplet `2026.08.20.3` / sw v75→v76 / `docs/CLAUDE.md`. `test_pwa_push.py` (3, in
+  `tests.yml --ignore`). Lead re-verified: `node --check` script+sw.js OK, release guard 5/5. Subagent ran
+  the 3 push tests in Chromium (pass) + re-ran positions/preclose green; 7 pre-existing Morning failures
+  confirmed pre-existing via `git stash`.
+
+**Ops done this session:** VAPID keypair generated+verified; `VAPID_PRIVATE_KEY` written live to
+`finviz-positions` (owner advance sign-off); `0005` migration applied live+verified; PR #346 merged +
+deploy verified on Cloudflare (not just green CI).
+
+**Deferred + tracked (nothing orphaned):** #348 (WS5-4b-PAYLOAD — RFC 8291 payload + Tier-2 + earnings;
+SPRINT row added) and #349 (WS5-8-PUSH — push the 15:40 pre-close act-now band, the highest-value push;
+SPRINT row added). Both are GitHub issues + SPRINT rows.
+
+**Next steps:** merge PR B (deploy-ordering already satisfied — backend live). Then a fresh session can
+take #348 (payload/Tier-2) — the higher-leverage of the two follow-ups — or #349 (pre-close push). e2e for
+the whole channel is gated on a live weekday 17:30 held bar driving a real `closing` transition (same WS5
+data gate) + a subscribed device.
+
+**Note:** distil cloned at `/home/user/distil` (in-session scope) as the VAPID reference — external repo,
+not this project. Owner confirmed distil pushes reach their iPhone (de-risks iOS delivery, which lead
+can't e2e here). This notes entry + SPRINT ride in PR B so they land on default when it merges.
+
 ---
 
 ## 2026-08-20 — WS5-8 pre-close read: FULLY BUILT (backend + feed + cron + PWA) in PR #345 (#343)

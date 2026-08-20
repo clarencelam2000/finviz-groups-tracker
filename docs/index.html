@@ -433,6 +433,17 @@
     const WATCHLIST_EXPIRING_AT = 1;    // sessions_remaining <= this => amber "expiring" cue on the card.
     const WATCHLIST_GAUGE_PAD = 0.08;   // fraction of the price domain padded on each end of the levels gauge so end markers aren't clipped.
 
+    // WS5-4b VAPID web-push. Public key (applicationServerKey) — safe to ship to clients; the private
+    // key is a finviz-positions Worker secret. Keep in sync with wrangler.toml [vars] VAPID_PUBLIC_KEY.
+    const VAPID_PUBLIC_KEY = 'BIlHEo6AR0obzj6aFUPsrRxCd_U473Q4EoCzaXPwPqLIH583hyFwiMXH1k8yBElGNwowiR8DKQ-nJ39vETP67yc';
+
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const raw = atob(base64);
+      return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+    }
+
     // localStorage keys for Lookup tab persistence (Ideas 5+7, planning/lookup-search-enhancements.md).
     // fvg_lookup_recent: [{type:'group'|'ticker', name, groupKey?}] newest-first, max RECENT_MAX; pinned items exempt.
     // fvg_lookup_pinned: [{type:'group'|'ticker', name, groupKey?}] no cap; survives recents overflow.
@@ -5567,6 +5578,89 @@
       return resp.json();
     }
 
+    // ── WS5-4b exit-alerts (VAPID push) — a quiet, set-once footer affordance on the Positions tab.
+    // Data-less: the SW shows a generic notification; this only manages the subscription lifecycle.
+    function posAlertsSupported() {
+      return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+    }
+    function posIsIOS() {
+      return /iP(hone|ad|od)/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    }
+    function posIsStandalone() {
+      return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    }
+
+    // Populates #pos-alerts (a footer container renderPositions injects). Async because it inspects the
+    // live pushManager subscription. Never throws into the render path.
+    async function posRenderAlerts() {
+      const box = document.getElementById('pos-alerts');
+      if (!box) return;
+      if (!posAlertsSupported()) {
+        // iOS ≥16.4 supports web push ONLY for a Home-Screen-installed PWA; in a plain Safari tab
+        // PushManager is undefined. Guide the install rather than dead-ending "not supported".
+        box.innerHTML = (posIsIOS() && !posIsStandalone())
+          ? `<div class="text-[11px] text-slate-500">🔔 To get exit alerts on iPhone: tap Share → Add to Home Screen, then open the app from that icon and turn them on here.</div>`
+          : '';
+        return;
+      }
+      if (Notification.permission === 'denied') {
+        box.innerHTML = `<div class="text-[11px] text-slate-500">🔕 Exit alerts are blocked — allow notifications for this site in your browser settings to turn them on.</div>`;
+        return;
+      }
+      let subscribed = false;
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        subscribed = !!sub && Notification.permission === 'granted';
+      } catch { subscribed = false; }
+      if (subscribed) {
+        box.innerHTML = `<div class="flex items-center justify-between gap-2">
+          <span class="text-[11px] text-slate-400">🔔 Exit alerts on — you'll get a push when a position hits an exit signal.</span>
+          <button onclick="posDisableAlerts()" class="text-[11px] text-slate-500 hover:text-slate-300 underline shrink-0">Turn off</button>
+        </div>`;
+        return;
+      }
+      box.innerHTML = `<div class="flex items-center justify-between gap-2">
+          <span class="text-[11px] text-slate-400">Get a push when a position hits an exit signal.</span>
+          <button onclick="posEnableAlerts()" class="text-[11px] font-semibold px-3 py-1.5 rounded-lg bg-slate-700 text-slate-100 hover:bg-slate-600 shrink-0">🔔 Turn on exit alerts</button>
+        </div>
+        <div id="pos-alerts-status" class="text-[11px] text-slate-500 mt-1"></div>`;
+    }
+
+    // window.* (not a plain function decl) -- these are called from inline onclick="" attributes,
+    // which execute in global scope; this codebase's convention (see window.posDoLogin, etc.).
+    window.posEnableAlerts = async function () {
+      const status = document.getElementById('pos-alerts-status');
+      const setS = (t) => { if (status) status.textContent = t; };
+      try {
+        if (!posAlertsSupported()) { setS(posIsIOS() ? 'Add the app to your Home Screen first on iPhone.' : 'Not supported in this browser.'); return; }
+        const perm = await Notification.requestPermission();
+        if (perm !== 'granted') { setS('Notification permission denied.'); return; }
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+        const raw = sub.toJSON();
+        await posApi('/push/subscribe', { method: 'POST', body: { endpoint: raw.endpoint, keys: raw.keys } });
+        posRenderAlerts();
+      } catch (e) {
+        if (e && e.unauth) { setS('Sign in to turn on alerts.'); return; }
+        setS(`Couldn't enable: ${(e && e.message) || 'unknown error'}`);
+      }
+    };
+
+    window.posDisableAlerts = async function () {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          const endpoint = sub.endpoint;
+          await sub.unsubscribe().catch(() => {});
+          try { await posApi('/push/unsubscribe', { method: 'POST', body: { endpoint } }); } catch {}
+        }
+      } catch {}
+      posRenderAlerts();
+    };
+
     // ── WS5 §8b P3: personal watchlist worker client ────────────────────────────────────
     // All owner-bearer, reuse posApi (handles Bearer + 401 -> {unauth:true}).
 
@@ -6709,8 +6803,10 @@
       if (liveRows.length === 0 && graceRows.length === 0 && closingRows.length === 0) {
         el.innerHTML = manualEntryHtml() + watchAddHtml() + header
           + `<p class="text-slate-400 text-sm text-center py-8">No open positions yet — log one from the Morning tab.</p>`
-          + closedSection;
+          + closedSection
+          + `<div id="pos-alerts" class="mt-4 pt-3 border-t border-slate-800/60"></div>`;
         manualRecompute();
+        posRenderAlerts();
         return;
       }
 
@@ -6741,8 +6837,10 @@
       // there anyway; keeping it out of that branch avoids fetching/rendering a receipt line
       // for an account with nothing to manage.
       const advisoryBand = advisoryBandHtml(state.precloseData);
-      el.innerHTML = manualEntryHtml() + watchAddHtml() + header + advisoryBand + strip + cardsHtml + closedSection;
+      el.innerHTML = manualEntryHtml() + watchAddHtml() + header + advisoryBand + strip + cardsHtml + closedSection
+        + `<div id="pos-alerts" class="mt-4 pt-3 border-t border-slate-800/60"></div>`;
       manualRecompute();
+      posRenderAlerts();
     }
 
     // WS5-5 (#332) — collapsible "Closed" history section (past POS_CLOSED_HISTORY_SESSIONS
@@ -8782,8 +8880,13 @@
       // new shell HTML is rendered without requiring a manual refresh.
       navigator.serviceWorker.addEventListener('message', e => {
         if (e.data?.type === 'SW_RELOAD') location.reload();
+        if (e.data?.type === 'OPEN_POSITIONS') switchTab('positions');
       });
     }
+
+    // WS5-4b — cold-start deep link from the SW's notificationclick openWindow fallback
+    // (no existing window to postMessage into, so it opens '#positions' instead).
+    if (location.hash === '#positions') switchTab('positions');
 
   })();
   </script>

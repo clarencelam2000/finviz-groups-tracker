@@ -1,6 +1,17 @@
 {
-  "current": "2026.08.20.2",
+  "current": "2026.08.20.3",
   "releases": [
+    {
+      "version": "2026.08.20.3",
+      "date": "2026-08-20",
+      "title": "Exit alerts",
+      "tag": "feature",
+      "tab": "positions",
+      "notes": [
+        "Turn on push alerts from the Positions tab to get a notification the moment a position hits an exit signal.",
+        "On iPhone, add the app to your Home Screen first."
+      ]
+    },
     {
       "version": "2026.08.20.2",
       "date": "2026-08-20",
