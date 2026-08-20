@@ -62,8 +62,10 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `WATCHLIST_TTL_SESSIONS` | `10` | Watch card "N mornings left" — display-only mirror of the worker's `WATCHLIST_TTL_SESSIONS` (worker-positions), which owns the real `sessions_remaining` counter. |
 | `WATCHLIST_EXPIRING_AT` | `1` | Watch card footer: `sessions_remaining <= this` shows the amber "expiring" cue (e.g. "1 morning left" in amber). |
 | `WATCHLIST_GAUGE_PAD` | `0.08` | Fraction of the price domain padded on each end of a watch card's levels gauge so end markers (prior high/low, your level) aren't clipped at the track edges. |
-| `POS_VISIBLE_STATES` | `{'open','managing','closing'}` | Positions tab: worker `state` values that render as a card. Also the server-side filter value (`?state=open,managing,closing`, worker-positions PR #333's multi-state `IN` clause) — the client-side check is now defense-in-depth, not load-bearing. Only `closed` drops off. |
+| `POS_VISIBLE_STATES` | `{'open','managing','closing'}` | Positions tab: worker `state` values that always render as a live card. Since WS5-5 the live fetch is `?state=open,managing,closing,closed&closed_within_sessions=POS_GRACE_SESSIONS` — `posIsLiveVisible(p)` (not a bare `POS_VISIBLE_STATES.has()`) is the real client-side gate, additionally keeping `closed` rows within the grace window. |
 | `POS_STATE_BADGE` | see code | Positions tab: small uppercase badge on `managing` cards; `open` gets no badge. `closing` no longer has an entry — WS5-4a hoists `closing` rows out of the card list into the confirmation strip, so they never reach this lookup. |
+| `POS_GRACE_SESSIONS` | `2` | Positions tab (WS5-5, #332): trading sessions a `closed` position keeps showing in the live positions list (read-only "closed" badge card) before it drops to the Closed section only. Compared against the server's `sessions_since_close`. |
+| `POS_CLOSED_HISTORY_SESSIONS` | `60` | Positions tab (WS5-5): how many trading sessions back the lazy-loaded Closed section fetches (`?closed_within_sessions=60`) once expanded — ~3 trading months. |
 | `POS_EXIT_REASON_LABEL` | see code | Positions tab (WS5-7 / WS5-4a): maps `advance()`'s exit-check reason enum (`stop_hit`, `gap_down_below_stop`, `close_below_50ma`, `close_below_20ma`, `severe_breakdown`, `two_close_below_20ma`) to the plain-English phrase shown in the confirmation strip's expanded reason pill and the Activity trail. |
 | `POS_EXIT_REASON_SHORT` | see code | Positions tab (WS5-4a): terse companion to `POS_EXIT_REASON_LABEL` for the confirmation strip's collapsed one-line summary (e.g. `stop_hit` → "stop hit", `gap_down_below_stop` → "gap-down"). |
 
@@ -195,9 +197,26 @@ zero. See `planning/ws5-7-positions-managing-card.md` §2 for the formula table.
   /positions/<id>/still-holding`). Both re-fetch via `posLoadPositions()` on success rather than
   hand-mutating state — the closed/reopened row simply drops out of (or changes state within)
   the next `open,managing,closing` fetch.
-- **Out of scope here (tracked separately):** the OS/app-icon push badge is WS5-4b. The
-  auto-closed-unconfirmed-but-still-correctable list (owner-decided 3-session grace window) is
-  WS5-5 — it needs `closed` rows in the `GET /positions` fetch, which this PR does not add.
+- **Recently-closed grace + Closed section (WS5-5, issue #332).** A `closed` position no longer
+  vanishes from the tab the instant it settles. Two tiers: (1) it keeps rendering in the live
+  list for `POS_GRACE_SESSIONS` (2) trading sessions — as a compact, **read-only**
+  `posClosedCardHtml` card (no hero/stop-banner/overlays) under a muted "Recently closed"
+  divider below the live cards, badge-marked "closed", showing exit price + realized $/R via
+  `posDerive`; (2) a collapsible **Closed** section at the bottom of the tab, always rendered
+  for a signed-in user, **lazy-loaded** — `posLoadClosed()` only fires `GET
+  /positions?state=closed&closed_within_sessions=POS_CLOSED_HISTORY_SESSIONS` (60 sessions, ~3
+  months) on first expand (`posToggleClosed()`), keeping the default tab payload light. The
+  live fetch itself changed to `?state=open,managing,closing,closed&closed_within_sessions=
+  POS_GRACE_SESSIONS` — `posIsLiveVisible(p)` gates what actually renders (open/managing/closing
+  always; `closed` only while `sessions_since_close <= POS_GRACE_SESSIONS`), replacing the old
+  bare `POS_VISIBLE_STATES.has()` check. The Closed section excludes rows already shown as grace
+  cards (`sessions_since_close <= POS_GRACE_SESSIONS`) so nothing double-renders; a successful
+  `posConfirmExit` invalidates `state.closedData` (set to `null`) so the next expand picks up
+  the newly-closed trade. `posClosedCardHtml` is the single card renderer for both the grace
+  block and the Closed section. **Out of scope (deferred, tracked separately):** the OS/app-icon
+  push badge is WS5-4b. Hoisting an auto-closed-unconfirmed position into the confirmation strip
+  with a `correct-exit` editor is a separate follow-up — WS5-5 renders it as a plain read-only
+  closed card (with an amber "auto" cue from `confirmation_status === 'auto'`), no correction UI.
 - Backend fields consumed (all null-safe, `worker-positions` GET `/positions`): `last_close`,
   `last_bar_date`, `last_open/high/low`, `last_change_pct`, `last_volume`, `last_raw` (JSON string),
   `events` (≤8, newest-first, `payload` pre-parsed to an object), `stop_ack_value` (server-computed
