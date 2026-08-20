@@ -22,7 +22,10 @@ GitHub-Actions held feed. See README § Auth — the Cloudflare-Access-vs-bearer
 3. ✅ **`advance()` daily engine** — **3a (pure engine) = `src/advance.js`**; **3b-i (wiring) =
    `src/sweep.js` + `POST /advance`**; **3b-ii (owner transition routes + `autoConfirm`) =
    `src/transitions.js`**, all done (see below).
-4. ⬜ Push notifications (VAPID; reuse the sibling `distil` worker's web-push + `push_subscriptions`).
+4. 🟡 **Push notifications (WS5-4b) — Tier-1 data-less exit push done.** `migrations/0005_push_subscriptions.sql`
+   + `src/push.js` + `POST /push/subscribe` / `POST /push/unsubscribe` + a two-tier `sweep.js`
+   dispatch (collect intents during the advance loop, dispatch once post-commit). Tier-2 reminders,
+   earnings-approach push, and RFC 8291 payload encryption are deferred fast-follows. See § below.
 5. 🟡 **Personal watchlist (WS5 §8b, issue #319) — P1 (this worker) done.** `migrations/0003_watchlist.sql`
    + `src/watchlist.js` + the `/watchlist*` routes + `heldTickers()` union. P2 (`pick_status.py`
    reclaim state + `collect_morning.py` union) and P3 (PWA) are separate, not-yet-started phases —
@@ -257,6 +260,39 @@ field (`ingestQuotes()` only stamps it on at INSERT time). `computePreCloseAdvis
 batch's `trade_date` onto each row before calling `normalizeBar()` (which requires `row.trade_date`
 to stay a pure function of the row — see advance.js's own comment on that). Don't be surprised the
 `quotes` param here isn't literally `ticker_quotes`-row-shaped on its own.
+
+## The push dispatch: `src/push.js` (WS5-4b)
+
+Ported VERBATIM from the sibling `distil` worker's proven `src/cron/webpush.ts` (VAPID JWT signer +
+`sendPush`) and adapted from its `src/store/push.ts` (subscription store). **v1 is Tier-1
+exit-signal push ONLY, data-less** — RFC 8292 VAPID auth, no RFC 8291 `aes128gcm` payload
+encryption, no ephemeral ECDH/HKDF/AES-GCM. Do not add any of that here; a future Tier-2/earnings
+push is a separate PR that needs payload encryption to differentiate salience.
+
+Three things to internalize before editing this file:
+
+- **`dispatchExitPushes()` is the seam `sweep.js` calls, and it NEVER throws.** Every failure mode
+  — no `vapid` config, zero subscriptions for a user, a `sendPushFn` throw, a non-ok/non-gone
+  response — is caught and counted (`sent`/`pruned`/`skipped`), never rethrown. `sweep.js`'s call
+  site wraps the call in its own try/catch on top of that, so a push failure is structurally unable
+  to fail the sweep, block a D1 write, or surface as an error to `/advance`'s caller.
+- **The `push_sent` idempotency marker is written ONLY after a real successful send** — never
+  pre-emptively, never on a failure. That's what makes a transient send failure self-healing (the
+  next sweep retries) while a genuine duplicate dispatch for the same `(trade_id, trade_date)` is
+  a true no-op. It's disjoint from both `persistAdvance` and `persistTransition` by construction:
+  it's a plain `INSERT` into `position_events` with no matching `positions` column write at all —
+  same shape as `stop_ack` (WS5-7), and like `stop_ack`, no migration is needed since `event_type`
+  has no CHECK constraint.
+- **Dispatch runs strictly AFTER both `sweep()` loops finish, not inside `persistAdvance`'s batch.**
+  `sweep.js` collects `exitIntents` during the advance loop (gated on `applied === true &&
+  !dry_run`, so a lost CAS race or a dry run never queues a push) and calls
+  `dispatchExitPushes(db, {...})` once, after the auto-confirm pass, right before building the
+  return value. This is the "outside the transaction, post-commit, best-effort" rule — push must
+  never be able to observe (or worse, block on) a still-open D1 batch.
+- **`readVapidConfig(env)` is the single missing-secret guard.** It returns `null` unless all three
+  of `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` are set; every caller (`index.js`'s
+  `/advance` route) passes its result through unconditionally, and `sweep()`/`dispatchExitPushes()`
+  no-op cleanly on `null` — there is no second "is push configured" branch to keep in sync.
 
 ## Tests
 

@@ -34,7 +34,13 @@ This is **phase 1** of the four-phase WS5 plan (ADR-012 §10), with **phase 2 in
      functions already in `advance.js`, plus `autoConfirm()` wired into the sweep. Ordered AFTER 3b-i
      on purpose — shipping `autoConfirm` first would auto-close every exit at
      `EXIT_AUTOCONFIRM_SESSIONS` with no endpoint for the owner to confirm or reject it.
-4. ⬜ Push notifications (VAPID; the sibling `distil` worker's web-push code is the reference).
+4. 🟡 **Push notifications (WS5-4b, issue #264 epic) — Tier-1 backend done.** `migrations/0005_push_subscriptions.sql`
+   + `src/push.js` + `POST /push/subscribe` / `POST /push/unsubscribe` + a Tier-1 dispatch wired
+   into `src/sweep.js`. **Data-less** (RFC 8292 VAPID auth only, no RFC 8291 payload encryption) —
+   fires one push per exit the moment the 17:30 sweep first transitions a position to `closing`.
+   Tier-2 reminders, earnings-approach push, and payload encryption are deferred fast-follows (they
+   need `aes128gcm` to differentiate salience, which v1 lacks). PWA subscribe affordance + service-
+   worker `push`/`notificationclick` handlers are a separate, not-yet-started PR.
 
 The PWA surfaces that *call* these transition routes (the "needs your confirmation" strip, the
 editable Confirm-fill / Still-holding actions, the two-tier exit push) are phase-4 work — the
@@ -122,6 +128,8 @@ by construction (the engine runs exactly when fresh bars exist) and keeps us cle
 | `POST` | `/watchlist/tick` | Service token | WS5 §8b P1: idempotent-per-ET-date TTL decrement + expire + purge (`src/watchlist.js::tickWatchlist`); optional body `{date}` overrides the derived ET date. |
 | `POST` | `/positions/preclose-advisory` | Service token | WS5-8: the 15:40 ET provisional-bar batch (SAME shape as `/ingest/quotes` — `{trade_date, collected_at, quotes:[...]}`, reuses `validateIngestBatch`). Runs the pure `advance()` **in memory only** against each `open`/`managing` position + its matching bar and upserts the classified result into `preclose_advisory`. Never writes `ticker_quotes` or `positions` (`src/preclose.js`). Returns counts only: `{trade_date, users, checked, flagged}`. |
 | `GET` | `/positions/preclose` | Bearer | WS5-8: today's (ET) pre-close advisory read for the caller — `{ran_at, n_checked, n_flagged, items}`. Null-safe: returns the same shape with `ran_at:null` and empty `items` if no advisory has run yet today, never a 404. |
+| `POST` | `/push/subscribe` | Bearer | WS5-4b: register/renew a Web Push subscription. Body `{endpoint, keys:{p256dh, auth}}` (the shape `PushSubscription.toJSON()` produces) — UPSERT on `(user_id, endpoint)`. `{ok:true}`. |
+| `POST` | `/push/unsubscribe` | Bearer | WS5-4b: remove a subscription. Body `{endpoint}`. `{ok:true}`. |
 
 **Two auth paths, one seam.** The interactive `Bearer` rows above are the owner's HMAC login token
 (`authenticate()`); the machine rows use a **separate service token** (`authenticateService()`,
@@ -166,6 +174,37 @@ close-referenced MA rule that may still firm up by the real close) — see `PREC
 /positions/preclose` (owner Bearer) reads today's ET-date row, or a null-safe empty shape if no
 15:40 run has landed yet.
 
+## WS5-4b push (Tier-1, data-less)
+
+Ported from the sibling `distil` worker's proven web-push code (`src/push.js` header cites the
+exact source files). **v1 scope is Tier-1 exit-signal push only, data-less** — an RFC 8292 VAPID-
+authenticated push with an empty body (`Content-Length: 0`), no RFC 8291 `aes128gcm` payload
+encryption. `src/sweep.js` collects one push intent per position whose `to_state` freshly becomes
+`closing` this run (`applied === true && !dry_run`), then — **after both the advance and
+auto-confirm loops have already committed to D1** — calls `dispatchExitPushes()` once with the
+batch. That ordering is the whole safety story: push dispatch is a post-commit, best-effort side
+effect, never part of a persist transaction.
+
+- **Push can never fail the sweep.** `dispatchExitPushes()` itself never throws (every failure —
+  no VAPID config, no subscriptions, a `sendPush` throw, a non-ok/non-gone response — is counted
+  and swallowed), and the `sweep()` call site wraps it in its own try/catch besides.
+- **Idempotency is a `position_events` marker, not a flag column.** A `push_sent` event
+  (`(trade_id, trade_date)`) is appended **only after a real successful send** — a transient
+  failure does not permanently suppress the retry — and dispatch checks for that marker before
+  sending again. This is belt-and-suspenders: the closing-edge is already naturally once-per-
+  position because the sweep's advance loop excludes `closing` positions, but the marker guards a
+  same-day re-dispatch and any future change to that exclusion. `push_sent` needs no migration —
+  `event_type` has no CHECK constraint (migration 0001), same as `stop_ack` (WS5-7).
+- **404/410 self-prunes.** A dead subscription is deleted from `push_subscriptions` the moment the
+  push service reports it gone; no separate cleanup job.
+- **`readVapidConfig(env)` returns `null`** if `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` /
+  `VAPID_SUBJECT` aren't all set — `POST /advance` passes `{vapid: readVapidConfig(env)}`
+  unconditionally, and `sweep()` no-ops push entirely when it's `null`. Safe by construction: push
+  degrades to off, never to a crash, if a secret is missing.
+- **`p256dh`/`auth` are captured now even though v1 never uses them** — they're exactly what a
+  future RFC 8291 payload-encryption fast-follow needs, so capturing them today means no
+  re-subscribe prompt later.
+
 ## Auth (§ Auth — the one security decision, owner call 2026-08-13)
 
 **Worker-native HMAC bearer token, not Cloudflare Access.** The PWA is a cross-origin GitHub-Pages
@@ -193,6 +232,9 @@ token is minted server-side from a login passphrase and lives only in the owner'
 | secret | `POSITIONS_SESSION_SECRET` | — | HMAC key signing bearer tokens (rotating it invalidates all tokens) |
 | secret | `POSITIONS_AUTH_PASSPHRASE` | — | the owner's login passphrase (user = 1) |
 | secret | `POSITIONS_INGEST_TOKEN` | — | WS5 phase 2 machine token for the GH-Actions held feed (`/held-tickers`, `/ingest/quotes`); also a GitHub Actions secret. Least-privilege, distinct from the owner passphrase. |
+| `wrangler.toml` `[vars]` | `VAPID_PUBLIC_KEY` | (public keypair half) | WS5-4b: the `applicationServerKey` shipped to the PWA for `pushManager.subscribe()`; safe to expose — it's public by design. |
+| `wrangler.toml` `[vars]` | `VAPID_SUBJECT` | `mailto:...` | WS5-4b: the RFC 8292 contact address in the VAPID JWT's `sub` claim; a push service may use it to contact the sender if something's wrong. |
+| secret | `VAPID_PRIVATE_KEY` | — | WS5-4b: private half of the VAPID keypair; signs the push auth JWT (`buildVapidJwt`). Never in `wrangler.toml`. Rotate all three together — see the comment above the `[vars]` block. |
 
 ### Watchlist constants (`src/watchlist.js`, WS5 §8b)
 
