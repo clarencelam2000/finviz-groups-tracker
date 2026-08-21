@@ -270,11 +270,18 @@ out) — a null-safe empty shape.
 
 A quiet, set-once footer affordance on the Positions tab (`#pos-alerts`, `posRenderAlerts()` /
 `posEnableAlerts()` / `posDisableAlerts()`), rendered after the closed section in every signed-in,
-non-transient branch of `renderPositions()` — never above the confirmation strip. **Data-less
-only**: the service worker (`docs/sw.js` `push` handler) shows one generic "Exit signal"
-notification with no payload (no RFC 8291 encryption, no ticker/tier in the push itself) — the
-in-app confirmation strip is the source of truth for WHICH position needs action; there is no
-Tier-2 rich-payload UI. Tapping the notification (`notificationclick`) focuses an existing window
+non-transient branch of `renderPositions()` — never above the confirmation strip. **Ticker-named
+payload (PR-1, issue #348):** the worker now encrypts an RFC 8291 `aes128gcm` JSON payload
+(`{title, body, ticker, tag, url}`, built by `worker-positions/src/push.js`'s
+`buildExitPushPayload()`) into the Tier-1 exit push, so the notification names the ticker and reason
+(e.g. "🚨 NVT — exit signal" / "Stop hit at 42.10. Confirm your fill."). The service worker
+(`docs/sw.js` `push` handler) reads it via `event.data.json()` — the browser's push service does the
+RFC 8291 decryption before the event fires, so the handler only ever sees plaintext JSON. A
+data-less push (no `event.data`) still falls back to today's generic "Exit signal" notification —
+kept for backward compatibility, not otherwise used going forward. The in-app confirmation strip
+remains the source of truth for full detail (modeled fill, R, auto-close countdown); the push is
+still just a nudge. There is no Tier-2 rich-payload UI (decaying-cadence reminders, earnings-approach
+push) — that's a separate later PR. Tapping the notification (`notificationclick`) focuses an existing window
 and `postMessage`s `{type:'OPEN_POSITIONS'}` (handled by the SW-message listener next to
 `SW_RELOAD`), or falls back to `self.clients.openWindow('...#positions')` on a cold start, which
 `index.html`'s boot code picks up via a `location.hash === '#positions'` check and calls

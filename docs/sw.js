@@ -1,7 +1,7 @@
 // Bump CACHE on every release (see CLAUDE.md § Automation release-bump checklist):
 // prepend a releases.json entry + update its `current` + bump CACHE here — all three
 // together, so the new shell + releases.json aren't served from a stale cache.
-const CACHE = 'finviz-v77';
+const CACHE = 'finviz-v78';
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -27,14 +27,26 @@ self.addEventListener('activate', e => {
   );
 });
 
-// WS5-4b — data-less exit-signal push (no RFC 8291 payload; see worker-positions/src/push.js). The
-// notification is intentionally generic — the Positions confirmation strip names WHICH position.
+// WS5-4b / PR-1 of issue #348 — the exit-signal push now carries an RFC 8291 aes128gcm-encrypted
+// JSON payload ({title, body, ticker, tag, url}, see worker-positions/src/push.js
+// buildExitPushPayload) so the notification can name the ticker and reason. event.data.json()
+// decrypts automatically (the browser's push service does the RFC 8291 decryption before firing
+// this event — this handler never touches raw ciphertext). A data-less push (event.data absent —
+// an older/unexpected send, or any future decrypt-less fallback) still shows today's exact generic
+// notification, so both paths stay backward-compatible.
 self.addEventListener('push', event => {
+  let data = null;
+  try {
+    data = event.data ? event.data.json() : null;
+  } catch {
+    data = null;
+  }
+  const title = data && data.title ? data.title : 'Exit signal';
+  const body = data && data.body ? data.body : "A position hit an exit signal — open the app to confirm your fill or tap 'still holding'.";
+  const tag = (data && data.tag) || 'finviz-exit';
+  const url = (data && data.url) || '#positions';
   event.waitUntil(
-    self.registration.showNotification('Exit signal', {
-      body: "A position hit an exit signal — open the app to confirm your fill or tap 'still holding'.",
-      tag: 'finviz-exit',
-    })
+    self.registration.showNotification(title, { body, tag, data: { url } })
   );
 });
 

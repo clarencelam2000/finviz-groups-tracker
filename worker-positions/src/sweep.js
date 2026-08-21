@@ -322,7 +322,7 @@ export async function persistAdvance(db, { trade_id, user_id, expectedLastAdvanc
 // ── sweep(db, opts) — the orchestrator. ───────────────────────────────────────────────────────
 // `push` (WS5-4b) is `{ vapid, sendPushFn? }` or null/undefined — index.js builds it from env via
 // readVapidConfig(); tests inject a mock sendPushFn directly. See push.js's header for the v1
-// Tier-1-only, data-less scope.
+// Tier-1-only scope (now RFC 8291 ticker-named payload, PR-1 of issue #348).
 export async function sweep(db, { dry_run = false, now = new Date(), cfg, push = null } = {}) {
   const now_iso = isoUtc(now);
   const globals = cfg || ENGINE_CONFIG;
@@ -416,7 +416,16 @@ export async function sweep(db, { dry_run = false, now = new Date(), cfg, push =
       // actually persisted, not a lost CAS race) and !dry_run (a dry run must never fire a push,
       // same as it never writes).
       if (applied && !dry_run) {
-        exitIntents.push({ user_id: pos.user_id, trade_id: pos.trade_id, ticker: pos.ticker });
+        // reason/price come off the just-persisted position (signalExit() in advance.js stamps
+        // exit_reason/expected_exit_price on the SAME transition that flips state to 'closing') —
+        // preferred per the locked spec so the push can be reason-aware, not just ticker-only.
+        exitIntents.push({
+          user_id: pos.user_id,
+          trade_id: pos.trade_id,
+          ticker: pos.ticker,
+          reason: outcome.position.exit_reason,
+          price: outcome.position.expected_exit_price,
+        });
       }
     }
     if (outcome.staleBars > 0) staleCount++;
