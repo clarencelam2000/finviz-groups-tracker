@@ -3,11 +3,12 @@
 // `src/store/push.ts` (Phase 3 plan §6-D3 there) — see the header comment on buildVapidJwt/sendPush
 // below for why it's a small vendored implementation, not a Node-shimmed `web-push` dependency.
 //
-// SCOPE, v1: Tier-1 ONLY — one data-less, VAPID-authenticated push fired when the 17:30 sweep first
-// transitions a position to `closing`. Data-less means RFC 8292 VAPID auth with NO RFC 8291
-// `aes128gcm` payload encryption — no ephemeral ECDH, no HKDF, no AES-GCM. Tier-2 reminders,
-// decaying cadence, and earnings-approach push are explicitly OUT OF SCOPE for this file; they need
-// payload encryption to differentiate salience, which this file deliberately does not implement.
+// SCOPE, v1 (PR-1, issue #348 core): Tier-1 push, now WITH an RFC 8291 `aes128gcm` payload — the
+// 17:30 sweep's first transition of a position to `closing` sends a ticker-named notification
+// ("🚨 NVT — stop hit. Confirm your fill.") instead of a generic one. RFC 8292 VAPID auth (JWT +
+// `Authorization: vapid ...`) is unchanged. Tier-2 decaying-cadence reminders and earnings-approach
+// push are still OUT OF SCOPE for this file — those are a separate later PR; only the Tier-1
+// exit-signal payload is built here.
 //
 // Push is a NUDGE, never load-bearing: dispatchExitPushes() below must never throw, and every call
 // site in sweep.js wraps it in its own try/catch besides. A push failure must never fail the sweep,
@@ -66,17 +67,116 @@ export async function buildVapidJwt(endpoint, privateKeyB64, publicKeyB64, conta
   return `${signingInput}.${bytesToBase64Url(new Uint8Array(sig))}`;
 }
 
-/** Send a data-less, VAPID-authenticated push to one subscription endpoint. */
-export async function sendPush(endpoint, vapid) {
-  const jwt = await buildVapidJwt(endpoint, vapid.privateKey, vapid.publicKey, vapid.contactEmail);
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `vapid t=${jwt}, k=${vapid.publicKey}`,
-      TTL: "86400",
-      "Content-Length": "0",
-    },
-  });
+// ── RFC 8291 aes128gcm payload encryption ────────────────────────────────────────────────────────
+// Encrypts a UTF-8 payload string to one subscription's {p256dh, auth} keys. Single-record only (the
+// push payload is always small — a JSON notification body, nowhere near the 4096-byte record size),
+// so RFC 8188's multi-record chaining is out of scope; the record-size field is still emitted (fixed
+// at RS below) because the header format requires it regardless of record count.
+const RS = 4096; // RFC 8188 §2.1 record size — fixed; our single-record payload is always << 4096B.
+
+async function importP256Raw(rawBytes, usages, extractable = false) {
+  return crypto.subtle.importKey("raw", rawBytes, { name: "ECDH", namedCurve: "P-256" }, extractable, usages);
+}
+
+async function exportRawPublic(key) {
+  return new Uint8Array(await crypto.subtle.exportKey("raw", key));
+}
+
+function concatBytes(...arrs) {
+  const len = arrs.reduce((n, a) => n + a.length, 0);
+  const out = new Uint8Array(len);
+  let off = 0;
+  for (const a of arrs) {
+    out.set(a, off);
+    off += a.length;
+  }
+  return out;
+}
+
+/** HKDF-SHA256 (RFC 5869) via Web Crypto, returning raw derived bytes (not an unextractable key) so
+ * callers can feed the output straight into HKDF-Extract for the next step or into AES-GCM. */
+async function hkdf(saltBytes, ikmBytes, infoBytes, lengthBytes) {
+  const ikmKey = await crypto.subtle.importKey("raw", ikmBytes, "HKDF", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "HKDF", hash: "SHA-256", salt: saltBytes, info: infoBytes },
+    ikmKey,
+    lengthBytes * 8
+  );
+  return new Uint8Array(bits);
+}
+
+/**
+ * RFC 8291 §3.4 encryption of `payloadText` to one subscription's raw ECDH public key (`p256dhB64`,
+ * base64url 65-byte 0x04||x||y) and auth secret (`authB64`, base64url 16 bytes). Returns the full
+ * aes128gcm request body: RFC 8188 §2.1 header (salt(16) || rs(4, BE uint32) || idlen(1)=65 ||
+ * keyid(65)) followed by ciphertext+tag. Exported so tests can call it directly (A4).
+ */
+export async function encryptAes128Gcm(payloadText, p256dhB64, authB64) {
+  const uaPublic = base64UrlToBytes(p256dhB64); // client's raw EC public key, 65B
+  const authSecret = base64UrlToBytes(authB64); // 16B
+
+  // Ephemeral server P-256 keypair — a fresh one per message, per RFC 8291.
+  const serverKeyPair = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const asPublic = await exportRawPublic(serverKeyPair.publicKey); // 65B
+
+  // ECDH shared secret between our ephemeral key and the client's public key.
+  const uaPublicKey = await importP256Raw(uaPublic, []);
+  const ecdhSecretBits = await crypto.subtle.deriveBits({ name: "ECDH", public: uaPublicKey }, serverKeyPair.privateKey, 256);
+  const ecdhSecret = new Uint8Array(ecdhSecretBits);
+
+  // PRK_key = HKDF-Extract-and-Expand(salt=auth_secret, ikm=ecdh_secret,
+  //   info="WebPush: info\0" || ua_public || as_public, L=32)  — RFC 8291 §3.4.
+  const webpushInfo = concatBytes(new TextEncoder().encode("WebPush: info\0"), uaPublic, asPublic);
+  const prkKey = await hkdf(authSecret, ecdhSecret, webpushInfo, 32);
+
+  // Per-message random salt for the content-encoding step (RFC 8188 §2.1).
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+
+  // CEK = HKDF(salt, PRK_key, info="Content-Encoding: aes128gcm\0", L=16)
+  const cek = await hkdf(salt, prkKey, new TextEncoder().encode("Content-Encoding: aes128gcm\0"), 16);
+  // NONCE = HKDF(salt, PRK_key, info="Content-Encoding: nonce\0", L=12)
+  const nonce = await hkdf(salt, prkKey, new TextEncoder().encode("Content-Encoding: nonce\0"), 12);
+
+  // Record padding: plaintext || 0x02 (last-record delimiter, RFC 8188 §2) || zero padding. No extra
+  // padding beyond the delimiter — our payloads are small and padding-for-size-obscurity isn't a goal
+  // here (the ticker/reason is visible in the notification either way).
+  const plaintext = new TextEncoder().encode(payloadText);
+  const padded = concatBytes(plaintext, new Uint8Array([0x02]));
+
+  const aesKey = await crypto.subtle.importKey("raw", cek, { name: "AES-GCM" }, false, ["encrypt"]);
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce, tagLength: 128 }, aesKey, padded));
+
+  // RFC 8188 §2.1 header: salt(16) || rs(4, big-endian uint32) || idlen(1) || keyid(idlen).
+  const header = new Uint8Array(16 + 4 + 1 + asPublic.length);
+  header.set(salt, 0);
+  new DataView(header.buffer).setUint32(16, RS, false);
+  header[20] = asPublic.length; // 65
+  header.set(asPublic, 21);
+
+  return { body: concatBytes(header, ciphertext), salt, asPublic };
+}
+
+/** Send a VAPID-authenticated push to one subscription. `sub = {endpoint, p256dh, auth}`.
+ * `payload === null` (default) sends today's exact data-less request (Content-Length:0, no
+ * Content-Encoding) — unchanged from before RFC 8291 support. `payload` as a string encrypts it
+ * per RFC 8291 against `sub`'s keys and sends it as the aes128gcm-encoded body. */
+export async function sendPush(sub, vapid, payload = null) {
+  const jwt = await buildVapidJwt(sub.endpoint, vapid.privateKey, vapid.publicKey, vapid.contactEmail);
+  const headers = {
+    Authorization: `vapid t=${jwt}, k=${vapid.publicKey}`,
+    TTL: "86400",
+  };
+  let body;
+  if (payload === null || payload === undefined) {
+    headers["Content-Length"] = "0";
+    body = undefined;
+  } else {
+    const encrypted = await encryptAes128Gcm(payload, sub.p256dh, sub.auth);
+    headers["Content-Encoding"] = "aes128gcm";
+    headers["Content-Type"] = "application/octet-stream";
+    body = encrypted.body;
+  }
+  const res = await fetch(sub.endpoint, { method: "POST", headers, body });
   return {
     ok: res.ok,
     status: res.status,
@@ -136,8 +236,37 @@ export async function listSubscriptionsForUser(db, userId) {
   return results ?? [];
 }
 
+// Reason -> terse phrase, mirroring the PWA's POS_EXIT_REASON_SHORT (docs/index.html) so the push
+// notification body reads consistently with the in-app confirmation strip. Kept as a small local map
+// (not imported — this is a Worker, the PWA is a separate deployable) rather than a shared constant.
+const EXIT_REASON_PHRASE = {
+  stop_hit: "Stop hit",
+  gap_down_below_stop: "Gap-down through stop",
+  close_below_50ma: "Closed below the 50MA",
+  close_below_20ma: "Closed below the 20MA",
+  severe_breakdown: "Severe breakdown",
+  two_close_below_20ma: "2 closes below the 20MA",
+};
+
+/** Build the Tier-1 exit-push JSON payload string for one intent. `reason`/`price` are optional —
+ * an intent that only has `ticker` (reason/price unavailable) falls back to a generic body, per the
+ * locked spec. */
+export function buildExitPushPayload({ ticker, reason, price }) {
+  const title = `🚨 ${ticker} — exit signal`;
+  const phrase = reason && EXIT_REASON_PHRASE[reason];
+  let body;
+  if (phrase) {
+    body = `${phrase}${typeof price === "number" ? ` at ${price}` : ""}. Confirm your fill.`;
+  } else {
+    body = "An exit signal fired. Open to confirm your fill.";
+  }
+  return JSON.stringify({ title, body, ticker, tag: "finviz-exit", url: "#positions" });
+}
+
 // ── Dispatch orchestrator — the seam sweep.js calls; fully offline-testable via sendPushFn. ──────
-// intents: [{ user_id, trade_id, ticker }] — Tier-1 exit signals collected by this sweep run.
+// intents: [{ user_id, trade_id, ticker, reason?, price? }] — Tier-1 exit signals collected by this
+// sweep run. `reason`/`price` are preferred (drive the ticker-named payload via
+// buildExitPushPayload); when absent, the payload falls back to a ticker-only message.
 // NEVER THROWS — every failure mode (no vapid config, no subscriptions, a send throwing, a non-ok
 // non-gone response) is swallowed and counted, never rethrown. The caller relies on this.
 export async function dispatchExitPushes(db, { intents, vapid, sendPushFn = sendPush, now_iso, trade_date }) {
@@ -173,10 +302,12 @@ export async function dispatchExitPushes(db, { intents, vapid, sendPushFn = send
         continue;
       }
 
+      const payload = buildExitPushPayload(intent);
+
       let anySuccess = false;
       for (const sub of subs) {
         try {
-          const res = await sendPushFn(sub.endpoint, vapid);
+          const res = await sendPushFn(sub, vapid, payload);
           if (res && res.gone) {
             await pruneSubscriptionById(db, sub.id);
             pruned++;

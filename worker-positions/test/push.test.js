@@ -6,10 +6,14 @@ import { sweep } from "../src/sweep.js";
 import {
   buildVapidJwt,
   base64UrlToBytes,
+  bytesToBase64Url,
   subscribePush,
   unsubscribePush,
   listSubscriptionsForUser,
   dispatchExitPushes,
+  sendPush,
+  encryptAes128Gcm,
+  buildExitPushPayload,
 } from "../src/push.js";
 
 // Lead-generated, round-trip-verified test keypair (from the locked spec).
@@ -45,6 +49,142 @@ describe("buildVapidJwt", () => {
     expect(payload.sub).toBe(`mailto:${TEST_VAPID.contactEmail}`);
     const expectedExp = Math.floor(now.getTime() / 1000) + 12 * 3600;
     expect(payload.exp).toBe(expectedExp);
+  });
+});
+
+// ── 1b. RFC 8291 aes128gcm payload encryption — THE MERGE GATE (A4) ─────────────────────────────
+// Decrypts encryptAes128Gcm()'s output in pure WebCrypto, independently of push.js's own HKDF code
+// path where reasonably possible, to prove the encryption is actually correct (not just "produces
+// bytes of the right shape") without touching the network.
+function concatBytes(...arrs) {
+  const len = arrs.reduce((n, a) => n + a.length, 0);
+  const out = new Uint8Array(len);
+  let off = 0;
+  for (const a of arrs) {
+    out.set(a, off);
+    off += a.length;
+  }
+  return out;
+}
+
+async function hkdf(saltBytes, ikmBytes, infoBytes, lengthBytes) {
+  const ikmKey = await crypto.subtle.importKey("raw", ikmBytes, "HKDF", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "HKDF", hash: "SHA-256", salt: saltBytes, info: infoBytes }, ikmKey, lengthBytes * 8);
+  return new Uint8Array(bits);
+}
+
+/** Generate a real subscription keypair the way a browser's PushManager would hand it to us:
+ * a P-256 ECDH keypair (p256dh = raw public key) + a random 16-byte auth secret. Returns both the
+ * base64url strings (what a real `{p256dh, auth}` subscription carries) and the raw CryptoKey
+ * material needed to decrypt on the "client" side in this test. */
+async function makeTestSubscription() {
+  const keyPair = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+  const rawPublic = new Uint8Array(await crypto.subtle.exportKey("raw", keyPair.publicKey));
+  const authSecret = crypto.getRandomValues(new Uint8Array(16));
+  return {
+    p256dh: bytesToBase64Url(rawPublic),
+    auth: bytesToBase64Url(authSecret),
+    rawPublic,
+    authSecret,
+    privateKey: keyPair.privateKey,
+  };
+}
+
+/** Decrypt an encryptAes128Gcm() body using the "client" private key + auth secret — the mirror
+ * operation a real browser's push service performs before delivering to the SW `push` event. */
+async function decryptAes128Gcm(body, uaPublic, authSecret, privateKey) {
+  const salt = body.slice(0, 16);
+  const idlen = body[20];
+  const asPublicRaw = body.slice(21, 21 + idlen);
+  const ciphertext = body.slice(21 + idlen);
+
+  const asPublicKey = await crypto.subtle.importKey("raw", asPublicRaw, { name: "ECDH", namedCurve: "P-256" }, false, []);
+  const ecdhSecretBits = await crypto.subtle.deriveBits({ name: "ECDH", public: asPublicKey }, privateKey, 256);
+  const ecdhSecret = new Uint8Array(ecdhSecretBits);
+
+  const webpushInfo = concatBytes(new TextEncoder().encode("WebPush: info\0"), uaPublic, asPublicRaw);
+  const prkKey = await hkdf(authSecret, ecdhSecret, webpushInfo, 32);
+  const cek = await hkdf(salt, prkKey, new TextEncoder().encode("Content-Encoding: aes128gcm\0"), 16);
+  const nonce = await hkdf(salt, prkKey, new TextEncoder().encode("Content-Encoding: nonce\0"), 12);
+
+  const aesKey = await crypto.subtle.importKey("raw", cek, { name: "AES-GCM" }, false, ["decrypt"]);
+  const paddedBits = await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce, tagLength: 128 }, aesKey, ciphertext);
+  const padded = new Uint8Array(paddedBits);
+
+  // Strip the RFC 8188 last-record delimiter (0x02) and any trailing zero padding after it.
+  let end = padded.length;
+  while (end > 0 && padded[end - 1] === 0x00) end--;
+  if (padded[end - 1] !== 0x02) throw new Error("missing 0x02 record delimiter");
+  end--;
+  return new TextDecoder().decode(padded.slice(0, end));
+}
+
+describe("encryptAes128Gcm — RFC 8291 round-trip (merge gate)", () => {
+  it("self-round-trip: encrypt against a real ECDH keypair, decrypt with the private key, plaintext matches", async () => {
+    const sub = await makeTestSubscription();
+    const plaintext = JSON.stringify({ title: "🚨 NVT — exit signal", body: "Stop hit at 42.10. Confirm your fill.", ticker: "NVT", tag: "finviz-exit", url: "#positions" });
+
+    const { body } = await encryptAes128Gcm(plaintext, sub.p256dh, sub.auth);
+    expect(body).toBeInstanceOf(Uint8Array);
+    // Header shape: salt(16) || rs(4) || idlen(1)=65 || keyid(65) — 86 bytes before ciphertext+tag.
+    expect(body[20]).toBe(65);
+    expect(new DataView(body.buffer, body.byteOffset).getUint32(16, false)).toBe(4096);
+
+    const decrypted = await decryptAes128Gcm(body, sub.rawPublic, sub.authSecret, sub.privateKey);
+    expect(decrypted).toBe(plaintext);
+  });
+
+  it("self-round-trip: two encryptions of the same plaintext produce different ciphertext (fresh salt+ephemeral key each time)", async () => {
+    const sub = await makeTestSubscription();
+    const plaintext = "same payload";
+    const a = await encryptAes128Gcm(plaintext, sub.p256dh, sub.auth);
+    const b = await encryptAes128Gcm(plaintext, sub.p256dh, sub.auth);
+    expect(bytesToBase64Url(a.body)).not.toBe(bytesToBase64Url(b.body));
+    expect(await decryptAes128Gcm(a.body, sub.rawPublic, sub.authSecret, sub.privateKey)).toBe(plaintext);
+    expect(await decryptAes128Gcm(b.body, sub.rawPublic, sub.authSecret, sub.privateKey)).toBe(plaintext);
+  });
+
+  it("a decrypt with the WRONG auth secret fails (sanity check that the test harness actually verifies something)", async () => {
+    const sub = await makeTestSubscription();
+    const wrongAuth = crypto.getRandomValues(new Uint8Array(16));
+    const { body } = await encryptAes128Gcm("hello", sub.p256dh, sub.auth);
+    await expect(decryptAes128Gcm(body, sub.rawPublic, wrongAuth, sub.privateKey)).rejects.toThrow();
+  });
+});
+
+describe("buildExitPushPayload", () => {
+  it("reason-aware body for a known reason with a price", () => {
+    const payload = JSON.parse(buildExitPushPayload({ ticker: "NVT", reason: "stop_hit", price: 42.1 }));
+    expect(payload.title).toBe("🚨 NVT — exit signal");
+    expect(payload.body).toBe("Stop hit at 42.1. Confirm your fill.");
+    expect(payload.ticker).toBe("NVT");
+    expect(payload.tag).toBe("finviz-exit");
+    expect(payload.url).toBe("#positions");
+  });
+
+  it("falls back to a generic body for an unknown/missing reason", () => {
+    const payload = JSON.parse(buildExitPushPayload({ ticker: "OUST" }));
+    expect(payload.body).toBe("An exit signal fired. Open to confirm your fill.");
+  });
+});
+
+describe("sendPush data-less path is unchanged", () => {
+  it("payload=null sends Content-Length:0 with no Content-Encoding header, and no body", async () => {
+    let capturedInit;
+    const realFetch = global.fetch;
+    global.fetch = async (url, init) => {
+      capturedInit = init;
+      return new Response(null, { status: 201 });
+    };
+    try {
+      const res = await sendPush({ endpoint: "https://push.example/a", p256dh: "p1", auth: "a1" }, TEST_VAPID);
+      expect(res.ok).toBe(true);
+      expect(capturedInit.headers["Content-Length"]).toBe("0");
+      expect(capturedInit.headers["Content-Encoding"]).toBeUndefined();
+      expect(capturedInit.body).toBeUndefined();
+    } finally {
+      global.fetch = realFetch;
+    }
   });
 });
 
@@ -149,6 +289,28 @@ describe("dispatchExitPushes", () => {
     });
     expect(result.sent).toBe(0);
     expect(db._events()).toHaveLength(0);
+  });
+
+  it("ticker-named payload: dispatchExitPushes passes a payload containing the ticker to sendPushFn", async () => {
+    await subscribePush(db, "owner", { endpoint: "https://push.example/a", p256dh: "p1", auth: "a1" });
+    let received;
+    const mock = async (sub, vapid, payload) => {
+      received = payload;
+      return { ok: true, status: 201, gone: false };
+    };
+
+    await dispatchExitPushes(db, {
+      intents: [{ user_id: "owner", trade_id: "t1", ticker: "NVT", reason: "stop_hit", price: 42.1 }],
+      vapid: TEST_VAPID,
+      sendPushFn: mock,
+      now_iso: "2026-08-20T21:05:00Z",
+      trade_date: "2026-08-20",
+    });
+
+    expect(typeof received).toBe("string");
+    expect(received).toContain("NVT");
+    const parsed = JSON.parse(received);
+    expect(parsed.body).toContain("Stop hit");
   });
 
   it("best-effort: a throwing sendPushFn does not make dispatchExitPushes throw", async () => {
