@@ -1,6 +1,16 @@
 {
-  "current": "2026.08.20.4",
+  "current": "2026.08.21",
   "releases": [
+    {
+      "version": "2026.08.21",
+      "date": "2026-08-21",
+      "title": "Exit alerts now name the ticker",
+      "tag": "improvement",
+      "tab": "positions",
+      "notes": [
+        "Push notifications for a stop hit (or other exit signal) now say which ticker and why — e.g. \"NVT — stop hit. Confirm your fill.\" — instead of a generic alert."
+      ]
+    },
     {
       "version": "2026.08.20.4",
       "date": "2026-08-20",

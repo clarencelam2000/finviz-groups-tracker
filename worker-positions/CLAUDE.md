@@ -22,10 +22,12 @@ GitHub-Actions held feed. See README § Auth — the Cloudflare-Access-vs-bearer
 3. ✅ **`advance()` daily engine** — **3a (pure engine) = `src/advance.js`**; **3b-i (wiring) =
    `src/sweep.js` + `POST /advance`**; **3b-ii (owner transition routes + `autoConfirm`) =
    `src/transitions.js`**, all done (see below).
-4. 🟡 **Push notifications (WS5-4b) — Tier-1 data-less exit push done.** `migrations/0005_push_subscriptions.sql`
-   + `src/push.js` + `POST /push/subscribe` / `POST /push/unsubscribe` + a two-tier `sweep.js`
-   dispatch (collect intents during the advance loop, dispatch once post-commit). Tier-2 reminders,
-   earnings-approach push, and RFC 8291 payload encryption are deferred fast-follows. See § below.
+4. 🟡 **Push notifications (WS5-4b) — Tier-1 ticker-named exit push done (PR-1, issue #348).**
+   `migrations/0005_push_subscriptions.sql` + `src/push.js` + `POST /push/subscribe` / `POST
+   /push/unsubscribe` + a two-tier `sweep.js` dispatch (collect intents during the advance loop,
+   dispatch once post-commit). The push now carries an RFC 8291 `aes128gcm`-encrypted payload
+   naming the ticker + exit reason. Tier-2 decaying-cadence reminders and earnings-approach push are
+   still deferred fast-follows. See § below.
 5. 🟡 **Personal watchlist (WS5 §8b, issue #319) — P1 (this worker) done.** `migrations/0003_watchlist.sql`
    + `src/watchlist.js` + the `/watchlist*` routes + `heldTickers()` union. P2 (`pick_status.py`
    reclaim state + `collect_morning.py` union) and P3 (PWA) are separate, not-yet-started phases —
@@ -265,11 +267,29 @@ to stay a pure function of the row — see advance.js's own comment on that). Do
 
 Ported VERBATIM from the sibling `distil` worker's proven `src/cron/webpush.ts` (VAPID JWT signer +
 `sendPush`) and adapted from its `src/store/push.ts` (subscription store). **v1 is Tier-1
-exit-signal push ONLY, data-less** — RFC 8292 VAPID auth, no RFC 8291 `aes128gcm` payload
-encryption, no ephemeral ECDH/HKDF/AES-GCM. Do not add any of that here; a future Tier-2/earnings
-push is a separate PR that needs payload encryption to differentiate salience.
+exit-signal push, now with an RFC 8291 `aes128gcm` payload (PR-1, issue #348)** — RFC 8292 VAPID
+auth plus ephemeral ECDH + HKDF-SHA256 + AES-128-GCM single-record encryption
+(`encryptAes128Gcm()`), producing a ticker-named notification instead of a generic one. A future
+Tier-2/decaying-cadence and earnings-approach push is still a separate PR — the payload-encryption
+constraint that used to block it here is lifted (this file now does encryption), but the Tier-2
+cadence/scheduling logic itself is out of scope for this file and hasn't been added.
 
-Three things to internalize before editing this file:
+Four things to internalize before editing this file:
+
+- **`sendPush(sub, vapid, payload = null)` takes the full subscription object, not just the
+  endpoint** — encryption needs `sub.p256dh`/`sub.auth`. `payload === null` is EXACTLY the old
+  data-less request (`Content-Length: 0`, no `Content-Encoding`); a string payload is encrypted via
+  `encryptAes128Gcm()` against `sub`'s keys and sent as `Content-Encoding: aes128gcm`,
+  `Content-Type: application/octet-stream`. `dispatchExitPushes()`'s inner loop calls
+  `sendPushFn(sub, vapid, payload)` — if you add a new call site, pass the subscription object, not
+  `sub.endpoint`.
+- **The HKDF `info` byte layouts are exact-bytes-or-it-silently-fails.** `"WebPush: info\0" ||
+  ua_public(65B) || as_public(65B)` for `PRK_key`; `"Content-Encoding: aes128gcm\0"` for the CEK;
+  `"Content-Encoding: nonce\0"` for the nonce — each a distinct HKDF-Expand call keyed off the SAME
+  `PRK_key`/per-message salt. Get a byte wrong here and encryption doesn't throw, it just produces
+  garbage the push service (or a client) can't decrypt — there's no compile-time or runtime check
+  that would catch a subtly-wrong `info` string. `test/push.test.js`'s self-round-trip decrypt test
+  is what actually verifies this; treat it as load-bearing if you touch `encryptAes128Gcm()`.
 
 - **`dispatchExitPushes()` is the seam `sweep.js` calls, and it NEVER throws.** Every failure mode
   — no `vapid` config, zero subscriptions for a user, a `sendPushFn` throw, a non-ok/non-gone

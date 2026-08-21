@@ -6,6 +6,57 @@
 
 ---
 
+## 2026-08-21 — WS5 push fast-follows: RFC 8291 payload (#348 core) + pre-close act-now push (#349)
+
+**Status: safe to close once #353 + #354 merge (merge #353 FIRST — #354 is stacked on it).** Staff-eng
+session picking up the last WS5 push work after PR #350 landed the data-less channel. Lead owned the
+348-vs-349 sequencing call, the crypto line-by-line review, and notification copy/taste; delegated both
+boots-on-ground builds to Sonnet subagents against locked specs
+(`scratchpad/pr1-rfc8291-spec.md`, `pr2-preclose-push-spec.md`) and re-ran/reviewed every line.
+
+**The staff call: #348 first (split), then #349.** #348's payload encryption is the enabler that makes
+every push better (incl. #349's ticker-named form) — building #349 first on the data-less channel would
+ship a weak version and force rework. So payload landed first. Split #348 into a **core** PR (payload +
+ticker-named Tier-1, high value, shipped) and a **remainder** (Tier-2 decaying reminders + earnings push,
+held for owner cadence sign-off — real alert-fatigue risk, needs a cadence-curve decision not made
+silently).
+
+**What landed:**
+- **PR #353 (#348 core, base `claude/elegant-babbage-hlxnfy`, branch `claude/ws5-positions-tab-review-gx4ezn`):**
+  RFC 8291 `aes128gcm` in `worker-positions/src/push.js` (ephemeral P-256 ECDH → HKDF-SHA256 → AES-128-GCM,
+  RFC 8188 record framing). `sendPush(sub, vapid, payload=null)` — `null` is the byte-identical data-less
+  path. `dispatchExitPushes` builds a reason-aware ticker-named payload; sweep.js intent now carries
+  `reason`/`price`. `docs/sw.js` push handler reads `event.data.json()` (generic fallback kept), CACHE
+  v77→v78, release `2026.08.21`. **281 vitest** — the **self-round-trip decrypt test** (encrypt with the
+  real fn, independently re-derive+decrypt in-test, wrong-auth negative control) is the merge gate;
+  RFC §5 fixed-vector skipped (WebCrypto gives no seam to force a fixed ephemeral key/salt). Lead reviewed
+  crypto line-by-line vs RFC 8291 §3.4 / 8188 §2.1.
+- **PR #354 (#349, stacked on #353, branch `claude/ws5-preclose-push-act`):** `dispatchPreClosePushes` +
+  `buildPreClosePushPayload` in push.js, wired into `POST /positions/preclose-advisory` in index.js. Reads
+  the already-upserted `preclose_advisory` rows, pushes **`act` severity ONLY** (heads_up stays silent —
+  not actionable pre-close), one per position, ticker-named, distinct `finviz-preclose` tag +
+  `preclose_push_sent` marker keyed `(trade_id,trade_date)`. **Disjointness grep-proven** — zero
+  `ingestQuotes`/`persistAdvance`/`last_advanced_date` calls; the 17:30 sweep stays sole writer. Worker-only,
+  no PWA/release change (the in-app band from PR #345 + #353's SW handler already render it). **291 vitest.**
+
+**Verification (lead re-ran, not just trusted subagents):** #353 → 281/281 vitest + node --check sw.js +
+release guard 5/5; #354 → 291/291 vitest + node --check push.js/index.js + confirmed single `const payload`
+(a doubled-lines sed artifact was NOT real source duplication — Node would've thrown on redeclaration).
+
+**Next steps:** (1) merge #353, then #354 (GitHub retargets #354 to default on #353 merge). Both auto-deploy
+`finviz-positions` via `deploy-workers.yml`. (2) e2e for both is gated on a live weekday sweep (17:30 for
+#353's exit push, 15:40 for #354's pre-close push) hitting a signal on a subscribed device — same WS5 data
+gate. Owner confirmed distil pushes reach their iPhone (de-risks iOS delivery). (3) Only remaining push work
+is **#348 remainder (Tier-2 + earnings)** — held for an owner cadence review; lead to bring a concrete
+decaying-cadence proposal rather than pick numbers silently.
+
+**Flagged / low-confidence:** the HKDF `info` byte layouts are the one silent-failure risk (a wrong info
+string produces undecryptable output, not a throw) — the round-trip test is what actually pins them; a
+load-bearing warning was added to `worker-positions/CLAUDE.md`. Delivery itself is unverifiable from here
+(no live push device in-session).
+
+---
+
 ## 2026-08-20 — Positions tab: fix stop-ack "Couldn't update — try again" (branch `claude/position-tab-display-integrity-vcfx19`)
 
 **Status: safe to close once the PR merges.** Owner reported the EOG position card's "✓ Updated"
