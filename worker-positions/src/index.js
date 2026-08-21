@@ -7,7 +7,7 @@ import { authenticate, authenticateService, login } from "./auth.js";
 import { validateCreatePayload, buildPositionRow, insertPosition, listPositions, ALL_STATES } from "./positions.js";
 import { validateIngestBatch, ingestQuotes, heldTickers } from "./quotes.js";
 import { sweep } from "./sweep.js";
-import { subscribePush, unsubscribePush, readVapidConfig } from "./push.js";
+import { subscribePush, unsubscribePush, readVapidConfig, dispatchPreClosePushes } from "./push.js";
 import { computePreCloseAdvisory, readPreCloseAdvisory } from "./preclose.js";
 import { etDateStr } from "./time.js";
 import { applyTransition, ackStop } from "./transitions.js";
@@ -150,6 +150,23 @@ export async function handleRequest(request, env) {
       result = await computePreCloseAdvisory(env.POSITIONS_DB, { quotes: v.value.rows, trade_date: v.value.trade_date });
     } catch (e) {
       return json({ error: "advisory failed" }, 500, request, env);
+    }
+    // WS5-8 PR-2 (issue #349): fire act-now pushes for the advisory's `act`-severity items. Best-
+    // effort — never lets a push failure fail this route's response (see push.js's dispatch
+    // comment); readVapidConfig(env) returns null when the VAPID secrets aren't set, in which case
+    // dispatchPreClosePushes no-ops cleanly and `result.pushed` is simply omitted.
+    const vapid = readVapidConfig(env);
+    if (vapid) {
+      try {
+        const pushRes = await dispatchPreClosePushes(env.POSITIONS_DB, {
+          trade_date: v.value.trade_date,
+          vapid,
+          now_iso: new Date().toISOString(),
+        });
+        result.pushed = (pushRes && pushRes.sent) || 0;
+      } catch (e) {
+        console.error("dispatchPreClosePushes failed", e);
+      }
     }
     return json(result, 200, request, env);
   }
