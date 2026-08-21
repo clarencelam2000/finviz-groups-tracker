@@ -263,6 +263,114 @@ export function buildExitPushPayload({ ticker, reason, price }) {
   return JSON.stringify({ title, body, ticker, tag: "finviz-exit", url: "#positions" });
 }
 
+/** Build the pre-close act-now push JSON payload string for one advisory item. Distinct copy from
+ * `buildExitPushPayload` — different moment (15:40 provisional, not 17:30 settled) and different
+ * call to action (place the order before the bell, not confirm an already-closed fill). Reuses the
+ * SAME `EXIT_REASON_PHRASE` map so the reason wording stays consistent across both push tiers.
+ * `tag: 'finviz-preclose'` is deliberately DISTINCT from Tier-1's `'finviz-exit'` so a later 17:30
+ * push doesn't replace this one on the lockscreen (and vice versa) — see locked spec § A1. */
+export function buildPreClosePushPayload({ ticker, signal, price }) {
+  const title = `🚨 ${ticker} — act now before the close`;
+  const phrase = signal && EXIT_REASON_PHRASE[signal];
+  let body;
+  if (phrase) {
+    body = `${phrase}${typeof price === "number" ? ` at ${price}` : ""}. Place your broker order before the bell.`;
+  } else {
+    body = "A position hit an exit signal. Place your order before the bell.";
+  }
+  return JSON.stringify({ title, body, ticker, tag: "finviz-preclose", url: "#positions" });
+}
+
+// ── Pre-close act-now push dispatch (WS5-8 PR-2, issue #349) ─────────────────────────────────────
+// Sibling dispatcher to dispatchExitPushes below, reading the already-upserted preclose_advisory
+// rows (src/preclose.js) instead of collecting sweep-time intents. Same NEVER-THROWS contract, same
+// "marker written only after a real successful send" idempotency discipline — but a DISTINCT
+// event_type ('preclose_push_sent' vs 'push_sent') so the two push channels (15:40 advisory vs
+// 17:30 settled exit) never suppress each other for the same trade_id/trade_date.
+//
+// HARD INVARIANT: this function must NEVER call ingestQuotes()/persistAdvance() or stamp
+// positions.last_advanced_date — it only reads preclose_advisory and position_events/
+// push_subscriptions. See worker-positions/CLAUDE.md § pre-close advisory for why that disjointness
+// is load-bearing.
+export async function dispatchPreClosePushes(db, { trade_date, vapid, sendPushFn = sendPush, now_iso }) {
+  let sent = 0;
+  let pruned = 0;
+  let skipped = 0;
+
+  if (!vapid) return { sent, pruned, skipped };
+
+  let rows;
+  try {
+    const res = await db.prepare(`SELECT user_id, items FROM preclose_advisory WHERE trade_date = ?`).bind(trade_date).all();
+    rows = res.results ?? [];
+  } catch {
+    return { sent, pruned, skipped };
+  }
+
+  for (const row of rows) {
+    let items;
+    try {
+      items = JSON.parse(row.items || "[]");
+    } catch {
+      items = [];
+    }
+
+    for (const item of items) {
+      if (!item || item.severity !== "act") continue;
+
+      // Per-item isolation: a D1 error on one item must not abort the rest, mirroring
+      // dispatchExitPushes' per-intent try/catch.
+      try {
+        const already = await db
+          .prepare(`SELECT 1 FROM position_events WHERE trade_id = ? AND trade_date = ? AND event_type = 'preclose_push_sent' LIMIT 1`)
+          .bind(item.trade_id, trade_date)
+          .first();
+        if (already) {
+          skipped++;
+          continue;
+        }
+
+        const subs = await listSubscriptionsForUser(db, row.user_id);
+        if (subs.length === 0) {
+          // No marker written — retries once a device subscribes, same rule as Tier-1.
+          continue;
+        }
+
+        const payload = buildPreClosePushPayload({ ticker: item.ticker, signal: item.signal, price: item.price });
+
+        let anySuccess = false;
+        for (const sub of subs) {
+          try {
+            const res = await sendPushFn(sub, vapid, payload);
+            if (res && res.gone) {
+              await pruneSubscriptionById(db, sub.id);
+              pruned++;
+            } else if (res && res.ok) {
+              anySuccess = true;
+              sent++;
+            }
+          } catch {
+            // Best-effort: a throw (network error, etc.) — continue to the next subscription.
+          }
+        }
+
+        if (anySuccess) {
+          await db
+            .prepare(
+              `INSERT INTO position_events (trade_id, user_id, ts, trade_date, event_type, payload) VALUES (?, ?, ?, ?, ?, ?)`
+            )
+            .bind(item.trade_id, row.user_id, now_iso, trade_date, "preclose_push_sent", JSON.stringify({ ticker: item.ticker }))
+            .run();
+        }
+      } catch {
+        // Best-effort: a D1 failure on this item is swallowed so the rest still dispatch.
+      }
+    }
+  }
+
+  return { sent, pruned, skipped };
+}
+
 // ── Dispatch orchestrator — the seam sweep.js calls; fully offline-testable via sendPushFn. ──────
 // intents: [{ user_id, trade_id, ticker, reason?, price? }] — Tier-1 exit signals collected by this
 // sweep run. `reason`/`price` are preferred (drive the ticker-named payload via
