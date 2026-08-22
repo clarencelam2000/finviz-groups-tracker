@@ -268,6 +268,12 @@ edit `ENGINE_CONFIG` (each has an in-code comment) — no other engine code refe
 | `EXIT_AUTOCONFIRM_SESSIONS` | `5` | Sessions a position may sit in `Closing` before `autoConfirm()` closes it at `expected_exit_price` with `confirmation_status='auto'`. |
 | `CAUTION_REARM_ON_HOLD` | `true` | On "still holding", reset `caution_flag` so the two-close rule re-arms (needs two fresh closes) instead of re-signalling on the next single close. |
 
+### Push reminder constants (`src/sweep.js`, WS5-4b PR-A, issue #348 tail)
+
+| Name | Default | Controls |
+|---|---|---|
+| `TIER2_REMINDER_SESSIONS` | `[1, 2, 4]` | `sessions_in_closing` values on which a silent Tier-2 exit-reminder push fires. PRODUCT-LOCKED. Coupled to `ENGINE_CONFIG.EXIT_AUTOCONFIRM_SESSIONS` — must stay a subset of `{1 .. EXIT_AUTOCONFIRM_SESSIONS-1}` (currently `{1,2,3,4}`). No stateful cadence marker needed — a re-signal resets `sessions_in_closing` to 0, so the curve restarts naturally. |
+
 ### Sweep constants (`src/sweep.js` `SWEEP_CONFIG`, WS5 phase 3b)
 
 Wiring-layer tunables, distinct from the engine constants above: these govern how bars are *fed to*

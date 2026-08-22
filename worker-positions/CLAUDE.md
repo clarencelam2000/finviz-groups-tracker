@@ -309,6 +309,24 @@ Four things to internalize before editing this file:
   `dispatchExitPushes(db, {...})` once, after the auto-confirm pass, right before building the
   return value. This is the "outside the transaction, post-commit, best-effort" rule — push must
   never be able to observe (or worse, block on) a still-open D1 batch.
+- **Tier-2 decaying-cadence reminders (WS5-4b PR-A, issue #348 tail) are DONE.**
+  `buildReminderPushPayload`/`dispatchReminderPushes` mirror `buildExitPushPayload`/
+  `dispatchExitPushes` line-for-line — the only differences are the tag
+  (`finviz-exit-reminder`, distinct from Tier-1's `finviz-exit` so reminders collapse into their
+  own lockscreen entry), the `silent: true` payload field (read by `docs/sw.js`'s `push` handler),
+  the idempotency marker's `event_type` (`reminder_push_sent`, not `push_sent`), and the cadence
+  gate. The cadence itself — `TIER2_REMINDER_SESSIONS = [1, 2, 4]` (`src/sweep.js`) — is
+  PRODUCT-LOCKED and evaluated PURELY off `sessions_in_closing` (the SAME global session clock
+  `autoConfirm()` already computes in its closing loop, reused, not recomputed): no
+  `sent_count`/`last_sent_date` history is stored, because a "still holding" tap resets
+  `sessions_in_closing` to 0 (a fresh closing episode), so the `{1,2,4}` curve restarts naturally
+  on its own. Intents are collected INSIDE the existing auto-confirm closing loop in `sweep.js`
+  (not a new query) — a position gets a reminder only when it did NOT auto-confirm this sweep AND
+  `sessions_in_closing` is in the set; a position transitioning to `closing` THIS sweep has
+  `sessions_in_closing === 0`, never in `{1,2,4}`, so it never double-fires alongside its own
+  fresh Tier-1 push. Dispatch runs in its own try/catch, right next to (never folded into)
+  `dispatchExitPushes`'s call — same NEVER-THROWS contract, same post-commit/best-effort/
+  dry_run-guarded placement.
 - **`readVapidConfig(env)` is the single missing-secret guard.** It returns `null` unless all three
   of `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` are set; every caller (`index.js`'s
   `/advance` route) passes its result through unconditionally, and `sweep()`/`dispatchExitPushes()`
