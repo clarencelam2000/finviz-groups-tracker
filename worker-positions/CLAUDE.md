@@ -22,12 +22,12 @@ GitHub-Actions held feed. See README § Auth — the Cloudflare-Access-vs-bearer
 3. ✅ **`advance()` daily engine** — **3a (pure engine) = `src/advance.js`**; **3b-i (wiring) =
    `src/sweep.js` + `POST /advance`**; **3b-ii (owner transition routes + `autoConfirm`) =
    `src/transitions.js`**, all done (see below).
-4. 🟡 **Push notifications (WS5-4b) — Tier-1 ticker-named exit push done (PR-1, issue #348).**
+4. ✅ **Push notifications (WS5-4b) — Tier-1 exit push, Tier-2 decaying reminders, and the
+   earnings-approach push are all done (issue #348 + tail).**
    `migrations/0005_push_subscriptions.sql` + `src/push.js` + `POST /push/subscribe` / `POST
-   /push/unsubscribe` + a two-tier `sweep.js` dispatch (collect intents during the advance loop,
-   dispatch once post-commit). The push now carries an RFC 8291 `aes128gcm`-encrypted payload
-   naming the ticker + exit reason. Tier-2 decaying-cadence reminders and earnings-approach push are
-   still deferred fast-follows. See § below.
+   /push/unsubscribe` + a three-tier `sweep.js` dispatch (collect intents during the advance/closing
+   loops, dispatch once post-commit). The push carries an RFC 8291 `aes128gcm`-encrypted payload
+   naming the ticker + exit reason (or the earnings countdown). See § below.
 5. 🟡 **Personal watchlist (WS5 §8b, issue #319) — P1 (this worker) done.** `migrations/0003_watchlist.sql`
    + `src/watchlist.js` + the `/watchlist*` routes + `heldTickers()` union. P2 (`pick_status.py`
    reclaim state + `collect_morning.py` union) and P3 (PWA) are separate, not-yet-started phases —
@@ -269,10 +269,9 @@ Ported VERBATIM from the sibling `distil` worker's proven `src/cron/webpush.ts` 
 `sendPush`) and adapted from its `src/store/push.ts` (subscription store). **v1 is Tier-1
 exit-signal push, now with an RFC 8291 `aes128gcm` payload (PR-1, issue #348)** — RFC 8292 VAPID
 auth plus ephemeral ECDH + HKDF-SHA256 + AES-128-GCM single-record encryption
-(`encryptAes128Gcm()`), producing a ticker-named notification instead of a generic one. A future
-Tier-2/decaying-cadence and earnings-approach push is still a separate PR — the payload-encryption
-constraint that used to block it here is lifted (this file now does encryption), but the Tier-2
-cadence/scheduling logic itself is out of scope for this file and hasn't been added.
+(`encryptAes128Gcm()`), producing a ticker-named notification instead of a generic one. Tier-2
+decaying-cadence reminders and the earnings-approach push (both described further below) are done
+too — all three tiers share this same payload-encryption machinery.
 
 Four things to internalize before editing this file:
 
@@ -327,6 +326,25 @@ Four things to internalize before editing this file:
   fresh Tier-1 push. Dispatch runs in its own try/catch, right next to (never folded into)
   `dispatchExitPushes`'s call — same NEVER-THROWS contract, same post-commit/best-effort/
   dry_run-guarded placement.
+- **The earnings-approach push (WS5-4b earnings fast-follow, issue #348 tail) is DONE.**
+  `buildEarningsPushPayload`/`dispatchEarningsPushes` mirror `buildExitPushPayload`/
+  `dispatchExitPushes` line-for-line too — differences: a 📅 title (not an alert emoji — a
+  scheduled event, not a signal), a per-TICKER tag `finviz-earnings-<ticker>` (unlike Tier-1/
+  Tier-2's single shared tag — two different tickers reporting the same week must not collapse
+  into one lockscreen entry), NO `silent` field (rare/actionable, deserves a real buzz), and the
+  idempotency marker's `event_type` (`earnings_push_sent`). Fires at `days_to_earnings <=
+  EARNINGS_PUSH_SESSIONS` (3, `src/sweep.js`) — deliberately tighter than
+  `ENGINE_CONFIG.EARNINGS_WARN_SESSIONS` (10, the in-app amber flag). **Division of labor differs
+  from Tier-2's cadence gate in WHERE it runs, not in spirit:** `dispatchEarningsPushes()` itself
+  only does same-day `(trade_id, trade_date)` idempotency (belt-and-suspenders); the real
+  fire-once-per-earnings-event cooldown (`EARNINGS_PUSH_COOLDOWN_SESSIONS = 15` sessions) is
+  applied by `sweep.js` AFTER both loops, via `sessionsSince(calendar, lastEarningsPushDate)` —
+  NO earnings-date reconstruction, no arithmetic on `days_to_earnings` itself (used only as a
+  threshold). Candidates are collected in the main advance loop off the freshest
+  `outcome.position.days_to_earnings`, independent of whether `last_advanced_date` moved that
+  sweep, so a position sitting inside the push band keeps surfacing as a candidate every sweep
+  until the cooldown filter decides. A calendar-load failure fails OPEN (keeps the candidate)
+  rather than silently dropping a legitimate push.
 - **`readVapidConfig(env)` is the single missing-secret guard.** It returns `null` unless all three
   of `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` are set; every caller (`index.js`'s
   `/advance` route) passes its result through unconditionally, and `sweep()`/`dispatchExitPushes()`

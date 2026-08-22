@@ -273,6 +273,8 @@ edit `ENGINE_CONFIG` (each has an in-code comment) — no other engine code refe
 | Name | Default | Controls |
 |---|---|---|
 | `TIER2_REMINDER_SESSIONS` | `[1, 2, 4]` | `sessions_in_closing` values on which a silent Tier-2 exit-reminder push fires. PRODUCT-LOCKED. Coupled to `ENGINE_CONFIG.EXIT_AUTOCONFIRM_SESSIONS` — must stay a subset of `{1 .. EXIT_AUTOCONFIRM_SESSIONS-1}` (currently `{1,2,3,4}`). No stateful cadence marker needed — a re-signal resets `sessions_in_closing` to 0, so the curve restarts naturally. |
+| `EARNINGS_PUSH_SESSIONS` | `3` | `days_to_earnings` threshold at/below which the earnings-approach push fires. PRODUCT-LOCKED. Distinct from `ENGINE_CONFIG.EARNINGS_WARN_SESSIONS` (10, the in-app amber-flag band) — this is the tighter, actionable push band. |
+| `EARNINGS_PUSH_COOLDOWN_SESSIONS` | `15` | Trading sessions to suppress a repeat earnings push for the same position (fire-once-per-quarterly-event guard, via `sessionsSince`). Must stay `<` the inter-earnings gap (~63 sessions/quarter) and `>` a single `≤EARNINGS_PUSH_SESSIONS` spell (~3 sessions), so one earnings event yields exactly one push and the guard re-arms next quarter. |
 
 ### Sweep constants (`src/sweep.js` `SWEEP_CONFIG`, WS5 phase 3b)
 
