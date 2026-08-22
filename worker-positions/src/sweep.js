@@ -11,7 +11,7 @@
 import { advance, autoConfirm, normalizeBar, effectiveConfig, ENGINE_CONFIG } from "./advance.js";
 import { persistTransition } from "./transitions.js";
 import { etDateStr, isoUtc } from "./time.js";
-import { dispatchExitPushes, dispatchReminderPushes } from "./push.js";
+import { dispatchExitPushes, dispatchReminderPushes, dispatchEarningsPushes } from "./push.js";
 
 // The `sessions_in_closing` values on which a silent Tier-2 reminder fires (WS5-4b PR-A, issue #348
 // tail). PRODUCT-LOCKED (do not change without a fresh owner decision) — do not add a stateful
@@ -22,6 +22,19 @@ import { dispatchExitPushes, dispatchReminderPushes } from "./push.js";
 // (currently EXIT_AUTOCONFIRM_SESSIONS=5, so the window is {1,2,3,4}; day 1&2 catch a missed Tier-1,
 // day 3 is skipped, day 4 is the "auto-closes in 1 session" last call — max 3 reminders/episode).
 export const TIER2_REMINDER_SESSIONS = [1, 2, 4];
+
+// The days_to_earnings threshold at/below which the earnings-approach push fires (WS5-4b earnings
+// fast-follow, issue #348 tail). PRODUCT-LOCKED — distinct from ENGINE_CONFIG.EARNINGS_WARN_SESSIONS
+// (10, the in-app amber-flag band): this is the tighter, actionable push band ("decide now"), not
+// the wider "heads up" band the PWA already surfaces.
+export const EARNINGS_PUSH_SESSIONS = 3;
+
+// Trading sessions to suppress a repeat earnings push for the SAME position (fire-once-per-
+// quarterly-earnings-event guard, enforced via sessionsSince() below, NOT date arithmetic). Must
+// stay < the inter-earnings gap (~63 trading sessions/quarter) and > a single ≤EARNINGS_PUSH_SESSIONS
+// spell (~3 sessions), so one earnings event yields exactly one push and the guard re-arms cleanly
+// before the next quarter's event.
+export const EARNINGS_PUSH_COOLDOWN_SESSIONS = 15;
 
 // ── Configurable constants (triple-documented: here + README § Configurable parameters +
 // worker-positions/CLAUDE.md — see this repo's 3-places rule, CLAUDE.md § Code quality).
@@ -346,6 +359,12 @@ export async function sweep(db, { dry_run = false, now = new Date(), cfg, push =
   // Tier-1 exit-signal push intents (WS5-4b), collected in the advance loop below and dispatched
   // AFTER both loops complete — post-commit, best-effort, never inside a persist batch.
   const exitIntents = [];
+  // Earnings-approach push CANDIDATES (WS5-4b earnings fast-follow), collected in this SAME advance
+  // loop off the freshest post-advance days_to_earnings — regardless of dry_run/applied, since the
+  // cooldown filter + dispatch below are already dry_run-guarded. The fire-once-per-earnings-event
+  // cooldown is applied AFTER this loop (see below), once, using the already-loaded session
+  // calendar — not per-candidate here.
+  const earningsCandidates = [];
 
   for (const pos of positions) {
     // Defensive: a position with no entry_date at all is a data-integrity gap (every position
@@ -376,6 +395,15 @@ export async function sweep(db, { dry_run = false, now = new Date(), cfg, push =
 
     const effCfg = effectiveConfig(pos, globals);
     const outcome = advanceThroughBars(pos, bars, effCfg);
+
+    // Earnings-approach push candidate: read the FRESHEST days_to_earnings off the just-advanced
+    // position, regardless of whether last_advanced_date moved this sweep — a position already
+    // inside the push band should keep surfacing as a candidate every sweep until the cooldown
+    // filter (below, after both loops) decides whether it actually re-fires.
+    const dte = outcome.position.days_to_earnings;
+    if (typeof dte === "number" && dte >= 0 && dte <= EARNINGS_PUSH_SESSIONS) {
+      earningsCandidates.push({ user_id: pos.user_id, trade_id: pos.trade_id, ticker: pos.ticker, days_to_earnings: dte });
+    }
 
     const fromState = pos.state;
     const toState = outcome.position.state;
@@ -559,6 +587,59 @@ export async function sweep(db, { dry_run = false, now = new Date(), cfg, push =
       });
     } catch (e) {
       console.error("dispatchReminderPushes failed", e);
+    }
+  }
+
+  // ── Earnings-approach push: fire-once cooldown filter, THEN dispatch (WS5-4b earnings
+  // fast-follow, issue #348 tail). The cooldown (EARNINGS_PUSH_COOLDOWN_SESSIONS) is applied HERE,
+  // not inside dispatchEarningsPushes — same division of labor as Tier-2's cadence gate: the
+  // dispatcher only does same-day idempotency + marker write, sweep.js (which has the session
+  // calendar) decides whether a candidate has already been pushed this earnings event.
+  if (earningsCandidates.length) {
+    let survivors = earningsCandidates;
+    try {
+      // Load the session calendar once here (not per-candidate) — distinct from the `calendar`
+      // loaded inside the `if (closing.length)` block above, which may not run at all this sweep.
+      const calendar = await distinctTradeDates(db);
+      const kept = [];
+      for (const candidate of earningsCandidates) {
+        // Guard every D1 read: a query failure on one candidate must not throw out of the sweep —
+        // best-effort, like the dispatchers. On failure, fail OPEN (keep the candidate) rather than
+        // silently drop a legitimate push.
+        let lastDate = null;
+        try {
+          const row = await db
+            .prepare(`SELECT trade_date FROM position_events WHERE trade_id = ? AND event_type = 'earnings_push_sent' ORDER BY trade_date DESC LIMIT 1`)
+            .bind(candidate.trade_id)
+            .first();
+          lastDate = row ? row.trade_date : null;
+        } catch {
+          lastDate = null;
+        }
+        if (lastDate && sessionsSince(calendar, lastDate) < EARNINGS_PUSH_COOLDOWN_SESSIONS) {
+          continue; // already pushed this earnings event — drop.
+        }
+        kept.push(candidate);
+      }
+      survivors = kept;
+    } catch (e) {
+      // Best-effort: if the calendar itself can't be loaded, fall back to dispatching every
+      // candidate unfiltered rather than losing the push entirely.
+      console.error("earnings push cooldown filter failed", e);
+    }
+
+    if (!dry_run && push && push.vapid) {
+      try {
+        await dispatchEarningsPushes(db, {
+          intents: survivors,
+          vapid: push.vapid,
+          sendPushFn: push.sendPushFn,
+          now_iso,
+          trade_date: etDateStr(now),
+        });
+      } catch (e) {
+        console.error("dispatchEarningsPushes failed", e);
+      }
     }
   }
 

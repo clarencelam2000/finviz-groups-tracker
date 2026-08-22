@@ -685,3 +685,95 @@ describe("persist-disjointness — sweep vs. ackStop", () => {
     expect(after).toEqual(before); // ackStop appended an event but wrote zero positions columns
   });
 });
+
+// ── WS5-4b earnings-approach push (fast-follow, issue #348 tail) ────────────────────────────────
+describe("sweep — earnings-approach push", () => {
+  async function runWithBar(db, { daysToEarnings, tradeDate = "2026-08-02" }, mock) {
+    seedPos(db, { state: "managing", last_advanced_date: null });
+    db._seedQuote(quoteRow({ trade_date: tradeDate, close: 101, sma20: 95, sma50: 80, low: 99, daysToEarnings }));
+    await subscribePush(db, "owner", { endpoint: "https://push.example/a", p256dh: "p1", auth: "a1" });
+    const now = new Date(`${tradeDate}T22:00:00Z`);
+    return sweep(db, { now, push: { vapid: { publicKey: "x", privateKey: "y", contactEmail: "z@z.com" }, sendPushFn: mock } });
+  }
+
+  it("days_to_earnings=2 (<=3), no prior marker: an earnings push is dispatched", async () => {
+    const db = makeD1();
+    let calls = 0;
+    const mock = async () => {
+      calls++;
+      return { ok: true, status: 201, gone: false };
+    };
+    await runWithBar(db, { daysToEarnings: 2 }, mock);
+    expect(calls).toBe(1);
+    const events = db._events().filter((e) => e.event_type === "earnings_push_sent");
+    expect(events).toHaveLength(1);
+  });
+
+  it("days_to_earnings=8 (>3): NOT dispatched", async () => {
+    const db = makeD1();
+    let calls = 0;
+    const mock = async () => {
+      calls++;
+      return { ok: true, status: 201, gone: false };
+    };
+    await runWithBar(db, { daysToEarnings: 8 }, mock);
+    expect(calls).toBe(0);
+    expect(db._events().filter((e) => e.event_type === "earnings_push_sent")).toHaveLength(0);
+  });
+
+  it("days_to_earnings=2 with an earnings_push_sent event 5 sessions ago (< 15): suppressed", async () => {
+    const db = makeD1();
+    const p = seedPos(db, { state: "managing", last_advanced_date: null });
+    // Prior marker on 2026-02-09.
+    await db
+      .prepare(`INSERT INTO position_events (trade_id, user_id, ts, trade_date, event_type, payload) VALUES (?, ?, ?, ?, ?, ?)`)
+      .bind(p.trade_id, "owner", "2026-02-09T21:00:00Z", "2026-02-09", "earnings_push_sent", "{}")
+      .run();
+    // 5 trading sessions strictly after the marker, the last of which is today's advance bar.
+    for (const d of ["2026-02-10", "2026-02-11", "2026-02-12", "2026-02-13"]) {
+      db._seedQuote(quoteRow({ trade_date: d, close: 100 }));
+    }
+    db._seedQuote(quoteRow({ trade_date: "2026-02-16", close: 101, sma20: 95, sma50: 80, low: 99, daysToEarnings: 2 }));
+
+    let calls = 0;
+    const mock = async () => {
+      calls++;
+      return { ok: true, status: 201, gone: false };
+    };
+    await subscribePush(db, "owner", { endpoint: "https://push.example/a", p256dh: "p1", auth: "a1" });
+    const now = new Date("2026-02-16T22:00:00Z");
+    await sweep(db, { now, push: { vapid: { publicKey: "x", privateKey: "y", contactEmail: "z@z.com" }, sendPushFn: mock } });
+
+    expect(calls).toBe(0);
+    expect(db._events().filter((e) => e.event_type === "earnings_push_sent")).toHaveLength(1); // still just the seeded marker
+  });
+
+  it("days_to_earnings=2 with an earnings_push_sent event 20 sessions ago (>= 15, last quarter): fires again", async () => {
+    const db = makeD1();
+    const p = seedPos(db, { state: "managing", last_advanced_date: null, entry_date: "2025-10-01" });
+    await db
+      .prepare(`INSERT INTO position_events (trade_id, user_id, ts, trade_date, event_type, payload) VALUES (?, ?, ?, ?, ?, ?)`)
+      .bind(p.trade_id, "owner", "2025-11-01T21:00:00Z", "2025-11-01", "earnings_push_sent", "{}")
+      .run();
+    // 20 trading (calendar, no weekend awareness needed here) sessions strictly after the marker.
+    let d = "2025-11-01";
+    for (let i = 1; i <= 19; i++) {
+      d = addDays("2025-11-01", i);
+      db._seedQuote(quoteRow({ trade_date: d, close: 100 }));
+    }
+    const tradeDate = addDays("2025-11-01", 20);
+    db._seedQuote(quoteRow({ trade_date: tradeDate, close: 101, sma20: 95, sma50: 80, low: 99, daysToEarnings: 2 }));
+
+    let calls = 0;
+    const mock = async () => {
+      calls++;
+      return { ok: true, status: 201, gone: false };
+    };
+    await subscribePush(db, "owner", { endpoint: "https://push.example/a", p256dh: "p1", auth: "a1" });
+    const now = new Date(`${tradeDate}T22:00:00Z`);
+    await sweep(db, { now, push: { vapid: { publicKey: "x", privateKey: "y", contactEmail: "z@z.com" }, sendPushFn: mock } });
+
+    expect(calls).toBe(1);
+    expect(db._events().filter((e) => e.event_type === "earnings_push_sent")).toHaveLength(2); // old marker + new one
+  });
+});
