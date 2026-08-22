@@ -15,6 +15,7 @@ import {
   loadClosingPositions,
 } from "../src/sweep.js";
 import { ackStop } from "../src/transitions.js";
+import { subscribePush } from "../src/push.js";
 
 // ── Fixture helpers ──────────────────────────────────────────────────────────────────────────
 
@@ -556,6 +557,101 @@ describe("sweep — auto-confirm of stuck closing positions", () => {
     db._seedQuote({ ticker: "VRT", trade_date: "2026-02-12", close: 1 }); // same date, dedup
     db._seedQuote({ ticker: "AAPL", trade_date: "2026-02-11", close: 1 });
     expect(await distinctTradeDates(db)).toEqual(["2026-02-11", "2026-02-12"]);
+  });
+});
+
+// ── WS5-4b PR-A: Tier-2 decaying-cadence exit reminders (issue #348 tail) ────────────────────────
+describe("sweep — Tier-2 reminder push cadence", () => {
+  function seedClosingPos(db, partial = {}) {
+    return db._seedPosition({
+      ticker: "VRT",
+      user_id: "owner",
+      state: "closing",
+      entry_date: "2026-01-02",
+      entry_price: 100,
+      initial_stop: 90,
+      profit_floor: 90,
+      current_stop: 96,
+      remaining_qty: 100,
+      expected_exit_price: 96,
+      exit_signal_date: "2026-02-10",
+      exit_reason: "stop_hit",
+      last_advanced_date: "2026-02-10",
+      ...partial,
+    });
+  }
+  function seedCalendar(db, dates, ticker = "AAPL") {
+    for (const d of dates) db._seedQuote({ ticker, trade_date: d, close: 100 });
+  }
+
+  const CAL_ALL = ["2026-02-11", "2026-02-12", "2026-02-13", "2026-02-16", "2026-02-17"]; // sessions 1..5 after signal 02-10
+
+  async function runAt(db, sessionsInClosing, mock) {
+    // seedCalendar with exactly `sessionsInClosing` sessions strictly after 2026-02-10.
+    seedCalendar(db, CAL_ALL.slice(0, sessionsInClosing));
+    await subscribePush(db, "owner", { endpoint: "https://push.example/a", p256dh: "p1", auth: "a1" });
+    const now = new Date("2026-02-20T22:00:00Z");
+    return sweep(db, { now, push: { vapid: { publicKey: "x", privateKey: "y", contactEmail: "z@z.com" }, sendPushFn: mock } });
+  }
+
+  for (const n of [1, 2, 4]) {
+    it(`sessions_in_closing=${n} queues a reminder`, async () => {
+      const db = makeD1();
+      seedClosingPos(db);
+      let calls = 0;
+      const mock = async () => {
+        calls++;
+        return { ok: true, status: 201, gone: false };
+      };
+      await runAt(db, n, mock);
+      expect(calls).toBe(1);
+      expect(db._events().filter((e) => e.event_type === "reminder_push_sent")).toHaveLength(1);
+    });
+  }
+
+  it("sessions_in_closing=3 does NOT queue a reminder", async () => {
+    const db = makeD1();
+    seedClosingPos(db);
+    let calls = 0;
+    const mock = async () => {
+      calls++;
+      return { ok: true, status: 201, gone: false };
+    };
+    await runAt(db, 3, mock);
+    expect(calls).toBe(0);
+    expect(db._events().filter((e) => e.event_type === "reminder_push_sent")).toHaveLength(0);
+  });
+
+  it("sessions_in_closing=0 (just entered closing this sweep) does NOT queue a Tier-2 reminder", async () => {
+    const db = makeD1();
+    // exit_signal_date == last_advanced_date == today's trade_date -> sessionsSince returns 0
+    // with no calendar entries strictly after it.
+    seedClosingPos(db, { exit_signal_date: "2026-02-20", last_advanced_date: "2026-02-20" });
+    let calls = 0;
+    const mock = async () => {
+      calls++;
+      return { ok: true, status: 201, gone: false };
+    };
+    await subscribePush(db, "owner", { endpoint: "https://push.example/a", p256dh: "p1", auth: "a1" });
+    const now = new Date("2026-02-20T22:00:00Z");
+    const out = await sweep(db, { now, push: { vapid: { publicKey: "x", privateKey: "y", contactEmail: "z@z.com" }, sendPushFn: mock } });
+    expect(calls).toBe(0);
+    expect(out.auto_confirmed).toBe(0);
+    expect(db._events().filter((e) => e.event_type === "reminder_push_sent")).toHaveLength(0);
+  });
+
+  it("sessions_in_closing=5 auto-confirms and gets no reminder", async () => {
+    const db = makeD1();
+    seedClosingPos(db);
+    let calls = 0;
+    const mock = async () => {
+      calls++;
+      return { ok: true, status: 201, gone: false };
+    };
+    const out = await runAt(db, 5, mock);
+    expect(out.auto_confirmed).toBe(1);
+    expect(calls).toBe(0);
+    expect(db._events().filter((e) => e.event_type === "reminder_push_sent")).toHaveLength(0);
   });
 });
 
