@@ -263,6 +263,21 @@ export function buildExitPushPayload({ ticker, reason, price }) {
   return JSON.stringify({ title, body, ticker, tag: "finviz-exit", url: "#positions" });
 }
 
+/** Build the Tier-2 decaying-cadence reminder push JSON payload string for one intent (WS5-4b PR-A,
+ * issue #348 tail). MIRRORS `buildExitPushPayload` line-for-line — differences are ONLY: no 🚨 in
+ * the title (this is the quiet tier), a "Day N..." countdown body, `tag: 'finviz-exit-reminder'`
+ * (distinct from Tier-1's 'finviz-exit' so reminders collapse into their OWN lockscreen entry, never
+ * replacing or being replaced by a Tier-1 notification), and `silent: true` (read by docs/sw.js's
+ * push handler — the OS should not buzz/light up for these, just update quietly). See the locked
+ * spec (`scratchpad/pr-A-tier2-reminders-spec.md`) for the full cadence rationale. */
+export function buildReminderPushPayload({ ticker, sessions_in_closing, auto_confirm_sessions, reason, price }) {
+  const title = `${ticker} — still closing`;
+  const phrase = (reason && EXIT_REASON_PHRASE[reason]) || "Still below your exit level";
+  const remaining = auto_confirm_sessions - sessions_in_closing;
+  const body = `Day ${sessions_in_closing}. ${phrase}${typeof price === "number" ? ` at ${price}` : ""}. Auto-closes in ${remaining} session${remaining === 1 ? "" : "s"}.`;
+  return JSON.stringify({ title, body, ticker, tag: "finviz-exit-reminder", silent: true, url: "#positions" });
+}
+
 /** Build the pre-close act-now push JSON payload string for one advisory item. Distinct copy from
  * `buildExitPushPayload` — different moment (15:40 provisional, not 17:30 settled) and different
  * call to action (place the order before the bell, not confirm an already-closed fill). Reuses the
@@ -437,6 +452,82 @@ export async function dispatchExitPushes(db, { intents, vapid, sendPushFn = send
         await db
           .prepare(`INSERT INTO position_events (trade_id, user_id, ts, trade_date, event_type, payload) VALUES (?, ?, ?, ?, ?, ?)`)
           .bind(intent.trade_id, intent.user_id, now_iso, trade_date, "push_sent", JSON.stringify({ tier: 1 }))
+          .run();
+      }
+    } catch {
+      // Best-effort: a D1 failure on this intent is swallowed so the rest still dispatch.
+    }
+  }
+
+  return { sent, pruned, skipped };
+}
+
+// ── Tier-2 decaying-cadence reminder push dispatch (WS5-4b PR-A, issue #348 tail) ────────────────
+// MIRRORS dispatchExitPushes ABOVE, line-for-line. The only differences: the idempotency marker's
+// event_type is 'reminder_push_sent' (not 'push_sent') so the two tiers never suppress each other
+// for the same (trade_id, trade_date); the payload is built via buildReminderPushPayload; and the
+// cadence gate (TIER2_REMINDER_SESSIONS) is enforced by the CALLER (sweep.js), not here — this
+// function fires unconditionally for whatever intents it's handed, same as dispatchExitPushes.
+// intents: [{ user_id, trade_id, ticker, sessions_in_closing, auto_confirm_sessions, reason?, price? }].
+// NEVER THROWS — same contract as dispatchExitPushes; sweep.js wraps this call in its own try/catch
+// besides.
+export async function dispatchReminderPushes(db, { intents, vapid, sendPushFn = sendPush, now_iso, trade_date }) {
+  let sent = 0;
+  let pruned = 0;
+  let skipped = 0;
+
+  if (!vapid || !intents || intents.length === 0) return { sent, pruned, skipped };
+
+  for (const intent of intents) {
+    // Per-intent isolation, identical rationale to dispatchExitPushes.
+    try {
+      // Idempotency guard: at most one reminder per (trade_id, trade_date).
+      const already = await db
+        .prepare(`SELECT 1 FROM position_events WHERE trade_id = ? AND trade_date = ? AND event_type = 'reminder_push_sent' LIMIT 1`)
+        .bind(intent.trade_id, trade_date)
+        .first();
+      if (already) {
+        skipped++;
+        continue;
+      }
+
+      const subs = await listSubscriptionsForUser(db, intent.user_id);
+      if (subs.length === 0) {
+        // No marker written — retries once a device subscribes, same rule as Tier-1.
+        continue;
+      }
+
+      const payload = buildReminderPushPayload(intent);
+
+      let anySuccess = false;
+      for (const sub of subs) {
+        try {
+          const res = await sendPushFn(sub, vapid, payload);
+          if (res && res.gone) {
+            await pruneSubscriptionById(db, sub.id);
+            pruned++;
+          } else if (res && res.ok) {
+            anySuccess = true;
+            sent++;
+          }
+          // A non-ok, non-gone response: count nothing further, just move on (never rethrow).
+        } catch {
+          // A throw (network error, etc.): best-effort, continue to the next subscription.
+        }
+      }
+
+      if (anySuccess) {
+        // Marker written ONLY after a real successful send, same discipline as Tier-1.
+        await db
+          .prepare(`INSERT INTO position_events (trade_id, user_id, ts, trade_date, event_type, payload) VALUES (?, ?, ?, ?, ?, ?)`)
+          .bind(
+            intent.trade_id,
+            intent.user_id,
+            now_iso,
+            trade_date,
+            "reminder_push_sent",
+            JSON.stringify({ tier: 2, sessions_in_closing: intent.sessions_in_closing })
+          )
           .run();
       }
     } catch {
