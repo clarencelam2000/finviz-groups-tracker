@@ -6,9 +6,9 @@
 // SCOPE, v1 (PR-1, issue #348 core): Tier-1 push, now WITH an RFC 8291 `aes128gcm` payload — the
 // 17:30 sweep's first transition of a position to `closing` sends a ticker-named notification
 // ("🚨 NVT — stop hit. Confirm your fill.") instead of a generic one. RFC 8292 VAPID auth (JWT +
-// `Authorization: vapid ...`) is unchanged. Tier-2 decaying-cadence reminders and earnings-approach
-// push are still OUT OF SCOPE for this file — those are a separate later PR; only the Tier-1
-// exit-signal payload is built here.
+// `Authorization: vapid ...`) is unchanged. Tier-2 decaying-cadence reminders (`buildReminderPushPayload`/
+// `dispatchReminderPushes`) and the earnings-approach push (`buildEarningsPushPayload`/
+// `dispatchEarningsPushes`, WS5-4b earnings fast-follow) are both DONE, further down this file.
 //
 // Push is a NUDGE, never load-bearing: dispatchExitPushes() below must never throw, and every call
 // site in sweep.js wraps it in its own try/catch besides. A push failure must never fail the sweep,
@@ -296,6 +296,21 @@ export function buildPreClosePushPayload({ ticker, signal, price }) {
   return JSON.stringify({ title, body, ticker, tag: "finviz-preclose", url: "#positions" });
 }
 
+/** Build the earnings-approach push JSON payload string for one intent (WS5-4b earnings fast-follow,
+ * issue #348 tail). MIRRORS `buildExitPushPayload`/`buildReminderPushPayload` shape — differences:
+ * a distinct 📅 title (not an alert emoji — this is a scheduled-event nudge, not a signal), a
+ * days-to-earnings countdown body that explicitly notes the engine never auto-exits on earnings,
+ * `tag: 'finviz-earnings-<ticker>'` PER-TICKER (unlike Tier-1/Tier-2's single shared tag — two
+ * different tickers reporting the same week must get their own lockscreen entries, not collapse
+ * into one), and NO `silent` field (this is rare/actionable and deserves a real buzz, unlike
+ * Tier-2's quiet reminders). */
+export function buildEarningsPushPayload({ ticker, days_to_earnings }) {
+  const plural = days_to_earnings === 1 ? "" : "s";
+  const title = `📅 ${ticker} — earnings in ${days_to_earnings} day${plural}`;
+  const body = `Reports in ${days_to_earnings} session${plural}. Decide hold-or-exit before the print. Earnings never auto-exits.`;
+  return JSON.stringify({ title, body, ticker, tag: `finviz-earnings-${ticker}`, url: "#positions" });
+}
+
 // ── Pre-close act-now push dispatch (WS5-8 PR-2, issue #349) ─────────────────────────────────────
 // Sibling dispatcher to dispatchExitPushes below, reading the already-upserted preclose_advisory
 // rows (src/preclose.js) instead of collecting sweep-time intents. Same NEVER-THROWS contract, same
@@ -528,6 +543,77 @@ export async function dispatchReminderPushes(db, { intents, vapid, sendPushFn = 
             "reminder_push_sent",
             JSON.stringify({ tier: 2, sessions_in_closing: intent.sessions_in_closing })
           )
+          .run();
+      }
+    } catch {
+      // Best-effort: a D1 failure on this intent is swallowed so the rest still dispatch.
+    }
+  }
+
+  return { sent, pruned, skipped };
+}
+
+// ── Earnings-approach push dispatch (WS5-4b earnings fast-follow, issue #348 tail) ───────────────
+// MODELED LINE-FOR-LINE on dispatchExitPushes ABOVE. The only differences: the idempotency marker's
+// event_type is 'earnings_push_sent' (not 'push_sent'/'reminder_push_sent') so this tier never
+// suppresses or is suppressed by the other two for the same (trade_id, trade_date); the payload is
+// built via buildEarningsPushPayload; and the marker here is SAME-DAY idempotency only
+// (belt-and-suspenders against a same-day double dispatch) — the real fire-once-per-earnings-event
+// cooldown (EARNINGS_PUSH_COOLDOWN_SESSIONS) is enforced by the CALLER in sweep.js, which already has
+// the session `calendar` loaded, exactly the same division of labor as Tier-2's cadence gate.
+// intents: [{ user_id, trade_id, ticker, days_to_earnings }].
+// NEVER THROWS — same contract as dispatchExitPushes/dispatchReminderPushes; sweep.js wraps this
+// call in its own try/catch besides.
+export async function dispatchEarningsPushes(db, { intents, vapid, sendPushFn = sendPush, now_iso, trade_date }) {
+  let sent = 0;
+  let pruned = 0;
+  let skipped = 0;
+
+  if (!vapid || !intents || intents.length === 0) return { sent, pruned, skipped };
+
+  for (const intent of intents) {
+    // Per-intent isolation, identical rationale to dispatchExitPushes/dispatchReminderPushes.
+    try {
+      // Same-day idempotency guard: at most one earnings push per (trade_id, trade_date).
+      const already = await db
+        .prepare(`SELECT 1 FROM position_events WHERE trade_id = ? AND trade_date = ? AND event_type = 'earnings_push_sent' LIMIT 1`)
+        .bind(intent.trade_id, trade_date)
+        .first();
+      if (already) {
+        skipped++;
+        continue;
+      }
+
+      const subs = await listSubscriptionsForUser(db, intent.user_id);
+      if (subs.length === 0) {
+        // No marker written — retries once a device subscribes, same rule as Tier-1/Tier-2.
+        continue;
+      }
+
+      const payload = buildEarningsPushPayload(intent);
+
+      let anySuccess = false;
+      for (const sub of subs) {
+        try {
+          const res = await sendPushFn(sub, vapid, payload);
+          if (res && res.gone) {
+            await pruneSubscriptionById(db, sub.id);
+            pruned++;
+          } else if (res && res.ok) {
+            anySuccess = true;
+            sent++;
+          }
+          // A non-ok, non-gone response: count nothing further, just move on (never rethrow).
+        } catch {
+          // A throw (network error, etc.): best-effort, continue to the next subscription.
+        }
+      }
+
+      if (anySuccess) {
+        // Marker written ONLY after a real successful send, same discipline as Tier-1/Tier-2.
+        await db
+          .prepare(`INSERT INTO position_events (trade_id, user_id, ts, trade_date, event_type, payload) VALUES (?, ?, ?, ?, ?, ?)`)
+          .bind(intent.trade_id, intent.user_id, now_iso, trade_date, "earnings_push_sent", JSON.stringify({ days_to_earnings: intent.days_to_earnings }))
           .run();
       }
     } catch {

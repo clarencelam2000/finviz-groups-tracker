@@ -16,6 +16,8 @@ import {
   buildExitPushPayload,
   buildReminderPushPayload,
   dispatchReminderPushes,
+  buildEarningsPushPayload,
+  dispatchEarningsPushes,
 } from "../src/push.js";
 
 // Lead-generated, round-trip-verified test keypair (from the locked spec).
@@ -262,6 +264,104 @@ describe("dispatchReminderPushes", () => {
     await expect(
       dispatchReminderPushes(db, {
         intents: [{ user_id: "owner", trade_id: "t1", ticker: "NVT", sessions_in_closing: 1, auto_confirm_sessions: 5 }],
+        vapid: TEST_VAPID,
+        sendPushFn: throwing,
+        now_iso: "2026-08-20T21:05:00Z",
+        trade_date: "2026-08-20",
+      })
+    ).resolves.toEqual({ sent: 0, pruned: 0, skipped: 0 });
+  });
+});
+
+describe("buildEarningsPushPayload", () => {
+  it("correct shape: 📅 title, per-ticker tag, NO silent key", () => {
+    const payload = JSON.parse(buildEarningsPushPayload({ ticker: "MSFT", days_to_earnings: 2 }));
+    expect(payload.title).toBe("📅 MSFT — earnings in 2 days");
+    expect(payload.body).toBe("Reports in 2 sessions. Decide hold-or-exit before the print. Earnings never auto-exits.");
+    expect(payload.ticker).toBe("MSFT");
+    expect(payload.tag).toBe("finviz-earnings-MSFT");
+    expect(payload.url).toBe("#positions");
+    expect("silent" in payload).toBe(false);
+  });
+
+  it("singular 'day'/'session' when days_to_earnings === 1", () => {
+    const payload = JSON.parse(buildEarningsPushPayload({ ticker: "NVT", days_to_earnings: 1 }));
+    expect(payload.title).toBe("📅 NVT — earnings in 1 day");
+    expect(payload.body).toBe("Reports in 1 session. Decide hold-or-exit before the print. Earnings never auto-exits.");
+  });
+
+  it("two different tickers get distinct per-ticker tags (must not collapse into one notification)", () => {
+    const a = JSON.parse(buildEarningsPushPayload({ ticker: "AAPL", days_to_earnings: 2 }));
+    const b = JSON.parse(buildEarningsPushPayload({ ticker: "MSFT", days_to_earnings: 2 }));
+    expect(a.tag).not.toBe(b.tag);
+  });
+});
+
+describe("dispatchEarningsPushes", () => {
+  it("fires for a subscribed user and writes an earnings_push_sent marker only on success", async () => {
+    await subscribePush(db, "owner", { endpoint: "https://push.example/a", p256dh: "p1", auth: "a1" });
+    let calls = 0;
+    const mock = async () => {
+      calls++;
+      return { ok: true, status: 201, gone: false };
+    };
+
+    const result = await dispatchEarningsPushes(db, {
+      intents: [{ user_id: "owner", trade_id: "t1", ticker: "MSFT", days_to_earnings: 2 }],
+      vapid: TEST_VAPID,
+      sendPushFn: mock,
+      now_iso: "2026-08-20T21:05:00Z",
+      trade_date: "2026-08-20",
+    });
+
+    expect(calls).toBe(1);
+    expect(result.sent).toBe(1);
+    const events = db._events().filter((e) => e.event_type === "earnings_push_sent");
+    expect(events).toHaveLength(1);
+    expect(events[0].trade_id).toBe("t1");
+    // Distinct event_type from Tier-1/Tier-2 — never shares suppression with either.
+    expect(db._events().filter((e) => e.event_type === "push_sent")).toHaveLength(0);
+    expect(db._events().filter((e) => e.event_type === "reminder_push_sent")).toHaveLength(0);
+  });
+
+  it("same-(trade_id, trade_date) second dispatch is a no-op", async () => {
+    await subscribePush(db, "owner", { endpoint: "https://push.example/a", p256dh: "p1", auth: "a1" });
+    let calls = 0;
+    const mock = async () => {
+      calls++;
+      return { ok: true, status: 201, gone: false };
+    };
+    const intents = [{ user_id: "owner", trade_id: "t1", ticker: "MSFT", days_to_earnings: 2 }];
+
+    await dispatchEarningsPushes(db, { intents, vapid: TEST_VAPID, sendPushFn: mock, now_iso: "2026-08-20T21:05:00Z", trade_date: "2026-08-20" });
+    expect(calls).toBe(1);
+
+    const result2 = await dispatchEarningsPushes(db, { intents, vapid: TEST_VAPID, sendPushFn: mock, now_iso: "2026-08-20T21:06:00Z", trade_date: "2026-08-20" });
+    expect(calls).toBe(1);
+    expect(result2.skipped).toBe(1);
+    expect(result2.sent).toBe(0);
+  });
+
+  it("no subscription: no throw, no marker written (retries once a device subscribes)", async () => {
+    const result = await dispatchEarningsPushes(db, {
+      intents: [{ user_id: "owner", trade_id: "t1", ticker: "MSFT", days_to_earnings: 2 }],
+      vapid: TEST_VAPID,
+      sendPushFn: async () => ({ ok: true, status: 201, gone: false }),
+      now_iso: "2026-08-20T21:05:00Z",
+      trade_date: "2026-08-20",
+    });
+    expect(result.sent).toBe(0);
+    expect(db._events()).toHaveLength(0);
+  });
+
+  it("never throws on a sendPushFn throw", async () => {
+    await subscribePush(db, "owner", { endpoint: "https://push.example/a", p256dh: "p1", auth: "a1" });
+    const throwing = async () => {
+      throw new Error("network down");
+    };
+    await expect(
+      dispatchEarningsPushes(db, {
+        intents: [{ user_id: "owner", trade_id: "t1", ticker: "MSFT", days_to_earnings: 2 }],
         vapid: TEST_VAPID,
         sendPushFn: throwing,
         now_iso: "2026-08-20T21:05:00Z",
