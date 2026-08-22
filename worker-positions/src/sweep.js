@@ -11,7 +11,17 @@
 import { advance, autoConfirm, normalizeBar, effectiveConfig, ENGINE_CONFIG } from "./advance.js";
 import { persistTransition } from "./transitions.js";
 import { etDateStr, isoUtc } from "./time.js";
-import { dispatchExitPushes } from "./push.js";
+import { dispatchExitPushes, dispatchReminderPushes } from "./push.js";
+
+// The `sessions_in_closing` values on which a silent Tier-2 reminder fires (WS5-4b PR-A, issue #348
+// tail). PRODUCT-LOCKED (do not change without a fresh owner decision) — do not add a stateful
+// cadence marker (sent_count/last_sent_date): a re-signal starts a fresh closing episode
+// (sessions_in_closing resets to 0 on stillHolding → managing, per advance.js), so the {1,2,4} curve
+// is a pure function of sessions_in_closing and restarts naturally. COUPLED to
+// ENGINE_CONFIG.EXIT_AUTOCONFIRM_SESSIONS: must stay a subset of {1 .. EXIT_AUTOCONFIRM_SESSIONS-1}
+// (currently EXIT_AUTOCONFIRM_SESSIONS=5, so the window is {1,2,3,4}; day 1&2 catch a missed Tier-1,
+// day 3 is skipped, day 4 is the "auto-closes in 1 session" last call — max 3 reminders/episode).
+export const TIER2_REMINDER_SESSIONS = [1, 2, 4];
 
 // ── Configurable constants (triple-documented: here + README § Configurable parameters +
 // worker-positions/CLAUDE.md — see this repo's 3-places rule, CLAUDE.md § Code quality).
@@ -452,6 +462,9 @@ export async function sweep(db, { dry_run = false, now = new Date(), cfg, push =
   // user-owned write path the manual confirm-exit route uses — NOT persistAdvance, whose UPDATE
   // deliberately never touches those columns. Skipped entirely in dry_run (report, don't write).
   let autoConfirmed = 0;
+  // Tier-2 decaying-cadence reminder intents (WS5-4b PR-A), collected in this SAME closing loop —
+  // not a new query — and dispatched after both loops, right alongside dispatchExitPushes.
+  const reminderIntents = [];
   const closing = await loadClosingPositions(db);
   if (closing.length) {
     const calendar = await distinctTradeDates(db);
@@ -460,6 +473,21 @@ export async function sweep(db, { dry_run = false, now = new Date(), cfg, push =
       const effCfg = effectiveConfig(pos, globals);
       const sessionsInClosing = sessionsSince(calendar, pos.exit_signal_date);
       const outcome = autoConfirm(pos, effCfg, { sessionsInClosing, trade_date, now_iso });
+      // A position that did NOT auto-confirm this sweep (outcome is null) and whose
+      // sessionsInClosing lands on the locked {1,2,4} cadence gets a quiet reminder. A position
+      // that transitioned to `closing` THIS sweep has sessionsInClosing === 0 — never in the set —
+      // so it never double-fires alongside its own fresh Tier-1 push.
+      if (!outcome && TIER2_REMINDER_SESSIONS.includes(sessionsInClosing)) {
+        reminderIntents.push({
+          user_id: pos.user_id,
+          trade_id: pos.trade_id,
+          ticker: pos.ticker,
+          sessions_in_closing: sessionsInClosing,
+          auto_confirm_sessions: effCfg.EXIT_AUTOCONFIRM_SESSIONS,
+          reason: pos.exit_reason,
+          price: pos.expected_exit_price,
+        });
+      }
       if (!outcome) continue; // not yet time — leave it parked, awaiting the owner.
 
       let applied = false;
@@ -514,6 +542,23 @@ export async function sweep(db, { dry_run = false, now = new Date(), cfg, push =
     } catch (e) {
       // Best-effort: log and move on. A push failure must never fail the sweep.
       console.error("dispatchExitPushes failed", e);
+    }
+  }
+
+  // ── Tier-2 reminder push dispatch (WS5-4b PR-A) — same post-commit/best-effort/dry_run-guarded
+  // block as Tier-1 above, but its OWN try/catch and its own dispatcher (distinct tag, marker,
+  // cadence gate — never folded into dispatchExitPushes).
+  if (!dry_run && push && push.vapid) {
+    try {
+      await dispatchReminderPushes(db, {
+        intents: reminderIntents,
+        vapid: push.vapid,
+        sendPushFn: push.sendPushFn,
+        now_iso,
+        trade_date: etDateStr(now),
+      });
+    } catch (e) {
+      console.error("dispatchReminderPushes failed", e);
     }
   }
 

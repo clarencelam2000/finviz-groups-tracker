@@ -1,7 +1,7 @@
 // Bump CACHE on every release (see CLAUDE.md § Automation release-bump checklist):
 // prepend a releases.json entry + update its `current` + bump CACHE here — all three
 // together, so the new shell + releases.json aren't served from a stale cache.
-const CACHE = 'finviz-v78';
+const CACHE = 'finviz-v79';
 
 self.addEventListener('install', e => {
   e.waitUntil(
@@ -34,6 +34,11 @@ self.addEventListener('activate', e => {
 // this event — this handler never touches raw ciphertext). A data-less push (event.data absent —
 // an older/unexpected send, or any future decrypt-less fallback) still shows today's exact generic
 // notification, so both paths stay backward-compatible.
+//
+// WS5-4b PR-A (issue #348 tail) — Tier-2 decaying reminders add a `silent` payload field
+// (worker-positions/src/push.js buildReminderPushPayload). Read here and passed straight into
+// showNotification's options. Backward-compatible: Tier-1/pre-close payloads omit `silent`, so
+// `!!(data && data.silent)` is `false` for them — unchanged behavior.
 self.addEventListener('push', event => {
   let data = null;
   try {
@@ -44,9 +49,10 @@ self.addEventListener('push', event => {
   const title = data && data.title ? data.title : 'Exit signal';
   const body = data && data.body ? data.body : "A position hit an exit signal — open the app to confirm your fill or tap 'still holding'.";
   const tag = (data && data.tag) || 'finviz-exit';
+  const silent = !!(data && data.silent);
   const url = (data && data.url) || '#positions';
   event.waitUntil(
-    self.registration.showNotification(title, { body, tag, data: { url } })
+    self.registration.showNotification(title, { body, tag, silent, data: { url } })
   );
 });
 

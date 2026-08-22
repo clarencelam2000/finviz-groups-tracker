@@ -15,3 +15,6 @@ node_modules/
 
 # Probe debug HTML dumps (CI artifact only, never committed)
 data/picks/debug_html/
+
+# Throwaway build specs / working files (per-session, never committed)
+scratchpad/

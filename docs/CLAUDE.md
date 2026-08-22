@@ -280,8 +280,12 @@ RFC 8291 decryption before the event fires, so the handler only ever sees plaint
 data-less push (no `event.data`) still falls back to today's generic "Exit signal" notification —
 kept for backward compatibility, not otherwise used going forward. The in-app confirmation strip
 remains the source of truth for full detail (modeled fill, R, auto-close countdown); the push is
-still just a nudge. There is no Tier-2 rich-payload UI (decaying-cadence reminders, earnings-approach
-push) — that's a separate later PR. Tapping the notification (`notificationclick`) focuses an existing window
+still just a nudge. **Tier-2 decaying reminders (WS5-4b PR-A, issue #348 tail) are done:** a
+`closing` position still parked on session 1, 2, or 4 (PRODUCT-LOCKED cadence,
+`worker-positions/src/sweep.js` `TIER2_REMINDER_SESSIONS`) gets a QUIET reminder push — same `push`
+handler, but `data.silent` is `true` and `data.tag` is `finviz-exit-reminder` (a distinct lockscreen
+entry from Tier-1's `finviz-exit`, so a reminder never replaces or is replaced by a settled exit
+push). Earnings-approach push is still a separate later PR. Tapping the notification (`notificationclick`) focuses an existing window
 and `postMessage`s `{type:'OPEN_POSITIONS'}` (handled by the SW-message listener next to
 `SW_RELOAD`), or falls back to `self.clients.openWindow('...#positions')` on a cold start, which
 `index.html`'s boot code picks up via a `location.hash === '#positions'` check and calls

@@ -6,6 +6,66 @@
 
 ---
 
+## 2026-08-22 — WS5-4b #348 tail: Tier-2 decaying reminders (#357) + earnings-approach push (#358)
+
+**Status: safe to close once #357 + #358 merge (merge #357 FIRST — #358 is stacked on it; GitHub
+retargets #358 to default on #357's merge).** Staff-eng session closing out the LAST push work in
+WS5. Lead owned the two product-taste calls (Tier-2 cadence curve; earnings threshold + fire-once
+model), wrote both locked specs, delegated both boots-on-ground builds to Sonnet subagents, and
+re-ran/reviewed every line + independently re-verified all tests.
+
+**The two product calls (owner-approved):**
+- **Tier-2 cadence = `sessions_in_closing ∈ {1,2,4}`**, silent, collapsing tag. Window is `{1,2,3,4}`
+  (auto-confirm consumes 5, Tier-1 owns 0). Day 1&2 catch a missed Tier-1; skip 3; day 4 = "auto-closes
+  in 1 session" last-call. **Key simplification the lead verified in code:** `stillHolding` moves a
+  position `closing → managing` and nulls `exit_signal_date`, so a re-signal starts a fresh closing
+  episode and `sessions_in_closing` resets to 0 → the cadence is a PURE function of that count.
+  **No `sent_count`/`last_sent_date` stateful marker needed** (deviation from the prior eng's handoff
+  note, which assumed one). Just the existing `(trade_id,trade_date)` idempotency marker + the schedule set.
+- **Earnings push = fire once at `days_to_earnings ≤ 3`** (`EARNINGS_PUSH_SESSIONS`, distinct from the
+  engine's `EARNINGS_WARN_SESSIONS=10` in-app flag band), NON-silent (rare + actionable → real buzz).
+  **Fire-once guard = "no `earnings_push_sent` in the last 15 sessions"** (`EARNINGS_PUSH_COOLDOWN_SESSIONS`)
+  via `sessionsSince` — **NO earnings-date reconstruction, NO arithmetic on `days_to_earnings`** (owner
+  pushed for this; `days_to_earnings` is used ONLY as a threshold, so its calendar-vs-sessions ambiguity
+  is moot). Quarters are ~63 sessions apart, so it fires once/event and re-arms next quarter.
+
+**What landed (both worker-only push logic on `finviz-positions`, auto-deploys via deploy-workers.yml):**
+- **PR #357 (Tier-2, branch `claude/ws5-tier2-reminders`, base default):** `buildReminderPushPayload` +
+  `dispatchReminderPushes` in `push.js` (mirror Tier-1 line-for-line; tag `finviz-exit-reminder`,
+  `silent:true`, `reminder_push_sent` marker). `TIER2_REMINDER_SESSIONS=[1,2,4]` in `sweep.js`; intents
+  collected INSIDE the existing auto-confirm closing loop (no new query), gated `!autoConfirmed &&
+  includes(sessions_in_closing)`; dispatched post-loops in own try/catch. **`docs/sw.js` `silent`
+  passthrough** (the one PWA change) + release triplet (v78→v79, `2026.08.22` "Quiet exit reminders").
+  **304 vitest**, +14 new.
+- **PR #358 (earnings, branch `claude/ws5-earnings-push`, STACKED on #357):** `buildEarningsPushPayload`
+  (📅, per-ticker tag `finviz-earnings-<ticker>`, non-silent) + `dispatchEarningsPushes` (marker
+  `earnings_push_sent`). Sweep collects candidates in the advance loop off `outcome.position.days_to_earnings`;
+  post-loop cooldown filter (15-session `sessionsSince`, **fails OPEN** on a D1 hiccup — prefers a rare
+  dup over dropping a real alert; same-day idempotency still blocks a same-day double-send) → dispatch.
+  **Worker-only, NO release triplet** (non-silent reuses the #353 payload passthrough; a cache bump would
+  also collide with #357's v79). **315 vitest**, +11 vs #357 base.
+
+**Verification (lead re-ran, not just trusted subagents):** #357 → 304/304 vitest + 5/5 release guard +
+`node --check` on push/sweep/sw.js; #358 → 315/315 vitest + `node --check`. Diffs reviewed line-by-line —
+both dispatchers are faithful mirrors of the Tier-1 path (NEVER-THROWS, marker-only-after-success,
+prune-on-gone), disjoint markers, no migration (event_type has no CHECK).
+
+**Filed for future — issue #356 (`WS5-4b-EARNINGS-CUSHION`):** owner's 1.5-ATR-cushion rule — hold into
+earnings iff `cushion = (last_close − current_stop)/atr ≥ 1.5`, else advise exiting before the print.
+ADVISORY ONLY, engine must NOT auto-exit (bolded in the issue). Enriches #358's earnings-push copy; depends
+on #358.
+
+**Next steps:** (1) merge #357 then #358. (2) e2e for both gated on a live weekday sweep hitting the signal
+on a subscribed device (Tier-2 needs a position aged to day 1/2/4 in closing; earnings needs a held name
+within 3 sessions of a report). (3) Pick up #356 when convenient. **WS5 push channel is then feature-complete.**
+
+**Flagged / low-confidence:** (a) Tier-2 copy is the lead's wording ("NVT — still closing / Day 2 · …
+Auto-closes in 3 sessions.") — owner may want to reword before merge. (b) Earnings cooldown fail-open is a
+deliberate "don't drop a real alert" call; if a rare cross-day duplicate is unacceptable, flip it to
+fail-closed. (c) Chore: `scratchpad/` is now gitignored (throwaway per-session specs live there).
+
+---
+
 ## 2026-08-21 — WS5 push fast-follows: RFC 8291 payload (#348 core) + pre-close act-now push (#349)
 
 **Status: safe to close once #353 + #354 merge (merge #353 FIRST — #354 is stacked on it).** Staff-eng

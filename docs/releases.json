@@ -1,6 +1,16 @@
 {
-  "current": "2026.08.21",
+  "current": "2026.08.22",
   "releases": [
+    {
+      "version": "2026.08.22",
+      "date": "2026-08-22",
+      "title": "Quiet exit reminders",
+      "tag": "feature",
+      "tab": "positions",
+      "notes": [
+        "If an exit signal is still awaiting your confirmation a day or two later, you'll now get a quiet (silent) reminder — no separate alert sound, just a nudge on your lock screen."
+      ]
+    },
     {
       "version": "2026.08.21",
       "date": "2026-08-21",

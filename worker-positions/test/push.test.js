@@ -14,6 +14,8 @@ import {
   sendPush,
   encryptAes128Gcm,
   buildExitPushPayload,
+  buildReminderPushPayload,
+  dispatchReminderPushes,
 } from "../src/push.js";
 
 // Lead-generated, round-trip-verified test keypair (from the locked spec).
@@ -165,6 +167,107 @@ describe("buildExitPushPayload", () => {
   it("falls back to a generic body for an unknown/missing reason", () => {
     const payload = JSON.parse(buildExitPushPayload({ ticker: "OUST" }));
     expect(payload.body).toBe("An exit signal fired. Open to confirm your fill.");
+  });
+});
+
+describe("buildReminderPushPayload", () => {
+  it("correct shape: title has no 🚨, tag is finviz-exit-reminder, silent:true, countdown math", () => {
+    const payload = JSON.parse(
+      buildReminderPushPayload({ ticker: "NVT", sessions_in_closing: 2, auto_confirm_sessions: 5, reason: "stop_hit", price: 42.1 })
+    );
+    expect(payload.title).toBe("NVT — still closing");
+    expect(payload.title).not.toContain("🚨");
+    expect(payload.body).toBe("Day 2. Stop hit at 42.1. Auto-closes in 3 sessions.");
+    expect(payload.tag).toBe("finviz-exit-reminder");
+    expect(payload.silent).toBe(true);
+    expect(payload.url).toBe("#positions");
+  });
+
+  it("singular 'session' when exactly 1 remains", () => {
+    const payload = JSON.parse(
+      buildReminderPushPayload({ ticker: "NVT", sessions_in_closing: 4, auto_confirm_sessions: 5 })
+    );
+    expect(payload.body).toBe("Day 4. Still below your exit level. Auto-closes in 1 session.");
+  });
+
+  it("reason-phrase fallback when reason is absent", () => {
+    const payload = JSON.parse(
+      buildReminderPushPayload({ ticker: "OUST", sessions_in_closing: 1, auto_confirm_sessions: 5 })
+    );
+    expect(payload.body).toBe("Day 1. Still below your exit level. Auto-closes in 4 sessions.");
+  });
+});
+
+describe("dispatchReminderPushes", () => {
+  it("fires for a subscribed user and writes a reminder_push_sent marker only on success", async () => {
+    await subscribePush(db, "owner", { endpoint: "https://push.example/a", p256dh: "p1", auth: "a1" });
+    let calls = 0;
+    const mock = async () => {
+      calls++;
+      return { ok: true, status: 201, gone: false };
+    };
+
+    const result = await dispatchReminderPushes(db, {
+      intents: [{ user_id: "owner", trade_id: "t1", ticker: "NVT", sessions_in_closing: 1, auto_confirm_sessions: 5 }],
+      vapid: TEST_VAPID,
+      sendPushFn: mock,
+      now_iso: "2026-08-20T21:05:00Z",
+      trade_date: "2026-08-20",
+    });
+
+    expect(calls).toBe(1);
+    expect(result.sent).toBe(1);
+    const events = db._events().filter((e) => e.event_type === "reminder_push_sent");
+    expect(events).toHaveLength(1);
+    expect(events[0].trade_id).toBe("t1");
+    // Tier-1 and Tier-2 markers must be distinct event_types, never sharing suppression.
+    expect(db._events().filter((e) => e.event_type === "push_sent")).toHaveLength(0);
+  });
+
+  it("idempotency: a second dispatch for the same (trade_id, trade_date) is a no-op", async () => {
+    await subscribePush(db, "owner", { endpoint: "https://push.example/a", p256dh: "p1", auth: "a1" });
+    let calls = 0;
+    const mock = async () => {
+      calls++;
+      return { ok: true, status: 201, gone: false };
+    };
+    const intents = [{ user_id: "owner", trade_id: "t1", ticker: "NVT", sessions_in_closing: 1, auto_confirm_sessions: 5 }];
+
+    await dispatchReminderPushes(db, { intents, vapid: TEST_VAPID, sendPushFn: mock, now_iso: "2026-08-20T21:05:00Z", trade_date: "2026-08-20" });
+    expect(calls).toBe(1);
+
+    const result2 = await dispatchReminderPushes(db, { intents, vapid: TEST_VAPID, sendPushFn: mock, now_iso: "2026-08-20T21:06:00Z", trade_date: "2026-08-20" });
+    expect(calls).toBe(1);
+    expect(result2.skipped).toBe(1);
+    expect(result2.sent).toBe(0);
+  });
+
+  it("no subscription: no throw, no marker written (retries next day)", async () => {
+    const result = await dispatchReminderPushes(db, {
+      intents: [{ user_id: "owner", trade_id: "t1", ticker: "NVT", sessions_in_closing: 1, auto_confirm_sessions: 5 }],
+      vapid: TEST_VAPID,
+      sendPushFn: async () => ({ ok: true, status: 201, gone: false }),
+      now_iso: "2026-08-20T21:05:00Z",
+      trade_date: "2026-08-20",
+    });
+    expect(result.sent).toBe(0);
+    expect(db._events()).toHaveLength(0);
+  });
+
+  it("never throws on a sendPushFn throw", async () => {
+    await subscribePush(db, "owner", { endpoint: "https://push.example/a", p256dh: "p1", auth: "a1" });
+    const throwing = async () => {
+      throw new Error("network down");
+    };
+    await expect(
+      dispatchReminderPushes(db, {
+        intents: [{ user_id: "owner", trade_id: "t1", ticker: "NVT", sessions_in_closing: 1, auto_confirm_sessions: 5 }],
+        vapid: TEST_VAPID,
+        sendPushFn: throwing,
+        now_iso: "2026-08-20T21:05:00Z",
+        trade_date: "2026-08-20",
+      })
+    ).resolves.toEqual({ sent: 0, pruned: 0, skipped: 0 });
   });
 });
 
