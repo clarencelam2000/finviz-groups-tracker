@@ -603,6 +603,7 @@
       picksExpanded: new Set(), // stable "ticker_category" keys of currently-expanded Picks rows; survives re-renders within a session, cleared on full page reload
       picksChartOpen: new Set(), // stable "ticker_category" keys with the TradingView chart panel open; survives re-renders, same lifecycle as picksExpanded
       morningChartOpen: new Set(), // tickers with the TradingView chart panel open on the Morning tab; same lifecycle as picksChartOpen (morning rows are one-per-ticker, so ticker alone is a stable key)
+      posChartOpen: new Set(), // trade_id (not ticker) with the TradingView chart panel open on a Positions card — a closed-and-reopened trade on the same ticker must not share panel state
       provenanceData: null,
       latestAiDate: null,
       latestSnapshotDate: null,
@@ -6730,17 +6731,55 @@
       const entryDate = escapeHtml(p.entry_date || p.created_at || '');
       const stateBadge = POS_STATE_BADGE[p.state] || '';
       const d = posDerive(p);
+      const tradeIdJs = String(p.trade_id || '').replace(/'/g, "\\'");
+      const tickerJs = String(p.ticker || '').replace(/'/g, "\\'");
       return `
         <div class="pos-card bg-slate-800 border border-slate-700 rounded-lg px-3.5 py-3">
           <div class="flex justify-between items-center">
-            <span><span class="font-bold text-sm tracking-wide">${ticker}</span> <span class="text-xs text-slate-500">· ${source} · ${entryDate}</span>${stateBadge}</span>
+            <span><span class="font-bold text-sm tracking-wide cursor-pointer hover:text-sky-300 transition-colors" onclick="__togglePosChart('${tradeIdJs}','${tickerJs}')" title="Show chart">${ticker}</span> <span class="text-xs text-slate-500">· ${source} · ${entryDate}</span>${stateBadge}</span>
           </div>
           ${posHeroHtml(p, d)}
           ${posStopMovedHtml(p, d)}
           ${posOverlaysHtml(p, d)}
+          ${posChartAffordance(p)}
           ${posDetailsHtml(p, d)}
         </div>`;
     }
+
+    // Chart toggle + lazy-load panel for a Positions card, reusing the same TradingView
+    // "Advanced Chart" embed and click-to-expand pattern as Watchlist/Morning
+    // (__toggleWatchChart/__toggleMorningChart) — see there for the widget rationale. Keyed by
+    // trade_id rather than ticker: unlike Morning/Watchlist (one row per ticker), a ticker can
+    // recur across multiple trades over time (closed and reopened), so ticker alone isn't a
+    // stable/unique key here.
+    function posChartAffordance(p) {
+      const tradeId = String(p.trade_id || '');
+      const ticker = String(p.ticker || '');
+      const isOpen = state.posChartOpen.has(tradeId);
+      const tradeIdJs = tradeId.replace(/'/g, "\\'");
+      const tickerJs = ticker.replace(/'/g, "\\'");
+      return `
+        <div class="mt-2.5 pt-2 border-t border-slate-700/50">
+          <button id="pos-chart-toggle-${escapeHtml(tradeId)}" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation();__togglePosChart('${tradeIdJs}','${tickerJs}')">${isOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
+          <div id="pos-chart-panel-${escapeHtml(tradeId)}" class="mt-2">${isOpen ? tradingViewChartHtml(ticker, 560) : ''}</div>
+        </div>`;
+    }
+
+    window.__togglePosChart = function (tradeId, ticker) {
+      const panel = document.getElementById('pos-chart-panel-' + tradeId);
+      const btn = document.getElementById('pos-chart-toggle-' + tradeId);
+      if (!panel) return;
+      const isOpen = state.posChartOpen.has(tradeId);
+      if (isOpen) {
+        state.posChartOpen.delete(tradeId);
+        panel.innerHTML = '';
+        if (btn) btn.textContent = 'Show chart ▼';
+      } else {
+        state.posChartOpen.add(tradeId);
+        panel.innerHTML = tradingViewChartHtml(ticker, 560);
+        if (btn) btn.textContent = 'Hide chart ▲';
+      }
+    };
 
     function renderPositions() {
       const el = document.getElementById('positions-content');
@@ -7561,9 +7600,16 @@
         </div>`;
     }
 
-    // Levels gauge — prior levels labeled on top, today's on the bottom, your level in
-    // violet, price = the white dot (mock §01). Returns '' when there isn't enough data to
-    // draw a meaningful band (no prior_high/prior_low yet).
+    // Levels gauge — tick marks only on the track (prior low/high, day low, your level,
+    // price = the white dot); the numbers live in a fixed key/value readout underneath
+    // instead of floating text pinned to each marker's own position. The old floating labels
+    // (each independently centered at its marker's %, with no distance check between them)
+    // collided into unreadable overlap whenever two markers landed close together — common
+    // right after a breakout or reclaim, when e.g. day low sits near a prior level. A fixed
+    // readout can't collide at any spacing, and unlike the floating version it no longer has
+    // to drop a marker under crowding (the floating layout favored four canonical captions
+    // max) — every marker present on the card gets its own readout cell. Returns '' when
+    // there isn't enough data to draw a meaningful band (no prior_high/prior_low yet).
     function watchGaugeHtml(entry, pub) {
       const price  = pub ? parseFloat(pub.price) : NaN;
       const open   = pub ? parseFloat(pub.open)  : NaN;
@@ -7584,44 +7630,37 @@
 
       const bandLeft = pct(pLow), bandRight = 100 - pct(pHigh);
 
-      // Top markers (prior levels): prior low (red), prior high (emerald).
-      const topMarkers = `
+      const ticks = `
         <div class="absolute w-0.5 h-2.5 bottom-3 bg-red-400" style="left:${pct(pLow)}%"></div>
-        <div class="absolute text-[9px] tabular-nums -translate-x-1/2 whitespace-nowrap bottom-[26px] text-red-400" style="left:${pct(pLow)}%">prior low ${pLow.toFixed(2)}</div>
         <div class="absolute w-0.5 h-2.5 bottom-3 bg-emerald-400" style="left:${pct(pHigh)}%"></div>
-        <div class="absolute text-[9px] tabular-nums -translate-x-1/2 whitespace-nowrap bottom-[26px] text-emerald-400" style="left:${pct(pHigh)}%">prior high ${pHigh.toFixed(2)}</div>`;
-
-      // Bottom markers (today + you): day low (slate), your level (violet). `open` dropped
-      // when the card is crowded (four canonical captions favored per spec §4c-iv).
-      let bottomMarkers = '';
-      if (!isNaN(dayLow)) {
-        bottomMarkers += `
-          <div class="absolute w-0.5 h-2.5 top-3 bg-slate-500" style="left:${pct(dayLow)}%"></div>
-          <div class="absolute text-[9px] tabular-nums -translate-x-1/2 whitespace-nowrap top-[26px] text-slate-500" style="left:${pct(dayLow)}%">day low ${dayLow.toFixed(2)}</div>`;
-      }
-      if (!isNaN(you)) {
-        bottomMarkers += `
-          <div class="absolute w-0.5 h-2.5 top-3 bg-violet-400" style="left:${pct(you)}%"></div>
-          <div class="absolute text-[9px] tabular-nums -translate-x-1/2 whitespace-nowrap top-[26px] text-violet-400" style="left:${pct(you)}%">your ${you.toFixed(2)}</div>`;
-      }
+        ${!isNaN(dayLow) ? `<div class="absolute w-0.5 h-2.5 top-3 bg-slate-500" style="left:${pct(dayLow)}%"></div>` : ''}
+        ${!isNaN(you) ? `<div class="absolute w-0.5 h-2.5 top-3 bg-violet-400" style="left:${pct(you)}%"></div>` : ''}`;
 
       const priceDot = !isNaN(price)
         ? `<div class="absolute w-3 h-3 rounded-full bg-white border-2 border-slate-800 -translate-x-1/2 -translate-y-1/2 top-1/2 z-10" style="left:${pct(price)}%"></div>`
         : '';
 
+      const cell = (colorCls, label, val) => !isNaN(val) ? `
+        <div class="flex items-center gap-1.5 text-slate-400">
+          <i class="inline-block w-1.5 h-1.5 rounded-sm ${colorCls} flex-none"></i>${label}
+          <span class="ml-auto text-slate-200 font-medium tabular-nums">${val.toFixed(2)}</span>
+        </div>` : '';
+      const readout = `
+        <div class="grid grid-cols-2 gap-x-3 gap-y-1 mt-1.5 text-[11px]">
+          ${cell('bg-red-400', 'prior low', pLow)}
+          ${cell('bg-emerald-400', 'prior high', pHigh)}
+          ${cell('bg-slate-500', 'day low', dayLow)}
+          ${cell('bg-violet-400', 'your level', you)}
+          ${cell('bg-white', 'now', price)}
+        </div>`;
+
       return `
-        <div class="relative h-1.5 bg-slate-700 rounded-full my-6 mx-1">
+        <div class="relative h-1.5 bg-slate-700 rounded-full mt-3 mb-1 mx-1">
           <div class="absolute inset-y-0 rounded-full bg-emerald-500/25" style="left:${bandLeft}%;right:${bandRight}%"></div>
-          ${topMarkers}
-          ${bottomMarkers}
+          ${ticks}
           ${priceDot}
         </div>
-        <div class="flex gap-3.5 justify-center -mt-1 mb-1 text-[9px] text-slate-500">
-          <span class="inline-flex items-center gap-1"><i class="inline-block w-2 h-0.5 rounded bg-red-400"></i>prior low</span>
-          <span class="inline-flex items-center gap-1"><i class="inline-block w-2 h-0.5 rounded bg-emerald-400"></i>prior high</span>
-          <span class="inline-flex items-center gap-1"><i class="inline-block w-2 h-0.5 rounded bg-violet-400"></i>your level</span>
-          <span class="inline-flex items-center gap-1"><i class="inline-block w-2 h-0.5 rounded bg-white"></i>now</span>
-        </div>`;
+        ${readout}`;
     }
 
     // Gauge collapse/show toggle — DOM-patched (no full re-render), mirrors __toggleMorningChart.
@@ -7759,6 +7798,7 @@
           <div class="bg-slate-800 border border-slate-700 border-l-4 border-slate-600 rounded-lg px-3.5 py-3">
             ${header}
             <div class="text-xs text-slate-400 mt-1.5">Added — first morning check lands tomorrow AM after tonight's data run.</div>
+            ${watchChartAffordance(ticker)}
             ${footer}
           </div>`;
       }

@@ -1,6 +1,18 @@
 {
-  "current": "2026.08.21",
+  "current": "2026.08.23",
   "releases": [
+    {
+      "version": "2026.08.23",
+      "date": "2026-08-23",
+      "title": "Charts on positions and watchlist, clearer levels",
+      "tag": "improvement",
+      "tab": "positions",
+      "notes": [
+        "Open positions now have a Show chart button (tap the ticker too) — chart access used to be Watchlist/Morning-only.",
+        "Watchlist tickers still in \"Adding\" status (before their first morning check) can now pull up a chart as well.",
+        "The Morning tab's levels bar no longer overlaps its price labels when two levels sit close together — the numbers now live in a clean list under the bar."
+      ]
+    },
     {
       "version": "2026.08.21",
       "date": "2026-08-21",
