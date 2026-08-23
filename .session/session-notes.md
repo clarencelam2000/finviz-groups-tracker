@@ -1311,3 +1311,49 @@ unconditionally). Owner then asked to file that as tracked work. Opened **issue 
 notifications (VAPID) *and* the confirm/still-holding action surface for `closing`-state
 positions — it does NOT cover a closed-trades history/grace-window view. That's WS5-5, a distinct,
 newly-filed item, not something already tracked under WS5-4 as previously implied.
+
+---
+
+## 2026-08-23 — Positions chart access + Morning gauge label collision fix
+
+**Status: safe to close — PR #359 open on `claude/richer-cards-chart-display-r07y55`, all three
+release-surface pieces (code, `releases.json`, `sw.js` cache bump) landed in one commit, tests
+pass.** Owner flagged two things from screenshots: Positions cards (FROG, EOG) have no chart
+affordance unlike Watchlist/Morning cards, and the Morning-tab levels gauge (TER, NVT) was
+rendering garbled overlapping text. Produced a before/after mock as an Artifact first
+(https://claude.ai/code/artifact/bfdcc856-93c1-4e57-85de-2496a52ca86a), owner approved both plus
+a third ask (Watchlist cards still in "Adding" status should get charts too), then implemented.
+
+**What landed (PR #359, `docs/index.html` + `docs/releases.json` + `docs/sw.js`):**
+- `posChartAffordance(p)` + `window.__togglePosChart(tradeId, ticker)` — same lazy TradingView
+  embed/toggle pattern as `watchChartAffordance`/`__toggleWatchChart`, but keyed by `trade_id`
+  (not ticker) since a Positions ticker can recur across multiple trades over time; a closed
+  ticker doesn't reopen sharing panel state with a new one. Wired into `posCardHtml` between
+  `posOverlaysHtml` and `posDetailsHtml`; the ticker itself is also now a click target bound to
+  the same toggle. New `state.posChartOpen: new Set()`.
+- Watchlist "Adding" state (`watchCardHtml`'s `noBarYet` branch, no morning read yet) now also
+  renders `watchChartAffordance(ticker)` — it needed no morning data, the early return just never
+  reached the chart block before.
+- `watchGaugeHtml()` rewritten: root cause of the TER/NVT overlap was each price label
+  independently centered under its own marker's `%` with zero distance check between labels —
+  guaranteed to collide whenever two markers land close together (day low near a prior level,
+  "your level" crowding day low — common right after a breakout/reclaim). Fix drops the floating
+  labels entirely; track keeps tick marks + price dot only, numbers move to a fixed key/value
+  readout grid underneath. Can't collide at any spacing, and — bonus — no longer silently drops a
+  marker under crowding the way the floating layout did (`cell()` renders every non-NaN marker).
+
+**Verification (documented gaps, not glossed over):** `python3 -m pytest tests/ -q` with the
+standard Playwright ignore list — 703 passed, one pre-existing unrelated failure
+(`test_collect_held.py` weekend-guard tied to today's system date). Extracted `watchGaugeHtml()`
+into standalone Node and ran it against TER-shaped and NVT-shaped data — confirmed zero floating
+label text in the output for both. Playwright against real Chromium (needed the
+`chromium-1194`-vs-`chromium-1117` symlink workaround from
+`knowledge/investigations/playwright-cloud-session-testing.md`) confirmed `__togglePosChart`
+opens/closes the panel and injects the iframe markup with no page errors. **Not verified:** actual
+TradingView iframe visual rendering (`s.tradingview.com` unreachable from this sandbox's
+Chromium — same documented limitation) and live rendering against the authenticated
+`finviz-positions`/watchlist worker APIs (no test credentials in this session) — Positions/
+Watchlist card output was checked via pure-function extraction + hand-built DOM instead of a full
+signed-in render.
+
+**Next steps:** none outstanding from this session — PR #359 is ready for review/merge.
