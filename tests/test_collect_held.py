@@ -308,6 +308,19 @@ def test_main_advisory_mode_skips_advance_and_posts_advisory_path(monkeypatch, c
     monkeypatch.setenv("POSITIONS_INGEST_TOKEN", "tok")
     monkeypatch.setattr(sys_mod, "argv", ["collect_held.py", "--advisory"])
 
+    # main()'s non-trading-day guard reads the real wall clock (datetime.now(et)) — freeze it to
+    # a known trading Thursday so this test doesn't fail every time it happens to run on an
+    # actual weekend (it did: 2026-08-23 is a Sunday). Subclassing (not a MagicMock) keeps every
+    # other datetime call in main() — e.g. the collected_at timestamp — working normally.
+    import datetime as real_datetime
+
+    class _FixedDatetime(real_datetime.datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return cls(2026, 8, 20, 15, 40, tzinfo=tz)  # a Thursday, not an NYSE holiday
+
+    monkeypatch.setattr(ch, "datetime", _FixedDatetime)
+
     ch.main()
 
     assert posted["path"] == ch.PRECLOSE_ADVISORY_PATH
