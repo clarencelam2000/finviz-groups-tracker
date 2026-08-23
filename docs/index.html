@@ -5175,38 +5175,56 @@
       return body + morningChartAffordance(r.ticker);
     }
 
+    // Shared markup + toggle-state core for a card's chart button + lazy-load TradingView panel
+    // — reused by Morning, Watchlist, and Positions cards. Originally three independent
+    // near-verbatim copies of this pattern (one per surface); consolidated so a future
+    // toggle-logic fix only needs to land once. `key` is the DOM id / open-set membership key:
+    // ticker for Morning/Watchlist (one row per ticker), trade_id for Positions (a ticker can
+    // recur across multiple closed/reopened trades there, so ticker alone isn't stable/unique).
+    // Returns the new open state so callers that also drive a title/tooltip elsewhere (see
+    // posChartAffordance) can keep it in sync without re-deriving it from the Set themselves.
+    function chartAffordanceHtml(idPrefix, key, ticker, openSet, wrapClass) {
+      const isOpen = openSet.has(key);
+      const keyJs = String(key).replace(/'/g, "\\'");
+      const tickerJs = String(ticker).replace(/'/g, "\\'");
+      return `
+        <div class="${wrapClass}">
+          <button id="${idPrefix}-chart-toggle-${escapeHtml(key)}" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation();${idPrefix}ChartToggle('${keyJs}','${tickerJs}')">${isOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
+          <div id="${idPrefix}-chart-panel-${escapeHtml(key)}" class="mt-2">${isOpen ? tradingViewChartHtml(ticker, 560) : ''}</div>
+        </div>`;
+    }
+
+    function toggleChartPanel(idPrefix, key, ticker, openSet) {
+      const panel = document.getElementById(idPrefix + '-chart-panel-' + key);
+      const btn = document.getElementById(idPrefix + '-chart-toggle-' + key);
+      if (!panel) return null;
+      const isOpen = openSet.has(key);
+      if (isOpen) {
+        openSet.delete(key);
+        panel.innerHTML = '';
+        if (btn) btn.textContent = 'Show chart ▼';
+      } else {
+        openSet.add(key);
+        panel.innerHTML = tradingViewChartHtml(ticker, 560);
+        if (btn) btn.textContent = 'Hide chart ▲';
+      }
+      return !isOpen;
+    }
+
     // Chart toggle + lazy-load panel for a Morning card, reusing the same TradingView
     // "Advanced Chart" embed and click-to-expand pattern as the Picks tab's
     // __togglePickChart/state.picksChartOpen (see there for the widget rationale). Morning
     // rows are one-per-ticker (no list_category dimension), so the ticker alone is a stable
     // key — no expandKey needed.
     function morningChartAffordance(ticker) {
-      const isOpen = state.morningChartOpen.has(ticker);
-      const tickerJs = ticker.replace(/'/g, "\\'");
-      return `
-        <div class="mt-2 pt-2 border-t border-slate-700/50">
-          <button id="morning-chart-toggle-${escapeHtml(ticker)}" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation();__toggleMorningChart('${tickerJs}')">${isOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
-          <div id="morning-chart-panel-${escapeHtml(ticker)}" class="mt-2">${isOpen ? tradingViewChartHtml(ticker, 560) : ''}</div>
-        </div>`;
+      return chartAffordanceHtml('morning', ticker, ticker, state.morningChartOpen, 'mt-2 pt-2 border-t border-slate-700/50');
     }
 
     // Lazy-load the TradingView chart into a Morning card without a full re-render — mirrors
     // __togglePickChart's DOM-patch pattern. morningChartOpen persists the open/closed state
     // across renderMorning() re-renders (tab switches, WS4 ticket toggles).
-    window.__toggleMorningChart = function(ticker) {
-      const panel = document.getElementById('morning-chart-panel-' + ticker);
-      const btn = document.getElementById('morning-chart-toggle-' + ticker);
-      if (!panel) return;
-      const isOpen = state.morningChartOpen.has(ticker);
-      if (isOpen) {
-        state.morningChartOpen.delete(ticker);
-        panel.innerHTML = '';
-        if (btn) btn.textContent = 'Show chart ▼';
-      } else {
-        state.morningChartOpen.add(ticker);
-        panel.innerHTML = tradingViewChartHtml(ticker, 560);
-        if (btn) btn.textContent = 'Hide chart ▲';
-      }
+    window.morningChartToggle = function(ticker) {
+      toggleChartPanel('morning', ticker, ticker, state.morningChartOpen);
     };
 
     // ── WS4 Phase B trade ticket (ADR-014) ──────────────────────────────────
@@ -6731,12 +6749,17 @@
       const entryDate = escapeHtml(p.entry_date || p.created_at || '');
       const stateBadge = POS_STATE_BADGE[p.state] || '';
       const d = posDerive(p);
-      const tradeIdJs = String(p.trade_id || '').replace(/'/g, "\\'");
+      const tradeId = String(p.trade_id || '');
+      const tradeIdJs = tradeId.replace(/'/g, "\\'");
       const tickerJs = String(p.ticker || '').replace(/'/g, "\\'");
+      // Ticker label doubles as the chart toggle's other click target (alongside the button in
+      // posChartAffordance below); its title must stay in sync with open/closed state — see
+      // posChartToggle, which patches this element by id after the button-driven toggle.
+      const tickerLabelOpen = state.posChartOpen.has(tradeId);
       return `
         <div class="pos-card bg-slate-800 border border-slate-700 rounded-lg px-3.5 py-3">
           <div class="flex justify-between items-center">
-            <span><span class="font-bold text-sm tracking-wide cursor-pointer hover:text-sky-300 transition-colors" onclick="__togglePosChart('${tradeIdJs}','${tickerJs}')" title="Show chart">${ticker}</span> <span class="text-xs text-slate-500">· ${source} · ${entryDate}</span>${stateBadge}</span>
+            <span><span id="pos-ticker-label-${escapeHtml(tradeId)}" class="font-bold text-sm tracking-wide cursor-pointer hover:text-sky-300 transition-colors" onclick="posChartToggle('${tradeIdJs}','${tickerJs}')" title="${tickerLabelOpen ? 'Hide chart' : 'Show chart'}">${ticker}</span> <span class="text-xs text-slate-500">· ${source} · ${entryDate}</span>${stateBadge}</span>
           </div>
           ${posHeroHtml(p, d)}
           ${posStopMovedHtml(p, d)}
@@ -6748,37 +6771,21 @@
 
     // Chart toggle + lazy-load panel for a Positions card, reusing the same TradingView
     // "Advanced Chart" embed and click-to-expand pattern as Watchlist/Morning
-    // (__toggleWatchChart/__toggleMorningChart) — see there for the widget rationale. Keyed by
+    // (watchChartToggle/morningChartToggle) — see there for the widget rationale. Keyed by
     // trade_id rather than ticker: unlike Morning/Watchlist (one row per ticker), a ticker can
     // recur across multiple trades over time (closed and reopened), so ticker alone isn't a
     // stable/unique key here.
     function posChartAffordance(p) {
       const tradeId = String(p.trade_id || '');
       const ticker = String(p.ticker || '');
-      const isOpen = state.posChartOpen.has(tradeId);
-      const tradeIdJs = tradeId.replace(/'/g, "\\'");
-      const tickerJs = ticker.replace(/'/g, "\\'");
-      return `
-        <div class="mt-2.5 pt-2 border-t border-slate-700/50">
-          <button id="pos-chart-toggle-${escapeHtml(tradeId)}" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation();__togglePosChart('${tradeIdJs}','${tickerJs}')">${isOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
-          <div id="pos-chart-panel-${escapeHtml(tradeId)}" class="mt-2">${isOpen ? tradingViewChartHtml(ticker, 560) : ''}</div>
-        </div>`;
+      return chartAffordanceHtml('pos', tradeId, ticker, state.posChartOpen, 'mt-2.5 pt-2 border-t border-slate-700/50');
     }
 
-    window.__togglePosChart = function (tradeId, ticker) {
-      const panel = document.getElementById('pos-chart-panel-' + tradeId);
-      const btn = document.getElementById('pos-chart-toggle-' + tradeId);
-      if (!panel) return;
-      const isOpen = state.posChartOpen.has(tradeId);
-      if (isOpen) {
-        state.posChartOpen.delete(tradeId);
-        panel.innerHTML = '';
-        if (btn) btn.textContent = 'Show chart ▼';
-      } else {
-        state.posChartOpen.add(tradeId);
-        panel.innerHTML = tradingViewChartHtml(ticker, 560);
-        if (btn) btn.textContent = 'Hide chart ▲';
-      }
+    window.posChartToggle = function (tradeId, ticker) {
+      const isOpen = toggleChartPanel('pos', tradeId, ticker, state.posChartOpen);
+      if (isOpen === null) return;
+      const label = document.getElementById('pos-ticker-label-' + tradeId);
+      if (label) label.title = isOpen ? 'Hide chart' : 'Show chart';
     };
 
     function renderPositions() {
@@ -7663,7 +7670,7 @@
         ${readout}`;
     }
 
-    // Gauge collapse/show toggle — DOM-patched (no full re-render), mirrors __toggleMorningChart.
+    // Gauge collapse/show toggle — DOM-patched (no full re-render), mirrors morningChartToggle.
     // Re-resolves entry/pub by ticker from state rather than passing them through the onclick
     // attribute (avoids JSON-in-HTML-attribute escaping fragility).
     window.__toggleWatchGauge = function (ticker) {
@@ -7679,32 +7686,14 @@
     };
 
     // Chart toggle for a watch card — clones morningChartAffordance's pattern but keyed on
-    // state.watchChartOpen / __toggleWatchChart so the picks chart and watch chart panels
+    // state.watchChartOpen / watchChartToggle so the picks chart and watch chart panels
     // stay independent.
     function watchChartAffordance(ticker) {
-      const isOpen = state.watchChartOpen.has(ticker);
-      const tickerJs = ticker.replace(/'/g, "\\'");
-      return `
-        <div class="mt-2 pt-2 border-t border-slate-700/50">
-          <button id="watch-chart-toggle-${escapeHtml(ticker)}" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation();__toggleWatchChart('${tickerJs}')">${isOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
-          <div id="watch-chart-panel-${escapeHtml(ticker)}" class="mt-2">${isOpen ? tradingViewChartHtml(ticker, 560) : ''}</div>
-        </div>`;
+      return chartAffordanceHtml('watch', ticker, ticker, state.watchChartOpen, 'mt-2 pt-2 border-t border-slate-700/50');
     }
 
-    window.__toggleWatchChart = function (ticker) {
-      const panel = document.getElementById('watch-chart-panel-' + ticker);
-      const btn = document.getElementById('watch-chart-toggle-' + ticker);
-      if (!panel) return;
-      const isOpen = state.watchChartOpen.has(ticker);
-      if (isOpen) {
-        state.watchChartOpen.delete(ticker);
-        panel.innerHTML = '';
-        if (btn) btn.textContent = 'Show chart ▼';
-      } else {
-        state.watchChartOpen.add(ticker);
-        panel.innerHTML = tradingViewChartHtml(ticker, 560);
-        if (btn) btn.textContent = 'Hide chart ▲';
-      }
+    window.watchChartToggle = function (ticker) {
+      toggleChartPanel('watch', ticker, ticker, state.watchChartOpen);
     };
 
     // "I took it →" graduation: prefill the §8a manual-entry ticket and hand off to Positions.
