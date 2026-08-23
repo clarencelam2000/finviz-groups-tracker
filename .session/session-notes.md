@@ -6,6 +6,42 @@
 
 ---
 
+## 2026-08-23 — PR #359 taste review follow-up: chart-toggle tooltip fix + de-dup
+
+**Status: safe to close once the follow-up PR merges.** PR #359 (Positions/Watchlist chart
+access) had already merged; ran `/code-review` against it for correctness + taste and found two
+issues, fixed both in a new PR since #359 couldn't be amended.
+
+**What landed:**
+- **Correctness fix:** the Positions card ticker's click-to-chart tooltip (`title="Show chart"`)
+  never updated after the first toggle — `__togglePosChart` only patched the separate button's
+  text and the panel HTML, never the ticker span's `title`. Gave the ticker span a stable id
+  (`pos-ticker-label-<trade_id>`) and now patch its title alongside the button on every toggle.
+- **Taste fix (de-dup):** `posChartAffordance`/`__togglePosChart`,
+  `watchChartAffordance`/`__toggleWatchChart`, and `morningChartAffordance`/`__toggleMorningChart`
+  were three near-verbatim copies of the same lazy-TradingView button+panel+Set-tracked
+  open/close pattern. Consolidated into two shared helpers — `chartAffordanceHtml(idPrefix, key,
+  ticker, openSet, wrapClass)` and `toggleChartPanel(idPrefix, key, ticker, openSet)` — with each
+  surface keeping a thin wrapper (`morningChartAffordance`/`window.morningChartToggle`, etc.) so
+  existing call sites and inline `onclick` handlers didn't need touching beyond the rename.
+  `window.__toggleMorningChart`/`__toggleWatchChart`/`__togglePosChart` renamed to
+  `morningChartToggle`/`watchChartToggle`/`posChartToggle` (no external references besides
+  archived session notes, which were left as historical record).
+- Release surface bumped together per the hard rule: `releases.json` `2026.08.23.1` (fix,
+  positions tab) + `current` + `sw.js` CACHE `v79→v80`.
+
+**Verification:** `python3 -m pytest tests/ -q` (CI's non-Playwright subset) — 704 passed.
+`tests/test_pwa_positions.py` (Playwright, CI-ignored, run locally via the
+`knowledge/investigations/playwright-cloud-session-testing.md` chromium-revision symlink trick,
+removed after) — 26/30 passed; the 4 failures are all `"I took it →"` Morning-tab timeouts,
+confirmed pre-existing by re-running one against the unmodified baseline (`git stash`) — same
+failure there, unrelated to this diff's chart-toggle code.
+
+**Next steps:** none outstanding — this was a self-contained follow-up. No new SPRINT task
+needed (no deferred work).
+
+---
+
 ## 2026-08-21 — WS5 push fast-follows: RFC 8291 payload (#348 core) + pre-close act-now push (#349)
 
 **Status: safe to close once #353 + #354 merge (merge #353 FIRST — #354 is stacked on it).** Staff-eng
