@@ -28,7 +28,7 @@ unrelated stats stacked in the same card region with no labels distinguishing th
     reading as the same kind of stat). Gate stays exactly `month/quarter/half/ytd` (owner's explicit
     call — `year` stays excluded from the gate, same as `week`).
   - Both rows' shared tf/label/order live in one `DOT_ROW_TFS` const + `BREADTH_GATE_TFS` Set —
-    `computeSectorTopHalfCounts()`'s Today-tab breadth-bar caller (line ~3218) was using the old
+    `groupSignal()`'s breadth-factor block (line ~3218, Lookup tab SIGNAL card) was using the old
     `BREADTH_TFS` shape and needed updating too; caught via grep before it shipped as a silent
     ReferenceError.
 - Verified live via a scratchpad Playwright script (mixed perf-sign + mixed beats-flag fixture data,
