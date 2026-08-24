@@ -404,6 +404,34 @@ The durable rules:
   run a no-op → the 15:30 read must be advisory-only). That one sentence was worth more than the
   whole hand-wavy paragraph. Find the precise technical point; cut everything that's just texture.
 
+### Verify scope claims before making them; derive labels, don't hardcode coincidences (2026-08-24, Lookup vs-S&P dot rows)
+
+Fixing the PWA's `+9.8pp vs S&P` chip (unlabeled timeframe) produced two separate wrong moves in one
+exchange, both caught only because the owner pushed back and said "check the code" / "why are we
+hardcoding":
+
+- **"This context doesn't apply there" is a scope claim — it needs the same verification as any other
+  factual claim, not a guess dressed as analysis.** Proposed fixing the ambiguous chip only on the
+  Lookup card, asserting the Today-tab card "where this context doesn't apply" was fine as-is —
+  without having grepped that call site first. It applied identically there (same unlabeled
+  `rs_month` chip, same function). This is the file:line-citation failure mode from the 2026-08-16
+  entry above, wearing a different costume: a fact-shaped statement about *where an issue is scoped*,
+  stated without checking, not derived from having checked. One grep would have caught it before it
+  reached the owner. Before saying "X doesn't apply in case Y," go look at case Y.
+- **A hardcoded value that happens to be correct for every caller today is a landmine, not a fix.**
+  Proposed baking the literal string `"(1mo)"` into `rsChip()`'s output because both current call
+  sites happen to pass `rs_month` — true today, silently wrong the instant a future caller passes
+  `rs_week` or `rs_quarter`. The owner's correction was the actually-correct design: take the
+  timeframe as a parameter and derive the label from it, so the output is correct *by construction*,
+  not by coincidence of current callers. When a proposed fix's correctness depends on a fact about
+  today's call sites rather than the code's own logic, that's the tell to add a parameter instead of
+  an assumption — the "note it in a comment so the next person doesn't get bitten" instinct is a
+  worse fix than just not building the landmine.
+- **Root pattern, same as the 2026-08-16 and 2026-08-19 entries above:** all three sessions involved
+  skipping a one-step check (read the other call site; ask whether a value is derived or asserted)
+  in favor of something that merely sounded plausible. The fix is always the same one step — do the
+  check before stating the conclusion — and it is cheap every single time it's skipped.
+
 ---
 
 - **Starting a session**: This `CLAUDE.md` auto-loads at session start. Also read `.session/session-notes.md` immediately — it holds the last 4 session entries with recent findings, blockers, and next steps. Start the session by summarizing what's in the notes so the user knows you're oriented. Older history is in `.session/archive/session-notes-archive.md` — only read it if the user asks or context demands it.
