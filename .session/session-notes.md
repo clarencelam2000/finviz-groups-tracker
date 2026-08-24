@@ -6,6 +6,52 @@
 
 ---
 
+## 2026-08-24 — Lookup card: fix "beats N/6" vs breadth-dot mismatch, unlabeled RS chip
+
+**Status: safe to close.** Branch `claude/beats-counter-mismatch-avk88v`. Started from a user
+screenshot question ("why does 'beats 2/6' not match the number of green dots?") — root cause was two
+unrelated stats stacked in the same card region with no labels distinguishing them.
+
+**What landed (`docs/index.html`, `docs/releases.json`, `docs/sw.js` v79→v80, `README.md`,
+`docs/CLAUDE.md`):**
+- `rsChip(v, tf)` now takes a timeframe param and derives its label from `RS_TF_LABEL` (`week:'1wk',
+  month:'1mo', quarter:'3mo', half:'6mo', year:'1yr', ytd:'ytd'`) instead of outputting a bare
+  `"+9.8pp vs S&P"` with no timeframe. Both call sites (Today-tab sector cards, Lookup card) pass
+  `'month'` today since both feed `rs_month` — output is now `"+9.8pp vs S&P (1mo)"` at both.
+- New `rsBreadthStrip(delta)`: a 6-dot row (`W M Q 6M YTD 1Y`) colored by `beats_benchmark_<tf>`,
+  rendered directly under the existing "vs S&P" badge row on the Lookup card — the visual breakdown
+  behind the `beats N/6` badge, same 6 timeframes/same count so they can never disagree.
+  - `breadthStrip()` (the pre-existing absolute-perf dot row) relabeled **"Raw Perf"**, timeframe set
+    aligned to the same `week/month/quarter/half/ytd/year` (dropped `day`, added `year`) and same
+    `W M Q 6M YTD 1Y` order so the two rows line up dot-for-dot. Its "N/4 green" caption is now
+    suppressed unless all-green (was cluttering the card next to the unrelated `beats N/6` badge and
+    reading as the same kind of stat). Gate stays exactly `month/quarter/half/ytd` (owner's explicit
+    call — `year` stays excluded from the gate, same as `week`).
+  - Both rows' shared tf/label/order live in one `DOT_ROW_TFS` const + `BREADTH_GATE_TFS` Set —
+    `groupSignal()`'s breadth-factor block (line ~3218, Lookup tab SIGNAL card) was using the old
+    `BREADTH_TFS` shape and needed updating too; caught via grep before it shipped as a silent
+    ReferenceError.
+- Verified live via a scratchpad Playwright script (mixed perf-sign + mixed beats-flag fixture data,
+  not all-same-color) rather than static code review alone — confirmed dot colors/order/labels and
+  the chip text match the underlying CSV values exactly. See
+  `knowledge/investigations/playwright-cloud-session-testing.md` for the `executable_path=
+  "/opt/pw-browsers/chromium"` launch workaround used (chromium-1194 installed, playwright==1.44.0
+  expects 1117).
+- `releases.json` `2026.08.24` (tag `improvement`, tab `lookup`) + `sw.js` cache bump, same PR per the
+  hard rule. README + `docs/CLAUDE.md` display-threshold tables both got new rows
+  (`BREADTH_GATE_TFS`, `RS_TF_LABEL`).
+- **CLAUDE.md**: added a new "Session continuity" retrospective entry — two corrections from the
+  owner this session (an unverified "this doesn't apply elsewhere" scope claim; a proposal to
+  hardcode a label that only happened to be correct for today's callers instead of deriving it from
+  the parameter) — both instances of skipping a one-step check in favor of a plausible-sounding
+  shortcut. Explicit owner ask to capture this so it doesn't recur.
+
+**Next steps:** none — this was a self-contained UI/copy fix. Tests: `690 passed` (non-Playwright
+suite; no new Playwright test file added, so no CI ignore-list change needed). Not yet pushed/PR'd as
+of this note — push branch and open PR before ending session.
+
+---
+
 ## 2026-08-21 — WS5 push fast-follows: RFC 8291 payload (#348 core) + pre-close act-now push (#349)
 
 **Status: safe to close once #353 + #354 merge (merge #353 FIRST — #354 is stacked on it).** Staff-eng

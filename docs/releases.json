@@ -1,6 +1,18 @@
 {
-  "current": "2026.08.23",
+  "current": "2026.08.24",
   "releases": [
+    {
+      "version": "2026.08.24",
+      "date": "2026-08-24",
+      "title": "Clearer Lookup vs-S&P breakdown",
+      "tag": "improvement",
+      "tab": "lookup",
+      "notes": [
+        "The Lookup card's \"vs S&P\" spread now says which timeframe it's measuring (e.g. \"+9.8pp vs S&P (1mo)\") instead of leaving it unlabeled.",
+        "Added a new per-timeframe dot row right under the \"beats N/6\" badge, so you can see which timeframes actually beat the S&P, not just the count.",
+        "The existing performance-breadth dots are now labeled \"Raw Perf\" and use the same 6 timeframes as the new vs-S&P row, since they were being misread as vs-S&P data — they're actually just the group's own up/down."
+      ]
+    },
     {
       "version": "2026.08.23",
       "date": "2026-08-23",

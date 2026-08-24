@@ -1141,15 +1141,23 @@
       return 'text-slate-400';
     }
 
-    // Inline RS chip: "+2.3pp vs S&P" or "-1.1pp vs S&P". Returns '' when null.
+    // Timeframe suffix → short label, shared by rsChip's "(1mo)"-style qualifier and any
+    // future RS-spread caller. Keys match the rs_<tf> column suffixes in delta_config.py.
+    const RS_TF_LABEL = { week: '1wk', month: '1mo', quarter: '3mo', half: '6mo', year: '1yr', ytd: 'ytd' };
+
+    // Inline RS chip: "+2.3pp vs S&P (1mo)" or "-1.1pp vs S&P (1wk)". Returns '' when null.
+    // `tf` is one of RS_TF_LABEL's keys and must match whichever rs_<tf> column `v` came from —
+    // the label is derived from `tf`, not hardcoded, so a caller passing rs_week gets "(1wk)"
+    // and a caller passing rs_quarter gets "(3mo)" automatically.
     // Shows chip for ALL non-null values, including within ±RS_SLIGHT (rendered grey = neutral).
     // Grey signals "SPY data confirmed; spread is small." Option A — suppress neutral chips by
     // adding `if (Math.abs(v) < RS_SLIGHT) return '';` — tracked in SPRINT.md § RS-4b.
-    function rsChip(v) {
+    function rsChip(v, tf) {
       if (v === null || v === undefined) return '';
       const color = rsColor(v);
       const sign = v >= 0 ? '+' : '';
-      return `<span class="${color} text-xs whitespace-nowrap">${sign}${v.toFixed(1)}pp vs S&P</span>`;
+      const label = RS_TF_LABEL[tf] || '';
+      return `<span class="${color} text-xs whitespace-nowrap">${sign}${v.toFixed(1)}pp vs S&P${label ? ' (' + label + ')' : ''}</span>`;
     }
 
     // Tier 5 RS discrete-flag helpers ----------------------------------------
@@ -1926,7 +1934,7 @@
         const subLine = subMetrics.map(m => `<span>${m.label}: ${fmtPct(row[m.key])}</span>`).join('');
 
         // RS vs S&P chip (rs_month spread, mid-frequency signal). Hidden until SPY data exists.
-        const rsMonthChip = rsChip(pf(d.rs_month));
+        const rsMonthChip = rsChip(pf(d.rs_month), 'month');
 
         const isExpanded = state.expandedName === row.name;
 
@@ -3207,7 +3215,7 @@
 
       if (snap) {
         let g = 0, t = 0;
-        for (const tf of BREADTH_TFS) { if (!tf.gate) continue; t++; const v = pf(snap[tf.k]); if (v !== null && v > 0) g++; }
+        for (const { tf } of DOT_ROW_TFS) { if (!BREADTH_GATE_TFS.has(tf)) continue; t++; const v = pf(snap['perf_' + tf]); if (v !== null && v > 0) g++; }
         if (t > 0) {
           factors.push({ id: 'breadth', weight: SIGNAL_WEIGHTS.breadth, val: g / t,
             label: g === t ? 'all timeframes positive' : (g === 0 ? 'no timeframes positive' : null) });
@@ -3308,37 +3316,79 @@
       return { floor, best, chip };
     }
 
-    // Breadth dot strip across timeframes. The green/"All green" verdict gates
-    // on month/quarter/half/ytd only — day and week dots render but do not gate.
-    // See knowledge/decisions/ADR-003-breadth-excludes-week.md.
-    const BREADTH_TFS = [
-      { k: 'perf_day',     lbl: 'D',  gate: false },
-      { k: 'perf_week',    lbl: 'W',  gate: false },
-      { k: 'perf_month',   lbl: 'M',  gate: true  },
-      { k: 'perf_quarter', lbl: 'Q',  gate: true  },
-      { k: 'perf_half',    lbl: '6M', gate: true  },
-      { k: 'perf_ytd',     lbl: 'Y',  gate: true  },
+    // Shared timeframe/label/order for the two Lookup-card dot rows below (raw perf and vs
+    // S&P) so they line up dot-for-dot and are directly comparable. Order: W M Q 6M YTD 1Y
+    // (YTD before 1Y — YTD is a "how far this calendar year" running total, 1Y is a fixed
+    // trailing window; putting the running total first, then the longest fixed window, reads
+    // naturally instead of alphabetically/arbitrarily).
+    const DOT_ROW_TFS = [
+      { tf: 'week',    lbl: 'W'   },
+      { tf: 'month',   lbl: 'M'   },
+      { tf: 'quarter', lbl: 'Q'   },
+      { tf: 'half',    lbl: '6M'  },
+      { tf: 'ytd',     lbl: 'YTD' },
+      { tf: 'year',    lbl: '1Y'  },
     ];
+
+    // Raw-performance breadth dot strip (own perf_<tf> sign, NOT vs SPY — see the "vs S&P"
+    // dot row below for the benchmark comparison). The "All green" verdict gates on
+    // month/quarter/half/ytd only — week and year dots render but do not gate. See
+    // knowledge/decisions/ADR-003-breadth-excludes-week.md (year was added later and kept out
+    // of the gate for the same "too easily all-green in a broad rally" reason).
+    const BREADTH_GATE_TFS = new Set(['month', 'quarter', 'half', 'ytd']);
     function breadthStrip(snap) {
       if (!snap) return '';
       let gateTotal = 0, gateGreen = 0;
-      const dots = BREADTH_TFS.map(tf => {
-        const v = pf(snap[tf.k]);
-        if (tf.gate) { gateTotal++; if (v !== null && v > 0) gateGreen++; }
+      const dots = DOT_ROW_TFS.map(({ tf, lbl }) => {
+        const v = pf(snap['perf_' + tf]);
+        if (BREADTH_GATE_TFS.has(tf)) { gateTotal++; if (v !== null && v > 0) gateGreen++; }
         const color = v === null ? 'bg-slate-600' : v > 0 ? 'bg-emerald-500' : v < 0 ? 'bg-red-500' : 'bg-slate-500';
         return `<span class="flex flex-col items-center gap-0.5">
             <span class="w-2.5 h-2.5 rounded-full ${color}"></span>
-            <span class="text-[0.55rem] text-slate-500 leading-none">${tf.lbl}</span>
+            <span class="text-[0.55rem] text-slate-500 leading-none">${lbl}</span>
           </span>`;
       }).join('');
       const allGreen = gateTotal > 0 && gateGreen === gateTotal;
+      // Only surface a caption on the all-green verdict — a partial count ("2/4 green") sat
+      // next to the vs-S&P "beats N/6" badge and read as the same kind of stat, when it's an
+      // unrelated absolute-performance count over a different timeframe set. Silence beats a
+      // misleading juxtaposition; the dots alone still show the picture.
       const badge = allGreen
         ? `<span class="text-[0.6rem] px-1.5 py-0.5 rounded bg-emerald-900/50 text-emerald-300 border border-emerald-700">All green</span>`
-        : `<span class="text-[0.6rem] text-slate-500">${gateGreen}/${gateTotal} green</span>`;
+        : '';
       return `
         <div class="flex justify-between items-center pt-0.5">
+          <span class="text-[0.6rem] text-slate-500 self-center">Raw Perf</span>
           <span class="flex gap-2 items-start">${dots}</span>
           ${badge}
+        </div>`;
+    }
+
+    // vs-S&P dot strip: same 6 timeframes/order/labels as breadthStrip above, but colored by
+    // beats_benchmark_<tf> (1 = beat SPY that timeframe, 0 = lagged, blank = no SPY data yet)
+    // instead of the group's own perf sign. This is the visual breakdown behind the "beats
+    // N/6" badge in rsBeatsChip — same 6 timeframes (week/month/quarter/half/year/ytd), same
+    // count, so the dots and the badge can never disagree. No label/caption of its own: it
+    // renders directly under the "vs S&P" row, which already carries that context.
+    function rsBreadthStrip(delta) {
+      if (!delta) return '';
+      const knownCount = DOT_ROW_TFS.filter(({ tf }) => {
+        const v = delta['beats_benchmark_' + tf];
+        return v !== '' && v !== undefined && v !== null;
+      }).length;
+      if (knownCount === 0) return '';
+      const dots = DOT_ROW_TFS.map(({ tf, lbl }) => {
+        const raw = delta['beats_benchmark_' + tf];
+        const known = raw !== '' && raw !== undefined && raw !== null;
+        const color = !known ? 'bg-slate-600' : +raw === 1 ? 'bg-emerald-500' : 'bg-red-500';
+        return `<span class="flex flex-col items-center gap-0.5">
+            <span class="w-2.5 h-2.5 rounded-full ${color}"></span>
+            <span class="text-[0.55rem] text-slate-500 leading-none">${lbl}</span>
+          </span>`;
+      }).join('');
+      return `
+        <div class="flex justify-end items-center pt-0.5">
+          <span class="flex gap-2 items-start">${dots}</span>
         </div>`;
     }
 
@@ -3388,7 +3438,7 @@
       // RS vs S&P 500 (rs_month spread + "beats N/6" chip) — previously computed for Today/
       // vs-Market cards only; Lookup never showed it despite GUIDE tagging rs_score/rs_confirmed
       // for the 'lookup' tab (see lookupGlossary()).
-      const rsMonthChip = delta ? rsChip(pf(delta.rs_month)) : '';
+      const rsMonthChip = delta ? rsChip(pf(delta.rs_month), 'month') : '';
       const rsBeats      = delta ? rsBeatsChip(delta) : '';
       const rsHtml = (rsMonthChip || rsBeats)
         ? `<div class="flex justify-between items-center text-xs"><span class="text-slate-400">vs S&P</span><span class="flex items-center gap-1.5">${rsMonthChip}${rsBeats}</span></div>`
@@ -3496,6 +3546,7 @@
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Momentum</span><span>${momHtml}</span></div>
           <div class="flex justify-between items-center text-xs"><span class="text-slate-400">Perf</span><span class="text-slate-300">Wk ${fmtPct(perfWeek)} · Mo ${fmtPct(perfMonth)} · YTD ${fmtPct(perfYtd)}</span></div>
           ${rsHtml}
+          ${rsBreadthStrip(delta)}
           ${groupKey === 'sectors' ? breadthRow(state.sectorBreadth[name]?.top, state.sectorBreadth[name]?.total) : ''}
           ${breadthStrip(snap)}
           ${spark}
