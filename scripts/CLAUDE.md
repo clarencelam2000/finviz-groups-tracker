@@ -73,10 +73,11 @@ The anti-flash floor (accel/rs_new_high only) is a **cross-sectional `momentum_s
 all_green has no anti-flash floor of its own — its 5-timeframe-positive gate already screens for
 consistency directly.
 
-> **Known gap (v3):** `DAILY_GROUP_CAP` (27) x `PAGE_CAP` (2) = `GLOBAL_FETCH_CAP` (50) exactly —
-> a fully-packed day (every bucket fills to its cap) has zero page-budget headroom below the global
-> cap. Owner decision 2026-08-24: raise `DAILY_GROUP_CAP` to fit the new all_green bucket, but keep
-> `GLOBAL_FETCH_CAP` at 50. On such a day the lowest-priority bucket reached can be silently cut
+> **Known gap (v3):** `DAILY_GROUP_CAP` (27) x `PAGE_CAP` (2) = 54, which is 4 pages over
+> `GLOBAL_FETCH_CAP` (50) — a fully-packed day (every bucket fills to its cap) already exceeds the
+> page budget, not merely matches it. Owner decision 2026-08-24: raise `DAILY_GROUP_CAP` to fit the
+> new all_green bucket, but keep `GLOBAL_FETCH_CAP` at 50. On such a day the lowest-priority bucket
+> reached can be silently cut
 > short by the page cap even though its own slot cap wasn't hit.
 
 **`grp_*` columns (19):** each pick row snapshots the selecting group's `deltas.csv` metrics at

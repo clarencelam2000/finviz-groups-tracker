@@ -56,8 +56,8 @@ GOLDEN_HEADER_PATH = BASE_DIR / "tests" / "fixtures" / "probe_header_84col.txt"
 # 20 -> 27 to cover the new bucket's worst-case max (11+2+4+3+3+4 = 27 unique
 # groups/day if every bucket fills completely); GLOBAL_FETCH_CAP was NOT raised
 # to match (owner decision) — a fully-packed day (27 groups x up to 2 pages) can
-# hit the 50-page ceiling with zero headroom, silently skipping the tail of the
-# lowest-priority bucket reached that day. Not an error, just worth knowing.
+# need up to 54 pages, 4 over the 50-page ceiling, silently skipping the tail of
+# the lowest-priority bucket reached that day. Not an error, just worth knowing.
 SELECTOR_VERSION = "v3"
 
 # ---------------------------------------------------------------------------

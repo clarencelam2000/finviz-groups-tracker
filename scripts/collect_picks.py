@@ -157,7 +157,7 @@ def select_groups(deltas_df: pd.DataFrame) -> list:
     groups or exhausted its qualifying pool. This is what backfill means below:
     duplicate groups no longer shrink a bucket's effective new-group yield (v2,
     see ADR-007 amendment). Applies to emerging/accel/rs_new_high; leaders' own
-    freshness-fill sub-bucket already excludes the core 8 by construction.
+    freshness-fill sub-bucket already excludes the core 11 by construction.
 
     Buckets are filled in priority order; a 0-group bucket is normal (e.g.
     momentum_accel is NaN until 11 sessions exist) — fill from the next priority,
@@ -231,7 +231,7 @@ def select_groups(deltas_df: pd.DataFrame) -> list:
                 else:
                     break  # DAILY_GROUP_CAP hit — no point scanning for more new
 
-    # ---- Priority 1: leaders (8 sustained_strength + 2 momentum_confirmed) ----
+    # ---- Priority 1: leaders (11 sustained_strength + 2 momentum_confirmed) ----
     latest["_sum_mid"] = (
         latest["rank_month"] + latest["rank_quarter"] + latest["rank_half"]
     )
@@ -240,7 +240,7 @@ def select_groups(deltas_df: pd.DataFrame) -> list:
     for i, name in enumerate(core_names, start=1):
         add(name, "leaders", "sustained_strength", i)
 
-    # Freshness fills: momentum_confirmed desc among groups NOT in the core 8.
+    # Freshness fills: momentum_confirmed desc among groups NOT in the core 11.
     fresh_pool = latest[~latest["name"].isin(core_names)].dropna(
         subset=["momentum_confirmed"]
     ).sort_values("momentum_confirmed", ascending=False)
