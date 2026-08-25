@@ -6,6 +6,50 @@
 
 ---
 
+## 2026-08-25 — PR #364 review fixes + PICKS-SEL-V3-PWA (all_green PWA chips)
+
+**Status: safe to close — implemented, tested, pushed on a fresh branch (`picks-sel-v3-pwa`),
+PR not yet opened as of writing this note.** Two pieces of work, both stemming from reviewing
+the already-merged #364 (picks selector v3):
+
+**1. Doc-only review fixes (pushed to #364's branch before it merged, landed as part of #364):**
+Reviewed #364 and found the "known gap" arithmetic wrong in 3 places (README.md,
+`scripts/CLAUDE.md`, `scripts/picks_config.py`) — the docs claimed `DAILY_GROUP_CAP (27) x
+PAGE_CAP (2) = 50 exactly`; actual product is 54 (4 pages *over* `GLOBAL_FETCH_CAP`, not
+exactly at it). Also fixed 3 leftover "core 8" comments in `scripts/collect_picks.py` that
+should've said "core 11" after `LEADER_SS_SLOTS` was bumped. Pushed as commit `6ccd023`
+directly onto #364's branch, which the owner then merged (#364 is done).
+
+**2. PICKS-SEL-V3-PWA (SPRINT backlog task, now done):** the PWA's category chip maps didn't
+know about the new `all_green` bucket — pick rows would show the raw string with no chip
+color. Since #364 was already merged by the time this started, restarted a new branch
+(`picks-sel-v3-pwa`) from the fresh default per the amendment policy, rather than stacking onto
+merged history.
+- `docs/index.html`: added `all_green: 'All Green'` + a green chip class to all 5
+  map/array pairs that enumerate categories — `CATEGORY_LABEL`/`CATEGORY_CHIP_CLS` (module
+  scope), the Lookup stage-2 `catOrder`, the Picks-tab `CAT_ORDER`/`CAT_LABELS`/`CAT_COLORS`,
+  and `ws4PickCategories`'s display-order array (this last one degrades gracefully already —
+  unknown categories append at the end — but was updated anyway for consistency).
+- **Anti-drift fallout:** `tests/test_picks_methodology.py::test_all_view_category_order`
+  checks the PWA's `CAT_ORDER` against `data/picks/display_methodology.json`'s
+  `all_view_sort.category_order`, so bumped that file to a new `v5` (2026-08-25) — full
+  `params` block copied verbatim from `v4` per the file's "self-contained entry" convention,
+  only `category_order` changed. Updated the hardcoded `test_current_is_v4_...` test to v5, and
+  `test_replay_picks.py`'s two hardcoded-latest-version tests (`test_loads_v4_for_later_date`
+  → `test_loads_v5_for_later_date`, plus a new `v4`-boundary test) — both assumed v4 was the
+  newest version.
+- **Release triplet** (hard rule, same PR): `docs/releases.json` `2026.08.25` entry ("All Green
+  picks category") + `current` bump + `docs/sw.js` `CACHE` `v80` → `v81`.
+- 712 tests pass (`pytest tests/` minus the documented Playwright-ignore list). Did **not** run
+  a live Playwright functional check against the rendered chip (no time budget in this session)
+  — the anti-drift test (`CAT_ORDER` vs JSON) plus the JSON's own key/value pairing are the only
+  verification; visually confirming the green "All Green" chip renders correctly in a live/local
+  PWA session is a reasonable quick follow-up if the owner wants extra confidence before merge.
+
+**Next steps:** push `picks-sel-v3-pwa`, open PR, merge.
+
+---
+
 ## 2026-08-24 — Picks selector v3: leaders core 8→11, new all_green bucket, cap 20→27
 
 **Status: safe to close — implemented, tested, ready to push/PR.** Owner-driven picks-selector change,
