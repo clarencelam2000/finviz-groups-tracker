@@ -548,3 +548,77 @@ SPRINT-tracked, line 51); #335 (breakeven ratchet + earnings-overlay bundle); WS
 strip + push). Ack is event-based so nothing to apply out-of-band.
 
 ---
+
+## 2026-08-25 — WS-POSITIONS-STATUS: honest watchlist "first read" state (branch `claude/missing-additions-status-ghxbn2`)
+
+**Status: safe to close.** All changes committed and pushed on the designated branch; tests green;
+release triplet included.
+
+**Trigger:** owner reported the Morning tab's watchlist cards for 5 tickers (added Sat 2026-08-22)
+still showed "Adding — first morning check lands tomorrow AM" unchanged on Monday evening, and
+pushed back hard on an initial hand-wavy "expected lag, not broken" answer (rightly — that answer
+conflated the TTL tick counter decrementing with the pipeline actually working, which was wrong).
+
+**Root-caused live**, not inferred: queried D1 (`finviz-positions`) and the committed
+`morning_latest.csv` directly. Confirmed the 5 tickers DID get a real bar (17:30 ET held feed) and
+DID get a real `morning_latest.csv` row that morning (10:06 ET) — but tagged `no_quote`, copy
+"Morning feed missed this ticker," which is false: the 10:05 ET classification run simply executed
+before that ticker's first bar could exist (added 2 calendar days earlier, first trading-day tick
+was that Monday). Distinct from, but adjacent to, the actual 2026-08-20 `WS5-8b-OPS` incident
+(already fixed) where the union silently never ran at all.
+
+**Staff-level review requested and incorporated** (Opus subagent, asked to pressure-test the fix
+plan before building): found the original 3-workstream draft's "seed a bar via FMP on watchlist
+add" design (then called WS-A — bad placeholder naming, since renamed) doesn't work as scoped —
+FMP's `/stable/quote` returns the *current session's own running quote*, not a prior completed
+bar, so seeding it as `prior_high` could manufacture a false `triggered` read; also flagged a real
+correctness risk (a seeded row could permanently pollute `ticker_quotes`, which `advance()` also
+reads for real positions, with no `source` column to quarantine it) and that the monitoring
+follow-up should lead with a positive-assertion healthchecks.io ping, not a warn-and-exit step
+(same silent-failure shape as the original incident). Full review + this session's own findings:
+`planning/watchlist-status-honesty-and-seeding.md`.
+
+**What landed (this PR — WS-POSITIONS-STATUS only; SEED and MONITOR held/backlog per the review):**
+- `worker-positions/src/watchlist.js`: `/watchlist-tickers` (`watchlistTickerRefs`) gains
+  `has_history:boolean` (`q_trade_date != null` — the same check `refsFromRow` already makes).
+- `scripts/pick_status.py`: new `STATUS_AWAITING_FIRST_READ` + optional `has_history` param on
+  `compute_pick_status()` — returns it instead of `STATUS_NO_QUOTE` when `has_history is False`.
+  Default `None` (every picks caller) is byte-identical to prior behavior, same pattern as
+  `ref`/`STATUS_RECLAIM`.
+- `scripts/collect_morning.py`: `build_watch_levels()` threads `has_history` through;
+  `build_status_rows()`'s `compute_pick_status` call passes it.
+- `docs/index.html`: `watchCardHtml()` split from 2 states to 3 — `noBarYet` (unchanged),
+  new `awaitingFirstRead` (bar exists, no real classification yet → "Reference bar captured —
+  first live read after the next scheduled check" + the actual prior-high/prior-low levels), then
+  real status. `MORNING_STATUS_META.awaiting_first_read` added for completeness (never hit by
+  picks, same precedent as `reclaim`). Release `2026.08.25.1`, sw.js v81→v82.
+- Tests: 4 new `test_pick_status.py` cases, 3 new `test_collect_morning.py` cases (incl. an
+  end-to-end `build_status_rows` case), 2 new `worker-positions/test/watchlist.test.js` cases, 1
+  new `tests/test_pwa_watchlist.py` Playwright case. 719 non-Playwright pytest pass; 292 vitest
+  pass. **Playwright case not verified green in this cloud session** — the whole PWA app failed to
+  boot past the loading skeleton for every watchlist test in this sandbox, including the
+  pre-existing, unmodified baseline tests in the same file (`test_signed_out_...`,
+  `test_signed_in_watch_card_shows_ticker_pill...`), with and without the matching pinned Chromium
+  revision (1117) — confirmed a pre-existing sandbox-only harness gap, not a regression from this
+  change. Verified the JS change itself via `node --check` on the extracted inline script (valid
+  syntax) and by structural mirroring of the existing `noBarYet` branch. **Needs a real
+  CI/local-dev run to confirm `test_pwa_watchlist.py` is actually green** — flag if it isn't.
+- Tracking: `planning/watchlist-status-honesty-and-seeding.md` (design + review), `.session/SPRINT.md`
+  rows `WS-POSITIONS-STATUS` (done, this PR), `WS-POSITIONS-SEED` (backlog, held per review),
+  `WS-POSITIONS-MONITOR` (backlog, supersedes/refines `WS5-8b-MONITOR`'s scope),
+  `WS-POSITIONS-TTL-BURN` (backlog, new gap found this session: `sessions_remaining` decrements even
+  on a day with zero real read — not fixed, just flagged).
+
+**Naming note:** the original draft used placeholder `WS-A/B/C` labels — pure shorthand, not tied to
+any tracking scheme. Owner correctly called this out as bad naming given the repo already has a live
+`WS5-8b-*` convention for this exact area. Renamed to `WS-POSITIONS-*` per owner request; existing
+`WS5-8b-*` SPRINT rows were NOT renamed (other docs/session-notes cite those IDs by name already) —
+the new rows cross-reference them instead.
+
+**Next steps:** confirm `test_pwa_watchlist.py` passes in CI/local dev (it's on the CI Playwright
+ignore list, so this PR's `test` job won't reveal a break either way — a human or a
+Chromium-matched session needs to actually run it). Then pick up `WS-POSITIONS-MONITOR` (healthchecks
+dead-man's-switch) — it's now meaningful since `no_quote` means what it says again. `WS-POSITIONS-SEED`
+stays parked until an FMP EOD-history endpoint + `ticker_quotes.source` column are worked out.
+
+---

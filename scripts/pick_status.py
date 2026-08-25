@@ -13,6 +13,14 @@ P2 (WS5 §8b watchlist build brief) added `STATUS_RECLAIM` + `compute_reclaim` �
 `ref` param on `compute_pick_status` lets a caller (collect_morning.py's watchlist union) ask
 for the reclaim read against a structural level (system default: the ticker's 50-day MA). Picks
 callers never pass `ref`, so `compute_pick_status`'s behavior for them is unchanged byte-for-byte.
+
+WS-POSITIONS-STATUS (2026-08-25, planning/watchlist-status-honesty-and-seeding.md) added
+`STATUS_AWAITING_FIRST_READ` + an optional `has_history` param, same pattern as `ref`/
+`STATUS_RECLAIM`: a brand-new watch ticker's first `collect_morning.py` run (10:05 ET) always
+executes before that ticker's first `ticker_quotes` bar can exist (17:30 ET held feed), so the
+missing-inputs gate below used to tag it `STATUS_NO_QUOTE` — copy "Morning feed missed this
+ticker" — which is false; nothing was missed, the ticker has simply never had a bar. Picks
+callers never pass `has_history`, so behavior for them is unchanged byte-for-byte.
 """
 
 import math
@@ -23,6 +31,12 @@ import math
 # ---------------------------------------------------------------------------
 
 STATUS_NO_QUOTE = "no_quote"
+# STATUS_AWAITING_FIRST_READ (WS-POSITIONS-STATUS, 2026-08-25): the missing-inputs case, but for a
+# watch ticker that has NEVER had a ticker_quotes bar (has_history=False) rather than one that had
+# a quote request today and it came back empty. Mutually exclusive with STATUS_NO_QUOTE per
+# evaluation — only ever the "no usable inputs" branch relabeled, never a fires-alongside case.
+# Picks callers never pass has_history, so they only ever get STATUS_NO_QUOTE, unchanged.
+STATUS_AWAITING_FIRST_READ = "awaiting_first_read"
 STATUS_INVALIDATED = "invalidated"
 STATUS_GAPPED_THROUGH = "gapped_through"
 STATUS_TRIGGERED = "triggered"
@@ -47,6 +61,7 @@ STATUS_SETTING_UP = "setting_up"
 # reclaim ref and recovered.
 STATUS_PRECEDENCE = [
     STATUS_NO_QUOTE,
+    STATUS_AWAITING_FIRST_READ,
     STATUS_INVALIDATED,
     STATUS_GAPPED_THROUGH,
     STATUS_TRIGGERED,
@@ -98,7 +113,7 @@ def compute_reclaim(price, today_low, prior_low, ref) -> bool:
     return price > ref and (today_low < ref or prior_low < ref)
 
 
-def compute_pick_status(trigger, stop, price, open_, high, low, ref=None) -> str:
+def compute_pick_status(trigger, stop, price, open_, high, low, ref=None, has_history=None) -> str:
     """Evaluate a single ticker's morning status against ADR-013 Decision 3.
 
     Inputs: `trigger` (prior High), `stop` (prior Low), and today's quote fields
@@ -106,7 +121,13 @@ def compute_pick_status(trigger, stop, price, open_, high, low, ref=None) -> str
     predicates deliberately overlap (a triggered name can also satisfy
     gapped_through or failed_breakout), so precedence is part of the spec:
 
-      1. no_quote        — any of trigger/stop/price/open_/high/low is None/NaN
+      1. no_quote / awaiting_first_read — any of trigger/stop/price/open_/high/low
+                             is None/NaN. Reported as awaiting_first_read when the
+                             caller passes has_history=False (WS-POSITIONS-STATUS,
+                             2026-08-25) — a watch ticker that has never had a bar,
+                             as opposed to one Finviz genuinely failed to quote
+                             today. Picks callers never pass has_history, so this
+                             is always no_quote for them, unchanged.
       2. invalidated      — price <= stop
       3. gapped_through   — open_ > trigger
       4. triggered        — price >= trigger
@@ -143,7 +164,7 @@ def compute_pick_status(trigger, stop, price, open_, high, low, ref=None) -> str
       breakout/setting_up read against trigger/stop, just never STATUS_RECLAIM.
     """
     if any(_is_missing(x) for x in (trigger, stop, price, open_, high, low)):
-        return STATUS_NO_QUOTE
+        return STATUS_AWAITING_FIRST_READ if has_history is False else STATUS_NO_QUOTE
     if price <= stop:
         return STATUS_INVALIDATED
     if open_ > trigger:

@@ -1,6 +1,16 @@
 {
-  "current": "2026.08.25",
+  "current": "2026.08.25.1",
   "releases": [
+    {
+      "version": "2026.08.25.1",
+      "date": "2026-08-25",
+      "title": "Honest watchlist \"first read\" state",
+      "tag": "fix",
+      "tab": "morning",
+      "notes": [
+        "A freshly-added watchlist ticker whose reference data has landed but hasn't had its first live status check yet now shows \"Reference bar captured — first live read after the next scheduled check\" instead of a misleading \"Morning feed missed this ticker.\" Nothing was missed — the check simply ran before that ticker's history existed."
+      ]
+    },
     {
       "version": "2026.08.25",
       "date": "2026-08-25",

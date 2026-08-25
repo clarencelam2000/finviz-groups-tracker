@@ -5133,6 +5133,13 @@
       // on watch cards (see watchCardHtml), but keeping meta complete avoids a no_quote
       // fallback if it ever does show up on a picks row.
       reclaim: { label: 'Reclaimed', order: 1, stripe: 'border-emerald-500', pill: 'bg-emerald-500/15 text-emerald-400', actionable: false },
+      // WS-POSITIONS-STATUS (2026-08-25, pick_status.STATUS_AWAITING_FIRST_READ) — a watch
+      // ticker that has NEVER had a ticker_quotes bar, as opposed to no_quote's "had a quote
+      // request today and it came back empty." Picks don't emit this today so this only ever
+      // renders on watch cards (watchCardHtml has its own dedicated branch for it, same as
+      // reclaim) — kept complete here so a no_quote fallback never mislabels it if it ever
+      // does show up elsewhere.
+      awaiting_first_read: { label: 'Pending read', order: 5, stripe: 'border-slate-700', pill: 'bg-slate-500/20 text-slate-400', actionable: false },
     };
 
     // ATR-from-LoD → colored label. Bands owner-set 2026-08-08 (ADR-013 Decision 3):
@@ -7814,22 +7821,36 @@
       return `<button onclick="__toggleWatchMenu('${entry.id}')" class="text-slate-500 hover:text-slate-300 text-[17px] leading-none px-1.5">⋯</button>${menu}`;
     }
 
-    // THE CARD — the taste core (build spec §4c). `pub` may be null (freshly added, no
-    // morning row yet). entry.prior_high/prior_low/atr/sma20/sma50 may be null (no EOD bar
-    // yet) — both cases render the "adding" state (no bar to read yet).
+    // THE CARD — the taste core (build spec §4c). Three states, not two (WS-POSITIONS-STATUS,
+    // 2026-08-25 — see planning/watchlist-status-honesty-and-seeding.md):
+    //   1. noBarYet     — entry.prior_high == null: NO ticker_quotes bar exists at all yet.
+    //                     True "still adding" — nothing useful to show.
+    //   2. awaitingFirstRead — a bar now exists (live via GET /watchlist, which can land hours
+    //                     before the next collect_morning.py run) but there's no real
+    //                     triggered/setting_up/etc. classification yet — either `pub` hasn't
+    //                     been written at all, or it was written as
+    //                     pick_status.STATUS_AWAITING_FIRST_READ. This used to collapse into
+    //                     `pub.status === 'no_quote'`'s "Morning feed missed this ticker" copy,
+    //                     which was actively wrong: nothing was missed, the classification run
+    //                     just executed before this ticker's first bar could exist.
+    //   3. real status  — pub exists with a genuine classification (or a genuine no_quote —
+    //                     an established ticker Finviz actually failed to quote today).
     function watchCardHtml(entry, pub) {
       const ticker = entry.ticker;
-      const noBarYet = !pub || entry.prior_high == null;
-      const meta = (!noBarYet && pub) ? (MORNING_STATUS_META[pub.status] || null) : null;
+      const hasBar = entry.prior_high != null;
+      const noBarYet = !hasBar;
+      const awaitingFirstRead = hasBar && (!pub || pub.status === 'awaiting_first_read');
+      const meta = (!noBarYet && !awaitingFirstRead && pub) ? (MORNING_STATUS_META[pub.status] || null) : null;
       const stripe = meta ? meta.stripe : 'border-slate-600';
 
       const picksRow = ws4FindPicksRow(ticker);
       const lr = picksRow ? computeLaunchReady(picksRow) : null;
       const lrChip = lr ? `<span class="text-[0.55rem] px-1 rounded font-bold ml-1 ${lr.cls}" title="Launch-ready: overhead supply vs. 52-week high + short-term extension">${lr.label}</span>` : '';
       const grp = (pub && pub.group) ? `<span class="text-xs text-slate-500">· ${escapeHtml(pub.group)}</span>` : '';
+      const fallbackPillLabel = awaitingFirstRead ? 'Pending read' : 'Adding';
       const pill = meta
         ? `<span class="text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${meta.pill}">${meta.label}</span>`
-        : `<span class="text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-400">Adding</span>`;
+        : `<span class="text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-400">${fallbackPillLabel}</span>`;
 
       const header = `
         <div class="flex justify-between items-center">
@@ -7851,6 +7872,22 @@
           <div class="bg-slate-800 border border-slate-700 border-l-4 border-slate-600 rounded-lg px-3.5 py-3">
             ${header}
             <div class="text-xs text-slate-400 mt-1.5">Added — first morning check lands tomorrow AM after tonight's data run.</div>
+            ${watchChartAffordance(ticker)}
+            ${footer}
+          </div>`;
+      }
+
+      if (awaitingFirstRead) {
+        const refLine = _mKv('Prior high', _mNum(entry.prior_high)) + _mKv('Prior low', _mNum(entry.prior_low));
+        const footer = `
+          <div class="flex items-center gap-2 mt-3 pt-2.5 border-t border-slate-700">
+            ${leftLabel}<span class="flex-1"></span>${watchKebabHtml(entry)}
+          </div>`;
+        return `
+          <div class="bg-slate-800 border border-slate-700 border-l-4 border-slate-600 rounded-lg px-3.5 py-3">
+            ${header}
+            <div class="text-xs text-slate-400 mt-1.5">Reference bar captured — first live read after the next scheduled check.</div>
+            ${refLine}
             ${watchChartAffordance(ticker)}
             ${footer}
           </div>`;

@@ -241,24 +241,29 @@ def _authed_request(url: str, token: str, method: str = "GET", body: bytes = Non
 def build_watch_levels(watch_refs: list) -> list:
     """Map the `/watchlist-tickers` payload to `pick_levels`-shaped dicts (P2).
 
-    PURE. Input rows: `{ticker, level_type, prior_high, prior_low, atr, sma20, sma50}`
-    (P1's `/watchlist-tickers` response — note `level_value` is deliberately absent
+    PURE. Input rows: `{ticker, level_type, has_history, prior_high, prior_low, atr, sma20,
+    sma50}` (P1's `/watchlist-tickers` response — note `level_value` is deliberately absent
     from that payload; the user's chosen level is never sent to this public store).
-    Output rows mirror `load_pick_levels`'s shape plus a `ref` key:
+    Output rows mirror `load_pick_levels`'s shape plus `ref`/`has_history` keys:
 
       {ticker, group: "", list_category: "watchlist",
-       trigger: prior_high, stop: prior_low, atr: atr, ref: sma50}
+       trigger: prior_high, stop: prior_low, atr: atr, ref: sma50, has_history: bool}
 
     `ref` is the SYSTEM-read reclaim level — always the ticker's 50-day MA,
     independent of the watch entry's own `level_type` (lead decision 1: the user's
     reclaim_20ma/reclaim_50ma overlay is a separate client-side P3 concern, not this
-    system read). Every field is run through `_to_float` (payload values may already
-    be numbers or None — Worker JSON round-trips numbers fine, but stay defensive).
+    system read). Every numeric field is run through `_to_float` (payload values may
+    already be numbers or None — Worker JSON round-trips numbers fine, but stay defensive).
+
+    `has_history` (WS-POSITIONS-STATUS, 2026-08-25) threads straight through to
+    `compute_pick_status`'s `has_history` param — True/False as returned by the Worker,
+    or None if the key is absent (an older, not-yet-deployed Worker), which safely falls
+    back to today's `STATUS_NO_QUOTE` behavior rather than guessing.
 
     A row with a null/None prior_high/prior_low/atr/sma50 is KEPT, not dropped — its
-    status just resolves to no_quote/setting_up naturally downstream (same contract
-    as `load_pick_levels`'s missing-value handling). Only a blank/missing ticker is
-    skipped (unusable as a row key).
+    status just resolves to awaiting_first_read/no_quote/setting_up naturally downstream
+    (same contract as `load_pick_levels`'s missing-value handling). Only a blank/missing
+    ticker is skipped (unusable as a row key).
     """
     levels = []
     for r in watch_refs:
@@ -273,6 +278,7 @@ def build_watch_levels(watch_refs: list) -> list:
             "stop": _to_float(r.get("prior_low")),
             "atr": _to_float(r.get("atr")),
             "ref": _to_float(r.get("sma50")),
+            "has_history": r.get("has_history"),
         })
     return levels
 
@@ -447,6 +453,11 @@ def build_status_rows(pick_levels: list, quotes: list, collected_at: str, date: 
     `ref` key, so `.get` returns None and compute_pick_status's reclaim check never
     fires for them — byte-identical to pre-P2 behavior. Watch levels (from
     build_watch_levels) carry `ref=sma50`, the system-read reclaim level.
+
+    `has_history=lvl.get("has_history")` (WS-POSITIONS-STATUS): same pattern — Focus
+    pick levels have no `has_history` key so `.get` returns None and
+    compute_pick_status's missing-inputs gate always resolves to STATUS_NO_QUOTE for
+    them, unchanged. Watch levels carry a real True/False from the Worker.
     """
     quotes_by_ticker = {q.get("Ticker"): q for q in quotes if q.get("Ticker")}
 
@@ -462,7 +473,7 @@ def build_status_rows(pick_levels: list, quotes: list, collected_at: str, date: 
         change = _to_float(q.get("Change")) if q else None
 
         status = compute_pick_status(lvl["trigger"], lvl["stop"], price, open_, high, low,
-                                      ref=lvl.get("ref"))
+                                      ref=lvl.get("ref"), has_history=lvl.get("has_history"))
 
         atr_from_lod = None
         if status in ACTIONABLE_STATUSES:

@@ -220,6 +220,14 @@ export async function watchlistTickers(db) {
 // level_type rides here (needed to know WHICH reference the morning job's reclaim check should use).
 // De-dupes by ticker if multiple users watch the same one (moot at user=1; GROUP BY picks the
 // lowest id arbitrarily, which is fine — it's the same market-data refs either way).
+//
+// `has_history` (WS-POSITIONS-STATUS, 2026-08-25): true iff a bar exists at all for this ticker,
+// i.e. the exact condition refsFromRow() itself gates on. Lets collect_morning.py/pick_status.py
+// tell "never had a bar yet" (a brand-new watch ticker, expected) apart from "had a quote request
+// today and it came back empty" (a genuine Finviz miss) — both used to collapse into the same
+// no_quote status/copy, which is what let the 2026-08-20 union-outage incident go unnoticed and is
+// what showed a misleading "feed missed this ticker" message on a ticker that had simply never had
+// data. See planning/watchlist-status-honesty-and-seeding.md.
 export async function watchlistTickerRefs(db) {
   const sql = `
     SELECT w.ticker, w.level_type, q.trade_date AS q_trade_date, q.close AS q_close, q.high AS q_high,
@@ -231,7 +239,12 @@ export async function watchlistTickerRefs(db) {
     ORDER BY w.ticker
   `;
   const { results } = await db.prepare(sql).all();
-  return results.map((r) => ({ ticker: r.ticker, level_type: r.level_type, ...refsFromRow(r) }));
+  return results.map((r) => ({
+    ticker: r.ticker,
+    level_type: r.level_type,
+    has_history: r.q_trade_date != null,
+    ...refsFromRow(r),
+  }));
 }
 
 // Idempotent-per-ET-date TTL decrement + expire + purge. Called by POST /watchlist/tick (service

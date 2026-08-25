@@ -15,6 +15,7 @@ from pick_status import (  # noqa: E402
     compute_atr_from_lod,
     compute_reclaim,
     STATUS_NO_QUOTE,
+    STATUS_AWAITING_FIRST_READ,
     STATUS_INVALIDATED,
     STATUS_GAPPED_THROUGH,
     STATUS_TRIGGERED,
@@ -69,6 +70,40 @@ def test_no_quote_missing_field():
 
 
 # ---------------------------------------------------------------------------
+# STATUS_AWAITING_FIRST_READ (WS-POSITIONS-STATUS)
+# ---------------------------------------------------------------------------
+
+
+def test_awaiting_first_read_when_has_history_false():
+    # Missing trigger/stop (no bar yet) + has_history=False -> awaiting_first_read, not no_quote.
+    assert (
+        compute_pick_status(None, None, 9.0, 8.5, 9.2, 8.4, has_history=False)
+        == STATUS_AWAITING_FIRST_READ
+    )
+
+
+def test_no_quote_when_has_history_true_despite_missing_field():
+    # An established ticker Finviz genuinely failed to quote today stays no_quote.
+    assert (
+        compute_pick_status(10, 8, None, 8.5, 9.2, 8.4, has_history=True) == STATUS_NO_QUOTE
+    )
+
+
+def test_has_history_none_default_is_byte_identical_to_no_quote():
+    # Every picks caller omits has_history -> default None must behave exactly like before.
+    assert compute_pick_status(None, 8, 9.0, 8.5, 9.2, 8.4) == STATUS_NO_QUOTE
+
+
+def test_has_history_false_does_not_fire_when_inputs_are_present():
+    # has_history is only consulted inside the missing-inputs gate -- a complete quote still
+    # evaluates normally even if has_history happens to be False (defensive, shouldn't occur
+    # in practice since a real quote implies a bar exists).
+    assert (
+        compute_pick_status(10, 8, 10.5, 9.5, 10.6, 9.4, has_history=False) == STATUS_TRIGGERED
+    )
+
+
+# ---------------------------------------------------------------------------
 # Precedence-collision cases
 # ---------------------------------------------------------------------------
 
@@ -109,6 +144,7 @@ def test_boundary_open_equals_trigger_is_not_gapped():
 def test_status_precedence_order():
     assert STATUS_PRECEDENCE == [
         STATUS_NO_QUOTE,
+        STATUS_AWAITING_FIRST_READ,
         STATUS_INVALIDATED,
         STATUS_GAPPED_THROUGH,
         STATUS_TRIGGERED,
