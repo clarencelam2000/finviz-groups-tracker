@@ -193,10 +193,14 @@ Python (P2, not yet built) and is unioned into `scripts/collect_morning.py`'s sc
   KEY)` + `INSERT OR IGNORE` — this worker has no KV binding (unlike `worker-cron`'s dispatch-guard
   pattern), so the guard lives in D1 instead, co-located with the data it protects.
   `tickWatchlist(db, {date, now})` resolves `date` from `now` via `etDateStr()` when omitted, tries
-  the guarded insert first, and returns `{ticked:false, decremented:0, expired:0, purged:0}`
-  immediately if that date was already ticked — a same-day retry (a double GitHub Actions dispatch,
-  the `collect.yml`/`collect_picks.yml`-style GitHub cron backstop) is a true no-op, never a double
-  decrement.
+  the guarded insert first, and returns `{ticked:false, decremented:0, expired:0, purged:0,
+  skipped_no_history:0}` immediately if that date was already ticked — a same-day retry (a double
+  GitHub Actions dispatch, the `collect.yml`/`collect_picks.yml`-style GitHub cron backstop) is a
+  true no-op, never a double decrement. **`tickWatchlist()` also skips the decrement for active rows
+  whose ticker has no `ticker_quotes` bar yet** (`WS-POSITIONS-TTL-BURN`) — a brand-new watch ticker
+  in the "awaiting_first_read" state (no bar, so no real classification could have happened) is left
+  at full TTL rather than burning a morning over a weekend/holiday gap before its first EOD read; the
+  count of such skipped rows is returned as `skipped_no_history`.
 - **UPSERT-on-add is the intended renew UX**, not a bug to guard against: `addWatch()` upserts on
   `(user_id, ticker)` — re-adding an already-watched ticker resets `sessions_remaining` to
   `WATCHLIST_TTL_SESSIONS`, clears `expired_at`/`status`, and updates the level, while `created_at`
