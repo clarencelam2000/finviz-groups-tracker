@@ -162,6 +162,13 @@ Failed-breakout / Invalidated / No-quote) at ~10:05 ET.
   falling back). Sits between `failed_breakout` and `setting_up` in precedence; only ever
   evaluated when a caller passes `ref` — picks callers never do, so `ref=None` keeps
   `compute_pick_status` byte-identical to pre-P2 behavior for every existing caller.
+  **WS-POSITIONS-STATUS (2026-08-25) added `STATUS_AWAITING_FIRST_READ` + an optional
+  `has_history` param, same pattern.** The missing-inputs gate (the `no_quote` branch) returns
+  `STATUS_AWAITING_FIRST_READ` instead when `has_history is False` — a watch ticker that has
+  never had a `ticker_quotes` bar, as opposed to `no_quote`'s "had a quote request today and it
+  came back empty." Picks callers never pass `has_history`, so `has_history=None` (default)
+  keeps `no_quote` behavior byte-identical for them. Root cause + full writeup:
+  `planning/watchlist-status-honesty-and-seeding.md`.
 - **`scripts/collect_morning.py`** — the writer. `fetch_ticker_quotes(page, tickers, config)` is
   the **shared component** WS3b and WS5's held-tickers feed reuse: batches tickers into
   `MORNING_BATCH_SIZE`-sized (50) chunks against the `morning` block in `screener_config.json`

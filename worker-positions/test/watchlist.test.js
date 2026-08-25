@@ -272,6 +272,16 @@ describe("watchlistTickerRefs", () => {
     expect(refs[0]).not.toHaveProperty("level_value");
     expect(refs[0].prior_high).toBe(222);
     expect(refs[0].prior_low).toBe(218);
+    expect(refs[0].has_history).toBe(true);
+  });
+
+  it("has_history is false for a ticker with no bar yet (WS-POSITIONS-STATUS)", async () => {
+    const db = makeD1();
+    db._seedWatchlist({ user_id: "owner", ticker: "SMCI" });
+    const refs = await watchlistTickerRefs(db);
+    expect(refs).toHaveLength(1);
+    expect(refs[0].has_history).toBe(false);
+    expect(refs[0].prior_high).toBeNull();
   });
 
   it("de-dupes by ticker when multiple users watch the same one", async () => {

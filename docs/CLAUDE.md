@@ -88,8 +88,17 @@ window, with an optional private "level of interest" overlay.
   *private feed*: owner-bearer `GET /watchlist` on the `finviz-positions` worker, which returns
   `level_type`/`level_value`, `sessions_remaining`, `status`, and reference values
   (`prior_high`, `prior_low`, `atr`, `sma20`, `sma50`). The Morning-tab card
-  (`watchCardHtml(entry, pub)`) merges the two by `ticker` at render time; `pub` may be null
-  (freshly added, no morning row yet) → an "Adding" state.
+  (`watchCardHtml(entry, pub)`) merges the two by `ticker` at render time.
+- **Three card states, not two (WS-POSITIONS-STATUS, 2026-08-25).** `entry.prior_high == null`
+  (no `ticker_quotes` bar exists at all yet) → the true "Added — first morning check lands
+  tomorrow AM" state. A bar can exist (live via `GET /watchlist`, which updates hours before the
+  next `collect_morning.py` run) while `pub` is still null or `pub.status ===
+  'awaiting_first_read'` (`pick_status.STATUS_AWAITING_FIRST_READ`) — that's a separate "Reference
+  bar captured — first live read after the next scheduled check" state, distinct from both
+  "Adding" and a genuine `no_quote` (an established ticker Finviz actually failed to quote today).
+  Collapsing these into one `no_quote` copy is exactly what made a brand-new watch ticker show
+  "Morning feed missed this ticker" when nothing was missed — see
+  `planning/watchlist-status-honesty-and-seeding.md`.
 - **Privacy — load-bearing:** `level_value` (the user's private price/MA threshold) never
   leaves the owner-bearer `/watchlist` path. There is no server-side "met/not-met" computation
   or storage of that comparison — the your-level read (`watchYourLevel()`) is computed entirely

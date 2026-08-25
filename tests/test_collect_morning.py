@@ -519,6 +519,25 @@ def test_build_watch_levels_coerces_string_numbers():
     assert lvl["ref"] == 180.0
 
 
+def test_build_watch_levels_threads_has_history():
+    watch_refs = [
+        {"ticker": "NEW", "prior_high": None, "prior_low": None, "atr": None, "sma50": None,
+         "has_history": False},
+        {"ticker": "OLD", "prior_high": 190.5, "prior_low": 185.0, "atr": 3.2, "sma50": 180.0,
+         "has_history": True},
+    ]
+    levels = cm.build_watch_levels(watch_refs)
+    assert levels[0]["has_history"] is False
+    assert levels[1]["has_history"] is True
+
+
+def test_build_watch_levels_has_history_defaults_to_none():
+    # An older Worker response with no has_history key -- must fall back to None, not False,
+    # so compute_pick_status's default (no_quote) behavior is preserved rather than guessing.
+    watch_refs = [{"ticker": "OLD", "prior_high": 10, "prior_low": 8, "atr": 1, "sma50": 9}]
+    assert cm.build_watch_levels(watch_refs)[0]["has_history"] is None
+
+
 # ---------------------------------------------------------------------------
 # union_watch_levels (P2)
 # ---------------------------------------------------------------------------
@@ -576,6 +595,26 @@ def test_build_status_rows_watch_level_reclaim():
     assert by_ticker["WATCH1"]["atr_from_lod"] != ""  # actionable status
 
     assert by_ticker["PICK1"]["status"] == "setting_up"
+
+
+def test_build_status_rows_watch_level_awaiting_first_read():
+    # A brand-new watch ticker (no bar yet -> trigger/stop/atr/ref all None, has_history=False)
+    # must resolve to awaiting_first_read, not no_quote, even with zero quote data at all.
+    pick_levels = [
+        {"ticker": "NEWWATCH", "group": "", "list_category": "watchlist",
+         "trigger": None, "stop": None, "atr": None, "ref": None, "has_history": False},
+        # Regression: an established watch ticker Finviz genuinely missed today stays no_quote.
+        {"ticker": "MISSEDWATCH", "group": "", "list_category": "watchlist",
+         "trigger": 10.0, "stop": 8.0, "atr": 2.0, "ref": 8.5, "has_history": True},
+        # Regression: a picks level (no has_history key at all) stays no_quote, unchanged.
+        {"ticker": "PICK1", "group": "G", "list_category": "leaders",
+         "trigger": None, "stop": None, "atr": None},
+    ]
+    rows = cm.build_status_rows(pick_levels, [], "2026-08-25T14:06:00Z", "2026-08-25")
+    by_ticker = {r["ticker"]: r for r in rows}
+    assert by_ticker["NEWWATCH"]["status"] == "awaiting_first_read"
+    assert by_ticker["MISSEDWATCH"]["status"] == "no_quote"
+    assert by_ticker["PICK1"]["status"] == "no_quote"
 
 
 # ---------------------------------------------------------------------------

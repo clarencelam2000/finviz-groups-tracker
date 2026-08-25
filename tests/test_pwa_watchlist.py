@@ -191,6 +191,31 @@ def test_signed_in_watch_card_shows_ticker_pill_and_your_level(server):
         browser.close()
 
 
+def test_signed_in_watch_card_shows_awaiting_first_read_not_no_quote(server):
+    """WS-POSITIONS-STATUS (2026-08-25): a watch ticker whose first bar has landed (prior_high/
+    prior_low set) but has no morning_latest.csv row yet must show the honest "reference bar
+    captured" copy, never a bare "Adding" and never no_quote's "feed missed this ticker" —
+    nothing was missed, the classification run just hasn't had a chance to run against this
+    ticker's first bar yet."""
+    from playwright.sync_api import sync_playwright
+    entry = {**WATCH_ENTRY, "ticker": "SMCI"}
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page, morning_csv="date,session,collected_at,ticker,group,list_category,trigger,stop,atr,price,open,high,low,change,status,atr_from_lod\n")
+        _mock_worker(page, watchlist_rows=[entry])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='morning']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#watchlist-section")
+        assert "SMCI" in html
+        assert "Reference bar captured" in html
+        assert "Morning feed missed this ticker" not in html
+        assert "Added — first morning check lands tomorrow" not in html
+        browser.close()
+
+
 def test_add_to_watchlist_flow_posts_correct_payload(server):
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
