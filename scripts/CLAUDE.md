@@ -42,23 +42,43 @@ not a fabricated exact time, since the daily cron time is a known constant. The 
 (`renderPicks()` in `docs/index.html`) surfaces this via the same `freshnessLabel()` helper already
 used by Sectors/Industries, so a stale/blocked picks run shows the same red/amber/green badge.
 
-**Selector (ADR-007, VP-locked; dedup policy amended v2 2026-07-02):** four buckets filled in
-priority order to ≤ `DAILY_GROUP_CAP` (20) unique groups; a group qualifying in multiple buckets
-is **scraped once but tagged per bucket** it naturally ranks in (attribution preserved). Since v2,
-a group already selected by a higher-priority bucket no longer eats one of a lower-priority
-bucket's N slots just by landing in that bucket's natural top-N — emerging/accel/rs_new_high
-backfill past rank N with the next NEW candidate so each bucket's N slots still yield N distinct
-groups when the qualifying pool is deep enough (`add_bucket_with_backfill` in `collect_picks.py`).
-Leaders' own freshness-fill sub-bucket already excluded the core 8 by construction (unchanged). A
-0-group bucket is normal (e.g. `momentum_accel` is NaN until 11 sessions) — fill from the next
-priority, never error.
-1. **leaders** ≤10 — 8 by sustained strength (`rank_month+rank_quarter+rank_half` asc) + 2 freshness fills (`momentum_confirmed` desc).
+**Selector (ADR-007, VP-locked; dedup policy amended v2 2026-07-02; widened v3 2026-08-24):**
+five buckets filled in priority order to ≤ `DAILY_GROUP_CAP` (27) unique groups; a group
+qualifying in multiple buckets is **scraped once but tagged per bucket** it naturally ranks in
+(attribution preserved). Since v2, a group already selected by a higher-priority bucket no longer
+eats one of a lower-priority bucket's N slots just by landing in that bucket's natural top-N —
+emerging/accel/rs_new_high/all_green backfill past rank N with the next NEW candidate so each
+bucket's N slots still yield N distinct groups when the qualifying pool is deep enough
+(`add_bucket_with_backfill` in `collect_picks.py`). Leaders' own freshness-fill sub-bucket already
+excluded the core by construction (unchanged). A 0-group bucket is normal (e.g. `momentum_accel`
+is NaN until 11 sessions) — fill from the next priority, never error.
+1. **leaders** ≤13 — 11 by sustained strength (`rank_month+rank_quarter+rank_half` asc; raised
+   from 8 in v3) + 2 freshness fills (`momentum_confirmed` desc).
 2. **emerging** ≤4 — `regime_short_long > 0.15` AND `rs_score > 0.5`.
 3. **accel** ≤3 — `momentum_accel > 0.08` AND top-40% by `momentum_score` AND `rs_score > 0.5`.
 4. **rs_new_high** ≤3 — `rs_new_high == 1` AND `rs_score ≥ 0.6` AND top-40% by `momentum_score`.
+5. **all_green** ≤4 (v3, new; lowest priority — fills last) — `perf_week > 0` AND
+   `perf_month > 0` AND `perf_quarter > 0` AND `perf_half > 0` AND `perf_ytd > 0` (raw group perf,
+   not vs. SPY — a pure cross-timeframe consistency screen, no rs/strength floor of its own), sort
+   `momentum_score` desc. **Needs snapshots.csv, not just deltas.csv**: `deltas.csv` carries no raw
+   `perf_*` columns, only ranks/deltas, so `main()` merges `perf_week/month/quarter/half/ytd` from
+   `snapshots.csv` onto the latest-date deltas slice before calling `select_groups()` — a caller
+   that skips this merge gets 0 all_green groups (not an error, degrades like every other bucket's
+   NaN handling). Being lowest priority is intentional: a group that also qualifies for a
+   higher-conviction bucket is claimed there first, so all_green only ever picks up groups nothing
+   else wanted.
 
-The anti-flash floor is a **cross-sectional `momentum_score` percentile** (`ANTIFLASH_PCTILE = 0.40`),
-not an absolute cutoff — invariant to `PERF_RANK_METRICS` rescaling.
+The anti-flash floor (accel/rs_new_high only) is a **cross-sectional `momentum_score` percentile**
+(`ANTIFLASH_PCTILE = 0.40`), not an absolute cutoff — invariant to `PERF_RANK_METRICS` rescaling.
+all_green has no anti-flash floor of its own — its 5-timeframe-positive gate already screens for
+consistency directly.
+
+> **Known gap (v3):** `DAILY_GROUP_CAP` (27) x `PAGE_CAP` (2) = 54, which is 4 pages over
+> `GLOBAL_FETCH_CAP` (50) — a fully-packed day (every bucket fills to its cap) already exceeds the
+> page budget, not merely matches it. Owner decision 2026-08-24: raise `DAILY_GROUP_CAP` to fit the
+> new all_green bucket, but keep `GLOBAL_FETCH_CAP` at 50. On such a day the lowest-priority bucket
+> reached can be silently cut
+> short by the page cap even though its own slot cap wasn't hit.
 
 **`grp_*` columns (19):** each pick row snapshots the selecting group's `deltas.csv` metrics at
 selection time (so Phase-4 attribution never re-derives them). Includes `grp_rank_basis`,

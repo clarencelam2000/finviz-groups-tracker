@@ -273,13 +273,15 @@ prepending an entry to `data/picks/selector_versions.json` (enforced by tests �
 
 | Parameter | Default | What it controls |
 |-----------|---------|-----------------|
-| `SELECTOR_VERSION` | `"v2"` | Monotonic, immutable-once-published selector policy id stamped on every `picks.csv` row. Bump on any selection-logic/constant change. |
-| `DAILY_GROUP_CAP` | `20` | Max **unique** groups scraped per day. A group qualifying in multiple buckets counts once toward this cap but is tagged once per bucket it naturally ranks in (attribution) — a lower-priority bucket backfills past its natural top-N with the next new candidate so dedup doesn't shrink its effective slot yield (v2). |
-| `LEADER_SS_SLOTS` | `8` | Leaders "core" slots ranked by sustained strength (lowest `rank_month+rank_quarter+rank_half`). |
+| `SELECTOR_VERSION` | `"v3"` | Monotonic, immutable-once-published selector policy id stamped on every `picks.csv` row. Bump on any selection-logic/constant change. |
+| `DAILY_GROUP_CAP` | `27` | Max **unique** groups scraped per day. A group qualifying in multiple buckets counts once toward this cap but is tagged once per bucket it naturally ranks in (attribution) — a lower-priority bucket backfills past its natural top-N with the next new candidate so dedup doesn't shrink its effective slot yield (v2). Raised 20 -> 27 (v3) to match the exact worst-case sum of all 5 buckets' slots (11+2+4+3+3+4) so a fully-packed day never truncates a bucket. |
+| `LEADER_SS_SLOTS` | `11` | Leaders "core" slots ranked by sustained strength (lowest `rank_month+rank_quarter+rank_half`). Raised 8 -> 11 (v3). |
 | `LEADER_MC_SLOTS` | `2` | Leaders "freshness" slots ranked by `momentum_confirmed` desc among groups not in the core. |
 | `EMERGING_SLOTS` | `4` | Max emerging-bucket groups. |
 | `ACCEL_SLOTS` | `3` | Max accel-bucket groups. |
 | `RS_NH_SLOTS` | `3` | Max rs_new_high-bucket groups. |
+| `ALL_GREEN_SLOTS` | `4` | Max all_green-bucket groups (v3, new). Lowest priority (5th) — fills last. |
+| `ALL_GREEN_PERF_COLS` | `["perf_week","perf_month","perf_quarter","perf_half","perf_ytd"]` | Raw perf columns (from `snapshots.csv`, not `deltas.csv`) that must ALL be positive for a group to qualify for all_green. `select_groups()` requires the caller to have already merged these onto its input — `main()` does this from `snapshots.csv`; missing columns degrade to 0 all_green groups, not an error. |
 | `ANTIFLASH_PCTILE` | `0.40` | Anti-flash floor for accel/rs_new_high as a cross-sectional `momentum_score` percentile (top 40%). Invariant to formula rescaling. |
 | `EMERGING_REGIME_FLOOR` | `0.15` | Emerging primary gate on `regime_short_long` (mirrors PWA `REGIME_THRESHOLD`). |
 | `ACCEL_THRESHOLD` | `0.08` | Accel primary gate on `momentum_accel` (mirrors PWA `ACCEL_STRONG`). |
@@ -287,7 +289,7 @@ prepending an entry to `data/picks/selector_versions.json` (enforced by tests �
 | `RS_NH_RS_FLOOR` | `0.6` | `rs_score` floor on rs_new_high (IBD "true leadership"). |
 | `PAGE_SIZE` | `20` | Rows per Finviz screener page (`v=151`); used to walk `&r=`. |
 | `PAGE_CAP` | `2` | Per-group hard page cap (40 names). Lowered from 15 after historical data showed only Biotechnology (a structurally oversized Finviz industry, ~100 names/day) ever exceeded 40 names. Screener sorts `-marketcap` desc, so the cap keeps the biggest/most-liquid names in an oversized group. |
-| `GLOBAL_FETCH_CAP` | `50` | **Hard global daily page cap (VP-set).** Job scrapes in priority order (leaders first) and stops at 50 pages. Revisit after live data. |
+| `GLOBAL_FETCH_CAP` | `50` | **Hard global daily page cap (VP-set).** Job scrapes in priority order (leaders first) and stops at 50 pages. Revisit after live data. > **Known gap:** as of v3, `DAILY_GROUP_CAP` (27) x `PAGE_CAP` (2) = 54, which is 4 pages **over** this cap on a fully-packed day (owner decision 2026-08-24: raise `DAILY_GROUP_CAP` but not this one). On such a day the lowest-priority bucket reached (`all_green`) can be silently cut short by the page cap, not just its own slot cap. |
 | `PAGE_DELAY_S` | `3` | Polite inter-fetch delay (s). `PICKS_PAGE_DELAY=0` to skip during debugging. |
 | `HEADER_MISSING_ABORT_FRAC` | `0.10` | Header-drift guard (`collect_picks.py`): if `Ticker` is missing from the scraped screener header, or more than this fraction of the config's 84 labels are missing, the run aborts **before** writing (parse untrustworthy). A smaller drift still writes the partial capture (affected columns blank) but exits 1 **after** the write so CI goes red and `screener_config.json` gets fixed before the next run. |
 | `TICKER_DUP_RATE_MAX` | `0.25` | Ticker-corruption guard (`collect_picks.py`): aborts **before** writing if more than this fraction of scraped tickers have a duplicated leading character (e.g. `"HHSBC"`, `"CC"`) — the signature of the 2026-07-15 markup-corruption incident. Real baseline is ~1-4%. To change safely, re-measure the real baseline over a few weeks of clean runs first. |

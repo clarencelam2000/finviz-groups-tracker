@@ -43,6 +43,8 @@ from picks_config import (
     EMERGING_SLOTS,
     ACCEL_SLOTS,
     RS_NH_SLOTS,
+    ALL_GREEN_SLOTS,
+    ALL_GREEN_PERF_COLS,
     ANTIFLASH_PCTILE,
     EMERGING_REGIME_FLOOR,
     ACCEL_THRESHOLD,
@@ -61,6 +63,7 @@ from probe_picks import slugify_industry, _build_url, _parse_table, SCREENER_TAB
 
 BASE_DIR = Path(__file__).parent.parent
 DELTAS_CSV = BASE_DIR / "data" / "industries" / "deltas.csv"
+SNAPSHOTS_CSV = BASE_DIR / "data" / "industries" / "snapshots.csv"
 
 # Top-40% floor means percentile rank >= (1 - ANTIFLASH_PCTILE).
 _PCTILE_CUTOFF = 1.0 - ANTIFLASH_PCTILE
@@ -154,13 +157,22 @@ def select_groups(deltas_df: pd.DataFrame) -> list:
     groups or exhausted its qualifying pool. This is what backfill means below:
     duplicate groups no longer shrink a bucket's effective new-group yield (v2,
     see ADR-007 amendment). Applies to emerging/accel/rs_new_high; leaders' own
-    freshness-fill sub-bucket already excludes the core 8 by construction.
+    freshness-fill sub-bucket already excludes the core 11 by construction.
 
     Buckets are filled in priority order; a 0-group bucket is normal (e.g.
     momentum_accel is NaN until 11 sessions exist) — fill from the next priority,
     total unique groups stays ≤ DAILY_GROUP_CAP, never error.
 
-    Pure: no Finviz access. Replayable over any historical date in deltas.csv.
+    NOTE on the all_green bucket (5th, lowest priority): it needs the raw
+    perf_week/perf_month/perf_quarter/perf_half/perf_ytd columns, which live in
+    snapshots.csv, NOT deltas.csv (deltas.csv only has ranks/deltas, never raw
+    perf). Callers must merge those columns onto deltas_df before calling this
+    function — main() does this from snapshots.csv; a deltas_df missing them
+    makes all_green silently yield 0 groups rather than erroring (same
+    graceful-degrade posture as every other bucket's NaN handling).
+
+    Pure: no Finviz access. Replayable over any historical date in deltas.csv
+    (+ snapshots.csv for all_green).
     """
     if deltas_df is None or len(deltas_df) == 0:
         return []
@@ -219,7 +231,7 @@ def select_groups(deltas_df: pd.DataFrame) -> list:
                 else:
                     break  # DAILY_GROUP_CAP hit — no point scanning for more new
 
-    # ---- Priority 1: leaders (8 sustained_strength + 2 momentum_confirmed) ----
+    # ---- Priority 1: leaders (11 sustained_strength + 2 momentum_confirmed) ----
     latest["_sum_mid"] = (
         latest["rank_month"] + latest["rank_quarter"] + latest["rank_half"]
     )
@@ -228,7 +240,7 @@ def select_groups(deltas_df: pd.DataFrame) -> list:
     for i, name in enumerate(core_names, start=1):
         add(name, "leaders", "sustained_strength", i)
 
-    # Freshness fills: momentum_confirmed desc among groups NOT in the core 8.
+    # Freshness fills: momentum_confirmed desc among groups NOT in the core 11.
     fresh_pool = latest[~latest["name"].isin(core_names)].dropna(
         subset=["momentum_confirmed"]
     ).sort_values("momentum_confirmed", ascending=False)
@@ -258,12 +270,28 @@ def select_groups(deltas_df: pd.DataFrame) -> list:
     ].sort_values("rs_slope", ascending=False)
     add_bucket_with_backfill(list(rs_nh["name"]), "rs_new_high", RS_NH_SLOTS)
 
+    # ---- Priority 5: all_green (perf positive on every ALL_GREEN_PERF_COLS
+    # timeframe — a pure consistency screen, no rs/strength floor of its own).
+    # Lowest priority: fills last, so a group also qualifying for a
+    # higher-priority bucket is claimed there first (intentional — higher-
+    # conviction buckets get first pick). Requires perf_* columns merged in by
+    # the caller (see docstring); missing columns degrade to 0 groups, not an
+    # error, same as every other bucket's NaN handling.
+    if all(c in latest.columns for c in ALL_GREEN_PERF_COLS):
+        green_mask = pd.Series(True, index=latest.index)
+        for col in ALL_GREEN_PERF_COLS:
+            green_mask &= latest[col] > 0
+        all_green = latest[green_mask].sort_values("momentum_score", ascending=False)
+    else:
+        all_green = latest.iloc[0:0]
+    add_bucket_with_backfill(list(all_green["name"]), "all_green", ALL_GREEN_SLOTS)
+
     return selections
 
 
 def selection_summary(selections: list) -> dict:
     """Per-bucket counts for the run summary (empty buckets are expected, G2)."""
-    counts = {"leaders": 0, "emerging": 0, "accel": 0, "rs_new_high": 0}
+    counts = {"leaders": 0, "emerging": 0, "accel": 0, "rs_new_high": 0, "all_green": 0}
     for s in selections:
         counts[s["list_category"]] = counts.get(s["list_category"], 0) + 1
     unique = len({s["group"] for s in selections})
@@ -608,6 +636,11 @@ def main():
         sys.exit(1)
     deltas = pd.read_csv(DELTAS_CSV)
 
+    if not SNAPSHOTS_CSV.exists():
+        print(f"FATAL: {SNAPSHOTS_CSV} not found — run collect.py first")
+        sys.exit(1)
+    snapshots = pd.read_csv(SNAPSHOTS_CSV)
+
     # trading_date is imported lazily (collect.py imports Playwright at module
     # top) so the pure-function path / tests don't require a browser install.
     import pytz
@@ -628,7 +661,13 @@ def main():
               f"— today's group rankings not yet computed. Skipping picks scrape.")
         sys.exit(0)
 
-    selections = select_groups(deltas[deltas["date"] == max_delta_date])
+    # all_green needs raw perf_* columns, which live in snapshots.csv, not
+    # deltas.csv — merge them onto the latest-date slice before selecting.
+    latest_deltas = deltas[deltas["date"] == max_delta_date]
+    latest_snaps = snapshots[snapshots["date"] == max_delta_date][["name"] + ALL_GREEN_PERF_COLS]
+    selector_input = latest_deltas.merge(latest_snaps, on="name", how="left")
+
+    selections = select_groups(selector_input)
     summary = selection_summary(selections)
     print(f"=== Picks selection for {date_str} (selector {SELECTOR_VERSION}) ===")
     print(f"  by category: {summary['by_category']}")

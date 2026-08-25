@@ -1,6 +1,35 @@
 {
-  "current": "v2",
+  "current": "v3",
   "versions": [
+    {
+      "version": "v3",
+      "effective_date": "2026-08-24",
+      "description": "Owner-requested widening (not a threshold/quality change to the existing 4 buckets). Leaders' sustained-strength core grew 8 -> 11 (leader_ss_slots), so more mid-timeframe leaders land in the stable core instead of relying on the smaller freshness fill or lower-priority buckets to surface them. New 5th bucket, all_green (all_green_slots=4, LOWEST priority — fills last, after rs_new_high, with the same tag-in-place + backfill-past-N dedup policy as emerging/accel/rs_new_high): a group qualifies if perf_week, perf_month, perf_quarter, perf_half, and perf_ytd (raw group perf, not vs. SPY) are ALL positive, ranked by momentum_score desc (chosen over momentum_confirmed — the gate itself already screens for cross-timeframe consistency, so ranking by raw strength differentiates within that already-consistent set better than re-applying a strength x agreement discount would). Because all_green is lowest priority, a group that would also qualify for a higher bucket is claimed there first; all_green only ever picks up groups nothing else wanted. daily_group_cap raised 20 -> 27, the exact worst-case sum of every bucket's slots (11+2+4+3+3+4) so a fully-packed day fills every bucket to its promised size with no truncation. global_fetch_cap (page budget) was deliberately NOT raised to match — see picks_config.py comment on GLOBAL_FETCH_CAP for the resulting zero-headroom tradeoff on a fully-packed day.",
+      "params": {
+        "daily_group_cap": 27,
+        "leader_ss_slots": 11,
+        "leader_mc_slots": 2,
+        "emerging_slots": 4,
+        "accel_slots": 3,
+        "rs_nh_slots": 3,
+        "all_green_slots": 4,
+        "antiflash_pctile": 0.40,
+        "emerging_regime_floor": 0.15,
+        "accel_threshold": 0.08,
+        "emerging_rs_floor": 0.5,
+        "accel_rs_floor": 0.5,
+        "rs_nh_rs_floor": 0.6,
+        "leaders_ss_metric": "sum(rank_month+rank_quarter+rank_half) asc",
+        "leaders_mc_metric": "momentum_confirmed desc",
+        "emerging_rank_metric": "regime_short_long desc",
+        "accel_rank_metric": "momentum_accel desc",
+        "rs_nh_rank_metric": "rs_slope desc",
+        "all_green_gate": "perf_week>0 AND perf_month>0 AND perf_quarter>0 AND perf_half>0 AND perf_ytd>0",
+        "all_green_rank_metric": "momentum_score desc",
+        "all_green_priority": "5 (lowest — fills last)",
+        "dedup_policy": "tag-in-place + backfill-past-N for emerging/accel/rs_new_high/all_green"
+      }
+    },
     {
       "version": "v2",
       "effective_date": "2026-07-02",

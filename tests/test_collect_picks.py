@@ -49,6 +49,8 @@ from picks_config import (
     DAILY_GROUP_CAP,
     LEADER_SS_SLOTS,
     LEADER_MC_SLOTS,
+    ALL_GREEN_SLOTS,
+    ALL_GREEN_PERF_COLS,
     PAGE_SIZE,
     GLOBAL_FETCH_CAP,
 )
@@ -66,7 +68,7 @@ GRP_NUMERIC_COLS = [
     "momentum_score", "momentum_accel", "momentum_weighted_mid", "rank_agreement",
     "regime_short_long", "rs_score", "rs_agreement", "rs_confirmed", "rs_accel",
     "rs_new_high", "rs_slope",
-]
+] + ALL_GREEN_PERF_COLS  # default NaN -> not all-green unless a test overrides them
 
 
 def _delta_row(name, date="2026-06-24", **overrides):
@@ -87,9 +89,10 @@ def _make_df(rows):
 
 class TestLeaders:
     def _leaders_df(self):
-        # 12 groups; sum_mid increases with index so ordering is deterministic.
+        # 15 groups (LEADER_SS_SLOTS=11 core + LEADER_MC_SLOTS=2 fill + 2 spare);
+        # sum_mid increases with index so ordering is deterministic.
         rows = []
-        for i in range(12):
+        for i in range(15):
             rows.append(_delta_row(
                 f"G{i:02d}",
                 rank_month=i + 1, rank_quarter=i + 1, rank_half=i + 1,
@@ -98,14 +101,14 @@ class TestLeaders:
             ))
         return _make_df(rows)
 
-    def test_picks_eight_by_sum_of_ranks(self):
+    def test_picks_eleven_by_sum_of_ranks(self):
         sels = select_groups(self._leaders_df())
         ss = [s for s in sels if s["grp_rank_basis"] == "sustained_strength"]
         assert len(ss) == LEADER_SS_SLOTS
-        # Lowest sum-of-ranks first: G00..G07 (sums 3,6,9,...).
-        assert [s["group"] for s in ss] == [f"G{i:02d}" for i in range(8)]
-        # grp_category_rank is 1..8 in that order.
-        assert [s["grp_category_rank"] for s in ss] == list(range(1, 9))
+        # Lowest sum-of-ranks first: G00..G10 (sums 3,6,9,...).
+        assert [s["group"] for s in ss] == [f"G{i:02d}" for i in range(11)]
+        # grp_category_rank is 1..11 in that order.
+        assert [s["grp_category_rank"] for s in ss] == list(range(1, 12))
         assert ss[0]["grp_sum_mid_rank"] == 3  # 1+1+1
 
     def test_two_freshness_fills_not_in_core(self):
@@ -115,18 +118,18 @@ class TestLeaders:
         core = {s["group"] for s in sels if s["grp_rank_basis"] == "sustained_strength"}
         for f in fills:
             assert f["group"] not in core
-        # momentum_confirmed desc among the remaining (G08 highest of the rest).
-        assert fills[0]["group"] == "G08"
+        # momentum_confirmed desc among the remaining (G11 highest of the rest).
+        assert fills[0]["group"] == "G11"
         assert fills[0]["grp_category_rank"] == 1
 
     def test_no_hard_intersection_gate_degrades_gracefully(self):
-        # Only 3 groups are "top" on all timeframes, but sum-of-ranks still fills 8.
+        # Only 3 groups are "top" on all timeframes, but sum-of-ranks still fills 11.
         rows = [_delta_row(f"H{i:02d}", rank_month=i + 1, rank_quarter=i + 1,
                            rank_half=i + 1, momentum_confirmed=0.5)
-                for i in range(8)]
+                for i in range(11)]
         sels = select_groups(_make_df(rows))
         ss = [s for s in sels if s["grp_rank_basis"] == "sustained_strength"]
-        assert len(ss) == 8  # not gated down to an intersection subset
+        assert len(ss) == 11  # not gated down to an intersection subset
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +137,7 @@ class TestLeaders:
 # ---------------------------------------------------------------------------
 
 class TestBuckets:
-    def _base_leaders(self, n=8):
+    def _base_leaders(self, n=LEADER_SS_SLOTS):
         return [_delta_row(f"L{i:02d}", rank_month=i + 1, rank_quarter=i + 1,
                            rank_half=i + 1, momentum_score=0.9 - i * 0.05,
                            momentum_confirmed=0.5)
@@ -222,14 +225,16 @@ class TestDedupAndCap:
         assert len({s["group"] for s in sels}) <= DAILY_GROUP_CAP
 
     def test_backfill_past_natural_top_n_when_leader_dups_in(self):
-        # 8 leaders (sum_mid 3..24) fill the core. The #1-ranked accel candidate
+        # 11 leaders (sum_mid 3..33) fill the core. The #1-ranked accel candidate
         # is one of those leaders (rank_month=1 -> sum_mid=3 -> core leader), so
         # it still gets tagged "accel" (top-3 zone attribution preserved) but must
         # NOT eat one of the 3 accel slots — 3 additional, genuinely new, accel
         # candidates should still be admitted via backfill past rank 3.
+        # (10 fillers + DUAL below = 11 low-sum_mid rows, exactly LEADER_SS_SLOTS,
+        # so the 3 high-sum_mid ACC rows stay correctly excluded from the core.)
         rows = [_delta_row(f"L{i:02d}", rank_month=i + 2, rank_quarter=i + 2,
                            rank_half=i + 2, momentum_score=0.9, momentum_confirmed=0.5)
-                for i in range(7)]
+                for i in range(10)]
         # This group is both a core leader (sum_mid=3, lowest) AND accel rank 1.
         rows.append(_delta_row("DUAL", rank_month=1, rank_quarter=1, rank_half=1,
                                momentum_score=0.99, momentum_accel=0.5, rs_score=0.8,
@@ -250,6 +255,78 @@ class TestDedupAndCap:
         # DUAL still counts once toward unique groups (already a leader).
         summ = selection_summary(sels)
         assert summ["unique_groups"] == len({s["group"] for s in sels})
+
+
+# ---------------------------------------------------------------------------
+# select_groups — all_green (5th bucket, lowest priority)
+# ---------------------------------------------------------------------------
+
+class TestAllGreen:
+    def _green_row(self, name, **overrides):
+        # All 5 ALL_GREEN_PERF_COLS positive by default; rank_month/quarter/half
+        # high (weak) so it never accidentally lands in the leaders core.
+        base = dict(rank_month=90, rank_quarter=90, rank_half=90, momentum_score=0.5)
+        for col in ALL_GREEN_PERF_COLS:
+            base[col] = 1.0
+        base.update(overrides)
+        return _delta_row(name, **base)
+
+    def test_requires_all_five_positive(self):
+        rows = [
+            self._green_row("ALLGREEN"),
+            self._green_row("ONE_RED", perf_ytd=-0.5),
+        ]
+        sels = select_groups(_make_df(rows))
+        green = [s["group"] for s in sels if s["list_category"] == "all_green"]
+        assert "ALLGREEN" in green
+        assert "ONE_RED" not in green
+
+    def test_missing_perf_columns_yields_zero_not_error(self):
+        # A deltas_df without the merged perf_* columns (e.g. an old caller that
+        # never merged snapshots.csv) must degrade to 0 groups, not KeyError.
+        rows = [_delta_row(f"L{i:02d}", rank_month=i + 1, rank_quarter=i + 1,
+                           rank_half=i + 1, momentum_score=0.9)
+                for i in range(3)]
+        bare_rows = [{k: v for k, v in r.items() if k not in ALL_GREEN_PERF_COLS}
+                     for r in rows]
+        sels = select_groups(_make_df(bare_rows))
+        assert [s for s in sels if s["list_category"] == "all_green"] == []
+
+    def test_sorted_by_momentum_score_desc(self):
+        rows = [
+            self._green_row("LOW", momentum_score=0.3),
+            self._green_row("HIGH", momentum_score=0.9),
+            self._green_row("MID", momentum_score=0.6),
+        ]
+        sels = select_groups(_make_df(rows))
+        green = [s["group"] for s in sels if s["list_category"] == "all_green"]
+        assert green == ["HIGH", "MID", "LOW"]
+
+    def test_lowest_priority_loses_to_higher_bucket_on_overlap(self):
+        # A group that is both all-green AND naturally a leader (low sum_mid) is
+        # claimed by leaders first; all_green still tags it (attribution) but a
+        # genuinely new all-green candidate should still get backfilled in.
+        rows = [_delta_row(f"L{i:02d}", rank_month=i + 2, rank_quarter=i + 2,
+                           rank_half=i + 2, momentum_score=0.9, momentum_confirmed=0.5)
+                for i in range(10)]
+        dual = self._green_row("DUAL", rank_month=1, rank_quarter=1, rank_half=1,
+                               momentum_score=0.99)
+        rows.append(dual)
+        rows.append(self._green_row("NEWGREEN", momentum_score=0.7))
+        sels = select_groups(_make_df(rows))
+        green = [s for s in sels if s["list_category"] == "all_green"]
+        green_groups = [s["group"] for s in green]
+        assert "DUAL" in green_groups          # tagged (attribution), rank 1
+        assert "NEWGREEN" in green_groups       # backfilled past rank 1
+        summ = selection_summary(sels)
+        assert summ["unique_groups"] == len({s["group"] for s in sels})
+
+    def test_cap_is_four(self):
+        rows = [self._green_row(f"G{i:02d}", momentum_score=1.0 - i * 0.01)
+                for i in range(10)]
+        sels = select_groups(_make_df(rows))
+        green = [s["group"] for s in sels if s["list_category"] == "all_green"]
+        assert len(green) == ALL_GREEN_SLOTS
 
 
 # ---------------------------------------------------------------------------
@@ -567,6 +644,9 @@ class TestSelectorRegistry:
         FROZEN_HASHES = {
             # v1 frozen when v2 (dedup backfill fix) became active 2026-07-02.
             "v1": "0550518c11ffd07da2cd5b103886745b3cd8e592d83b77e7f121b1e3860ef644",
+            # v2 frozen when v3 (leaders core 8->11, all_green bucket, cap 20->27)
+            # became active 2026-08-24.
+            "v2": "c3ce50a3624b16a0c67d46f27dfdfd1a6cbb88502ac7ab9e779f2cc290f8b92b",
         }
         for v in self._load()["versions"]:
             if v["version"] == SELECTOR_VERSION:

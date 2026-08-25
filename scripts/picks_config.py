@@ -44,7 +44,21 @@ GOLDEN_HEADER_PATH = BASE_DIR / "tests" / "fixtures" / "probe_header_84col.txt"
 # there (attribution preserved), but the bucket backfills past rank N with the
 # next NEW candidate so its N slots still yield N distinct groups when the
 # qualifying pool is deep enough. See select_groups()'s add_bucket_with_backfill.
-SELECTOR_VERSION = "v2"
+#
+# v2 -> v3 (2026-08-24, owner request): leaders' core grew 8 -> 11 (more of the
+# stable/sustained-strength picks). New 5th bucket, all_green (cap 4, lowest
+# priority — fills last, backfills past rank 4 like the other dedup buckets):
+# a group qualifies if perf_week/perf_month/perf_quarter/perf_half/perf_ytd are
+# ALL positive (see ALL_GREEN_PERF_COLS), sorted by momentum_score desc. Because
+# all_green is lowest priority, groups it would have picked can get claimed by
+# a higher bucket first (emerging/accel/rs_new_high) — this is intentional
+# (higher-conviction buckets get first pick), not a bug. DAILY_GROUP_CAP raised
+# 20 -> 27 to cover the new bucket's worst-case max (11+2+4+3+3+4 = 27 unique
+# groups/day if every bucket fills completely); GLOBAL_FETCH_CAP was NOT raised
+# to match (owner decision) — a fully-packed day (27 groups x up to 2 pages) can
+# need up to 54 pages, 4 over the 50-page ceiling, silently skipping the tail of
+# the lowest-priority bucket reached that day. Not an error, just worth knowing.
+SELECTOR_VERSION = "v3"
 
 # ---------------------------------------------------------------------------
 # Daily cap + per-bucket slot split (ADR-007, VP-locked 2026-06-24/25)
@@ -53,20 +67,46 @@ SELECTOR_VERSION = "v2"
 # DAILY_GROUP_CAP — max UNIQUE groups scraped per day (conviction over breadth;
 # also bounds ToS exposure). A group qualifying in multiple buckets counts once
 # toward this cap but still gets one tagged row per bucket in picks.csv.
-DAILY_GROUP_CAP = 20
+# Raised 20 -> 27 (2026-08-24) alongside LEADER_SS_SLOTS 8->11 and the new
+# all_green bucket (4 slots) — 27 is the exact worst-case sum of every bucket's
+# slots (11+2+4+3+3+4), so a fully-packed day fills every bucket to its promised
+# size with no truncation. See GLOBAL_FETCH_CAP below for the page-budget tradeoff
+# this implies (owner chose not to raise it to match).
+DAILY_GROUP_CAP = 27
 
 # Leaders bucket is split into a stable core + a responsive freshness fill.
 # LEADER_SS_SLOTS — core slots ranked by sustained_strength (sum of
 #   rank_month+rank_quarter+rank_half, lower = stronger mid-timeframe leader).
+#   Raised 8 -> 11 (2026-08-24, owner request) to capture more sustained-strength
+#   groups in the stable core rather than relying on the smaller freshness/other
+#   buckets to surface them.
 # LEADER_MC_SLOTS — freshness slots ranked by momentum_confirmed desc among
 #   groups NOT already in the core (catches fresh movers the stable core misses).
-LEADER_SS_SLOTS = 8
+LEADER_SS_SLOTS = 11
 LEADER_MC_SLOTS = 2
 
 # Smaller, earlier/riskier buckets get small allocations (ADR-007 table).
 EMERGING_SLOTS = 4
 ACCEL_SLOTS = 3
 RS_NH_SLOTS = 3
+
+# ALL_GREEN_SLOTS — 5th bucket (2026-08-24, owner request), lowest priority
+# (fills last, after rs_new_high). A group qualifies if it is positive across
+# ALL of ALL_GREEN_PERF_COLS below (raw perf, not vs. SPY) — a pure consistency
+# screen, no strength/rs floor of its own. Ranked by momentum_score desc: since
+# the gate itself already guarantees consistency (positive on all 5 timeframes),
+# ranking by raw strength (momentum_score) differentiates within that consistent
+# set better than a strength x agreement blend (momentum_confirmed) would, which
+# would re-apply a consistency discount the gate has already enforced.
+ALL_GREEN_SLOTS = 4
+
+# ALL_GREEN_PERF_COLS — the raw perf_* columns (from snapshots.csv, NOT
+# deltas.csv — deltas.csv has no raw perf_* columns, only ranks/deltas) that
+# must ALL be > 0 for a group to qualify for the all_green bucket. Matches the
+# "Wk / Mo / Qtr / ½yr / YTD all positive" definition used to spec this bucket.
+# select_groups() requires these columns to already be present on its input
+# DataFrame — main() merges them in from snapshots.csv before calling it.
+ALL_GREEN_PERF_COLS = ["perf_week", "perf_month", "perf_quarter", "perf_half", "perf_ytd"]
 
 # ---------------------------------------------------------------------------
 # Selector gate thresholds (ADR-007)

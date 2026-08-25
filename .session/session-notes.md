@@ -6,6 +6,49 @@
 
 ---
 
+## 2026-08-24 — Picks selector v3: leaders core 8→11, new all_green bucket, cap 20→27
+
+**Status: safe to close — implemented, tested, ready to push/PR.** Owner-driven picks-selector change,
+worked through interactively (explored why Railroads/Insurance Brokers missed picks, sized a hypothetical
+"all-green" category, then owner approved specifics and asked me to implement).
+
+**What landed (`scripts/picks_config.py`, `scripts/collect_picks.py`, `data/picks/selector_versions.json`,
+`tests/test_collect_picks.py`, `README.md`, `scripts/CLAUDE.md`):**
+- `SELECTOR_VERSION` v2 → v3; new registry entry prepended, v2 frozen + hash-pinned in
+  `TestSelectorRegistry.FROZEN_HASHES`.
+- `LEADER_SS_SLOTS` 8 → 11 (owner request — bigger stable core).
+- New 5th bucket **all_green** (`ALL_GREEN_SLOTS=4`, lowest priority — fills last, after
+  rs_new_high): a group qualifies if `perf_week/month/quarter/half/ytd` (raw, from `snapshots.csv`)
+  are ALL positive, ranked by `momentum_score` desc (owner's choice over `momentum_confirmed` — the
+  gate itself already screens consistency, so raw strength differentiates better within the already-
+  consistent set; owner agreed this was the better default but flagged as a judgment call, not a
+  certainty). Same tag-in-place + backfill-past-N dedup policy as the other 3 secondary buckets.
+- **Architectural note:** `select_groups(deltas_df)` needed perf_* columns that `deltas.csv` does NOT
+  carry (only ranks/deltas) — `main()` now merges them in from `snapshots.csv` before calling
+  `select_groups()`. The function stays pure/testable; missing perf columns degrade to 0 all_green
+  groups rather than erroring (same posture as every other bucket's NaN handling) — covered by
+  `TestAllGreen.test_missing_perf_columns_yields_zero_not_error`.
+- `DAILY_GROUP_CAP` 20 → 27 (owner request — exact worst-case sum of all 5 buckets' slots:
+  11+2+4+3+3+4). `GLOBAL_FETCH_CAP` deliberately left at 50 (owner decision) — now has **zero
+  headroom** on a fully-packed day (27 groups × up to 2 pages = 50 exactly); documented as a known
+  gap in `picks_config.py`, README, and `scripts/CLAUDE.md`, not silently accepted.
+- Verified priority order matters (not just dedup) with a live A/B test before implementing — owner's
+  instinct that dedup alone made bucket order irrelevant was wrong (found a concrete case: Food
+  Distribution only gets selected when all_green runs last, not 2nd), owner then chose "all_green
+  last" explicitly with that tradeoff understood.
+- Live dry-run against real 2026-08-21 data confirms the projected selection exactly (25 unique
+  groups; Insurance Brokers now a leader; Railroads/Oil & Gas Integrated/Food Distribution/Capital
+  Markets land in all_green).
+- 709 tests pass (`pytest tests/` minus the documented Playwright-ignore list from `tests.yml`).
+
+**Deferred, tracked:** `PICKS-SEL-V3-PWA` added to `.session/SPRINT.md` (Stock Picks Pipeline
+section) — the PWA's `CATEGORY_LABEL`/`catColor`/`catOrder` maps in `docs/index.html` don't know
+about `all_green` yet (falls back to raw string, no chip color — won't crash, just unstyled).
+Deliberately out of scope for this backend-only change.
+
+**Next steps:** push this branch, open PR, merge. No further selector work pending unless the owner
+wants the PWA follow-up (`PICKS-SEL-V3-PWA`) done next.
+
 ## 2026-08-24 — Lookup card: fix "beats N/6" vs breadth-dot mismatch, unlabeled RS chip
 
 **Status: safe to close.** Branch `claude/beats-counter-mismatch-avk88v`. Started from a user
