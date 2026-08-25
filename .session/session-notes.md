@@ -549,6 +549,55 @@ strip + push). Ack is event-based so nothing to apply out-of-band.
 
 ---
 
+## 2026-08-25 — PR #366 follow-ups: WS-POSITIONS-TTL-BURN fixed + SEED groundwork (branch `claude/pr366-followup-tasks-e1b3zz`, PR #367)
+
+**Status: safe to close once PR #367 merges.** Staff-eng session picking up the leftover tracked
+follow-ups after WS-POSITIONS-STATUS (#366) merged. Owner scoped this session to **TTL-BURN** +
+**SEED groundwork** (MONITOR and the #366 `test_pwa_watchlist.py` verification loose end stay
+parked). Lead owned review/synthesis; both boots-on-ground pieces went to Sonnet subagents against
+locked specs and every line was reviewed.
+
+**WS-POSITIONS-TTL-BURN — DONE (owner chose "skip decrement until first real read").** `tickWatchlist()`
+(`worker-positions/src/watchlist.js`) decremented `sessions_remaining` for every active watch row
+each trading day, so a ticker added Saturday burned 2 of its 10 "mornings" by Monday delivering
+zero info. Fix: step-3 decrement now scoped `WHERE status='active' AND ticker IN (SELECT ticker
+FROM ticker_quotes)` — the exact `has_history` boundary #366 established, so an `awaiting_first_read`
+row stays at full TTL until its first EOD bar lands. Added a `skipped_no_history` count to the tick
+return (observability + the natural input to WS-POSITIONS-MONITOR). 3-places docs (in-code,
+`worker-positions/CLAUDE.md`, `README.md`). **295 vitest green.** Lead reviewed the diff line-by-line:
+boundary matches `has_history`, no NULL-in-subquery hazard (`ticker` is a NOT-NULL PK component),
+`NOT IN (empty set)` correctly skips-all when `ticker_quotes` is empty. The subagent also correctly
+fixed `test/index.test.js`'s `/watchlist/tick` route test (it had asserted `decremented:1` on a
+bar-less ticker — the very bug). No release triplet (worker/engine-only). Commit `61128a0`.
+
+**WS-POSITIONS-SEED — GROUNDWORK ONLY, verdict GO (no seed code; build still gated on owner sign-off).**
+Reversed the "held" status only far enough to close the prerequisites. FMP key was live in-session,
+so verified against the REAL API, not docs. Findings integrated into
+`planning/watchlist-status-honesty-and-seeding.md` § "WS-POSITIONS-SEED — groundwork findings":
+- Endpoint is `GET /stable/historical-price-eod/full` (returns genuine completed prior sessions;
+  confirmed distinct from `/stable/quote`, the running-quote endpoint the original review rejected).
+  **Split-adjusted** (verified against AAPL's real 2020-08 4:1 split), not dividend-adjusted — moot
+  over the 1-session lookback a seed needs, so OHLC taken as-is.
+- Seed scope: OHLC + volume + change_pct + prev_close only; `atr` null, `raw` at `'{}'` default
+  (verified null-tolerant end-to-end via `normalizeBar()`/`advance.js`).
+- `0006_ticker_quotes_source.sql` (`ADD COLUMN source TEXT NOT NULL DEFAULT 'finviz'`) — additive/
+  non-breaking against `ingestQuotes()`'s explicit `INGEST_COLS` + `sweep.js`'s `SELECT *`. **Key
+  finding: `source` is belt-and-suspenders, NOT a correctness requirement** — a `sweep.js` trace
+  showed a past-dated seed is always outside the strictly-`>` bar window, so it can never leak into
+  a real position's advance. The sma50 level-vs-%-distance trap is sidestepped by the OHLC-only scope.
+- No new job — the existing 15:30 ET `preclose_status` pass already reruns the full status engine.
+- **Two residual unverified items** (don't block starting, close before merging the writer):
+  Finviz's own OHLC adjustment convention (`collect_held.py`) and `refsFromRow()`'s exact read query.
+- Ordered 5-step build plan in the planning doc. SPRINT `WS-POSITIONS-SEED` row moved to GO.
+
+**Next steps:** merge PR #367 → `deploy-workers.yml` auto-deploys `finviz-positions` (backward-compatible
+TTL fix). Then the remaining backlog: **WS-POSITIONS-MONITOR** (healthchecks dead-man's-switch, now
+meaningful and with `skipped_no_history` as an input) and **WS-POSITIONS-SEED** (owner decides whether
+to green-light the build from the groundwork). The #366 `test_pwa_watchlist.py` Playwright verification
+loose end is still open (sandbox Chromium harness gap; needs a CI/local run).
+
+---
+
 ## 2026-08-25 — WS-POSITIONS-STATUS: honest watchlist "first read" state (branch `claude/missing-additions-status-ghxbn2`)
 
 **Status: safe to close.** All changes committed and pushed on the designated branch; tests green;

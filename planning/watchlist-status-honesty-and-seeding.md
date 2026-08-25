@@ -132,3 +132,81 @@ session"), not a stderr warning that can itself go unnoticed the same way the or
 TTL burn during "Adding"/"awaiting_first_read": `sessions_remaining` currently decrements every
 weekday a watch entry is active, regardless of whether it ever produced a real read that day.
 Not fixed in this PR — flagged as a real, separate bug (see SPRINT.md `WS-POSITIONS-TTL-BURN`).
+
+**Update 2026-08-25 (PR #367):** `WS-POSITIONS-TTL-BURN` is now **fixed** — `tickWatchlist()`
+skips the decrement for any active row whose ticker has no `ticker_quotes` bar yet (the same
+`has_history` boundary WS-POSITIONS-STATUS added), so an `awaiting_first_read` ticker stays at
+full TTL until its first EOD bar lands. A `skipped_no_history` count was added to the tick
+response for observability (and as the natural input to WS-POSITIONS-MONITOR).
+
+## WS-POSITIONS-SEED — groundwork findings (2026-08-25, PR #367)
+
+Research only — no seed code/migration written; the build stays gated on owner sign-off. All FMP
+calls below were made **live** against `https://financialmodelingprep.com/stable/...` with the
+session's `FMP_API_KEY`; repo claims are traced to `file:line` in the current tree. **Verdict:
+GO** — the three SPRINT-listed prerequisites are satisfied at the research level.
+
+**A. FMP endpoint (verified live).** `GET /stable/historical-price-eod/full?symbol=X&apikey=…`
+(same `stable/`, `?apikey=` convention as `worker/src/index.js:128`). Returns completed prior
+sessions in descending date order; fields `symbol,date,open,high,low,close,volume,change,
+changePercent,vwap`. Recency confirmed (most recent row = the prior completed session, not
+today's running quote) and confirmed distinct from `/stable/quote` (current-session shape, no
+`date` — the endpoint the original review correctly warned against). Adjustment convention
+verified against AAPL's real 2020-08 4:1 split: `full` is **split-adjusted** (post-split scale),
+**not** dividend-adjusted — but over the **1-session lookback** a seed needs, the dividend gap is
+not observable, so `full`'s `open/high/low/close` are taken as-is with no adjustment math.
+
+**B. ticker_quotes gap.** `full` supplies `open/high/low/close/volume` + a `change_pct`
+equivalent + `prev_close` (the `close` of the adjacent older row `full` already returns). It does
+**not** supply `atr` or the `raw` SMA %-distance fields. Verified via `normalizeBar()` and
+helpers (`advance.js:418-501`) that **null `atr`/`raw` are tolerated end-to-end** — every
+consumer already gates on `isNum(...)`, and a partial-Finviz-scrape bar has this exact shape.
+**Recommended seed scope: OHLC + volume + change_pct + prev_close only; leave `atr` null and
+`raw` at its `'{}'` default.** Watchlist status reads only need `prior_high`/`prior_low`.
+
+**C. `source` provenance column.** Next migration is `0006` (max existing is `0005_push_…`).
+`ALTER TABLE ticker_quotes ADD COLUMN source TEXT NOT NULL DEFAULT 'finviz'` — confirmed additive
+and non-breaking: `ingestQuotes()` builds its INSERT/`ON CONFLICT` from the explicit `INGEST_COLS`
+array (`quotes.js:70`), which simply never mentions `source`; `sweep.js` reads via `SELECT *`. The
+seed writer sets `source='fmp_seed'` on its own INSERT.
+
+**D. sma50 %-distance trap — sidestepped.** Real (`advance.js:432` recovers `sma50` as a *level*
+from a *%-distance* in `raw`; FMP's `priceAvg50` is already a level, so a naive passthrough would
+be re-interpreted and corrupted) — but the OHLC-only scope leaves `raw` empty, so no SMA value is
+ever written and no trap surface exists. Conversion for the record if a future variant seeds MAs:
+`pct = (close/level − 1)*100`, stored into `raw["SMA{N}"]`.
+
+**E. ON CONFLICT / global-read hazard — not a correctness hazard.** PK is `(ticker, trade_date)`
+and the held feed only ever writes today's date, so a past-dated seed row is never `ON CONFLICT`-
+updated (confirmed). But `sweep.js`'s read window is **strictly** `trade_date > max(
+last_advanced_date, entry_date, opened_at-ET-date)` (`sweep.js:41-77`, `:215-219`). A seed's date
+is, by construction, *older* than any future position's entry on that ticker, so it always fails
+the `>` floor and is **never** folded into a real position's advance. → The `source` column is
+**belt-and-suspenders (debuggability + insurance against a future same-day-seed variant), not
+required for correctness.** Recommend shipping it anyway — cheap, additive, closes the review
+point.
+
+**F. Wiring — no new job.** Confirmed via `worker-cron/src/routing.js`: the existing **15:30 ET
+`preclose_status`** job reruns the full `collect_morning.py --session pre_close` status engine. A
+ticker seeded at add-time gets its first real status read the same afternoon (or next morning's
+10:05 ET run) with no new cron/workflow/KV key.
+
+**Two items still genuinely unverified (don't block starting; close before merging the seed
+writer):** (1) whether Finviz's own held-feed OHLC is split/dividend-adjusted the same way FMP's
+`full` is — practically moot for a 1-session seed, but a direct read of `collect_held.py` would
+give certainty; (2) `refsFromRow()` / `/watchlist-tickers`'s exact read query wasn't traced this
+pass — a seeded past bar *should* be visible there (that's the whole feature), just not
+independently re-verified.
+
+**Ordered build plan (when owner approves):**
+1. `0006_ticker_quotes_source.sql` — ship the additive column alone first (zero behavior change).
+2. Seed writer (`worker-positions/src/seed.js`) on `POST /watchlist`: call
+   `historical-price-eod/full` over a ~5-calendar-day range, take the newest two rows → map
+   OHLC/volume/change_pct + prev_close; `source='fmp_seed'`, `atr`/`raw` left default.
+3. Dedicated `INSERT OR IGNORE` (never clobber a real Finviz bar or a prior seed) — not
+   `ingestQuotes()` (its `INGEST_COLS` is held-feed-specific).
+4. Confirm `refsFromRow()` needs no `source`-aware branch (open item above), then no read-path
+   change is required.
+5. Tests: pure mapper test (happy path + IPO single-day edge) + integration test proving the seed
+   INSERT never overwrites and that a seeded row is excluded from a synthetic position's
+   `loadBarsAfter` window.
