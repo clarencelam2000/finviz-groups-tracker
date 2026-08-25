@@ -91,9 +91,17 @@ class TestLoadMethodology:
         m = rp.load_methodology("2026-08-12")
         assert m["version"] == "v4"
 
-    def test_loads_v4_for_later_date(self):
-        m = rp.load_methodology("2026-09-01")
+    def test_loads_v4_for_date_just_before_v5_effective(self):
+        m = rp.load_methodology("2026-08-24")
         assert m["version"] == "v4"
+
+    def test_loads_v5_for_pipeline_start_of_all_green_category_order(self):
+        m = rp.load_methodology("2026-08-25")
+        assert m["version"] == "v5"
+
+    def test_loads_v5_for_later_date(self):
+        m = rp.load_methodology("2026-09-01")
+        assert m["version"] == "v5"
 
     def test_loads_v1_for_date_before_v2_effective(self):
         m = rp.load_methodology("2026-06-30")

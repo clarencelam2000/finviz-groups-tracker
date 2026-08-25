@@ -755,12 +755,13 @@
 
     // Display labels and chip colors for picks list_category bucket values.
     // Moved to module scope so renderLookupStage2() and renderPickRow() share one definition.
-    const CATEGORY_LABEL = { leaders: 'Leaders', emerging: 'Emerging', accel: 'Accel', rs_new_high: 'RS New High' };
+    const CATEGORY_LABEL = { leaders: 'Leaders', emerging: 'Emerging', accel: 'Accel', rs_new_high: 'RS New High', all_green: 'All Green' };
     const CATEGORY_CHIP_CLS = {
       leaders:     'bg-emerald-900/40 text-emerald-400',
       emerging:    'bg-blue-900/40 text-blue-400',
       accel:       'bg-amber-900/40 text-amber-400',
       rs_new_high: 'bg-purple-900/40 text-purple-400',
+      all_green:   'bg-green-900/40 text-green-400',
     };
 
     // Launch-ready chip thresholds (display-only, computeLaunchReady() near _pF ~line 3840).
@@ -4003,8 +4004,8 @@
         const globalFocusScored = computeFocusScores(globalFocusCandidates);
         const lookupFocusMap = new Map(globalFocusScored.map(s => [s.r.ticker || s.r.Ticker || '', s]));
 
-        // Category chips — ordered leaders → emerging → accel → rs_new_high.
-        const catOrder = ['leaders', 'emerging', 'accel', 'rs_new_high'];
+        // Category chips — ordered leaders → emerging → accel → rs_new_high → all_green.
+        const catOrder = ['leaders', 'emerging', 'accel', 'rs_new_high', 'all_green'];
         const chips = catOrder
           .filter(c => groupCategories.has(c))
           .map(c => `<span class="text-[0.6rem] px-1.5 py-0.5 rounded-full ${CATEGORY_CHIP_CLS[c] || 'bg-slate-700/60 text-slate-300'}">${CATEGORY_LABEL[c] || c}</span>`)
@@ -4983,13 +4984,14 @@
       const focusScoreMap = new Map(allFocusScored.map(s => [s.r.ticker + '_' + (s.r.list_category || ''), s]));
 
       // Grouped: category → industry → stocks, sorted least-extended first within each group.
-      const CAT_ORDER  = ['leaders', 'emerging', 'accel', 'rs_new_high'];
-      const CAT_LABELS = { leaders: 'Leaders', emerging: 'Emerging', accel: 'Accel', rs_new_high: 'RS New High' };
+      const CAT_ORDER  = ['leaders', 'emerging', 'accel', 'rs_new_high', 'all_green'];
+      const CAT_LABELS = { leaders: 'Leaders', emerging: 'Emerging', accel: 'Accel', rs_new_high: 'RS New High', all_green: 'All Green' };
       const CAT_COLORS = {
         leaders:    'bg-sky-900 text-sky-200',
         emerging:   'bg-emerald-900 text-emerald-200',
         accel:      'bg-amber-900 text-amber-200',
         rs_new_high:'bg-purple-900 text-purple-200',
+        all_green:  'bg-green-900 text-green-200',
       };
 
       const catMap = {};
@@ -5339,7 +5341,7 @@
       // is still appended at the end, never silently dropped — `order.filter()` alone would
       // have thrown away anything not in the array, which is the exact class of drift bug
       // this function exists to avoid.
-      const order = ['leaders', 'emerging', 'accel', 'rs_new_high'];
+      const order = ['leaders', 'emerging', 'accel', 'rs_new_high', 'all_green'];
       const known = order.filter(c => cats.has(c));
       const unknown = [...cats].filter(c => !order.includes(c));
       return known.concat(unknown);
