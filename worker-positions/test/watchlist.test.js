@@ -295,12 +295,14 @@ describe("watchlistTickerRefs", () => {
 
 // ── tickWatchlist ────────────────────────────────────────────────────────────────────────────────
 describe("tickWatchlist", () => {
-  it("decrements active rows and reports ticked:true", async () => {
+  it("decrements active rows WITH a bar and reports ticked:true", async () => {
     const db = makeD1();
     db._seedWatchlist({ user_id: "owner", ticker: "AAPL", sessions_remaining: 10 });
     db._seedWatchlist({ user_id: "owner", ticker: "MSFT", sessions_remaining: 3 });
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-08-12", close: 200, high: 205, low: 198, atr: 4, raw: "{}" });
+    db._seedQuote({ ticker: "MSFT", trade_date: "2026-08-12", close: 300, high: 305, low: 298, atr: 4, raw: "{}" });
     const res = await tickWatchlist(db, { date: "2026-08-13", now: new Date("2026-08-13T21:05:00Z") });
-    expect(res).toEqual({ ticked: true, decremented: 2, expired: 0, purged: 0 });
+    expect(res).toEqual({ ticked: true, decremented: 2, expired: 0, purged: 0, skipped_no_history: 0 });
     const rows = db._watchlist();
     expect(rows.find((r) => r.ticker === "AAPL").sessions_remaining).toBe(9);
     expect(rows.find((r) => r.ticker === "MSFT").sessions_remaining).toBe(2);
@@ -309,15 +311,17 @@ describe("tickWatchlist", () => {
   it("a second call on the SAME date is a no-op (ticked:false)", async () => {
     const db = makeD1();
     db._seedWatchlist({ user_id: "owner", ticker: "AAPL", sessions_remaining: 10 });
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-08-12", close: 200, high: 205, low: 198, atr: 4, raw: "{}" });
     await tickWatchlist(db, { date: "2026-08-13", now: new Date("2026-08-13T21:05:00Z") });
     const res2 = await tickWatchlist(db, { date: "2026-08-13", now: new Date("2026-08-13T23:00:00Z") });
-    expect(res2).toEqual({ ticked: false, decremented: 0, expired: 0, purged: 0 });
+    expect(res2).toEqual({ ticked: false, decremented: 0, expired: 0, purged: 0, skipped_no_history: 0 });
     expect(db._watchlist()[0].sessions_remaining).toBe(9); // unchanged by the second call
   });
 
   it("a DIFFERENT date ticks again", async () => {
     const db = makeD1();
     db._seedWatchlist({ user_id: "owner", ticker: "AAPL", sessions_remaining: 10 });
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-08-12", close: 200, high: 205, low: 198, atr: 4, raw: "{}" });
     await tickWatchlist(db, { date: "2026-08-13", now: new Date("2026-08-13T21:05:00Z") });
     const res2 = await tickWatchlist(db, { date: "2026-08-14", now: new Date("2026-08-14T21:05:00Z") });
     expect(res2.ticked).toBe(true);
@@ -328,6 +332,7 @@ describe("tickWatchlist", () => {
   it("expires rows that hit 0", async () => {
     const db = makeD1();
     db._seedWatchlist({ user_id: "owner", ticker: "AAPL", sessions_remaining: 1 });
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-08-12", close: 200, high: 205, low: 198, atr: 4, raw: "{}" });
     const res = await tickWatchlist(db, { date: "2026-08-13", now: new Date("2026-08-13T21:05:00Z") });
     expect(res.expired).toBe(1);
     const row = db._watchlist()[0];
@@ -360,9 +365,45 @@ describe("tickWatchlist", () => {
   it("defaults `date` to the ET date derived from `now` when omitted", async () => {
     const db = makeD1();
     db._seedWatchlist({ user_id: "owner", ticker: "AAPL", sessions_remaining: 10 });
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-08-12", close: 200, high: 205, low: 198, atr: 4, raw: "{}" });
     const res = await tickWatchlist(db, { now: new Date("2026-08-13T15:00:00Z") }); // 11am ET
     expect(res.ticked).toBe(true);
     expect(res.decremented).toBe(1);
+  });
+
+  // ── WS-POSITIONS-TTL-BURN: skip decrement until first real read ─────────────────────────────
+  it("a brand-new watch ticker with NO bar yet is NOT decremented; skipped_no_history=1", async () => {
+    const db = makeD1();
+    db._seedWatchlist({ user_id: "owner", ticker: "FRESH", sessions_remaining: 10 });
+    const res = await tickWatchlist(db, { date: "2026-08-13", now: new Date("2026-08-13T21:05:00Z") });
+    expect(res).toEqual({ ticked: true, decremented: 0, expired: 0, purged: 0, skipped_no_history: 1 });
+    expect(db._watchlist()[0].sessions_remaining).toBe(10);
+  });
+
+  it("mixed: one ticker with a bar, one without -> only the bar-having row decrements", async () => {
+    const db = makeD1();
+    db._seedWatchlist({ user_id: "owner", ticker: "AAPL", sessions_remaining: 10 });
+    db._seedWatchlist({ user_id: "owner", ticker: "FRESH", sessions_remaining: 10 });
+    db._seedQuote({ ticker: "AAPL", trade_date: "2026-08-12", close: 200, high: 205, low: 198, atr: 4, raw: "{}" });
+    const res = await tickWatchlist(db, { date: "2026-08-13", now: new Date("2026-08-13T21:05:00Z") });
+    expect(res.decremented).toBe(1);
+    expect(res.skipped_no_history).toBe(1);
+    const rows = db._watchlist();
+    expect(rows.find((r) => r.ticker === "AAPL").sessions_remaining).toBe(9);
+    expect(rows.find((r) => r.ticker === "FRESH").sessions_remaining).toBe(10);
+  });
+
+  it("a no-bar row survives multiple ticks (different dates) without ever expiring", async () => {
+    const db = makeD1();
+    db._seedWatchlist({ user_id: "owner", ticker: "FRESH", sessions_remaining: 10 });
+    await tickWatchlist(db, { date: "2026-08-13", now: new Date("2026-08-13T21:05:00Z") });
+    await tickWatchlist(db, { date: "2026-08-14", now: new Date("2026-08-14T21:05:00Z") });
+    const res = await tickWatchlist(db, { date: "2026-08-17", now: new Date("2026-08-17T21:05:00Z") });
+    expect(res.decremented).toBe(0);
+    expect(res.expired).toBe(0);
+    const row = db._watchlist()[0];
+    expect(row.sessions_remaining).toBe(10);
+    expect(row.status).toBe("active");
   });
 });
 

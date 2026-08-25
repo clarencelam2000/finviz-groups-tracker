@@ -18,9 +18,11 @@ const TICKER_RE = /^[A-Z][A-Z0-9.\-]{0,9}$/; // 1–10 chars, letters/digits/./-
 export const LEVEL_TYPES = ["above", "below", "reclaim_20ma", "reclaim_50ma"];
 
 // TTL (in TRADING MORNINGS, not calendar days) a watch entry starts/renews at. Decremented once per
-// ET trading date by tickWatchlist(). Owner-set (build brief § 6): 10 mornings is enough runway to
-// see a setup develop without the list accumulating stale entries forever. Renewing (PATCH
-// {renew:true}, or re-POSTing the same ticker via addWatch's upsert) resets the counter to this value.
+// ET trading date on which the ticker HAS A BAR (skips "awaiting first read" mornings — see
+// WS-POSITIONS-TTL-BURN in tickWatchlist()'s step 3 below). Owner-set (build brief § 6): 10 mornings
+// is enough runway to see a setup develop without the list accumulating stale entries forever.
+// Renewing (PATCH {renew:true}, or re-POSTing the same ticker via addWatch's upsert) resets the
+// counter to this value.
 export const WATCHLIST_TTL_SESSIONS = 10;
 
 // Calendar days an `expired` entry lingers (collapsed bin in the UI) before tickWatchlist() purges
@@ -253,7 +255,12 @@ export async function watchlistTickerRefs(db) {
 //   2. INSERT OR IGNORE into watchlist_tick_log — if a row for this date already exists, the insert
 //      changes 0 rows and we return early with ticked:false (double-run guard: a GitHub Actions
 //      retry or the tests.yml/collect.yml backstop firing twice must not double-decrement).
-//   3. Decrement sessions_remaining for every 'active' row.
+//   3. Decrement sessions_remaining for every 'active' row WHOSE TICKER HAS AT LEAST ONE
+//      ticker_quotes BAR (WS-POSITIONS-TTL-BURN). A brand-new watch ticker with no bar yet is in
+//      the "awaiting_first_read" state — no real classification could have happened for it, so a
+//      tick over a weekend/holiday gap before its first EOD read must not burn TTL. The "has a bar"
+//      boundary matches has_history in watchlistTickerRefs() (q_trade_date != null) exactly.
+//      Awaiting rows are left at full TTL, which is what keeps step 4 from expiring them early.
 //   4. Expire rows that hit 0 (status='expired', expired_at=now).
 //   5. Purge 'expired' rows older than WATCHLIST_PURGE_DAYS calendar days (by expired_at).
 export async function tickWatchlist(db, { date, now = new Date() } = {}) {
@@ -262,13 +269,23 @@ export async function tickWatchlist(db, { date, now = new Date() } = {}) {
 
   const ins = await db.prepare("INSERT OR IGNORE INTO watchlist_tick_log (tick_date) VALUES (?)").bind(tickDate).run();
   const inserted = (ins.meta && ins.meta.changes) > 0;
-  if (!inserted) return { ticked: false, decremented: 0, expired: 0, purged: 0 };
+  if (!inserted) return { ticked: false, decremented: 0, expired: 0, purged: 0, skipped_no_history: 0 };
 
   const dec = await db
-    .prepare("UPDATE watchlist SET sessions_remaining = sessions_remaining - 1, updated_at = ? WHERE status = 'active'")
+    .prepare(
+      "UPDATE watchlist SET sessions_remaining = sessions_remaining - 1, updated_at = ? " +
+        "WHERE status = 'active' AND ticker IN (SELECT ticker FROM ticker_quotes)"
+    )
     .bind(nowIso)
     .run();
   const decremented = (dec.meta && dec.meta.changes) || 0;
+
+  const skippedRow = await db
+    .prepare(
+      "SELECT COUNT(*) AS n FROM watchlist WHERE status = 'active' AND ticker NOT IN (SELECT ticker FROM ticker_quotes)"
+    )
+    .first();
+  const skipped_no_history = (skippedRow && skippedRow.n) || 0;
 
   const exp = await db
     .prepare("UPDATE watchlist SET status = 'expired', expired_at = ? WHERE status = 'active' AND sessions_remaining <= 0")
@@ -286,5 +303,5 @@ export async function tickWatchlist(db, { date, now = new Date() } = {}) {
     .run();
   const purged = (purge.meta && purge.meta.changes) || 0;
 
-  return { ticked: true, decremented, expired, purged };
+  return { ticked: true, decremented, expired, purged, skipped_no_history };
 }

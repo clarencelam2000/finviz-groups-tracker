@@ -244,7 +244,7 @@ a trade ticket). These two constants govern its TTL lifecycle.
 
 | Name | Default | Controls |
 |---|---|---|
-| `WATCHLIST_TTL_SESSIONS` | `10` | Trading mornings a watch entry survives before expiring; `sessions_remaining`'s starting/renew value, decremented once per ET trading date by `tickWatchlist()`. |
+| `WATCHLIST_TTL_SESSIONS` | `10` | Trading mornings a watch entry survives before expiring; `sessions_remaining`'s starting/renew value. Decremented once per ET trading date on which the ticker has a real read — i.e. at least one `ticker_quotes` bar exists — by `tickWatchlist()`. The TTL clock counts mornings with a real read, not calendar mornings since add: an "awaiting_first_read" ticker (no bar yet) is skipped, so a weekend/holiday gap before its first EOD read never burns TTL (`WS-POSITIONS-TTL-BURN`). |
 | `WATCHLIST_PURGE_DAYS` | `14` | Calendar days an `expired` entry lingers (collapsed bin) before `tickWatchlist()` purges it (keyed off `expired_at`, not trading sessions). |
 
 ### Engine constants (`src/advance.js` `ENGINE_CONFIG`, design §6)

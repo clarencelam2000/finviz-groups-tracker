@@ -488,11 +488,14 @@ describe("WS5 §8b P1 — personal watchlist routes (issue #319)", () => {
     expect(tickers[0].ticker).toBe("AAPL");
     expect(tickers[0]).not.toHaveProperty("level_value");
 
+    // AAPL has no ticker_quotes bar yet (WS-POSITIONS-TTL-BURN: awaiting-first-read rows are
+    // skipped, not decremented).
     const tick = await handleRequest(ingestReq("/watchlist/tick", { method: "POST", body: { date: "2026-08-13" } }), env);
     expect(tick.status).toBe(200);
     const tickBody = await tick.json();
     expect(tickBody.ticked).toBe(true);
-    expect(tickBody.decremented).toBe(1);
+    expect(tickBody.decremented).toBe(0);
+    expect(tickBody.skipped_no_history).toBe(1);
   });
 
   // ── Cross-auth isolation ──────────────────────────────────────────────────────────────────────
