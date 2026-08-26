@@ -1,6 +1,16 @@
 {
-  "current": "2026.08.26",
+  "current": "2026.08.26.1",
   "releases": [
+    {
+      "version": "2026.08.26.1",
+      "date": "2026-08-26",
+      "title": "Watchlist tickers get a real level sooner",
+      "tag": "improvement",
+      "tab": "morning",
+      "notes": [
+        "Adding a ticker to your watchlist now captures its most recent daily bar right away, so it can show a real status (instead of \"awaiting first read\") at the very next scheduled check — 10:05am or 3:30pm ET — rather than waiting until the day after."
+      ]
+    },
     {
       "version": "2026.08.26",
       "date": "2026-08-26",
