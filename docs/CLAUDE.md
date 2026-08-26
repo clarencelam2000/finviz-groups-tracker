@@ -77,10 +77,31 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 Personal per-ticker watch entries that ride the morning status-check pipeline for a limited
 window, with an optional private "level of interest" overlay.
 
-- **Two surfaces.** Morning tab: a "Your watchlist" section (`renderWatchlistSection()`)
-  rendered above the picks list (`#morning-list`) — the user's own radar leads. Positions tab:
-  an "＋ Add to watchlist" collapsible, a sibling to the §8a manual-entry expander (separate
-  state, separate handlers — not merged with `manualEntry`).
+- **Two surfaces.** Morning tab: a "Your watchlist" section (`renderWatchlistSection()`), since
+  morning-subtabs-watchlist rendered in its own subtab pane (`#morning-subtab-watchlist`) rather
+  than stacked above the picks list — see § Morning tab below. Positions tab: an "＋ Add to
+  watchlist" collapsible, a sibling to the §8a manual-entry expander (separate state, separate
+  handlers — not merged with `manualEntry`).
+- **Levels gauge defaults to hidden** (morning-subtabs-watchlist, owner request). `watchGaugeHtml()`'s
+  "Show levels ▸ / Hide levels ▾" toggle (`__toggleWatchGauge`) is keyed by `state.watchGauge[ticker]`
+  as a **SHOWN** flag — absent/false = hidden, the opposite polarity from the original "collapsed?"
+  meaning the same map held before this change. The flip needed no per-ticker initialization: a
+  ticker simply never added to the map now reads as hidden by construction.
+- **Soft-remove, not delete (morning-subtabs-watchlist, migration 0007).** The watch card kebab's
+  "Remove" (`window.watchRemove`) now sends `PATCH /watchlist/:id {remove:true}` — NOT the old
+  `watchDeleteApi`/`DELETE` — so the row survives server-side as `status:'removed'` and drops into
+  a collapsed **"Recently removed"** bin (`watchRemovedCardHtml`, mirrors the existing "Expired"
+  bin) instead of vanishing. `worker-positions/src/watchlist.js::watchlistTickers()`'s
+  `status = 'active'` filter (used by both `heldTickers()`'s scrape union and the public
+  `GET /watchlist-tickers` feed) already excludes `removed` identically to `expired` — the ticker
+  stops being scraped on the very next held-feed run with no separate filter needed. A removed
+  card still renders a free TradingView chart (`watchChartAffordance` needs only the ticker
+  symbol, independent of any backend feed) plus a **Restore** button
+  (`window.watchRestore` → `PATCH {restore:true}`, same renew-with-fresh-TTL semantics as
+  `watchRenew`). The hard `DELETE`/`watchDeleteApi` path still exists, reserved for graduation
+  cleanup only (`watchGraduate`'s post-`POST /positions` cleanup) — a graduated ticker becoming a
+  real position should vanish outright, not sit in a removed bin. Both terminal statuses purge
+  after `WATCHLIST_PURGE_DAYS` (worker-side `tickWatchlist()`), symmetric.
 - **Merge model, two sources joined client-side by ticker.** (1) The *public system read*:
   `morning_latest.csv` rows tagged `list_category === 'watchlist'` — the same server-computed
   status pipeline (`pick_status.py`) that scores picks, so watch tickers get a real
@@ -119,6 +140,18 @@ window, with an optional private "level of interest" overlay.
   `worker-positions/README.md`.
 
 ## Morning tab (WS3, ADR-013)
+
+**Subtabs (morning-subtabs-watchlist).** The tab has two panes, `#morning-subtab-picks`
+(`renderMorning()`'s picks-confirmation cards) and `#morning-subtab-watchlist`
+(`renderWatchlistSection()`'s "Your watchlist" — see § Watchlist above), switched by a
+segmented-pill nav (`renderMorningSubtabs()` / `window.__setMorningSubtab`) that mirrors the
+Picks All/Focus toggle's look. Both panes render unconditionally on every `state.tab === 'morning'`
+pass (`render()` calls `renderMorningSubtabs(); renderWatchlistSection(); renderMorning();` every
+time) — switching subtabs is a pure visibility toggle (`classList.toggle('hidden', ...)`), no
+re-fetch or re-render. Default pane is `'picks'` (`state.morningSubtab`, session-only, resets on
+reload) — the picks confirmation read is the tab's primary ADR-013 job; the watchlist is the
+user's own opt-in radar, previously stacked above it in one scroll. The Watchlist subtab button
+shows an active-entry count badge when non-zero.
 
 The **Morning** tab (`renderMorning()` in `index.html`) reads the provisional store
 `data/picks/sessions/morning_latest.csv` (fetched via `MORNING_URL`) and tags each of

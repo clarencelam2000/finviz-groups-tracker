@@ -72,16 +72,21 @@ export function validateAddPayload(body) {
   return { ok: true, value: { ticker, ...lv.value } };
 }
 
-// PURE. Validate a PATCH /watchlist/:id body. Two shapes:
+// PURE. Validate a PATCH /watchlist/:id body. Four shapes:
 //   { renew: true }                     -> { ok:true, value:{ renew:true } }
+//   { remove: true }                    -> { ok:true, value:{ remove:true } }  (soft-remove)
+//   { restore: true }                   -> { ok:true, value:{ restore:true } } (undo a soft-remove)
 //   { level_type?, level_value? }       -> { ok:true, value:{ level_type, level_value } } (edit)
-// An empty/no-op body (neither renew nor any level key present) is rejected — the caller must say
-// what it wants changed.
+// An empty/no-op body (none of the above present) is rejected — the caller must say what it wants
+// changed. remove/restore mirror renew's shape exactly (a single boolean flag, no level payload) —
+// see patchWatch for what each actually does to the row.
 export function validatePatchPayload(body) {
   if (!body || typeof body !== "object") return { ok: false, error: "body must be a JSON object" };
   if (body.renew === true) return { ok: true, value: { renew: true } };
+  if (body.remove === true) return { ok: true, value: { remove: true } };
+  if (body.restore === true) return { ok: true, value: { restore: true } };
   const hasLevelKey = "level_type" in body || "level_value" in body;
-  if (!hasLevelKey) return { ok: false, error: "body must set renew:true or a level_type/level_value edit" };
+  if (!hasLevelKey) return { ok: false, error: "body must set renew/remove/restore:true or a level_type/level_value edit" };
   const lv = validateLevel(body);
   if (!lv.ok) return lv;
   return { ok: true, value: lv.value };
@@ -180,16 +185,23 @@ export async function listWatch(db, user_id) {
   });
 }
 
-// User-scoped UPDATE by id. renew resets the TTL/status; otherwise applies a level edit. Returns
-// { changed:boolean } — false means not found OR not owned by this user (indistinguishable on
-// purpose, matching listPositions/deleteWatch's tenant-scoping convention elsewhere in this worker).
-export async function patchWatch(db, { user_id, id, renew, level_type, level_value, now = new Date() }) {
+// User-scoped UPDATE by id. renew resets the TTL/status; remove soft-deletes (status='removed',
+// stops heldTickers()'s scrape union on the next held-feed run, still visible to the owner in a
+// collapsed "Recently removed" bin); restore undoes a remove back to 'active' with a fresh TTL
+// (same renew semantics — a restored ticker gets a full run, not the TTL it happened to have left
+// when removed); otherwise applies a level edit. Returns { changed:boolean } — false means not
+// found OR not owned by this user (indistinguishable on purpose, matching listPositions/deleteWatch's
+// tenant-scoping convention elsewhere in this worker).
+export async function patchWatch(db, { user_id, id, renew, remove, restore, level_type, level_value, now = new Date() }) {
   const nowIso = isoUtc(now);
   let sql;
   let binds;
-  if (renew) {
-    sql = `UPDATE watchlist SET sessions_remaining = ?, status = 'active', expired_at = NULL, updated_at = ? WHERE user_id = ? AND id = ?`;
+  if (renew || restore) {
+    sql = `UPDATE watchlist SET sessions_remaining = ?, status = 'active', expired_at = NULL, removed_at = NULL, updated_at = ? WHERE user_id = ? AND id = ?`;
     binds = [WATCHLIST_TTL_SESSIONS, nowIso, user_id, id];
+  } else if (remove) {
+    sql = `UPDATE watchlist SET status = 'removed', removed_at = ?, updated_at = ? WHERE user_id = ? AND id = ?`;
+    binds = [nowIso, nowIso, user_id, id];
   } else {
     sql = `UPDATE watchlist SET level_type = ?, level_value = ?, updated_at = ? WHERE user_id = ? AND id = ?`;
     binds = [level_type ?? null, level_value ?? null, nowIso, user_id, id];
@@ -207,7 +219,9 @@ export async function deleteWatch(db, { user_id, id }) {
 
 // The active-watch ticker set, for heldTickers()'s union (src/quotes.js). User-LESS on purpose —
 // same rationale as heldTickers itself: this selects which symbols the market-data feed must fetch,
-// not who owns them.
+// not who owns them. status = 'active' excludes BOTH 'expired' and 'removed' rows — a soft-removed
+// ticker (patchWatch's remove branch) drops out of the scrape union on the very next held-feed run
+// with no separate filter needed here.
 export async function watchlistTickers(db) {
   const { results } = await db
     .prepare("SELECT DISTINCT ticker FROM watchlist WHERE status = 'active' ORDER BY ticker")
@@ -262,7 +276,9 @@ export async function watchlistTickerRefs(db) {
 //      boundary matches has_history in watchlistTickerRefs() (q_trade_date != null) exactly.
 //      Awaiting rows are left at full TTL, which is what keeps step 4 from expiring them early.
 //   4. Expire rows that hit 0 (status='expired', expired_at=now).
-//   5. Purge 'expired' rows older than WATCHLIST_PURGE_DAYS calendar days (by expired_at).
+//   5. Purge 'expired' AND 'removed' rows older than WATCHLIST_PURGE_DAYS calendar days (by
+//      expired_at / removed_at respectively) — same lingering-collapsed-bin-then-gone lifecycle for
+//      both terminal statuses, so a "Recently removed" bin doesn't grow unbounded either.
 export async function tickWatchlist(db, { date, now = new Date() } = {}) {
   const tickDate = date || etDateStr(now);
   const nowIso = isoUtc(now);
@@ -297,11 +313,15 @@ export async function tickWatchlist(db, { date, now = new Date() } = {}) {
   // a plain string compare is correct (both are UTC, same fixed-width format).
   const cutoffMs = now.getTime() - WATCHLIST_PURGE_DAYS * 24 * 60 * 60 * 1000;
   const cutoffIso = new Date(cutoffMs).toISOString();
-  const purge = await db
+  const purgeExpired = await db
     .prepare("DELETE FROM watchlist WHERE status = 'expired' AND expired_at IS NOT NULL AND expired_at < ?")
     .bind(cutoffIso)
     .run();
-  const purged = (purge.meta && purge.meta.changes) || 0;
+  const purgeRemoved = await db
+    .prepare("DELETE FROM watchlist WHERE status = 'removed' AND removed_at IS NOT NULL AND removed_at < ?")
+    .bind(cutoffIso)
+    .run();
+  const purged = ((purgeExpired.meta && purgeExpired.meta.changes) || 0) + ((purgeRemoved.meta && purgeRemoved.meta.changes) || 0);
 
   return { ticked: true, decremented, expired, purged, skipped_no_history };
 }

@@ -6,6 +6,84 @@
 
 ---
 
+## 2026-08-26 — Morning tab: Picks/Watchlist subtabs, levels-hidden default, soft-remove watchlist
+
+**Status: safe to close — implemented, backend tests pass (310 vitest), PWA functionally
+verified in a real headless-Chromium harness (revision-symlink workaround, see
+`knowledge/investigations/playwright-cloud-session-testing.md`), committed on
+`claude/morning-subtabs-watchlist-q70cvm`. Not yet pushed/PR'd as of this note — see Next
+steps.** Owner request (three asks in one message, no issue #): split the Morning tab's
+watchlist out of the picks scroll, hide the price-levels bar by default, and let a removed
+watch ticker stop being scraped while still showing a chart.
+
+**1. Morning subtabs (`docs/index.html`).** New `#morning-subtab-picks` / `#morning-subtab-
+watchlist` panes inside `#tab-morning`, switched by a segmented-pill nav
+(`renderMorningSubtabs()` / `window.__setMorningSubtab`, styled like the existing Picks
+All/Focus toggle). Both panes render unconditionally on every `state.tab === 'morning'` pass
+(`render()` calls all three: `renderMorningSubtabs(); renderWatchlistSection(); renderMorning();`)
+— switching subtabs is a pure `classList.toggle('hidden', ...)`, no extra fetch. Default pane
+is `'picks'` (`state.morningSubtab`, session-only). Watchlist button shows an active-entry
+count badge when non-zero.
+
+**2. Levels gauge hidden by default.** `state.watchGauge[ticker]`'s meaning flipped from
+"collapsed?" (absent/false = shown, the old default) to "shown?" (absent/false = hidden, the
+new default) — a pure polarity flip in `watchCardHtml`/`__toggleWatchGauge`, no new state
+shape. Comments updated in both places to spell out the new default explicitly (the SPRINT
+board's "gauge on-by-default" line from WS5-8b's original design is now superseded).
+
+**3. Soft-remove watchlist entries (`worker-positions` + PWA).** New terminal status
+`'removed'` on the `watchlist` table (migration `0007_watchlist_removed.sql` adds
+`removed_at`, mirroring `expired_at`'s shape). `PATCH /watchlist/:id {remove:true}` (new
+`patchWatch` branch) replaces the old hard `DELETE` for the kebab's "Remove" button — the row
+survives so it renders in a new collapsed "Recently removed" bin (`watchRemovedCardHtml`,
+mirrors the existing "Expired" bin) instead of vanishing. Key design point: `watchlistTickers()`
+(feeds `heldTickers()`'s scrape union AND the public `GET /watchlist-tickers` feed) already
+filters `status = 'active'` — `'removed'` is excluded identically to `'expired'` with **zero
+new filter code**, so a removed ticker stops being scraped on the very next held-feed run for
+free. The removed card still renders a free TradingView chart
+(`watchChartAffordance(ticker)` needs only the symbol, independent of any backend feed) plus a
+`{restore:true}` button (same renew-with-fresh-TTL semantics as the existing Renew action). The
+hard `DELETE`/`watchDeleteApi` path still exists, now used ONLY for graduation cleanup
+(`watchGraduate`'s post-`POST /positions` cleanup — a graduated ticker should vanish outright,
+not sit in a removed bin). `tickWatchlist()` purges `'removed'` rows after
+`WATCHLIST_PURGE_DAYS`, symmetric with the existing `'expired'` purge.
+
+**Verification:**
+- `worker-positions`: `npm test` → 310 vitest passing (was 295; +9 counting the new remove/
+  restore/purge tests plus `d1.js` helper updates for the migration + `removed_at` default).
+- Root pytest suite (non-Playwright): 719 passed, same baseline as the prior session's note —
+  no regressions.
+- **PWA functional verification actually ran a real headless Chromium** (not just code
+  review) — `p.chromium.launch(executable_path="/opt/pw-browsers/chromium")` per the
+  documented revision-symlink workaround, plus a local stub for `pre_close_latest.csv` (a
+  pre-existing gap in `_base_routes()` — not stubbed by the committed test file at all,
+  real internet reaches `raw.githubusercontent.com` fine in CI/dev so it was never hit
+  there; **not fixed here, out of scope for this change** — flagged for whoever next hits
+  it in this sandbox). Confirmed live: subtab default + switch, gauge default-hidden +
+  toggle-shows, existing active-card rendering unaffected, "Recently removed" bin renders
+  a removed entry with chart + Restore, and the kebab's Remove sends `PATCH {remove:true}`
+  (not `DELETE`). 4 new/updated tests added to `tests/test_pwa_watchlist.py`
+  (`test_gauge_toggle_hides_panel_and_flips_label` rewritten for the flipped default;
+  `test_removed_entry_renders_in_collapsed_recently_removed_bin`,
+  `test_remove_sends_patch_not_delete`, `test_morning_subtabs_default_picks_switch_to_
+  watchlist` new) — file stays in the CI Playwright `--ignore=` list, no change needed there
+  (already present).
+- Release triplet done in-PR: `docs/releases.json` new `2026.08.26.2` entry (tag
+  `improvement`, tab `morning`) + `current` bumped; `docs/sw.js` `CACHE` `finviz-v84` →
+  `finviz-v85`.
+- Docs updated 3-places-style: `worker-positions/README.md` (routes table + constants
+  table), `worker-positions/CLAUDE.md` (§ watchlist, new soft-remove subsection),
+  `docs/CLAUDE.md` (§ Watchlist + § Morning tab).
+
+**Next steps (blocking merge, same shape as WS-POSITIONS-SEED/#368 before it):** (1) push
+the branch, open the PR; (2) **apply `migrations/0007_watchlist_removed.sql` to prod
+`finviz-positions` D1 out-of-band before/alongside merge** — the writer's `remove`/`restore`
+branches reference `removed_at`, and merge auto-deploys the worker; (3) merge; (4) post-merge,
+remove a watch ticker and confirm it drops into "Recently removed" and stops updating on the
+next held-feed run.
+
+---
+
 ## 2026-08-26 — Lookup rank sparkline: margin fix + touch/hover scrub tooltip + owner-review follow-up
 
 **Status: safe to close — implemented, verified in a headless-Playwright harness with real

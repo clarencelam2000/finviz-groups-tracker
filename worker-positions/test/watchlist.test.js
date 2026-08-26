@@ -91,6 +91,14 @@ describe("validatePatchPayload", () => {
     expect(validatePatchPayload(null).ok).toBe(false);
   });
 
+  it("accepts the remove shape", () => {
+    expect(validatePatchPayload({ remove: true })).toEqual({ ok: true, value: { remove: true } });
+  });
+
+  it("accepts the restore shape", () => {
+    expect(validatePatchPayload({ restore: true })).toEqual({ ok: true, value: { restore: true } });
+  });
+
   it("rejects an invalid edit-level payload the same way validateAddPayload would", () => {
     const r = validatePatchPayload({ level_type: "above" }); // missing value
     expect(r.ok).toBe(false);
@@ -225,6 +233,29 @@ describe("patchWatch", () => {
     const res = await patchWatch(db, { user_id: "owner", id: 9999, renew: true });
     expect(res.changed).toBe(false);
   });
+
+  it("remove soft-deletes: status='removed', removed_at set, row survives", async () => {
+    const db = makeD1();
+    db._seedWatchlist({ user_id: "owner", ticker: "AAPL" });
+    const row = db._watchlist()[0];
+    const res = await patchWatch(db, { user_id: "owner", id: row.id, remove: true, now: new Date("2026-08-20T00:00:00Z") });
+    expect(res.changed).toBe(true);
+    const after = db._watchlist()[0];
+    expect(after.status).toBe("removed");
+    expect(after.removed_at).toBe("2026-08-20T00:00:00.000Z");
+  });
+
+  it("restore undoes a remove: status back to active, fresh TTL, removed_at cleared", async () => {
+    const db = makeD1();
+    db._seedWatchlist({ user_id: "owner", ticker: "AAPL", status: "removed", sessions_remaining: 3, removed_at: "2026-08-19T00:00:00Z" });
+    const row = db._watchlist()[0];
+    const res = await patchWatch(db, { user_id: "owner", id: row.id, restore: true });
+    expect(res.changed).toBe(true);
+    const after = db._watchlist()[0];
+    expect(after.status).toBe("active");
+    expect(after.sessions_remaining).toBe(WATCHLIST_TTL_SESSIONS);
+    expect(after.removed_at).toBeNull();
+  });
 });
 
 describe("deleteWatch", () => {
@@ -256,6 +287,14 @@ describe("watchlistTickers", () => {
     db._seedWatchlist({ user_id: "owner", ticker: "TSLA", status: "expired", expired_at: "2026-08-01T00:00:00Z" });
     const t = await watchlistTickers(db);
     expect(t).toEqual(["AAPL", "MSFT"]);
+  });
+
+  it("excludes a removed ticker (same as expired) so the held feed stops scraping it", async () => {
+    const db = makeD1();
+    db._seedWatchlist({ user_id: "owner", ticker: "AAPL" });
+    db._seedWatchlist({ user_id: "owner", ticker: "TSLA", status: "removed", removed_at: "2026-08-01T00:00:00Z" });
+    const t = await watchlistTickers(db);
+    expect(t).toEqual(["AAPL"]);
   });
 });
 
@@ -348,6 +387,19 @@ describe("tickWatchlist", () => {
     const freshExpired = new Date(now.getTime() - 1 * 86400000).toISOString();
     db._seedWatchlist({ user_id: "owner", ticker: "OLD", status: "expired", expired_at: oldExpired });
     db._seedWatchlist({ user_id: "owner", ticker: "FRESH", status: "expired", expired_at: freshExpired });
+    const res = await tickWatchlist(db, { date: "2026-08-15", now });
+    expect(res.purged).toBe(1);
+    const tickers = db._watchlist().map((r) => r.ticker);
+    expect(tickers).toEqual(["FRESH"]);
+  });
+
+  it("purges a removed row older than WATCHLIST_PURGE_DAYS but keeps a fresh one, symmetric with expired", async () => {
+    const db = makeD1();
+    const now = new Date("2026-08-15T12:00:00Z");
+    const oldRemoved = new Date(now.getTime() - (WATCHLIST_PURGE_DAYS + 1) * 86400000).toISOString();
+    const freshRemoved = new Date(now.getTime() - 1 * 86400000).toISOString();
+    db._seedWatchlist({ user_id: "owner", ticker: "OLD", status: "removed", removed_at: oldRemoved });
+    db._seedWatchlist({ user_id: "owner", ticker: "FRESH", status: "removed", removed_at: freshRemoved });
     const res = await tickWatchlist(db, { date: "2026-08-15", now });
     expect(res.purged).toBe(1);
     const tickers = db._watchlist().map((r) => r.ticker);
