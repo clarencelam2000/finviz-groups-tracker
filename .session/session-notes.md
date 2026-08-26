@@ -6,6 +6,46 @@
 
 ---
 
+## 2026-08-26 — WS-POSITIONS-SEED build (seed first bar on watchlist add)
+
+**Status: DON'T CLOSE YET — draft PR #368 open, needs to be marked ready; owner approved the
+build this session.** Implemented the seed feature whose groundwork landed in #367.
+
+**What it does (plain):** on `POST /watchlist`, best-effort-fetch the ticker's newest completed
+daily bar from FMP `historical-price-eod/full` and `INSERT OR IGNORE` it into `ticker_quotes` as
+`source='fmp_seed'`. A brand-new watch ticker then resolves to a real level on its next status
+read (10:05 or 15:30 ET) instead of waiting for the 17:30 held feed. Ceiling: saves one trading
+morning; for an evening/weekend add it's a live card next morning vs. the morning after.
+
+**What landed (branch `claude/ws-positions-seed-proposal-9tmnr7`, PR #368, base = default):**
+- **Commit 1 (step 1):** `migrations/0006_ticker_quotes_source.sql` — `ALTER TABLE ticker_quotes
+  ADD COLUMN source TEXT NOT NULL DEFAULT 'finviz'`. Additive/non-breaking (ingestQuotes'
+  INGEST_COLS never mentions it; sweep reads SELECT *). Added to test harness MIGRATIONS list.
+- **Commit 2 (steps 2-3):** new `src/seed.js` (`mapFmpBar` pure mapper + `seedTickerBar`), one-line
+  wire into `index.js`'s POST /watchlist handler (fire-and-forget, double try/catch), 9 new tests
+  in `test/seed.test.js`. Safety pinned by tests: INSERT OR IGNORE never clobbers; a seed bar is
+  excluded from a synthetic position's `loadBarsAfter` window (strictly `> floor`).
+- **Commit 3 (docs+tracking):** README endpoint row + CLAUDE.md new "§ The watch-add seed" section,
+  this SPRINT row flipped to BUILT, these notes.
+
+**Both residuals closed this session (not just deferred):** (1) Finviz OHLC — `collect_morning.py::
+fetch_ticker_quotes` takes displayed prices as-is via `_to_float`, no adjustment math; Finviz
+screener prices are split-adjusted, FMP `full` is split-adjusted → consistent, and moot anyway
+since seed (prior session) and Finviz (today+) are never the same date and MAX(trade_date)
+supersedes. (2) `refsFromRow()`/`watchlistTickerRefs()` join on MAX(trade_date), no source-
+awareness → seeded bar picked up transparently. FMP flat-array shape re-verified live (curl AAPL).
+
+**Verification:** 304 worker-positions vitest tests pass (was 295). FMP response shape confirmed
+live. Did NOT run a real end-to-end POST /watchlist against prod (needs deploy + prod D1).
+
+**Next steps (blocking merge):** (1) mark PR #368 ready; (2) **owner applies migration 0006 to
+prod finviz-positions D1 out-of-band BEFORE merge** — the writer's INSERT sets `source`, and merge
+auto-deploys the worker; (3) merge; (4) post-merge, add a watch ticker and confirm the card shows a
+real level at the next status read. No release-surface triplet needed (backend behavior, no new PWA
+copy) — re-confirm before merge if any PWA copy turns out to change.
+
+---
+
 ## 2026-08-25 — PR #364 review fixes + PICKS-SEL-V3-PWA (all_green PWA chips)
 
 **Status: safe to close — implemented, tested, pushed on a fresh branch (`picks-sel-v3-pwa`),
