@@ -6,6 +6,36 @@
 
 ---
 
+## 2026-08-26 — PR #368 review follow-up: watch-add FMP seed was blocking, not fire-and-forget
+
+**Status: safe to close — fix implemented, tested, pushed on `claude/fix-watchlist-seed-await`, PR
+open against default.** Reviewed merged PR #368 (WS-POSITIONS-SEED). Found one bug: `src/index.js`'s
+`POST /watchlist` handler did `await seedTickerBar(...)` before responding, even though both the PR
+description and `worker-positions/CLAUDE.md` document the seed as "fire-and-forget — never changes
+the response." A slow/unresponsive FMP call added up to `FMP_TIMEOUT_MS` (5s) of real latency to
+every watchlist add (and every re-add/renew, which hits the same code path), even though the watch
+row was already durably written before the wait started.
+
+**Fix:** threaded `ctx` (the Cloudflare `ExecutionContext`) through `fetch()` → `handleRequest()`,
+and at the call site handed the seed promise to `ctx.waitUntil()` instead of awaiting it — response
+now returns as soon as the D1 write lands; the FMP fetch + insert continue in the background.
+`ctx` is optional everywhere it's threaded (existing test call sites that don't pass a third arg are
+unaffected — the seed promise just runs undetached, same as any environment without `waitUntil`).
+
+**Tests:** added one test in `test/index.test.js` that stubs a slow `fetch`, passes a `ctx.waitUntil`
+spy, and asserts `POST /watchlist` resolves (201) well before the stubbed fetch settles, with the
+seed promise captured by `waitUntil` rather than awaited inline. 311 worker-positions vitest tests
+pass (was 310, this is the 1 new test).
+
+**Docs:** added a fifth "thing to internalize" to `worker-positions/CLAUDE.md`'s § The watch-add
+seed, and updated the `WS-POSITIONS-SEED` SPRINT row with this follow-up.
+
+**Next steps:** none blocking — this is a self-contained fix. Owner should merge the PR; no schema
+change, no ops impact, no release-surface entry needed (backend latency fix only, no user-visible
+copy change).
+
+---
+
 ## 2026-08-26 — Morning tab: Picks/Watchlist subtabs, levels-hidden default, soft-remove watchlist
 
 **Status: safe to close — implemented, backend tests pass (310 vitest), PWA functionally
