@@ -1,6 +1,18 @@
 {
-  "current": "2026.08.26.1",
+  "current": "2026.08.26.2",
   "releases": [
+    {
+      "version": "2026.08.26.2",
+      "date": "2026-08-26",
+      "title": "Morning tab split into Picks / Watchlist",
+      "tag": "improvement",
+      "tab": "morning",
+      "notes": [
+        "The Morning tab is now two subtabs — Picks (yesterday's confirmation read) and Watchlist (your own tracked tickers) — instead of one long scroll.",
+        "A watch card's price-levels bar is now hidden by default; tap \"Show levels\" to see it.",
+        "Removing a ticker from your watchlist now moves it to a collapsed \"Recently removed\" section instead of deleting it outright — it stops being scraped for fresh data, but you can still pull up its chart or restore it."
+      ]
+    },
     {
       "version": "2026.08.26.1",
       "date": "2026-08-26",

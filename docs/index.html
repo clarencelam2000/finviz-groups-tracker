@@ -329,10 +329,19 @@
          did to each setup. Provisional session — the banner/timestamp are non-negotiable per
          ADR-011: a mid-session read must never look settled. Rendered by renderMorning(). -->
     <section id="tab-morning" class="px-3 pt-3 pb-24 hidden">
-      <!-- WS5 §8b P3 — personal watchlist, rendered above the picks list (the user's own
-           radar leads). Rendered by renderWatchlistSection(). -->
-      <div id="watchlist-section" class="mb-4"></div>
-      <div id="morning-list" class="space-y-2"></div>
+      <!-- Morning subtabs (morning-subtabs-watchlist): the picks confirmation read and the
+           personal watchlist used to stack in one scroll (watchlist above picks) — split into
+           two panes so each has its own screen instead of pushing the other down. Both panes
+           stay rendered underneath (renderWatchlistSection()/renderMorning() both fire on every
+           'morning' tab render, see render()) — __setMorningSubtab() just toggles which pane is
+           visible, no extra fetch/re-render on switch. -->
+      <div id="morning-subtabs" class="flex items-center gap-1 mb-3"></div>
+      <div id="morning-subtab-picks">
+        <div id="morning-list" class="space-y-2"></div>
+      </div>
+      <div id="morning-subtab-watchlist" class="hidden">
+        <div id="watchlist-section" class="mb-4"></div>
+      </div>
     </section>
 
     <!-- WS5 phase 1 (#309) Positions tab: read-only view over the finviz-positions worker
@@ -498,6 +507,10 @@
       // available read on each render until the user toggles (morningViewUserSet). Governs
       // the picks confirmation list only — the watchlist section stays on the morning feed.
       morningView: 'morning',      // 'morning' | 'preclose'
+      // 'picks' | 'watchlist'; which Morning subtab pane is visible (morning-subtabs-watchlist).
+      // Session-only, resets to 'picks' on reload — the picks confirmation read is the tab's
+      // primary job, watchlist is the user's opt-in radar.
+      morningSubtab: 'picks',
       morningViewUserSet: false,
       // WS4 Phase B (ADR-014) trade-ticket UI state, keyed by ticker. Survives renderMorning()
       // re-renders (module-level, not rebuilt each render). { expanded, stopBasis, priceOverride }.
@@ -578,13 +591,19 @@
       watchlistError: false,
       // Positions-tab "Add to watchlist" collapsible form state — see watchAddDefault().
       watchAdd: watchAddDefault(),
-      // ticker -> bool: gauge collapsed? absent/false = shown (on by default per brief §2).
+      // ticker -> bool: gauge SHOWN? absent/false = hidden (default OFF, morning-subtabs-watchlist
+      // — the price-levels bar is opt-in detail, not the first thing a card should show). Flipped
+      // from the original "collapsed?" polarity (absent/false = shown) on purpose so the default
+      // needs no per-ticker initialization — a ticker just never in this map reads as hidden.
       watchGauge: {},
       // tickers with the watch section's chart panel open; mirrors morningChartOpen but kept
       // independent so the Morning picks chart and watch chart panels don't interfere.
       watchChartOpen: new Set(),
       // ticker (or id) of the watch card whose "⋯" kebab menu (Renew/Edit level/Remove) is open.
       watchMenu: null,
+      // collapsed-bin toggle for the "Recently removed" section (morning-subtabs-watchlist),
+      // mirrors watchExpiredOpen.
+      watchRemovedOpen: false,
       // 'all' | 'focus'; persists across tab navigation within a session (A4 REVERSED
       // 2026-06-30 — VP call, see PICKS-STATE-PERSIST in SPRINT.md and the note in
       // planning/stock-picks-from-leading-groups.md). Previously reset to 'all' on every
@@ -5162,7 +5181,7 @@
       if (state.tab === 'ai')       renderAI();
       if (state.tab === 'lookup')   { renderLookup(); renderLookupChips(); }
       if (state.tab === 'picks')    renderPicks();
-      if (state.tab === 'morning')  { renderWatchlistSection(); renderMorning(); }
+      if (state.tab === 'morning')  { renderMorningSubtabs(); renderWatchlistSection(); renderMorning(); }
       if (state.tab === 'positions') renderPositions();
 
       if (state.restoreScrollOnRender) {
@@ -7660,8 +7679,11 @@
         return;
       }
 
-      const active = entries.filter(e => e.status !== 'expired');
+      // Three buckets, not two — 'removed' (morning-subtabs-watchlist, PATCH {remove:true}) is a
+      // distinct terminal status from 'expired' (TTL ran out), each with its own collapsed bin.
+      const active = entries.filter(e => e.status === 'active');
       const expired = entries.filter(e => e.status === 'expired');
+      const removed = entries.filter(e => e.status === 'removed');
 
       const findPub = ticker => (state.morningData || []).find(m => m.ticker === ticker && (m.list_category || '') === 'watchlist');
 
@@ -7679,7 +7701,24 @@
           </div>`;
       }
 
-      el.innerHTML = head + `<div class="space-y-2">${activeHtml}</div>` + expiredHtml;
+      // "Recently removed" — a ticker the owner explicitly removed (not TTL-expired). It no
+      // longer rides the held-feed scrape (worker-positions PATCH {remove:true} drops it from
+      // watchlistTickers()'s active set), so there's no fresh price/levels data to show — just
+      // the ticker and a free TradingView chart (watchChartAffordance needs only the symbol) plus
+      // a Restore action. Purged server-side after WATCHLIST_PURGE_DAYS, same as Expired.
+      let removedHtml = '';
+      if (removed.length > 0) {
+        const open = !!state.watchRemovedOpen;
+        removedHtml = `
+          <div class="mt-2">
+            <button onclick="window.__toggleWatchRemoved(this)" class="text-[11px] text-slate-500 hover:text-slate-300">${open ? '▾' : '▸'} Recently removed (${removed.length})</button>
+            <div id="watch-removed-bin" class="${open ? '' : 'hidden'} mt-2 space-y-2">
+              ${removed.map(entry => watchRemovedCardHtml(entry)).join('')}
+            </div>
+          </div>`;
+      }
+
+      el.innerHTML = head + `<div class="space-y-2">${activeHtml}</div>` + expiredHtml + removedHtml;
     }
 
     window.__toggleWatchExpired = function (btn) {
@@ -7687,6 +7726,13 @@
       const bin = document.getElementById('watch-expired-bin');
       if (bin) bin.classList.toggle('hidden', !state.watchExpiredOpen);
       if (btn) btn.textContent = (state.watchExpiredOpen ? '▾' : '▸') + ' Expired (' + (btn.textContent.match(/\((\d+)\)/) || [,''])[1] + ')';
+    };
+
+    window.__toggleWatchRemoved = function (btn) {
+      state.watchRemovedOpen = !state.watchRemovedOpen;
+      const bin = document.getElementById('watch-removed-bin');
+      if (bin) bin.classList.toggle('hidden', !state.watchRemovedOpen);
+      if (btn) btn.textContent = (state.watchRemovedOpen ? '▾' : '▸') + ' Recently removed (' + (btn.textContent.match(/\((\d+)\)/) || [,''])[1] + ')';
     };
 
     // Client-side "your level" read (brief §2 option a: direction + quiet met). Never touches
@@ -7796,19 +7842,20 @@
         ${readout}`;
     }
 
-    // Gauge collapse/show toggle — DOM-patched (no full re-render), mirrors __toggleMorningChart.
+    // Gauge show/hide toggle — DOM-patched (no full re-render), mirrors __toggleMorningChart.
     // Re-resolves entry/pub by ticker from state rather than passing them through the onclick
-    // attribute (avoids JSON-in-HTML-attribute escaping fragility).
+    // attribute (avoids JSON-in-HTML-attribute escaping fragility). state.watchGauge[ticker] is a
+    // SHOWN flag (absent/false = hidden, the default — see the state.watchGauge comment above).
     window.__toggleWatchGauge = function (ticker) {
       const entry = (state.watchlistData || []).find(e => e.ticker === ticker);
       if (!entry) return;
       const pub = (state.morningData || []).find(m => m.ticker === ticker && (m.list_category || '') === 'watchlist');
-      const collapsed = !!state.watchGauge[ticker];
-      state.watchGauge[ticker] = !collapsed;
+      const shown = !!state.watchGauge[ticker];
+      state.watchGauge[ticker] = !shown;
       const panel = document.getElementById('watch-gauge-panel-' + ticker);
       const btn = document.getElementById('watch-gauge-toggle-' + ticker);
-      if (panel) panel.innerHTML = state.watchGauge[ticker] ? '' : watchGaugeHtml(entry, pub);
-      if (btn) btn.textContent = state.watchGauge[ticker] ? '▸ Show levels' : '▾ Hide levels';
+      if (panel) panel.innerHTML = state.watchGauge[ticker] ? watchGaugeHtml(entry, pub) : '';
+      if (btn) btn.textContent = state.watchGauge[ticker] ? '▾ Hide levels' : '▸ Show levels';
     };
 
     // Chart toggle for a watch card — clones morningChartAffordance's pattern but keyed on
@@ -7875,13 +7922,41 @@
       switchTab('positions');
     };
 
+    // Soft-remove (morning-subtabs-watchlist): PATCH {remove:true}, NOT watchDeleteApi/DELETE.
+    // The row survives server-side (status='removed') so it drops into the "Recently removed"
+    // bin instead of vanishing — the worker stops scraping it (watchlistTickers()'s active-only
+    // filter) on the next held-feed run, but the owner can still see/restore/chart it here.
+    // watchDeleteApi (hard DELETE) is reserved for graduation cleanup (watchGraduate's caller).
     window.watchRemove = async function (id) {
-      try { await watchDeleteApi(id); } catch (e) { /* best-effort */ }
+      try { await watchPatchApi(id, { remove: true }); } catch (e) { /* best-effort */ }
       state.watchMenu = null;
       state.watchlistData = null;
       await loadWatchlist(true);
       renderWatchlistSection();
     };
+
+    window.watchRestore = async function (id) {
+      try { await watchPatchApi(id, { restore: true }); } catch (e) { /* best-effort */ }
+      state.watchlistData = null;
+      await loadWatchlist(true);
+      renderWatchlistSection();
+    };
+
+    // Recently-removed card — deliberately thin: no gauge/levels/status (the worker stopped
+    // scraping this ticker the moment it was removed, so there's no fresh read to show), just the
+    // ticker, a free TradingView chart (watchChartAffordance needs only the symbol, independent of
+    // any backend feed), and Restore.
+    function watchRemovedCardHtml(entry) {
+      const ticker = entry.ticker;
+      return `
+        <div class="bg-slate-800/60 border border-slate-700 rounded-lg px-3.5 py-3">
+          <div class="flex justify-between items-center">
+            <span class="font-bold text-sm tracking-wide text-slate-400">${escapeHtml(ticker)}</span>
+            <button onclick="watchRestore('${entry.id}')" class="text-[11px] font-semibold text-sky-400 hover:text-sky-300">Restore</button>
+          </div>
+          ${watchChartAffordance(ticker)}
+        </div>`;
+    }
 
     function watchKebabHtml(entry) {
       const isOpen = state.watchMenu === entry.id;
@@ -7991,12 +8066,12 @@
 
       const yourLevel = watchYourLevelHtml(entry, pub);
 
-      const gaugeCollapsed = !!state.watchGauge[ticker];
+      const gaugeShown = !!state.watchGauge[ticker];
       const gaugeInner = watchGaugeHtml(entry, pub);
       const gaugeToggle = gaugeInner ? `
         <div class="mt-1">
-          <button id="watch-gauge-toggle-${escapeHtml(ticker)}" class="text-[11px] font-semibold text-sky-400 hover:text-sky-300" onclick="__toggleWatchGauge('${ticker.replace(/'/g, "\\'")}')">${gaugeCollapsed ? '▸ Show levels' : '▾ Hide levels'}</button>
-          <div id="watch-gauge-panel-${escapeHtml(ticker)}">${gaugeCollapsed ? '' : gaugeInner}</div>
+          <button id="watch-gauge-toggle-${escapeHtml(ticker)}" class="text-[11px] font-semibold text-sky-400 hover:text-sky-300" onclick="__toggleWatchGauge('${ticker.replace(/'/g, "\\'")}')">${gaugeShown ? '▾ Hide levels' : '▸ Show levels'}</button>
+          <div id="watch-gauge-panel-${escapeHtml(ticker)}">${gaugeShown ? gaugeInner : ''}</div>
         </div>` : '';
 
       const footer = `
@@ -8069,6 +8144,34 @@
 
     // Statuses that count as "the setup is working" for the pre-close "since AM" delta chip.
     const MORNING_BULLISH_STATUSES = new Set(['triggered', 'reclaim']);
+
+    // Morning subtab nav (morning-subtabs-watchlist) — two panes, "Picks" (the ADR-013
+    // confirmation read, the tab's primary job) and "Watchlist" (the user's own opt-in radar,
+    // previously stacked above the picks list). Segmented-pill pattern, matches the Picks
+    // All/Focus toggle and the Morning/Pre-close Read toggle just below it.
+    function renderMorningSubtabs() {
+      const nav = document.getElementById('morning-subtabs');
+      if (!nav) return;
+      const activeWatch = (state.watchlistData || []).filter(e => e.status === 'active').length;
+      const badge = activeWatch > 0 ? ` <span class="tabular-nums">(${activeWatch})</span>` : '';
+      const seg = (v, label, extra) => {
+        const on = state.morningSubtab === v;
+        return `<button id="morning-subtab-btn-${v}" class="px-3 py-1 text-xs rounded-full font-medium ${on ? 'bg-slate-600 text-white' : 'bg-slate-700 text-slate-400'}" onclick="__setMorningSubtab('${v}')">${label}${extra || ''}</button>`;
+      };
+      nav.innerHTML = seg('picks', 'Picks') + seg('watchlist', 'Watchlist', badge);
+
+      // Re-applied on every call (not just __setMorningSubtab), so a full re-render — e.g. after
+      // a data refresh — keeps whichever pane was already selected visible instead of resetting.
+      const picksEl = document.getElementById('morning-subtab-picks');
+      const watchEl = document.getElementById('morning-subtab-watchlist');
+      if (picksEl) picksEl.classList.toggle('hidden', state.morningSubtab !== 'picks');
+      if (watchEl) watchEl.classList.toggle('hidden', state.morningSubtab !== 'watchlist');
+    }
+
+    window.__setMorningSubtab = function (tab) {
+      state.morningSubtab = tab;
+      renderMorningSubtabs();
+    };
 
     function renderMorning() {
       const el = document.getElementById('morning-list');

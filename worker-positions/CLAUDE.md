@@ -226,6 +226,19 @@ Python (P2, not yet built) and is unioned into `scripts/collect_morning.py`'s sc
   brand-new watch has no history for. `watchlistTickers(db)` (user-less, same rationale as
   `heldTickers` itself) is the seam; do not inline a second `SELECT DISTINCT ticker FROM watchlist`
   elsewhere — always route through it so the "active" definition never drifts.
+- **Soft-remove is a third terminal status, `removed` (migration 0007, morning-subtabs-watchlist
+  work).** `PATCH /watchlist/:id {remove:true}` sets `status='removed'` + `removed_at` instead of
+  the hard `DELETE` — the row survives so the PWA can render it in a collapsed "Recently removed"
+  bin (mirroring the existing "Expired" bin) with its TradingView chart still reachable, while
+  `watchlistTickers()`'s `status = 'active'` filter (used by both `heldTickers()`'s union and the
+  public `/watchlist-tickers` feed) excludes it identically to `expired` — no separate filter
+  needed, remove-then-stop-scraping falls out of the existing status check for free. `{restore:true}`
+  undoes it (back to `active`, fresh TTL, same as `renew`). `removed` rows are purged by
+  `tickWatchlist()` after `WATCHLIST_PURGE_DAYS`, symmetric with the `expired` purge (keyed off
+  `removed_at` instead of `expired_at`). The hard `DELETE` route still exists and is now used ONLY
+  for graduation cleanup (`watchGraduate` deletes the watch row right after `POST /positions`
+  succeeds) — a graduated ticker becoming a real position isn't "removed," it should just vanish
+  from the watchlist entirely, no bin.
 - **Migration 0003 is applied out-of-band**, exactly like 0001/0002 — `wrangler deploy` does not run
   it. `test/helpers/d1.js`'s `MIGRATIONS` array runs it for real in tests (real SQLite, real schema),
   plus `_seedWatchlist()`/`_watchlist()` test-only conveniences mirroring `_seedQuote()`/`_quotes()`.

@@ -36,6 +36,7 @@ const MIGRATIONS = [
   "../../migrations/0004_preclose_advisory.sql",
   "../../migrations/0005_push_subscriptions.sql",
   "../../migrations/0006_ticker_quotes_source.sql",
+  "../../migrations/0007_watchlist_removed.sql",
 ];
 
 // The leading SQL keyword decides node:sqlite dispatch: SELECT reads (`.all()`), everything else
@@ -211,6 +212,7 @@ export function makeD1() {
         created_at: "2026-01-01T00:00:00Z",
         updated_at: null,
         expired_at: null,
+        removed_at: null,
         meta: "{}",
         ...partial,
       };

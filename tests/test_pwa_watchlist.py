@@ -22,7 +22,10 @@ Covered:
      showing "above 144.00" / "now above".
   3. Add flow: Positions tab -> "＋ Add to watchlist" -> fill #watch-ticker -> click "Above"
      seg -> fill #watch-levelvalue -> click "Watch" -> POST /watchlist body asserted exactly.
-  4. Gauge toggle: "▾ Hide levels" click flips to "▸ Show levels" and hides the gauge panel.
+  4. Gauge toggle: levels are hidden by default ("▸ Show levels"); clicking flips to
+     "▾ Hide levels" and renders the panel.
+  5. Morning subtabs: the tab defaults to the Picks pane; clicking "Watchlist" reveals
+     #watchlist-section and hides #morning-list.
 
 Run with Playwright installed:
     python3 -m playwright install chromium
@@ -94,10 +97,12 @@ def _base_routes(page, morning_csv=MORNING_WATCHLIST_CSV):
                lambda r: r.fulfill(body='{"sectors":{}}', content_type="application/json"))
 
 
-def _mock_worker(page, login_ok=True, watchlist_rows=None, capture=None):
+def _mock_worker(page, login_ok=True, watchlist_rows=None, capture=None, patch_capture=None):
     """Intercept every finviz-positions.* call this suite needs. `capture` (if given) is a
-    list that POST /watchlist bodies get appended to. Path-based globs, per the gotcha in
-    test_pwa_positions.py: a host-based glob silently never matches the workers.dev host."""
+    list that POST /watchlist bodies get appended to; `patch_capture` (if given) is a list
+    that (id, body) PATCH /watchlist/<id> tuples get appended to. Path-based globs, per the
+    gotcha in test_pwa_positions.py: a host-based glob silently never matches the workers.dev
+    host."""
     if watchlist_rows is None:
         watchlist_rows = []
 
@@ -120,8 +125,12 @@ def _mock_worker(page, login_ok=True, watchlist_rows=None, capture=None):
                           content_type="application/json")
 
     def handle_watchlist_item(route, request):
-        # PATCH/DELETE /watchlist/<id> — not exercised by these tests' assertions but must
-        # not 404 if the card's kebab menu fires one incidentally.
+        # PATCH/DELETE /watchlist/<id>. PATCH bodies are captured when the caller wants them
+        # (e.g. asserting a Remove click sends {remove:true}, not a DELETE); otherwise this is
+        # just a 200-ok stub so the card's kebab menu doesn't 404 on an incidental call.
+        if request.method == "PATCH" and patch_capture is not None:
+            item_id = request.url.rstrip("/").rsplit("/", 1)[-1]
+            patch_capture.append((item_id, json.loads(request.post_data or "{}")))
         route.fulfill(status=200, body=json.dumps({"ok": True}), content_type="application/json")
 
     page.route("**/auth/login", handle_login)
@@ -248,6 +257,8 @@ def test_add_to_watchlist_flow_posts_correct_payload(server):
 
 
 def test_gauge_toggle_hides_panel_and_flips_label(server):
+    """morning-subtabs-watchlist: the levels gauge now defaults to HIDDEN (owner request) —
+    opposite of the original default-shown behavior."""
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -260,12 +271,96 @@ def test_gauge_toggle_hides_panel_and_flips_label(server):
 
         toggle = page.locator("#watch-gauge-toggle-AXON")
         assert toggle.count() == 1, "gauge toggle should render (prior_high/prior_low both present)"
-        assert toggle.inner_text() == "▾ Hide levels"
+        assert toggle.inner_text() == "▸ Show levels"
+        panel_html = page.inner_html("#watch-gauge-panel-AXON")
+        assert panel_html.strip() == "", "panel should be empty by default (levels hidden)"
 
         toggle.dispatch_event("click")
         page.wait_for_timeout(200)
 
-        assert toggle.inner_text() == "▸ Show levels"
+        assert toggle.inner_text() == "▾ Hide levels"
         panel_html = page.inner_html("#watch-gauge-panel-AXON")
-        assert panel_html.strip() == "", "panel content should be cleared when levels are hidden"
+        assert panel_html.strip() != "", "panel content should render once levels are shown"
+        browser.close()
+
+
+def test_removed_entry_renders_in_collapsed_recently_removed_bin(server):
+    """morning-subtabs-watchlist: a status='removed' row (worker-positions PATCH {remove:true})
+    renders in a collapsed "Recently removed" bin, separate from active cards and the Expired
+    bin, with a chart affordance and a Restore action — never a bare DELETE-gone ticker."""
+    from playwright.sync_api import sync_playwright
+    removed_entry = {**WATCH_ENTRY, "id": "w3", "ticker": "PLTR", "status": "removed"}
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        _mock_worker(page, watchlist_rows=[WATCH_ENTRY, removed_entry])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='morning']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#watchlist-section")
+        assert "Recently removed (1)" in html
+
+        bin_el = page.locator("#watch-removed-bin")
+        assert "hidden" in (bin_el.get_attribute("class") or ""), "recently-removed bin should start collapsed"
+
+        page.locator("text=Recently removed (1)").dispatch_event("click")
+        page.wait_for_timeout(200)
+
+        assert "hidden" not in (bin_el.get_attribute("class") or "")
+        bin_html = page.inner_html("#watch-removed-bin")
+        assert "PLTR" in bin_html
+        assert "Restore" in bin_html
+        browser.close()
+
+
+def test_remove_sends_patch_not_delete(server):
+    """The kebab menu's Remove action must PATCH {remove:true} (soft-remove), never DELETE —
+    a hard delete would drop the ticker with no way back and no Recently-removed record."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        patch_capture = []
+        _mock_worker(page, watchlist_rows=[WATCH_ENTRY], patch_capture=patch_capture)
+        _boot(page, signed_in=True)
+        page.click("[data-tab='morning']")
+        page.wait_for_timeout(500)
+
+        page.locator("text=⋯").first.dispatch_event("click")
+        page.wait_for_timeout(200)
+        page.locator("text=Remove").first.dispatch_event("click")
+        page.wait_for_timeout(300)
+
+        assert len(patch_capture) == 1, "expected exactly one PATCH /watchlist/<id>"
+        item_id, body = patch_capture[0]
+        assert item_id == "w1"
+        assert body == {"remove": True}
+        browser.close()
+
+
+def test_morning_subtabs_default_picks_switch_to_watchlist(server):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page)
+        _mock_worker(page, watchlist_rows=[WATCH_ENTRY])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='morning']")
+        page.wait_for_timeout(500)
+
+        picks_pane = page.locator("#morning-subtab-picks")
+        watch_pane = page.locator("#morning-subtab-watchlist")
+        assert "hidden" not in (picks_pane.get_attribute("class") or "")
+        assert "hidden" in (watch_pane.get_attribute("class") or "")
+
+        page.locator("#morning-subtab-btn-watchlist").dispatch_event("click")
+        page.wait_for_timeout(200)
+
+        assert "hidden" in (picks_pane.get_attribute("class") or "")
+        assert "hidden" not in (watch_pane.get_attribute("class") or "")
+        assert "AXON" in page.inner_html("#watchlist-section")
         browser.close()
