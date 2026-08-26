@@ -3263,12 +3263,21 @@
       const improving = last.rank <= first.rank; // lower (better) or equal
       const stroke = improving ? '#34d399' : '#f87171';
       const span = `last ${points.length}d`;
-      // Range labels inside SVG: #lo (best, top) and #hi (worst, bottom).
-      // Omit on flat series since lo/hi are synthetic ±1 values.
+      // Range labels: #lo (best, top) and #hi (worst, bottom). Rendered as HTML overlay
+      // text, NOT inside the SVG — the SVG uses preserveAspectRatio="none" so its viewBox
+      // scales width/height independently (height 1:1 via h-8, width stretched ~2-3x to
+      // fill the card); an in-SVG <text> gets stretched along with everything else and
+      // reads as squashed/distorted. Plain HTML text in the reserved padRight gutter is
+      // real CSS pixels, immune to that distortion. Omit on flat series since lo/hi are
+      // synthetic ±1 values.
       const isFlat = Math.max(...points.map(p => p.rank)) === Math.min(...points.map(p => p.rank));
-      const rangeLabels = isFlat ? '' :
-        `<text x="${W - 2}" y="${padY + 5}" text-anchor="end" style="font-size:6px;fill:#475569">#${lo}</text>` +
-        `<text x="${W - 2}" y="${H - 1}" text-anchor="end" style="font-size:6px;fill:#475569">#${hi}</text>`;
+      // top-2/bottom-2 (not top-0/bottom-0): the wrapper carries py-2 padding to enlarge
+      // the touch/scrub hit area (see the enlarged-hit-area comment below), which pushes
+      // the SVG's visual top/bottom edges in by 8px — these labels align to those edges,
+      // not the padding box's outer edge.
+      const rangeLabelsHtml = isFlat ? '' :
+        `<span class="absolute top-2 right-0 text-[0.55rem] leading-none text-slate-600">#${lo}</span>` +
+        `<span class="absolute bottom-2 right-0 text-[0.55rem] leading-none text-slate-600">#${hi}</span>`;
 
       // Scrub/tooltip support (`window.sparkScrub`/`window.sparkEnd` below):
       // each point's pixel position + raw date/rank travels with the markup
@@ -3283,17 +3292,23 @@
             <span class="text-[0.6rem] uppercase tracking-wider text-slate-500">Weekly rank · ${span}</span>
             <span class="text-[0.6rem] text-slate-500">${n ? `of ${n}` : ''}</span>
           </div>
-          <div class="relative select-none" id="${sparkId}" data-points="${pointsAttr}" data-w="${W}" data-h="${H}" data-n="${n || ''}"
+          <!-- py-2 -my-2: enlarges the pointer/touch hit area to ~48px tall (32px SVG + 8px
+               top/bottom) without adding visible layout height — the negative margin cancels
+               the padding's contribution to the surrounding flow. The scrub logic only reads
+               x-position, so a taller-than-the-line hit target is safe and improves drag
+               reliability on touch. Neighboring rows have no click handlers of their own, so
+               the small overlap doesn't steal taps from anything. -->
+          <div class="relative select-none py-2 -my-2" id="${sparkId}" data-points="${pointsAttr}" data-w="${W}" data-h="${H}" data-n="${n || ''}"
             onpointerdown="window.sparkScrub(event, this)" onpointermove="window.sparkScrub(event, this)"
             onpointerup="window.sparkEnd(this)" onpointerleave="window.sparkEnd(this)" onpointercancel="window.sparkEnd(this)">
             <div class="spark-tip hidden absolute px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-[0.6rem] whitespace-nowrap pointer-events-none z-10" style="top:-2px; transform:translate(-50%,-100%)"></div>
+            ${rangeLabelsHtml}
             <svg viewBox="0 0 ${W} ${H}" class="w-full h-8" preserveAspectRatio="none" aria-hidden="true">
               <line class="spark-guide hidden" y1="0" y2="${H}" stroke="#64748b" stroke-width="0.75" stroke-dasharray="1.5,1.5" vector-effect="non-scaling-stroke" />
               <polyline fill="none" stroke="${stroke}" stroke-width="1.5"
                 stroke-linejoin="round" stroke-linecap="round" points="${coords.join(' ')}" />
               <circle class="spark-last" cx="${x(points.length - 1).toFixed(1)}" cy="${y(last.rank).toFixed(1)}" r="2" fill="${stroke}" />
               <circle class="spark-cursor hidden" r="2.5" fill="#e2e8f0" stroke="${stroke}" stroke-width="1.2" />
-              ${rangeLabels}
             </svg>
           </div>
         </div>`;

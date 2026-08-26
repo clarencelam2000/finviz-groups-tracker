@@ -6,7 +6,7 @@
 
 ---
 
-## 2026-08-26 — Lookup rank sparkline: margin fix + touch/hover scrub tooltip
+## 2026-08-26 — Lookup rank sparkline: margin fix + touch/hover scrub tooltip + owner-review follow-up
 
 **Status: safe to close — implemented, verified in a headless-Playwright harness with real
 Tailwind CSS loaded (proxy-fetched once, stubbed locally — see below), committed on
@@ -45,6 +45,32 @@ drag/hover along the line to see the rank + date at that point.
   failures are pre-existing (identical failure count/list with `git stash` reverting this
   change) — the known cloud-sandbox Chromium-revision gap documented in
   `knowledge/investigations/playwright-cloud-session-testing.md`, not a regression.
+
+**Owner review follow-up, same PR (#369), still unmerged so amended in place per the
+Amendment policy** — two real issues from a screenshot re-check:
+- **Labels still looked squished, root cause was distortion not spacing.** The `#lo`/`#hi`
+  labels were `<text>` elements *inside* the sparkline's `<svg>`, which uses
+  `preserveAspectRatio="none"` — height scales 1:1 (`h-8` = the viewBox's 32 units exactly) but
+  width stretches ~2-3x to fill the card. That non-uniform scaling stretched the text glyphs
+  horizontally, reading as vertically-compressed/distorted regardless of how much margin they
+  had. Fix: moved both labels out of the SVG entirely, rendered as plain absolutely-positioned
+  HTML `<span>`s (`top-2 right-0` / `bottom-2 right-0`) overlaid on the reserved `padRight`
+  gutter — real CSS pixels, immune to the SVG's viewBox distortion.
+- **Touch target was only 32px tall.** The scrub wrapper matched the SVG's own height exactly
+  (`h-8`), under Apple's ~44px touch-target guideline, even though the scrub math only reads
+  x-position (y is irrelevant). Fixed with the padding+negative-margin trick: `py-2 -my-2` on
+  the wrapper gives a 48px-tall pointer/touch hit box while contributing zero extra height to
+  the surrounding layout (verified via `getBoundingClientRect()` in the same Playwright
+  harness — wrapper rect height came back 48px, unchanged row spacing above/below in the
+  screenshot). Neighboring rows have no click handlers, so the small overlap is safe.
+- Re-verified visually with the same real-Tailwind Playwright harness (still uncommitted,
+  scratchpad-only): labels now render crisp, tooltip still shows the correct
+  `"Aug 9 · #34 of 2"` text with the taller hit box. Re-ran the same pytest suite — still 719
+  passed, 65 pre-existing Playwright failures.
+- `docs/releases.json`: same `2026.08.26` entry's `notes[]` amended in place (added the
+  distortion-fix + bigger-touch-target lines) — no new version bump, no `sw.js` re-bump, since
+  the PR carrying that version is still open (per the release-cutting rule, a version bump is
+  per-PR, not per-commit).
 
 **Next steps**: none outstanding — PR ready to open against
 `origin/claude/sparkline-view-improvements-u93bq1`.
