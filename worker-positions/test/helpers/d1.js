@@ -35,6 +35,7 @@ const MIGRATIONS = [
   "../../migrations/0003_watchlist.sql",
   "../../migrations/0004_preclose_advisory.sql",
   "../../migrations/0005_push_subscriptions.sql",
+  "../../migrations/0006_ticker_quotes_source.sql",
 ];
 
 // The leading SQL keyword decides node:sqlite dispatch: SELECT reads (`.all()`), everything else

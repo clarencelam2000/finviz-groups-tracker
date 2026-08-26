@@ -1,0 +1,14 @@
+-- WS-POSITIONS-SEED (issue #264 epic). Provenance column on ticker_quotes so a bar's origin is
+-- distinguishable: 'finviz' (the 17:30 ET held feed, the default for every existing and future
+-- held-feed row) vs 'fmp_seed' (a prior-session bar seeded at watchlist-add time from FMP's
+-- historical-price-eod/full, so a brand-new watch ticker resolves to a real level on its next
+-- status read instead of sitting "awaiting first read" overnight).
+--
+-- Additive and non-breaking by construction: ingestQuotes() builds its INSERT from an explicit
+-- INGEST_COLS array that never mentions `source`, so held-feed writes keep the DEFAULT; sweep.js
+-- reads via SELECT * and simply ignores the extra column. The column is belt-and-suspenders, not a
+-- correctness requirement — a seed's trade_date is always older than any future position's entry
+-- floor, and sweep.js's read window is strictly `> floor`, so a seed can never fold into a real
+-- position's advance regardless of this column. Applied OUT-OF-BAND like 0001-0005 (wrangler deploy
+-- does not run migrations).
+ALTER TABLE ticker_quotes ADD COLUMN source TEXT NOT NULL DEFAULT 'finviz';

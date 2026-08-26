@@ -230,6 +230,39 @@ Python (P2, not yet built) and is unioned into `scripts/collect_morning.py`'s sc
   it. `test/helpers/d1.js`'s `MIGRATIONS` array runs it for real in tests (real SQLite, real schema),
   plus `_seedWatchlist()`/`_watchlist()` test-only conveniences mirroring `_seedQuote()`/`_quotes()`.
 
+## The watch-add seed: `src/seed.js` (WS-POSITIONS-SEED)
+
+When a ticker is added via `POST /watchlist`, `seedTickerBar(db, ticker, env)` best-effort-fetches
+its newest completed daily bar from FMP's `stable/historical-price-eod/full` (flat descending-date
+array — verified live) and writes it to `ticker_quotes` as `source='fmp_seed'`. Purpose: a brand-new
+watch ticker resolves to a real `prior_high`/`prior_low` on its **next** status read (10:05 or 15:30
+ET) instead of sitting "awaiting first read" until the 17:30 held feed creates its first bar.
+Realistic ceiling: saves one trading morning; the read job was never the limiter, the bar's absence
+was. Design + groundwork: `planning/watchlist-status-honesty-and-seeding.md`.
+
+Four things to internalize before editing:
+
+- **It must never break the add.** Every failure mode (no `FMP_API_KEY`, timeout, 429/5xx, bad JSON,
+  empty data, DB error) returns `{seeded:false, reason}` — `seedTickerBar` never throws, and the
+  `index.js` call site wraps it in its own try/catch on top. A seed failure is structurally unable to
+  fail or alter the `POST /watchlist` response.
+- **`INSERT OR IGNORE`, never `ON CONFLICT DO UPDATE`.** The opposite uniqueness stance from
+  `ingestQuotes()` (which upserts, last-write-wins per source): a seed must never clobber a real
+  Finviz bar or a prior seed for the same `(ticker, trade_date)`. An existing row of either kind is
+  already the better outcome. That's why the writer is dedicated, not a reuse of `ingestQuotes()`.
+- **OHLC-only scope.** Writes `open/high/low/close/volume/change_pct/prev_close` + `source` +
+  `collected_at`; leaves `atr`/`days_to_earnings`/`raw` at their column defaults. This sidesteps the
+  SMA %-distance-vs-level trap entirely (no MA is ever written) and is not a new case downstream — a
+  partial-Finviz-scrape bar already has this shape, and every consumer gates on `isNum`.
+- **It cannot corrupt a real position's advance — by construction, not by the `source` column.** A
+  seed's `trade_date` is the newest *completed* session, always `<=` any future position's entry
+  floor, and `sweep.js`'s `loadBarsAfter()` reads strictly `> floor`. So a seed never folds into an
+  advance regardless of `source`. The column is provenance/debuggability + insurance against a future
+  same-day-seed variant, not a correctness dependency (`test/seed.test.js` pins the exclusion).
+
+`FMP_TIMEOUT_MS = 5000` (in-code comment in `seed.js`) mirrors `worker/src/index.js`'s FMP timeout —
+internal, no user-facing effect, so not in the README config table (per the repo's constant-doc rule).
+
 ## The pre-close advisory: `src/preclose.js` (WS5-8)
 
 A 15:40 ET GitHub-Actions job scrapes near-final bars and calls `POST /positions/preclose-advisory`

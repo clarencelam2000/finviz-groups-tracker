@@ -11,6 +11,7 @@ import { subscribePush, unsubscribePush, readVapidConfig, dispatchPreClosePushes
 import { computePreCloseAdvisory, readPreCloseAdvisory } from "./preclose.js";
 import { etDateStr } from "./time.js";
 import { applyTransition, ackStop } from "./transitions.js";
+import { seedTickerBar } from "./seed.js";
 import {
   validateAddPayload,
   validatePatchPayload,
@@ -361,6 +362,11 @@ export async function handleRequest(request, env) {
       row = await addWatch(env.POSITIONS_DB, { ...v.value, user_id: auth.user_id });
     } catch (e) {
       return json({ error: "write failed" }, 500, request, env);
+    }
+    try {
+      await seedTickerBar(env.POSITIONS_DB, v.value.ticker, env);
+    } catch {
+      // seed is best-effort; never fail the add
     }
     return json({ watch: row }, 201, request, env);
   }
