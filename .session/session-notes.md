@@ -72,6 +72,17 @@ Amendment policy** — two real issues from a screenshot re-check:
   the PR carrying that version is still open (per the release-cutting rule, a version bump is
   per-PR, not per-commit).
 
+**Second owner round, same PR, same day: chart itself was too short (separate from the touch-
+target ask).** Bumped the sparkline's viewBox/CSS height from 32px (`H=32`, `h-8`) to 48px
+(`H=48`, `h-12`), and `padY` proportionally 4→6 to keep the same ~12.5% top/bottom breathing
+room. Height still scales 1:1 (viewBox units == CSS px via the matching `h-*` class), so this
+adds no new distortion — same non-uniform-scaling caveat as before applies only to the
+horizontal axis, unchanged. The `py-2 -my-2` touch-padding trick stacks on top unchanged, so the
+scrub hit box is now ~64px tall (48 visible + 16 padding). Re-verified with the same throwaway
+Playwright+real-Tailwind harness; re-ran pytest (719 passed, same 65 pre-existing failures).
+`docs/releases.json`'s `2026.08.26` entry got one more amended note line; still no version bump
+(PR still open).
+
 **Next steps**: none outstanding — PR ready to open against
 `origin/claude/sparkline-view-improvements-u93bq1`.
 

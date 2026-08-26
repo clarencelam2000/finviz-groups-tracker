@@ -3249,7 +3249,7 @@
     let sparkIdSeq = 0;
     function rankSparkline(points, n) {
       if (!points || points.length < 2) return '';
-      const W = 168, H = 32, padX = 2, padRight = 20, padY = 4;
+      const W = 168, H = 48, padX = 2, padRight = 20, padY = 6;
       const plotW = W - padX - padRight;
       const ranks = points.map(p => p.rank);
       let lo = Math.min(...ranks), hi = Math.max(...ranks);
@@ -3265,7 +3265,7 @@
       const span = `last ${points.length}d`;
       // Range labels: #lo (best, top) and #hi (worst, bottom). Rendered as HTML overlay
       // text, NOT inside the SVG — the SVG uses preserveAspectRatio="none" so its viewBox
-      // scales width/height independently (height 1:1 via h-8, width stretched ~2-3x to
+      // scales width/height independently (height 1:1 via h-12, width stretched ~2-3x to
       // fill the card); an in-SVG <text> gets stretched along with everything else and
       // reads as squashed/distorted. Plain HTML text in the reserved padRight gutter is
       // real CSS pixels, immune to that distortion. Omit on flat series since lo/hi are
@@ -3292,7 +3292,7 @@
             <span class="text-[0.6rem] uppercase tracking-wider text-slate-500">Weekly rank · ${span}</span>
             <span class="text-[0.6rem] text-slate-500">${n ? `of ${n}` : ''}</span>
           </div>
-          <!-- py-2 -my-2: enlarges the pointer/touch hit area to ~48px tall (32px SVG + 8px
+          <!-- py-2 -my-2: enlarges the pointer/touch hit area to ~64px tall (48px SVG + 8px
                top/bottom) without adding visible layout height — the negative margin cancels
                the padding's contribution to the surrounding flow. The scrub logic only reads
                x-position, so a taller-than-the-line hit target is safe and improves drag
@@ -3303,7 +3303,7 @@
             onpointerup="window.sparkEnd(this)" onpointerleave="window.sparkEnd(this)" onpointercancel="window.sparkEnd(this)">
             <div class="spark-tip hidden absolute px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-[0.6rem] whitespace-nowrap pointer-events-none z-10" style="top:-2px; transform:translate(-50%,-100%)"></div>
             ${rangeLabelsHtml}
-            <svg viewBox="0 0 ${W} ${H}" class="w-full h-8" preserveAspectRatio="none" aria-hidden="true">
+            <svg viewBox="0 0 ${W} ${H}" class="w-full h-12" preserveAspectRatio="none" aria-hidden="true">
               <line class="spark-guide hidden" y1="0" y2="${H}" stroke="#64748b" stroke-width="0.75" stroke-dasharray="1.5,1.5" vector-effect="non-scaling-stroke" />
               <polyline fill="none" stroke="${stroke}" stroke-width="1.5"
                 stroke-linejoin="round" stroke-linecap="round" points="${coords.join(' ')}" />
