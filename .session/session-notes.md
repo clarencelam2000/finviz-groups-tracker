@@ -6,6 +6,51 @@
 
 ---
 
+## 2026-08-26 — Lookup rank sparkline: margin fix + touch/hover scrub tooltip
+
+**Status: safe to close — implemented, verified in a headless-Playwright harness with real
+Tailwind CSS loaded (proxy-fetched once, stubbed locally — see below), committed on
+`claude/sparkline-view-improvements-u93bq1`.**
+
+User feedback on a screenshot of the Lookup tab's weekly-rank sparkline (`rankSparkline()`,
+`docs/index.html`): (1) the `#lo`/`#hi` range labels on the right crowded right up against the
+plotted line with no breathing room, and (2) requested an iOS-Stocks-style touch interaction —
+drag/hover along the line to see the rank + date at that point.
+
+- **Margin fix**: `rankSparkline()` now uses an asymmetric `padRight` (20 SVG units) vs
+  `padX`/`padY` (2/4), shrinking the plotted line's width so the range labels get clear space
+  instead of sitting on top of the line's end.
+- **Scrub tooltip**: each rendered sparkline embeds its points (date, rank, precomputed pixel
+  x/y) as a JSON `data-points` attribute on a wrapper div. New `window.sparkScrub`/
+  `window.sparkEnd` functions (pointer events — covers both touch and mouse) find the nearest
+  point by x-distance, move a cursor dot + vertical guide line to it, and show a floating tip
+  (`posFmtDate()` reused for the "Mon DD" format, no new date-formatting helper needed) reading
+  `"Aug 9 · #34 of 143"`. Tip position clamped 10–90% so it can't clip off either edge.
+- **Verification**: no existing pytest file covers the sparkline, and this is PWA-only (no
+  `scripts/` change), so no new test file was added per the "dashboard-only — note it in the
+  commit" testing-requirements carve-out. Instead ran a throwaway Playwright script (not
+  committed) reusing the CSV-route-interception pattern from `docs/CLAUDE.md`, seeding 25 days
+  of one industry's delta history so the sparkline had enough points to scrub. Confirmed via
+  screenshot + DOM assertions that the tooltip renders the correct date/rank and that the margin
+  looks right. **Note for future sessions**: the default `page.route` Tailwind-CDN stub (an
+  empty JS comment, used in the existing `test_pwa_*.py` suite) leaves all `.absolute`/
+  `.relative` positioning classes inert — fine for text-content assertions but not for visually
+  confirming an absolutely-positioned element's actual screen position. Fetching the real
+  `cdn.tailwindcss.com` script once via `curl` and stubbing *that* body instead (kept it in the
+  session scratchpad, not committed) got real CSS applied for a true visual check.
+- **Release surface updated in the same PR** (hard rule): `docs/releases.json` new
+  `2026.08.26` entry (tag `improvement`, tab `lookup`) + `current` bumped; `docs/sw.js`
+  `CACHE` bumped `finviz-v82` → `finviz-v83`.
+- Ran the full non-Playwright pytest suite (719 passed) plus confirmed the 65 Playwright-based
+  failures are pre-existing (identical failure count/list with `git stash` reverting this
+  change) — the known cloud-sandbox Chromium-revision gap documented in
+  `knowledge/investigations/playwright-cloud-session-testing.md`, not a regression.
+
+**Next steps**: none outstanding — PR ready to open against
+`origin/claude/sparkline-view-improvements-u93bq1`.
+
+---
+
 ## 2026-08-25 — PR #364 review fixes + PICKS-SEL-V3-PWA (all_green PWA chips)
 
 **Status: safe to close — implemented, tested, pushed on a fresh branch (`picks-sel-v3-pwa`),

@@ -1,6 +1,17 @@
 {
-  "current": "2026.08.25.1",
+  "current": "2026.08.26",
   "releases": [
+    {
+      "version": "2026.08.26",
+      "date": "2026-08-26",
+      "title": "Touch-scrub the weekly rank sparkline",
+      "tag": "improvement",
+      "tab": "lookup",
+      "notes": [
+        "Drag or hover along the Lookup card's weekly-rank sparkline to see the exact date and rank at that point, plus a snapping cursor and guide line — like the iOS Stocks app chart.",
+        "The #best/#worst range labels next to the sparkline now sit with clear space instead of crowding the plotted line."
+      ]
+    },
     {
       "version": "2026.08.25.1",
       "date": "2026-08-25",

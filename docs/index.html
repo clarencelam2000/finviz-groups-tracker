@@ -3244,13 +3244,17 @@
 
     // Inline SVG sparkline of weekly rank over time. Y is inverted so a rising
     // line = improving rank (rank 1 is best). Returns '' when too few points.
+    // padRight is wider than padX/padY so the #lo/#hi range labels get clear
+    // space instead of crowding the plotted line at the right edge.
+    let sparkIdSeq = 0;
     function rankSparkline(points, n) {
       if (!points || points.length < 2) return '';
-      const W = 168, H = 32, padX = 2, padY = 4;
+      const W = 168, H = 32, padX = 2, padRight = 20, padY = 4;
+      const plotW = W - padX - padRight;
       const ranks = points.map(p => p.rank);
       let lo = Math.min(...ranks), hi = Math.max(...ranks);
       if (hi === lo) { hi += 1; lo -= 1; } // flat series → centered line
-      const x = i => padX + (i * (W - 2 * padX)) / (points.length - 1);
+      const x = i => padX + (i * plotW) / (points.length - 1);
       // invert: best rank (low number) → top of the chart
       const y = r => padY + ((r - lo) / (hi - lo)) * (H - 2 * padY);
       const coords = points.map((p, i) => `${x(i).toFixed(1)},${y(p.rank).toFixed(1)}`);
@@ -3265,20 +3269,74 @@
       const rangeLabels = isFlat ? '' :
         `<text x="${W - 2}" y="${padY + 5}" text-anchor="end" style="font-size:6px;fill:#475569">#${lo}</text>` +
         `<text x="${W - 2}" y="${H - 1}" text-anchor="end" style="font-size:6px;fill:#475569">#${hi}</text>`;
+
+      // Scrub/tooltip support (`window.sparkScrub`/`window.sparkEnd` below):
+      // each point's pixel position + raw date/rank travels with the markup
+      // via a data attribute so the touch handler needs no extra lookup.
+      const sparkId = `spark-${++sparkIdSeq}`;
+      const scrubPoints = points.map((p, i) => ({ d: p.date, r: p.rank, x: +x(i).toFixed(2), y: +y(p.rank).toFixed(2) }));
+      const pointsAttr = JSON.stringify(scrubPoints).replace(/"/g, '&quot;');
+
       return `
         <div class="pt-0.5">
           <div class="flex justify-between items-baseline mb-0.5">
             <span class="text-[0.6rem] uppercase tracking-wider text-slate-500">Weekly rank · ${span}</span>
             <span class="text-[0.6rem] text-slate-500">${n ? `of ${n}` : ''}</span>
           </div>
-          <svg viewBox="0 0 ${W} ${H}" class="w-full h-8" preserveAspectRatio="none" aria-hidden="true">
-            <polyline fill="none" stroke="${stroke}" stroke-width="1.5"
-              stroke-linejoin="round" stroke-linecap="round" points="${coords.join(' ')}" />
-            <circle cx="${x(points.length - 1).toFixed(1)}" cy="${y(last.rank).toFixed(1)}" r="2" fill="${stroke}" />
-            ${rangeLabels}
-          </svg>
+          <div class="relative select-none" id="${sparkId}" data-points="${pointsAttr}" data-w="${W}" data-h="${H}" data-n="${n || ''}"
+            onpointerdown="window.sparkScrub(event, this)" onpointermove="window.sparkScrub(event, this)"
+            onpointerup="window.sparkEnd(this)" onpointerleave="window.sparkEnd(this)" onpointercancel="window.sparkEnd(this)">
+            <div class="spark-tip hidden absolute px-1.5 py-0.5 rounded bg-slate-800 border border-slate-600 text-[0.6rem] whitespace-nowrap pointer-events-none z-10" style="top:-2px; transform:translate(-50%,-100%)"></div>
+            <svg viewBox="0 0 ${W} ${H}" class="w-full h-8" preserveAspectRatio="none" aria-hidden="true">
+              <line class="spark-guide hidden" y1="0" y2="${H}" stroke="#64748b" stroke-width="0.75" stroke-dasharray="1.5,1.5" vector-effect="non-scaling-stroke" />
+              <polyline fill="none" stroke="${stroke}" stroke-width="1.5"
+                stroke-linejoin="round" stroke-linecap="round" points="${coords.join(' ')}" />
+              <circle class="spark-last" cx="${x(points.length - 1).toFixed(1)}" cy="${y(last.rank).toFixed(1)}" r="2" fill="${stroke}" />
+              <circle class="spark-cursor hidden" r="2.5" fill="#e2e8f0" stroke="${stroke}" stroke-width="1.2" />
+              ${rangeLabels}
+            </svg>
+          </div>
         </div>`;
     }
+
+    // Touch/drag scrub for the rank sparkline above, mirroring the iOS Stocks
+    // app: dragging along the line snaps a cursor + vertical guide to the
+    // nearest data point and shows its date/rank in a floating tip. Pointer
+    // events (not touch-only) so mouse hover on desktop works the same way.
+    function sparkScrub(evt, wrapper) {
+      evt.preventDefault();
+      const pts = JSON.parse(wrapper.dataset.points.replace(/&quot;/g, '"'));
+      if (!pts.length) return;
+      const W = +wrapper.dataset.w, n = wrapper.dataset.n;
+      const rect = wrapper.getBoundingClientRect();
+      const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+      const svgX = ((clientX - rect.left) / rect.width) * W;
+      // Nearest point by x distance in SVG-unit space.
+      let nearest = pts[0], bestDist = Infinity;
+      for (const p of pts) {
+        const d = Math.abs(p.x - svgX);
+        if (d < bestDist) { bestDist = d; nearest = p; }
+      }
+      const guide = wrapper.querySelector('.spark-guide');
+      const cursor = wrapper.querySelector('.spark-cursor');
+      const tip = wrapper.querySelector('.spark-tip');
+      guide.setAttribute('x1', nearest.x); guide.setAttribute('x2', nearest.x);
+      guide.classList.remove('hidden');
+      cursor.setAttribute('cx', nearest.x); cursor.setAttribute('cy', nearest.y);
+      cursor.classList.remove('hidden');
+      tip.textContent = `${posFmtDate(nearest.d)} · #${nearest.r}${n ? ` of ${n}` : ''}`;
+      // Clamp so the centered tip (translate -50%) never clips past either edge.
+      const leftPct = Math.min(90, Math.max(10, (nearest.x / W) * 100));
+      tip.style.left = `${leftPct}%`;
+      tip.classList.remove('hidden');
+    }
+    function sparkEnd(wrapper) {
+      wrapper.querySelector('.spark-guide')?.classList.add('hidden');
+      wrapper.querySelector('.spark-cursor')?.classList.add('hidden');
+      wrapper.querySelector('.spark-tip')?.classList.add('hidden');
+    }
+    window.sparkScrub = sparkScrub;
+    window.sparkEnd = sparkEnd;
 
     // Rank Floor + conviction chip from the medium-term ranks (month/quarter/
     // half) and rank_agreement. Floor = worst (max) of the three → "never worse
