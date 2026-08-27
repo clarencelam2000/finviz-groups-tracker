@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { handleRequest } from "../src/index.js";
 import { mintToken } from "../src/auth.js";
 import { makeD1 } from "./helpers/d1.js";
@@ -461,6 +461,32 @@ describe("WS5 §8b P1 — personal watchlist routes (issue #319)", () => {
 
     const listAfter = await handleRequest(req("/watchlist", { token }), env);
     expect((await listAfter.json()).watchlist).toHaveLength(0);
+  });
+
+  it("POST /watchlist responds before the best-effort FMP seed resolves (fire-and-forget)", async () => {
+    const token = await mintToken(env, "owner");
+    let resolveFetch;
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(() => new Promise((resolve) => { resolveFetch = resolve; }));
+    const seedEnv = { ...env, FMP_API_KEY: "test-key" };
+    const waited = [];
+    const ctx = { waitUntil: (p) => waited.push(p) };
+
+    const start = Date.now();
+    const add = await handleRequest(
+      req("/watchlist", { method: "POST", token, body: { ticker: "AAPL" } }),
+      seedEnv,
+      ctx
+    );
+    expect(add.status).toBe(201); // response lands without waiting on the still-pending FMP fetch
+    expect(Date.now() - start).toBeLessThan(1000);
+    expect(fetchSpy).toHaveBeenCalled();
+    expect(waited).toHaveLength(1); // the seed promise was handed to ctx.waitUntil, not awaited inline
+
+    resolveFetch({ status: 200, ok: true, json: async () => [] }); // let it settle so the test cleans up
+    await waited[0];
+    fetchSpy.mockRestore();
   });
 
   it("POST /watchlist rejects an invalid payload with 400", async () => {

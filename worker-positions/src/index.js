@@ -63,12 +63,12 @@ function json(body, status, request, env) {
 }
 
 export default {
-  async fetch(request, env) {
-    return handleRequest(request, env);
+  async fetch(request, env, ctx) {
+    return handleRequest(request, env, ctx);
   },
 };
 
-export async function handleRequest(request, env) {
+export async function handleRequest(request, env, ctx) {
   const url = new URL(request.url);
   const { pathname } = url;
   const method = request.method.toUpperCase();
@@ -363,11 +363,13 @@ export async function handleRequest(request, env) {
     } catch (e) {
       return json({ error: "write failed" }, 500, request, env);
     }
-    try {
-      await seedTickerBar(env.POSITIONS_DB, v.value.ticker, env);
-    } catch {
+    // Fire-and-forget: never await this in the response path (best-effort, per src/seed.js's
+    // contract). ctx.waitUntil keeps the Worker alive to let it finish after the response is
+    // sent; without a ctx (e.g. some test harnesses), the promise still runs but isn't awaited.
+    const seedPromise = seedTickerBar(env.POSITIONS_DB, v.value.ticker, env).catch(() => {
       // seed is best-effort; never fail the add
-    }
+    });
+    if (ctx && typeof ctx.waitUntil === "function") ctx.waitUntil(seedPromise);
     return json({ watch: row }, 201, request, env);
   }
 

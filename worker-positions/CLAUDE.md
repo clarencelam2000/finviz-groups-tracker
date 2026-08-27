@@ -259,6 +259,12 @@ Four things to internalize before editing:
   empty data, DB error) returns `{seeded:false, reason}` — `seedTickerBar` never throws, and the
   `index.js` call site wraps it in its own try/catch on top. A seed failure is structurally unable to
   fail or alter the `POST /watchlist` response.
+- **The call site must never `await` the seed promise.** `index.js` hands it to `ctx.waitUntil()`
+  instead, so the response returns as soon as the watch row is written — an `await` here would make
+  every add pay up to `FMP_TIMEOUT_MS` (5s) of added latency for a fetch whose result the caller
+  doesn't need. `handleRequest(request, env, ctx)` threads `ctx` down from the `fetch` handler for
+  this reason; a test harness calling `handleRequest` without a third arg still works (the seed
+  promise just runs undetached, same as any other environment lacking `waitUntil`).
 - **`INSERT OR IGNORE`, never `ON CONFLICT DO UPDATE`.** The opposite uniqueness stance from
   `ingestQuotes()` (which upserts, last-write-wins per source): a seed must never clobber a real
   Finviz bar or a prior seed for the same `(ticker, trade_date)`. An existing row of either kind is
