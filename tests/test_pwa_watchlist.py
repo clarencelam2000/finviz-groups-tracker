@@ -48,7 +48,13 @@ FAKE_TOKEN = "fake-watch-token-xyz789"
 # first morning check lands tomorrow" no-bar-yet state); level_type=above @144 vs
 # price=145.10 -> met=True -> "now above".
 WATCH_ENTRY = {
-    "id": "w1",
+    # A real D1 id is an INTEGER (migrations/0003_watchlist.sql: `id INTEGER PRIMARY KEY
+    # AUTOINCREMENT`), not a string — deliberately numeric here (not "w1") so this fixture
+    # would have caught the kebab-menu open/close bug (docs/index.html watchKebabHtml):
+    # entry.id (number) compared with strict === against state.watchMenu (always a string,
+    # since the onclick attribute quotes it) was never equal, so tapping the kebab silently
+    # never opened the menu. A string id here masks that exact bug.
+    "id": 1,
     "ticker": "AXON",
     "level_type": "above",
     "level_value": 144.00,
@@ -86,6 +92,8 @@ def _base_routes(page, morning_csv=MORNING_WATCHLIST_CSV):
                lambda r: r.fulfill(body=morning_csv, content_type="text/plain"))
     page.route("**/picks_latest.csv",
                lambda r: r.fulfill(body="date,list_category,Ticker\n", content_type="text/plain"))
+    page.route("**/pre_close_latest.csv",
+               lambda r: r.fulfill(body="date,session,collected_at,ticker,group,list_category,trigger,stop,atr,price,open,high,low,change,status,atr_from_lod\n", content_type="text/plain"))
     page.route("**/snapshots.csv",
                lambda r: r.fulfill(body="date,collected_at,group_type,name,stocks,market_cap,pe,fwd_pe,perf_day,perf_week,perf_month,perf_quarter,perf_half,perf_year,perf_ytd,avg_volume,rel_volume,change\n", content_type="text/plain"))
     page.route("**/deltas.csv",
@@ -118,7 +126,7 @@ def _mock_worker(page, login_ok=True, watchlist_rows=None, capture=None, patch_c
         if request.method == "POST":
             if capture is not None:
                 capture.append(json.loads(request.post_data or "{}"))
-            route.fulfill(status=201, body=json.dumps({"watch": {"id": "w2"}}),
+            route.fulfill(status=201, body=json.dumps({"watch": {"id": 2}}),
                           content_type="application/json")
         else:  # GET
             route.fulfill(status=200, body=json.dumps({"watchlist": watchlist_rows}),
@@ -289,7 +297,7 @@ def test_removed_entry_renders_in_collapsed_recently_removed_bin(server):
     renders in a collapsed "Recently removed" bin, separate from active cards and the Expired
     bin, with a chart affordance and a Restore action — never a bare DELETE-gone ticker."""
     from playwright.sync_api import sync_playwright
-    removed_entry = {**WATCH_ENTRY, "id": "w3", "ticker": "PLTR", "status": "removed"}
+    removed_entry = {**WATCH_ENTRY, "id": 3, "ticker": "PLTR", "status": "removed"}
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page()
@@ -336,7 +344,7 @@ def test_remove_sends_patch_not_delete(server):
 
         assert len(patch_capture) == 1, "expected exactly one PATCH /watchlist/<id>"
         item_id, body = patch_capture[0]
-        assert item_id == "w1"
+        assert item_id == "1"  # URL path segment, always a string regardless of the JSON id's type
         assert body == {"remove": True}
         browser.close()
 

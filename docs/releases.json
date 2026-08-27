@@ -1,6 +1,17 @@
 {
-  "current": "2026.08.27",
+  "current": "2026.08.27.1",
   "releases": [
+    {
+      "version": "2026.08.27.1",
+      "date": "2026-08-27",
+      "title": "Fix: watchlist \"Remove\" menu wasn't opening",
+      "tag": "fix",
+      "tab": "morning",
+      "notes": [
+        "Tapping the ⋯ menu on a Watchlist card did nothing — the menu's open/closed check compared a number to a string and never matched, so Remove, Renew, and Edit level were unreachable.",
+        "The ⋯ menu now opens and closes correctly."
+      ]
+    },
     {
       "version": "2026.08.27",
       "date": "2026-08-27",
