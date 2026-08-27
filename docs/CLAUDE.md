@@ -161,11 +161,15 @@ the empty state — a 404 is expected, never an error.
 
 - **Provisional chrome is non-negotiable** (ADR-011): the amber banner + "provisional — not
   settled" timestamp must always render so a 10:05 ET read is never mistaken for settled EOD.
-- **Actionability sort** (`MORNING_STATUS_META[*].order`): Triggered → Gapped-through → Failed
-  breakout → Setting up → Invalidated → No quote. This is the *display* order and is
-  deliberately different from the engine's evaluation precedence (`pick_status.STATUS_PRECEDENCE`).
+- **Actionability sort** (`MORNING_STATUS_META[*].order`): Triggered → Gapped-through / Reclaimed
+  (both order 1) → Failed breakout → Setting up → Invalidated → No quote. This is the *display*
+  order and is deliberately different from the engine's evaluation precedence
+  (`pick_status.STATUS_PRECEDENCE`).
 - **`atr_from_lod` and the "I took it" button render only on actionable states** (Triggered /
-  Gapped-through), gated by `MORNING_STATUS_META[*].actionable`.
+  Gapped-through / **Reclaimed** — 2026-08-27, `reclaim.actionable:true`), gated by
+  `MORNING_STATUS_META[*].actionable`. Picks now emit `reclaim` (against their prior low OR a
+  derived 50MA); the `reclaim` case in `morningCardBody` names the reclaimed level from the
+  `reclaim_ref`/`reclaim_ref_value` CSV columns (50MA prefixed `~` — a stale derived level).
 - **"I took it" creates a real position (WS5 phase 1, #309).** It is login-gated: signed out, the
   tap shows a "Sign in on the Positions tab" note (no write); signed in, it opens an inline confirm
   (entry/stop/qty captured from the trade ticket's current state via `ws5BuildPayload`) → `POST

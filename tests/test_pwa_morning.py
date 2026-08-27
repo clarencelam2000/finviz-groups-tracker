@@ -161,6 +161,40 @@ def test_i_took_it_requires_signin_when_signed_out(server):
         browser.close()
 
 
+RECLAIM_HEADER = ("date,session,collected_at,ticker,group,list_category,trigger,stop,atr,"
+                  "price,open,high,low,change,status,atr_from_lod,reclaim_ref,reclaim_ref_value\n")
+
+
+def _reclaim_body() -> str:
+    # Two reclaim picks: one attributed to the prior low (exact value), one to the derived
+    # 50MA (rendered with a "~" approximation prefix). Both are actionable.
+    return RECLAIM_HEADER + (
+        "2026-08-27,morning,2026-08-27T14:00:00Z,RCLO,Group A,leaders,44,42.15,2,43,42.5,43.4,41.9,0.5%,reclaim,0.6,prior_low,42.15\n"
+        "2026-08-27,morning,2026-08-27T14:00:00Z,RCMA,Group B,leaders,44,39,2,41,40,41.2,38.5,0.7%,reclaim,0.7,sma50,39.80\n"
+    )
+
+
+def test_reclaim_pick_renders_actionable_with_named_level(server):
+    # Owner decision 2026-08-27: picks now emit reclaim (undercut-and-reclaim / failed
+    # breakdown), actionable, with the reclaimed level named. prior_low shows the exact
+    # value; the derived 50MA is prefixed "~".
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _open_morning_tab(page, _reclaim_body())
+        html = page.inner_html("#morning-list")
+        assert html.count("Reclaimed") >= 2, "both reclaim picks should render a Reclaimed pill"
+        assert "Reclaimed prior low" in html
+        assert "42.15" in html
+        assert "Reclaimed 50MA" in html
+        assert "~39.80" in html
+        # Actionable: ATR-from-LoD row + "I took it" CTA on both reclaim cards.
+        assert html.count("ATR from LoD") == 2
+        assert html.count("I took it") == 2
+        browser.close()
+
+
 def test_empty_store_shows_empty_state(server):
     from playwright.sync_api import sync_playwright
     header_only = "date,session,collected_at,ticker,group,list_category,trigger,stop,atr,price,open,high,low,change,status,atr_from_lod\n"

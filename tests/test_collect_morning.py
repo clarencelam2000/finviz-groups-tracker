@@ -301,6 +301,28 @@ def test_load_pick_levels_handles_missing_values():
     assert levels[0]["trigger"] is None
     assert levels[0]["stop"] is None
     assert levels[0]["atr"] is None
+    # No Low and no Price/SMA50 -> no reclaim candidates at all (degrades cleanly).
+    assert levels[0]["reclaim_refs"] == []
+
+
+def test_load_pick_levels_reclaim_refs_prior_low_only_without_sma50():
+    # PICKS_CSV has Low but no Price/SMA50 columns -> only the prior_low candidate.
+    levels = cm.load_pick_levels(list(csv.DictReader(io.StringIO(PICKS_CSV))))
+    by_ticker = {lvl["ticker"]: lvl for lvl in levels}
+    assert by_ticker["AAPL"]["reclaim_refs"] == [("prior_low", 185.0)]
+
+
+def test_load_pick_levels_reclaim_refs_derives_absolute_sma50():
+    # Finviz SMA50 is a %-distance string: price sits 20% above the 50MA -> 50MA = 120/1.2 = 100.
+    csv_text = (
+        "date,collected_at,list_category,selector_version,group,ticker,High,Low,ATR,Price,SMA50\n"
+        "2026-08-06,x,leaders,v2,Group A,ZZZ,130.0,110.0,3.0,120.0,20.00%\n"
+    )
+    levels = cm.load_pick_levels(list(csv.DictReader(io.StringIO(csv_text))))
+    refs = levels[0]["reclaim_refs"]
+    assert refs[0] == ("prior_low", 110.0)
+    assert refs[1][0] == "sma50"
+    assert abs(refs[1][1] - 100.0) < 1e-9
 
 
 # ---------------------------------------------------------------------------
@@ -595,6 +617,43 @@ def test_build_status_rows_watch_level_reclaim():
     assert by_ticker["WATCH1"]["atr_from_lod"] != ""  # actionable status
 
     assert by_ticker["PICK1"]["status"] == "setting_up"
+    # A regular picks level with no reclaim_refs records nothing in the new columns.
+    assert by_ticker["PICK1"]["reclaim_ref"] == ""
+    assert by_ticker["PICK1"]["reclaim_ref_value"] == ""
+
+
+def test_build_status_rows_pick_reclaim_prior_low_and_records_level():
+    # A Pick carrying reclaim_refs: today_low 7.5 undercut prior_low 8.0, price 9.0 back
+    # above it, high never tagged trigger -> reclaim, attributed to prior_low.
+    pick_levels = [
+        {"ticker": "PICKR", "group": "G", "list_category": "leaders",
+         "trigger": 10.0, "stop": 8.0, "atr": 2.0,
+         "reclaim_refs": [("prior_low", 8.0), ("sma50", 7.0)]},
+    ]
+    quotes = [
+        {"Ticker": "PICKR", "Price": "9.0", "Open": "8.0", "High": "9.1", "Low": "7.5", "Change": "0%"},
+    ]
+    rows = cm.build_status_rows(pick_levels, quotes, "2026-08-27T13:45:00Z", "2026-08-27")
+    r = rows[0]
+    assert r["status"] == "reclaim"
+    assert r["atr_from_lod"] != ""            # reclaim is actionable
+    assert r["reclaim_ref"] == "prior_low"
+    assert float(r["reclaim_ref_value"]) == 8.0
+
+
+def test_build_status_rows_pick_reclaim_beats_failed_breakout():
+    # Bar both pokes its High (10.1 >= 10) AND reclaims prior_low (low 7.5 < 8, price 9.5
+    # back above) -> reclaim wins over failed_breakout (owner decision 2026-08-27).
+    pick_levels = [
+        {"ticker": "BOTH", "group": "G", "list_category": "leaders",
+         "trigger": 10.0, "stop": 8.0, "atr": 2.0, "reclaim_refs": [("prior_low", 8.0)]},
+    ]
+    quotes = [
+        {"Ticker": "BOTH", "Price": "9.5", "Open": "9.5", "High": "10.1", "Low": "7.5", "Change": "0%"},
+    ]
+    rows = cm.build_status_rows(pick_levels, quotes, "2026-08-27T13:45:00Z", "2026-08-27")
+    assert rows[0]["status"] == "reclaim"
+    assert rows[0]["reclaim_ref"] == "prior_low"
 
 
 def test_build_status_rows_watch_level_awaiting_first_read():

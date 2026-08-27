@@ -6,6 +6,59 @@
 
 ---
 
+## 2026-08-27 — Morning Picks: failed-breakdown / undercut-and-reclaim ("Reclaimed")
+
+**Status: safe to close pending CI — implemented + committed on
+`claude/failed-breakdown-undercut-unr-2vdvhk`, Python core fully tested (92 targeted + 731
+full non-Playwright suite green), PR to open.** Closes the deferred "picks opting into
+`reclaim`" item from `planning/watchlist-build-brief-8b.md` §10 line 305.
+
+**What it does.** The `reclaim` engine state (undercut a reference level, recover above it —
+mirror of `failed_breakout`) previously fired only for watchlist tickers (they pass
+`ref=sma50`); picks passed `ref=None` and never lit. Now Morning **picks** emit `reclaim` too.
+
+**Owner decisions (2026-08-27, all locked in-session):**
+1. **Both refs** — a pick reclaims against EITHER its prior swing low OR its derived 50MA.
+2. **Full entry trigger** — actionable (ATR-from-LoD + "I took it"), not just an info flag.
+3. **Label "Reclaimed"** (consistent with watch cards).
+4. **Name the level** on the card → two new store columns.
+5. **50MA derived from picks_latest's %-distance `SMA50`, ~1 session stale — accepted.**
+6. **Reclaim ranks ABOVE `failed_breakout`, applied uniformly to picks AND watch** (owner: "it
+   doesn't make sense to change one and not the other"). Kept `invalidated` > `reclaim`.
+
+**Changes.**
+- `scripts/pick_status.py`: `STATUS_PRECEDENCE` reordered (reclaim above failed_breakout); new
+  pure `matched_reclaim_ref(price, today_low, prior_low, candidates)`; `compute_pick_status`
+  gains `reclaim_refs` param + `_reclaim_candidates` normalizer; reclaim check moved above the
+  failed_breakout check. Legacy scalar `ref` (watch) still works, byte-identical except the
+  intended reorder. Docstrings/precedence comments updated.
+- `scripts/collect_morning.py`: `load_pick_levels` attaches `reclaim_refs` via new
+  `_pick_reclaim_refs(row, stop)` (prior_low + derived abs 50MA = `Price/(1+SMA50%/100)`);
+  `build_status_rows` threads `reclaim_refs=` and, on a reclaim row, re-derives the fired level
+  into new columns `reclaim_ref`/`reclaim_ref_value`. `STORE_COLUMNS` +2 (superset-additive —
+  `write_store` full-rewrites + backfills "" via `r.get(col,"")`, no ensure/migration needed).
+- `docs/index.html`: new `reclaim` case in `morningCardBody` naming the level (50MA `~`-prefixed
+  as stale/derived); `MORNING_STATUS_META.reclaim.actionable` false→true. **Verified watch cards
+  don't read `.actionable`** (only stripe/pill/label), so the flip is isolated to picks.
+- Release triplet `2026.08.27` / `sw.js` v85→v86. ADR-013 Decision 3 amended (precedence table +
+  two dated amendment notes). `scripts/CLAUDE.md` + `docs/CLAUDE.md` updated.
+- Tests: `tests/test_pick_status.py` (precedence flip + `reclaim_refs`/`matched_reclaim_ref`
+  coverage), `tests/test_collect_morning.py` (reclaim_refs derivation + picks reclaim status +
+  reclaim beats failed_breakout), `tests/test_pwa_morning.py` (new reclaim render test — already
+  in the CI `--ignore=` list).
+
+**Verification note (honest).** Python core executed green. **Could not run the Playwright PWA
+tests in this cloud sandbox** — the pinned `playwright==1.44.0` vs pre-installed browser layout +
+the offline route-stubbing hang means ALL `test_pwa_morning.py` tests (pre-existing ones
+included) fail identically here; it's the environment, not the change. The new PWA test follows
+the exact established harness and will run in CI. The main `<script>` block parses cleanly
+(node `new Function`).
+
+**Next steps:** open PR, confirm CI (esp. the Playwright `test` jobs) goes green. Still deferred
+(unchanged, tracked in brief §10): multi-day reclaim.
+
+---
+
 ## 2026-08-26 — PR #368 review follow-up: watch-add FMP seed was blocking, not fire-and-forget
 
 **Status: safe to close — fix implemented, tested, pushed on `claude/fix-watchlist-seed-await`, PR

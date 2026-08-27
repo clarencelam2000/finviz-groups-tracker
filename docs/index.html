@@ -5219,12 +5219,15 @@
       setting_up:      { label: 'Setting up',      order: 3, stripe: 'border-slate-600',   pill: 'bg-slate-500/20 text-slate-300',   actionable: false },
       invalidated:     { label: 'Invalidated',     order: 4, stripe: 'border-red-500',     pill: 'bg-red-500/15 text-red-400',       actionable: false },
       no_quote:        { label: 'No quote',        order: 5, stripe: 'border-slate-700',   pill: 'bg-slate-500/20 text-slate-400',   actionable: false },
-      // WS5 §8b P2 (pick_status.STATUS_RECLAIM) — dipped below a reference level (prior low
-      // / 20MA / 50MA) and recovered above it. Order 1 groups it with the bullish/early
-      // states in the picks sort; picks don't emit reclaim today so this only ever renders
-      // on watch cards (see watchCardHtml), but keeping meta complete avoids a no_quote
-      // fallback if it ever does show up on a picks row.
-      reclaim: { label: 'Reclaimed', order: 1, stripe: 'border-emerald-500', pill: 'bg-emerald-500/15 text-emerald-400', actionable: false },
+      // pick_status.STATUS_RECLAIM — dipped below a reference level and recovered above it
+      // (undercut-and-reclaim / failed breakdown). Order 1 groups it with the bullish/early
+      // states in the picks sort. actionable:true (owner decision 2026-08-27): picks now
+      // emit reclaim too (against their prior low OR derived 50MA), and a reclaimed pick is
+      // a full entry trigger — it gets the ATR-from-LoD entry-quality row + the "I took it"
+      // ticket, matching pick_status.ACTIONABLE_STATUSES and watch-card behavior. The
+      // 'reclaim' case in morningCardBody renders the reclaimed level from reclaim_ref/
+      // reclaim_ref_value; watch cards keep their own dedicated reclaim branch (watchCardHtml).
+      reclaim: { label: 'Reclaimed', order: 1, stripe: 'border-emerald-500', pill: 'bg-emerald-500/15 text-emerald-400', actionable: true },
       // WS-POSITIONS-STATUS (2026-08-25, pick_status.STATUS_AWAITING_FIRST_READ) — a watch
       // ticker that has NEVER had a ticker_quotes bar, as opposed to no_quote's "had a quote
       // request today and it came back empty." Picks don't emit this today so this only ever
@@ -5309,6 +5312,24 @@
                + _mNote('Entry here has poor R vs the planned stop.')
                + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
           break;
+        case 'reclaim': {
+          // Undercut-and-reclaim / failed breakdown (owner decision 2026-08-27): a pick
+          // that dipped below a reference level and recovered above it. Actionable — same
+          // ATR-from-LoD entry-quality row + trade ticket + "I took it" CTA as triggered/
+          // gapped. reclaim_ref names which level fired ("prior_low" | "sma50"); the 50MA
+          // value is DERIVED from picks_latest's stale %-distance SMA50 (see
+          // collect_morning._pick_reclaim_refs), so it's prefixed "~" as an approximation.
+          const isMa = r.reclaim_ref === 'sma50';
+          const refLabel = isMa ? '50MA' : 'prior low';
+          const refValRaw = parseFloat(r.reclaim_ref_value);
+          const refRow = isFinite(refValRaw)
+            ? _mKv(`Reclaimed ${refLabel}`, `${isMa ? '~' : ''}${refValRaw.toFixed(2)}`)
+            : '';
+          body = refRow + _mKv('Now', now) + atrRow
+               + _mNote('Undercut and reclaimed — failed breakdown. Confirm the recovery before entering.')
+               + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
+          break;
+        }
         case 'failed_breakout':
           body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', `${_mNum(r.price)} · below trigger`)
                + _mNote('Broke out and failed. Don\'t chase a re-break blindly.');

@@ -41,11 +41,13 @@ STATUS_INVALIDATED = "invalidated"
 STATUS_GAPPED_THROUGH = "gapped_through"
 STATUS_TRIGGERED = "triggered"
 STATUS_FAILED_BREAKOUT = "failed_breakout"
-# STATUS_RECLAIM (P2, WS5 §8b watchlist build brief §3/§4c/§4d/§5): a watch ticker's
-# price is back above its reclaim `ref` after a dip below it — the mirror of
-# failed_breakout (which pokes above the prior High and falls back; reclaim dips
-# below a level and recovers). Only ever evaluated when a caller passes `ref` (picks
-# callers never do, so this is zero-impact on the existing picks pipeline).
+# STATUS_RECLAIM (P2, WS5 §8b watchlist build brief §3/§4c/§4d/§5): price is back above
+# a reclaim reference level after a dip below it — the mirror of failed_breakout (which
+# pokes above the prior High and falls back; reclaim dips below a level and recovers).
+# Evaluated whenever a caller supplies a reclaim reference: watchlist callers pass a
+# single `ref` (the 50-day MA); picks callers pass `reclaim_refs` (undercut-and-reclaim
+# of EITHER the prior swing low OR the derived 50MA — owner decision 2026-08-27). A
+# caller supplying neither never emits reclaim.
 STATUS_RECLAIM = "reclaim"
 STATUS_SETTING_UP = "setting_up"
 
@@ -54,19 +56,22 @@ STATUS_SETTING_UP = "setting_up"
 # amending the ADR first (the mock's sort is: Triggered -> Gapped -> Failed ->
 # Setting-up -> Invalidated -> No-quote, a DIFFERENT order than evaluation precedence;
 # STATUS_PRECEDENCE below is the evaluation order, not the display order).
-# STATUS_RECLAIM sits between failed_breakout and setting_up (watchlist build brief
-# §4c: "above setting_up, below the breakout states") — it never outranks a genuine
-# triggered/gapped_through/failed_breakout read of the same quote, but a name that
-# would otherwise be a flat setting_up gets flagged reclaim if it dipped below its
-# reclaim ref and recovered.
+# STATUS_RECLAIM sits ABOVE failed_breakout and below the genuine-breakout states
+# (owner decision 2026-08-27, applied uniformly to picks AND watchlist): a bar that
+# both pokes its prior High (failed_breakout) AND undercuts-and-reclaims a reference
+# level reads as reclaim — the recovered-off-the-lows signal wins over the
+# rejected-at-highs one. It still never outranks a real triggered/gapped_through read
+# (a full breakout dominates) or invalidated (below the invalidation floor = dead).
+# Only ever fires when a caller supplies a reclaim ref (picks via `reclaim_refs`, watch
+# via `ref`); a caller passing neither is byte-identical to a world without reclaim.
 STATUS_PRECEDENCE = [
     STATUS_NO_QUOTE,
     STATUS_AWAITING_FIRST_READ,
     STATUS_INVALIDATED,
     STATUS_GAPPED_THROUGH,
     STATUS_TRIGGERED,
-    STATUS_FAILED_BREAKOUT,
     STATUS_RECLAIM,
+    STATUS_FAILED_BREAKOUT,
     STATUS_SETTING_UP,
 ]
 
@@ -113,7 +118,27 @@ def compute_reclaim(price, today_low, prior_low, ref) -> bool:
     return price > ref and (today_low < ref or prior_low < ref)
 
 
-def compute_pick_status(trigger, stop, price, open_, high, low, ref=None, has_history=None) -> str:
+def matched_reclaim_ref(price, today_low, prior_low, candidates):
+    """First `(label, value)` in `candidates` whose value yields a reclaim, else None.
+
+    `candidates` is an ordered iterable of `(label, value)` pairs; iteration order IS
+    the within-reclaim precedence (picks pass `prior_low` before `sma50`, so a name that
+    reclaims both is attributed to the prior swing low). Each value is tested with
+    `compute_reclaim` (same NaN/None guard), so a missing/derivable-as-None candidate
+    just never matches. Returns None when nothing reclaims.
+
+    Used in two places that must not diverge: `compute_pick_status` calls it to decide
+    the reclaim state, and `collect_morning.build_status_rows` calls it again on a
+    reclaim row to record WHICH level fired (for the PWA's "Reclaimed <level>" copy).
+    """
+    for label, value in candidates:
+        if compute_reclaim(price, today_low, prior_low, value):
+            return (label, value)
+    return None
+
+
+def compute_pick_status(trigger, stop, price, open_, high, low, ref=None, has_history=None,
+                        reclaim_refs=None) -> str:
     """Evaluate a single ticker's morning status against ADR-013 Decision 3.
 
     Inputs: `trigger` (prior High), `stop` (prior Low), and today's quote fields
@@ -131,22 +156,27 @@ def compute_pick_status(trigger, stop, price, open_, high, low, ref=None, has_hi
       2. invalidated      — price <= stop
       3. gapped_through   — open_ > trigger
       4. triggered        — price >= trigger
-      5. failed_breakout  — high >= trigger  (price < trigger, open_ <= trigger, by
-                             falling through 3 and 4)
-      6. reclaim          — (P2, watchlist build brief §4c) only evaluated when the
-                             caller passes `ref` (picks callers never do); price is
-                             back above `ref` after today's or the prior low dipped
-                             below it. Sits between failed_breakout and setting_up —
-                             it never outranks a genuine breakout-family read of the
-                             same quote, but promotes an otherwise-flat setting_up
-                             name that reclaimed a level worth watching.
+      5. reclaim          — price is back above a reclaim reference after today's or the
+                             prior low dipped below it. Evaluated whenever the caller
+                             supplies a reference: `reclaim_refs` (picks — an ordered
+                             list of (label, value), reclaim fires if ANY value matches)
+                             takes precedence over the legacy scalar `ref` (watch — the
+                             50MA). Sits ABOVE failed_breakout (owner decision
+                             2026-08-27, uniform for picks + watch): a bar that both
+                             pokes its High and reclaims a level reads as reclaim. Still
+                             below triggered/gapped_through (a full breakout dominates)
+                             and invalidated (below the floor = dead).
+      6. failed_breakout  — high >= trigger  (price < trigger, open_ <= trigger, no
+                             qualifying reclaim, by falling through 3/4/5)
       7. setting_up       — everything else
 
-    `ref` (optional, default None — reclaim never fires, byte-identical to the
-    pre-P2 behavior): the reclaim level. `low`/`stop` (today's low / prior low) are
-    already validated non-missing by the no_quote gate above by the time reclaim is
-    evaluated; `compute_reclaim` itself still guards `ref` (and re-checks the others
-    defensively) since `ref` is NOT part of the no_quote gate — see below.
+    `ref` (optional scalar, default None) / `reclaim_refs` (optional ordered
+    [(label, value), ...]): the reclaim reference(s). With neither supplied, reclaim
+    never fires — byte-identical to the pre-reclaim behavior for that caller.
+    `low`/`stop` (today's low / prior low) are already validated non-missing by the
+    no_quote gate above by the time reclaim is evaluated; `compute_reclaim` still
+    guards each ref value (and re-checks the others defensively) since the refs are NOT
+    part of the no_quote gate.
 
     Notes (see ADR-013 Decision 3 for full rationale — do not "improve" these):
     - invalidated outranks triggered/gapped_through: a name below its planned stop
@@ -171,11 +201,32 @@ def compute_pick_status(trigger, stop, price, open_, high, low, ref=None, has_hi
         return STATUS_GAPPED_THROUGH
     if price >= trigger:
         return STATUS_TRIGGERED
+    # reclaim now sits ABOVE failed_breakout (owner decision 2026-08-27): a bar that both
+    # pokes its prior High and reclaims a reference level reads as reclaim, uniformly for
+    # picks and watchlist. `reclaim_refs` (picks: ordered [(label, value), ...]) takes
+    # precedence over the legacy scalar `ref` (watch: the 50MA); a caller passing neither
+    # yields no candidates and can never reclaim (byte-identical to no-reclaim for it).
+    candidates = _reclaim_candidates(ref, reclaim_refs)
+    if candidates and matched_reclaim_ref(price, low, stop, candidates):
+        return STATUS_RECLAIM
     if high >= trigger:
         return STATUS_FAILED_BREAKOUT
-    if ref is not None and compute_reclaim(price, low, stop, ref):
-        return STATUS_RECLAIM
     return STATUS_SETTING_UP
+
+
+def _reclaim_candidates(ref, reclaim_refs):
+    """Normalize the two reclaim-ref forms into one ordered `[(label, value), ...]`.
+
+    `reclaim_refs` (picks) wins when supplied — even an empty list means "this caller
+    opted in but has no usable level today", which correctly yields no reclaim. Falls
+    back to the legacy scalar `ref` (watchlist's 50MA) as a single `("sma50", ref)`
+    candidate, or an empty list when both are absent (every pre-2026-08-27 caller).
+    """
+    if reclaim_refs is not None:
+        return list(reclaim_refs)
+    if ref is not None:
+        return [("sma50", ref)]
+    return []
 
 
 def compute_atr_from_lod(price, low, atr):

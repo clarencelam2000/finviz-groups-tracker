@@ -76,8 +76,25 @@ so precedence is part of the spec, not an implementation detail):
 | 2 | `invalidated` | `price <= stop` |
 | 3 | `gapped_through` | `open > trigger` |
 | 4 | `triggered` | `price >= trigger` |
-| 5 | `failed_breakout` | `high >= trigger` (and, by falling through 4, `price < trigger`) |
-| 6 | `setting_up` | everything else |
+| 5 | `reclaim` | a supplied reference level was undercut (today's or the prior low `< ref`) and `price > ref` — see the amendments below |
+| 6 | `failed_breakout` | `high >= trigger` (and, by falling through 4, `price < trigger`; and no qualifying reclaim) |
+| 7 | `setting_up` | everything else |
+
+> **Amendment (P2, WS5 §8b watchlist build brief):** `reclaim` was added as the downside
+> mirror of `failed_breakout` — the deferred "whipsaw" case below, made concrete for a supplied
+> reference level. Originally slotted between `failed_breakout` and `setting_up` and evaluated
+> only for watchlist callers (which pass a 50MA `ref`).
+
+> **Amendment (2026-08-27, owner decision):** `reclaim` was moved **above** `failed_breakout`
+> (now order 5, shown in the table) and extended to **picks**, which pass an ordered
+> `reclaim_refs` (undercut-and-reclaim of EITHER the prior swing low OR a derived 50MA) instead
+> of a single `ref`. Applied uniformly to picks and watchlist — one precedence table, no
+> per-caller branch. Rationale: a bar that both pokes its prior High (`failed_breakout`) and
+> reclaims a reference level is more usefully read as the recovered-off-the-lows signal than the
+> rejected-at-highs one. Still strictly below `triggered`/`gapped_through` (a full breakout
+> dominates) and `invalidated` (below the invalidation floor = dead; a 50MA sitting under the
+> prior low therefore never lights while price is under that low — an accepted interaction). A
+> reclaimed pick is **actionable** (ATR-from-LoD + "I took it"), matching `ACTIONABLE_STATUSES`.
 
 Notes locked here:
 - **Invalidated outranks everything with a quote** — a name whose *current price* is at or

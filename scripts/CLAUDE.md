@@ -159,9 +159,14 @@ Failed-breakout / Invalidated / No-quote) at ~10:05 ET.
   PWA concern, not this module's. **P2 (WS5 §8b watchlist build brief) added the `reclaim`
   state and `compute_reclaim(price, today_low, prior_low, ref)`** — the mirror of
   `failed_breakout` (dips below a level, then recovers, instead of poking above one and
-  falling back). Sits between `failed_breakout` and `setting_up` in precedence; only ever
-  evaluated when a caller passes `ref` — picks callers never do, so `ref=None` keeps
-  `compute_pick_status` byte-identical to pre-P2 behavior for every existing caller.
+  falling back). **Owner decision 2026-08-27: `reclaim` now ranks ABOVE `failed_breakout`
+  (uniform for picks + watch) and picks opt in via an ordered `reclaim_refs` param
+  (undercut-and-reclaim of EITHER the prior swing low OR a derived 50MA); `matched_reclaim_ref`
+  reports which one fired.** Watch callers still pass the scalar `ref` (50MA); a caller passing
+  neither `ref` nor `reclaim_refs` never emits `reclaim` — byte-identical to no-reclaim for it.
+  `collect_morning.load_pick_levels` builds `reclaim_refs` (see `_pick_reclaim_refs`); the 50MA
+  is derived from picks_latest's %-distance `SMA50` and is ~1 session stale (accepted). The two
+  new store columns `reclaim_ref`/`reclaim_ref_value` carry the fired level for the PWA copy.
   **WS-POSITIONS-STATUS (2026-08-25) added `STATUS_AWAITING_FIRST_READ` + an optional
   `has_history` param, same pattern.** The missing-inputs gate (the `no_quote` branch) returns
   `STATUS_AWAITING_FIRST_READ` instead when `has_history is False` — a watch ticker that has
