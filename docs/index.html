@@ -7980,7 +7980,12 @@
     }
 
     function watchKebabHtml(entry) {
-      const isOpen = state.watchMenu === entry.id;
+      // entry.id is a D1 INTEGER (number), but the onclick attribute below necessarily embeds it
+      // as a quoted string ('${entry.id}') — __toggleWatchMenu always receives a string, so
+      // state.watchMenu is always a string. Comparing against the raw entry.id (a number) made
+      // this strict-equal false 100% of the time, so the kebab menu never visibly opened even
+      // though the tap was registering. String both sides.
+      const isOpen = String(state.watchMenu) === String(entry.id);
       const menu = isOpen ? `
         <div class="mt-2 pt-2 border-t border-slate-700 flex justify-end gap-3 text-[11px] font-semibold">
           <button onclick="watchRenew('${entry.id}')" class="text-sky-400 hover:text-sky-300">Renew</button>

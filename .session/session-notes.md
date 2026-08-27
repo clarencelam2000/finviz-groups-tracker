@@ -6,6 +6,59 @@
 
 ---
 
+## 2026-08-27 — Fix: Watchlist "⋯" kebab menu never opened (Remove unreachable)
+
+**Status: safe to close — fixed, tested, PR to open.**
+
+**Report.** Owner asked how to remove a stock from the watchlist; walked them to Morning →
+Watchlist subtab → "⋯" kebab → Remove (per PR #370, `2026.08.26.2`). Owner replied: "I see a
+kebab but nothing happens when I tap."
+
+**Root cause.** `docs/index.html` `watchKebabHtml(entry)`:
+```js
+const isOpen = state.watchMenu === entry.id;
+```
+`entry.id` comes from `finviz-positions`' D1 `watchlist` table, `id INTEGER PRIMARY KEY
+AUTOINCREMENT` (migration 0003) — a JS **number** once parsed from the worker's JSON response.
+But the onclick handler that sets `state.watchMenu` is built as a template literal —
+`onclick="__toggleWatchMenu('${entry.id}')"` — which necessarily quotes it into a **string**
+in the generated HTML. So `state.watchMenu` was always a string (e.g. `"5"`) while `entry.id`
+stayed a number (`5`); `"5" === 5` is `false` in JS, so `isOpen` was always false. The tap did
+register (state updated correctly), it just never rendered the menu open — every tap looked
+like a no-op. Fix: `String(state.watchMenu) === String(entry.id)`.
+
+**Why existing tests missed it.** `tests/test_pwa_watchlist.py`'s `WATCH_ENTRY` fixture used a
+string id (`"w1"`), which happened to satisfy the (buggy) strict-equal check by coincidence —
+masking the bug since PR #370. Fixed the fixture to use real numeric ids (`1`/`3`), matching
+production D1 data, and confirmed the test now actually fails on the pre-fix code (reverted
+`docs/index.html`, reran — `test_remove_sends_patch_not_delete` timed out waiting for "Remove"
+to appear, exactly reproducing the owner's symptom) and passes with the fix restored.
+
+**Bonus find while debugging in this cloud sandbox:** the same test file's `_base_routes()`
+was missing a stub for `pre_close_latest.csv`. `switchTab('morning')` unconditionally fetches
+`PRECLOSE_URL` on first visit; with no stub, Chromium in this sandbox hangs indefinitely on
+that unreachable domain (known Root Cause 2 in
+`knowledge/investigations/playwright-cloud-session-testing.md`) rather than failing fast —
+this silently broke every test in the file until stubbed, not caused by this session's change
+but discovered and fixed here since it blocked verification.
+
+**Verification.** Node-level minimal repro of the strict-equal bug (proved both broken and
+fixed behavior in isolation) + full headless-Chromium Playwright run via the documented
+symlink trick (`chromium-1117` → `chromium-1194`) — all 8 tests in
+`tests/test_pwa_watchlist.py` pass; full non-Playwright suite (`pytest tests/ -q`, 731 tests)
+green.
+
+**Shipped:** `docs/index.html` fix, `tests/test_pwa_watchlist.py` fixture fix +
+`pre_close_latest.csv` stub, `docs/releases.json` entry `2026.08.27.1`, `docs/sw.js`
+v86→v87, `.session/SPRINT.md` Done entry.
+
+**Next steps:** none — self-contained fix. No other `entry.id`-style comparisons found
+elsewhere in the watchlist code (grepped; only `watchKebabHtml`'s `isOpen` check does a
+strict-equal against an id — the other `entry.id` usages just interpolate it into API call
+URLs/bodies, where the number/string distinction doesn't matter).
+
+---
+
 ## 2026-08-27 — Morning Picks: failed-breakdown / undercut-and-reclaim ("Reclaimed")
 
 **Status: safe to close pending CI — implemented + committed on
