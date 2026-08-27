@@ -1,6 +1,19 @@
 {
-  "current": "2026.08.26.2",
+  "current": "2026.08.27",
   "releases": [
+    {
+      "version": "2026.08.27",
+      "date": "2026-08-27",
+      "title": "Reclaimed — failed-breakdown picks on the Morning tab",
+      "tag": "feature",
+      "tab": "morning",
+      "notes": [
+        "Morning picks can now flag \"Reclaimed\": a stock that dipped below a key level intraday and recovered back above it — the failed-breakdown / undercut-and-reclaim setup.",
+        "It fires against either the pick's prior swing low or its 50-day moving average, and the card names which one it reclaimed.",
+        "A reclaimed pick is treated as a full entry trigger — it gets the entry-quality (ATR-from-low) read and the \"I took it\" button, just like a Triggered or Gapped-through pick.",
+        "Reclaim now ranks above Failed breakout everywhere (picks and watchlist): a bar that both pokes its high and reclaims a low reads as the more useful \"Reclaimed\"."
+      ]
+    },
     {
       "version": "2026.08.26.2",
       "date": "2026-08-26",

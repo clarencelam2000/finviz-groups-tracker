@@ -24,6 +24,7 @@ from pick_status import (  # noqa: E402
     STATUS_SETTING_UP,
     STATUS_PRECEDENCE,
     ACTIONABLE_STATUSES,
+    matched_reclaim_ref,
 )
 
 NAN = float("nan")
@@ -148,8 +149,8 @@ def test_status_precedence_order():
         STATUS_INVALIDATED,
         STATUS_GAPPED_THROUGH,
         STATUS_TRIGGERED,
-        STATUS_FAILED_BREAKOUT,
         STATUS_RECLAIM,
+        STATUS_FAILED_BREAKOUT,
         STATUS_SETTING_UP,
     ]
 
@@ -225,9 +226,73 @@ def test_compute_pick_status_reclaim_does_not_outrank_gapped():
     assert compute_pick_status(10, 8, 11.0, 10.5, 11.2, 10.4, ref=9.0) == STATUS_GAPPED_THROUGH
 
 
-def test_compute_pick_status_reclaim_does_not_outrank_failed_breakout():
-    # high >= trigger -> failed_breakout wins even with a qualifying ref.
-    assert compute_pick_status(10, 8, 9.8, 9.5, 10.1, 7.5, ref=8.5) == STATUS_FAILED_BREAKOUT
+def test_compute_pick_status_reclaim_outranks_failed_breakout():
+    # Owner decision 2026-08-27: reclaim now sits ABOVE failed_breakout. Same inputs as
+    # the old "does not outrank" test (high 10.1 >= trigger 10 AND a qualifying ref) now
+    # read as reclaim — uniform for picks and watch. The recovered-off-the-lows signal
+    # wins over the rejected-at-highs one.
+    assert compute_pick_status(10, 8, 9.8, 9.5, 10.1, 7.5, ref=8.5) == STATUS_RECLAIM
+
+
+def test_compute_pick_status_reclaim_still_below_invalidated():
+    # price <= stop (prior_low) -> invalidated still wins even with a qualifying ref.
+    assert compute_pick_status(10, 8, 7.9, 9.0, 10.5, 7.5, ref=8.5) == STATUS_INVALIDATED
+
+
+# ---------------------------------------------------------------------------
+# reclaim_refs (picks multi-ref, 2026-08-27)
+# ---------------------------------------------------------------------------
+
+
+def test_reclaim_refs_prior_low_fires():
+    # reclaim_refs with only prior_low (=8, the stop); today_low 7.5 < 8, price 9 > 8.
+    assert (
+        compute_pick_status(10, 8, 9.0, 8.0, 9.1, 7.5, reclaim_refs=[("prior_low", 8)])
+        == STATUS_RECLAIM
+    )
+
+
+def test_reclaim_refs_sma50_fires_when_prior_low_does_not():
+    # prior_low 8 does NOT reclaim (today_low 8.5 >= 8, prior_low 8 not < 8), but the
+    # 50MA at 8.7 does: price 9 > 8.7 and today_low 8.5 < 8.7.
+    assert (
+        compute_pick_status(10, 8, 9.0, 8.0, 9.1, 8.5,
+                            reclaim_refs=[("prior_low", 8), ("sma50", 8.7)])
+        == STATUS_RECLAIM
+    )
+
+
+def test_reclaim_refs_empty_list_never_reclaims():
+    # A picks caller that opted in but has no usable level today: no reclaim, falls to
+    # failed_breakout here (high 10.1 >= trigger 10).
+    assert (
+        compute_pick_status(10, 8, 9.8, 9.5, 10.1, 7.5, reclaim_refs=[])
+        == STATUS_FAILED_BREAKOUT
+    )
+
+
+def test_reclaim_refs_takes_precedence_over_scalar_ref():
+    # When both are passed, reclaim_refs wins: prior_low 8 fires, ignoring ref.
+    assert (
+        compute_pick_status(10, 8, 9.0, 8.0, 9.1, 7.5, ref=99, reclaim_refs=[("prior_low", 8)])
+        == STATUS_RECLAIM
+    )
+
+
+def test_matched_reclaim_ref_returns_first_match_in_order():
+    # both prior_low (8) and sma50 (8.5) qualify (today_low 7.5 < both); prior_low is
+    # first in the ordered candidate list, so it is the attributed level.
+    assert matched_reclaim_ref(9.0, 7.5, 8, [("prior_low", 8), ("sma50", 8.5)]) == ("prior_low", 8)
+
+
+def test_matched_reclaim_ref_skips_non_matching_first_candidate():
+    # prior_low 8 does not reclaim (today_low 8.5 >= 8); sma50 8.7 does -> attributed to sma50.
+    assert matched_reclaim_ref(9.0, 8.5, 8, [("prior_low", 8), ("sma50", 8.7)]) == ("sma50", 8.7)
+
+
+def test_matched_reclaim_ref_none_when_nothing_matches():
+    assert matched_reclaim_ref(9.0, 8.5, 8, [("prior_low", 8)]) is None
+    assert matched_reclaim_ref(9.0, 7.5, 8, []) is None
 
 
 def test_compute_pick_status_reclaim_outranks_setting_up():

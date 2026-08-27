@@ -31,7 +31,10 @@ import probe_picks  # noqa: E402  (reuse _parse_table, PAGE_SIZE, SCREENER_TABLE
 import replay_picks  # noqa: E402  (reuse the server-side Focus reconstruction — issue #293)
 import session_config  # noqa: E402
 from collect import NYSE_HOLIDAYS, _is_trading_day  # noqa: E402  (reuse holiday table only — NOT trading_date's rollback)
-from pick_status import compute_pick_status, compute_atr_from_lod, ACTIONABLE_STATUSES  # noqa: E402
+from pick_status import (  # noqa: E402
+    compute_pick_status, compute_atr_from_lod, matched_reclaim_ref,
+    ACTIONABLE_STATUSES, STATUS_RECLAIM,
+)
 
 # NOTE: `collect_held.py` imports FROM this module (CONFIG_PATH, _to_float,
 # fetch_ticker_quotes) — importing `collect_held._authed_request` back here would
@@ -75,6 +78,12 @@ STORE_COLUMNS = [
     "date", "session", "collected_at", "ticker", "group", "list_category",
     "trigger", "stop", "atr", "price", "open", "high", "low", "change",
     "status", "atr_from_lod",
+    # reclaim attribution (2026-08-27): which reference a reclaim row fired against
+    # ("prior_low" | "sma50") and that level's value, for the PWA's "Reclaimed <level>"
+    # copy. Blank on every non-reclaim row. Superset-additive: write_store rewrites the
+    # whole file each run and backfills "" for these on pre-existing rows via r.get(col, ""),
+    # so no separate ensure/migration step is needed (same two-way-door pattern as grp_*).
+    "reclaim_ref", "reclaim_ref_value",
 ]
 
 # URL-length safety: batch the scrape universe into chunks of <= 50 per `t=` screener
@@ -407,8 +416,10 @@ def load_pick_levels(picks_latest) -> list:
     tests can pass an in-memory fixture without touching the filesystem.
 
     Returns one dict per ticker: ticker, group, list_category, trigger (=today's
-    reference High as float), stop (=reference Low as float), atr (float). Rows
-    with an unparseable date are skipped; only the max date's rows are used.
+    reference High as float), stop (=reference Low as float), atr (float), and
+    reclaim_refs (ordered [(label, value), ...] undercut-and-reclaim candidates — see
+    `_pick_reclaim_refs`). Rows with an unparseable date are skipped; only the max
+    date's rows are used.
     Missing/NaN High/Low/ATR are carried through as None (not dropped) — a
     ticker with no usable trigger/stop still gets a no_quote-worthy row.
     """
@@ -426,15 +437,45 @@ def load_pick_levels(picks_latest) -> list:
     for r in rows:
         if r.get("date") != max_date:
             continue
+        stop = _to_float(r.get("Low"))
         levels.append({
             "ticker": r.get("ticker", ""),
             "group": r.get("group", ""),
             "list_category": r.get("list_category", ""),
             "trigger": _to_float(r.get("High")),
-            "stop": _to_float(r.get("Low")),
+            "stop": stop,
             "atr": _to_float(r.get("ATR")),
+            "reclaim_refs": _pick_reclaim_refs(r, stop),
         })
     return levels
+
+
+def _pick_reclaim_refs(row: dict, stop) -> list:
+    """Ordered reclaim candidates for a Pick: [("prior_low", <Low>), ("sma50", <abs 50MA>)].
+
+    A Pick's undercut-and-reclaim fires against EITHER its prior swing low OR its 50-day
+    MA (owner decision 2026-08-27); order here IS the attribution precedence, so a name
+    that reclaims both is credited to the prior low. Each candidate is omitted when its
+    value can't be formed, so a row missing Low and/or SMA50 degrades cleanly to fewer
+    (or zero) candidates rather than erroring.
+
+    The 50MA is DERIVED from Finviz's `SMA50` column, which is a %-distance-from-price
+    string (e.g. "19.32%" = price sits 19.32% above the 50MA), NOT an absolute level:
+    `sma50 = Price / (1 + SMA50%/100)`. Both `Price` and `SMA50` are the picks_latest
+    prior-EOD capture, so this 50MA is ~1 trading session stale by the morning read — an
+    accepted approximation (owner-confirmed 2026-08-27): the 50MA moves only cents/day,
+    and the morning scrape's narrow block carries no fresh MA to use instead.
+    """
+    refs = []
+    if stop is not None:
+        refs.append(("prior_low", stop))
+    price_cap = _to_float(row.get("Price"))
+    sma50_pct = _to_float(row.get("SMA50"))
+    if price_cap is not None and sma50_pct is not None:
+        denom = 1.0 + sma50_pct / 100.0
+        if denom != 0:
+            refs.append(("sma50", price_cap / denom))
+    return refs
 
 
 def build_status_rows(pick_levels: list, quotes: list, collected_at: str, date: str,
@@ -449,10 +490,11 @@ def build_status_rows(pick_levels: list, quotes: list, collected_at: str, date: 
     Decision 3 (extended by P2 lead decision 2) — left as "" otherwise, matching
     the CSV empty-value convention.
 
-    `ref=lvl.get("ref")` (P2): Focus pick levels (from load_pick_levels) have no
-    `ref` key, so `.get` returns None and compute_pick_status's reclaim check never
-    fires for them — byte-identical to pre-P2 behavior. Watch levels (from
-    build_watch_levels) carry `ref=sma50`, the system-read reclaim level.
+    Reclaim refs: Focus pick levels carry `reclaim_refs` (ordered prior_low + derived
+    50MA — 2026-08-27); watch levels carry the scalar `ref=sma50`. `compute_pick_status`
+    prefers `reclaim_refs` when present, else `ref`; a level with neither never reclaims.
+    On a reclaim row the fired reference is re-derived via `matched_reclaim_ref` (the same
+    helper the engine used) into the `reclaim_ref`/`reclaim_ref_value` columns.
 
     `has_history=lvl.get("has_history")` (WS-POSITIONS-STATUS): same pattern — Focus
     pick levels have no `has_history` key so `.get` returns None and
@@ -473,11 +515,25 @@ def build_status_rows(pick_levels: list, quotes: list, collected_at: str, date: 
         change = _to_float(q.get("Change")) if q else None
 
         status = compute_pick_status(lvl["trigger"], lvl["stop"], price, open_, high, low,
-                                      ref=lvl.get("ref"), has_history=lvl.get("has_history"))
+                                      ref=lvl.get("ref"), has_history=lvl.get("has_history"),
+                                      reclaim_refs=lvl.get("reclaim_refs"))
 
         atr_from_lod = None
         if status in ACTIONABLE_STATUSES:
             atr_from_lod = compute_atr_from_lod(price, low, lvl["atr"])
+
+        # On a reclaim row, re-derive WHICH reference fired (same helper the engine used,
+        # so the two can't diverge) for the PWA's "Reclaimed <level>" copy. Picks carry
+        # `reclaim_refs`; watch rows carry the scalar `ref` (the 50MA) — normalize both to
+        # the candidate list `compute_pick_status` itself built. Blank on non-reclaim rows.
+        reclaim_ref, reclaim_ref_value = "", ""
+        if status == STATUS_RECLAIM:
+            candidates = lvl.get("reclaim_refs")
+            if candidates is None and lvl.get("ref") is not None:
+                candidates = [("sma50", lvl["ref"])]
+            matched = matched_reclaim_ref(price, low, lvl["stop"], candidates or [])
+            if matched:
+                reclaim_ref, reclaim_ref_value = matched[0], _fmt(matched[1])
 
         rows.append({
             "date": date,
@@ -496,6 +552,8 @@ def build_status_rows(pick_levels: list, quotes: list, collected_at: str, date: 
             "change": _fmt(change),
             "status": status,
             "atr_from_lod": _fmt(atr_from_lod),
+            "reclaim_ref": reclaim_ref,
+            "reclaim_ref_value": reclaim_ref_value,
         })
     return rows
 
