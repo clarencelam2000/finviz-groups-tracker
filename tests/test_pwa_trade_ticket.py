@@ -92,6 +92,14 @@ def _open_morning_tab(page, picks_body=None):
                lambda r: r.fulfill(body=MORNING_FIXTURE.read_text(encoding="utf-8"), content_type="text/plain"))
     page.route("**/picks_latest.csv",
                lambda r: r.fulfill(body=picks_body if picks_body is not None else _picks_body(), content_type="text/plain"))
+    # switchTab('morning') unconditionally fetches PRECLOSE_URL on first visit (WS3b) — with
+    # no stub, Chromium in this sandbox hangs indefinitely on the unreachable domain (known
+    # Root Cause 2, knowledge/investigations/playwright-cloud-session-testing.md) rather than
+    # failing fast, which silently broke every test in this file (all 10 timed out waiting on
+    # "Trade ticket" text that never rendered) until this stub was added — same gap already
+    # found and fixed in test_pwa_watchlist.py's _base_routes(), just not applied here yet.
+    page.route("**/pre_close_latest.csv",
+               lambda r: r.fulfill(body="date,session,collected_at,ticker,group,list_category,trigger,stop,atr,price,open,high,low,change,status,atr_from_lod\n", content_type="text/plain"))
     page.route("**/snapshots.csv",
                lambda r: r.fulfill(body="date,collected_at,group_type,name,stocks,market_cap,pe,fwd_pe,perf_day,perf_week,perf_month,perf_quarter,perf_half,perf_year,perf_ytd,avg_volume,rel_volume,change\n", content_type="text/plain"))
     page.route("**/deltas.csv",
@@ -192,6 +200,31 @@ def test_price_edit_recomputes_atr_from_lod_label(server):
         assert "ok to act" in label_before
 
         page.fill("#ws4-price-AXON", "630")
+        page.wait_for_timeout(200)
+        label_after = page.inner_text("#ws4-atrlod-AXON")
+        assert "chase risk" in label_after
+        browser.close()
+
+
+def test_low_edit_recomputes_atr_from_lod_label(server):
+    """2026-08-28 owner report: Finviz's own scraped Low (613.00 in the fixture) can
+    understate a ticker's real day low, giving a falsely clean ATR-from-LoD reading with
+    no way to correct it — unlike price, which already had an edit affordance. Typing a
+    lower observed low must recompute the same gate, mirroring the price-edit test above."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _open_morning_tab(page)
+        page.click("text=▾ Trade ticket >> nth=0")
+        page.wait_for_timeout(300)
+
+        label_before = page.inner_text("#ws4-atrlod-AXON")
+        assert "ok to act" in label_before
+
+        # AXON: price=613.90, atr=14.20. A lower observed low (590) widens the distance
+        # from price to (613.90-590)/14.20 = 1.68 -> chase risk (threshold is 1.0).
+        page.fill("#ws4-low-AXON", "590")
         page.wait_for_timeout(200)
         label_after = page.inner_text("#ws4-atrlod-AXON")
         assert "chase risk" in label_after

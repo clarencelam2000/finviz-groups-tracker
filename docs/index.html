@@ -513,9 +513,14 @@
       morningSubtab: 'picks',
       morningViewUserSet: false,
       // WS4 Phase B (ADR-014) trade-ticket UI state, keyed by ticker. Survives renderMorning()
-      // re-renders (module-level, not rebuilt each render). { expanded, stopBasis, priceOverride }.
-      // priceOverride is a string (raw input value) so an in-progress edit ("61" typed toward
-      // "612.4") never gets coerced/clobbered by a re-render; NaN/'' falls back to r.price.
+      // re-renders (module-level, not rebuilt each render). { expanded, stopBasis, priceOverride,
+      // lowOverride }. priceOverride/lowOverride are strings (raw input value) so an in-progress
+      // edit ("61" typed toward "612.4") never gets coerced/clobbered by a re-render; NaN/''
+      // falls back to r.price / r.low respectively. lowOverride exists because r.low is a single
+      // point-in-time scrape (the morning snapshot) that can be stale or, per a live 2026-08-28
+      // owner report, simply wrong (Finviz's own screener under-reported a ticker's day low vs.
+      // its broker's chart) — with no override, the ATR-from-LoD "don't-chase" gate had no way
+      // to reflect the real low, unlike price which already had this same edit affordance.
       morningTicket: {},
       // WS5 phase 1 (#309) — per-ticker ephemeral UI state for the "I took it" -> real
       // POST /positions write flow. Survives renderMorning() re-renders the same way
@@ -5405,7 +5410,7 @@
     // re-renders (module-level state.morningTicket, not rebuilt each render).
     function ws4GetTicket(ticker) {
       if (!state.morningTicket[ticker]) {
-        state.morningTicket[ticker] = { expanded: false, stopBasis: 'prior_low', priceOverride: '' };
+        state.morningTicket[ticker] = { expanded: false, stopBasis: 'prior_low', priceOverride: '', lowOverride: '' };
       }
       return state.morningTicket[ticker];
     }
@@ -5514,6 +5519,15 @@
       return (!isNaN(v) && v > 0) ? v : _pF(r.price);
     }
 
+    // lowForCalc = user override (if typed and valid) else the morning-row snapshot low.
+    // Mirrors ws4PriceForCalc — r.low is a single scrape-time read (can be stale, or per
+    // a 2026-08-28 owner report, simply wrong vs. the ticker's actual day low) with no
+    // other way to correct it before this.
+    function ws4LowForCalc(r, ts) {
+      const v = parseFloat(ts.lowOverride);
+      return (!isNaN(v) && v > 0) ? v : _pF(r.low);
+    }
+
     // Recomputes both gates + sizing off the current price/risk inputs and patches the
     // affected spans in place (no full renderMorning() — keeps typing smooth per ADR-014
     // Phase B spec). Called on every price/risk input event.
@@ -5528,8 +5542,12 @@
       if (priceEl) ts.priceOverride = priceEl.value;
       const priceForCalc = ws4PriceForCalc(r, ts);
 
+      const lowEl = document.getElementById(`ws4-low-${ticker}`);
+      if (lowEl) ts.lowOverride = lowEl.value;
+      const lowForCalc = ws4LowForCalc(r, ts);
+
       // Gate 1: intraday ATR-from-LoD.
-      const low = _pF(r.low), atr = _pF(r.atr);
+      const low = lowForCalc, atr = _pF(r.atr);
       const atrLod = (!isNaN(priceForCalc) && !isNaN(low) && !isNaN(atr) && atr > 0)
         ? (priceForCalc - low) / atr : NaN;
       const atrLodLbl = morningAtrLabel(atrLod);
@@ -5595,7 +5613,7 @@
       const priceForCalc = ws4PriceForCalc(r, ts);
       const focusScore = picksRow ? ws4FocusScore(picksRow) : null;
 
-      const low = _pF(r.low), atr = _pF(r.atr);
+      const low = ws4LowForCalc(r, ts), atr = _pF(r.atr);
       const atrLod = (!isNaN(priceForCalc) && !isNaN(low) && !isNaN(atr) && atr > 0)
         ? (priceForCalc - low) / atr : NaN;
       const atrLodLbl = morningAtrLabel(atrLod);
@@ -5669,8 +5687,14 @@
                 oninput="ws4Recompute('${ticker}')"
                 class="bg-slate-900 border border-sky-500 rounded px-1.5 py-0.5 w-20 text-right text-slate-100 font-semibold tabular-nums text-xs" />
             </div>
+            <div class="flex justify-between items-center text-xs mt-1">
+              <span class="text-slate-400">Low so far <span class="text-slate-600">(${escapeHtml(freshTime)} read · edit)</span></span>
+              <input id="ws4-low-${ticker}" type="number" step="0.01" value="${ts.lowOverride || _mNum(r.low)}"
+                oninput="ws4Recompute('${ticker}')"
+                class="bg-slate-900 border border-sky-500 rounded px-1.5 py-0.5 w-20 text-right text-slate-100 font-semibold tabular-nums text-xs" />
+            </div>
             <div class="flex justify-between text-xs mt-1"><span class="text-slate-400">ATR (14)</span><span class="text-slate-200 font-medium tabular-nums">${_mNum(r.atr)}</span></div>
-            <div class="text-[10.5px] text-slate-500 mt-1.5">${escapeHtml(fresh.text)}. Checking later? Type the price you see — both gates and sizing recompute off your number.</div>
+            <div class="text-[10.5px] text-slate-500 mt-1.5">${escapeHtml(fresh.text)}. Checking later, or the chart's showing a lower low than this snapshot has? Type what you see for price and/or low — both gates and sizing recompute off your numbers.</div>
           </div>
 
           <div class="bg-slate-900/40 rounded-lg px-3 py-2.5">
