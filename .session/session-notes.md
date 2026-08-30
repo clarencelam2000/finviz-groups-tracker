@@ -1059,3 +1059,46 @@ against a live chart, and log what's found (confirms Finviz-side lag vs. rules o
 further).
 
 ---
+
+## 2026-08-30 — PR #374 review follow-up: low override → Today-low stop + localStorage persistence
+
+**Status: safe to close — implemented, tested (12/12 trade-ticket + 731 non-PW suite green), PR to open.**
+
+Reviewed PR #374 (adds a "Low so far" override to the Morning trade ticket's ATR-from-LoD
+gate). Author OOTO; owner asked me to make two recommended changes directly on top of the PR
+branch. Built on `origin/claude/atr-lod-calculation-bug-9vqnwo` (the PR head) so the low-override
+code is present, branch `claude/pr374-review-emuagm`.
+
+**Change 1 — corrected low now flows to the `today_low` stop, not just the gate.** The PR wired
+`lowOverride` only into the ATR-from-LoD gate; `ws4StopLevels`'s `today_low` option still read raw
+`r.low`. That's the same fact ("today's low = X") feeding two consumers with different values —
+and worse, `ws5BuildPayload` (the real `POST /positions` payload) used the raw low, so a corrected
+low + "Today low" stop would have created a position with a stop the user had explicitly flagged
+as wrong. Fix: `ws4StopLevels(r, dm, ts)` reads `today_low` through `ws4LowForCalc`; `ts` optional
+(falls back to raw low). Updated all three call sites (`ws4Recompute`, `ws4TicketHtml`,
+`ws5BuildPayload`).
+
+**Change 2 — low override persists across reload.** Was in-memory (`state.morningTicket`), lost on
+refresh. Added `ws4LoadLowOverride`/`ws4SaveLowOverride`/`ws4HydrateLow`, keyed
+`ws4_low_override:<ticker>` storing `{date, value}` and gated on a date match at read time, so a
+new trading day's fresh scrape is never shadowed by a stale correction (no key enumeration/cleanup
+needed). Saved on every `oninput` (mirrors `ws4SaveRiskDefault`), hydrated once per session via a
+`ts.lowHydrated` guard. `priceOverride` deliberately stays session-only — "price now" is a live
+value the user re-checks, not a lasting factual fix.
+
+**Deliberately NOT done:** ATR editable (owner decision — 14-day average, doesn't move intraday);
+DATA-FINVIZ-LOW upstream investigation (owner not pursuing). No release triplet — internal
+correctness fix to an existing tool input, same category as PR #374 itself.
+
+**Tests:** 2 new Playwright tests in `tests/test_pwa_trade_ticket.py`
+(`test_low_override_flows_to_today_low_stop_and_sizing`,
+`test_low_override_persists_across_reload`). Added a `clear_storage=False` param to
+`_open_morning_tab` so the persistence test survives a reload (the harness's init script clears
+localStorage on every load otherwise). Verified in-sandbox via the pre-installed chromium-1234
+(matched this session's playwright build — no symlink trick needed this time). Full 12/12
+trade-ticket file green; 731 non-Playwright suite green.
+
+**Next steps:** none blocking. If the owner wants the Today-low-stop correctness fix called out in
+What's New, add a `releases.json`/`sw.js` triplet in a follow-up.
+
+---
