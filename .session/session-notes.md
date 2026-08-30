@@ -1007,3 +1007,55 @@ dead-man's-switch) — it's now meaningful since `no_quote` means what it says a
 stays parked until an FMP EOD-history endpoint + `ticker_quotes.source` column are worked out.
 
 ---
+
+## 2026-08-28 — Fix: Morning ticket "ATR from LoD" had no way to correct a wrong scraped Low
+
+**Status: safe to close — fixed, tested, PR to open.**
+
+**Report.** Owner flagged a RPRX Reclaim card's "ATR from LoD" reading (0.1, "ok to act") as
+implausible next to the actual chart. First pass (wrong): assumed the session low had simply
+kept falling *after* the 10:05 ET morning scrape (a staleness story). Owner corrected this —
+their broker's chart showed the day's actual low (61.01) printed in the very first 5-minute bar
+(9:30–9:35 ET), well *before* the 10:07:32 ET scrape. Pulled the real stored row
+(`data/picks/sessions/morning.csv`, 2026-08-27) to check: `open=61.44, high=61.67, low=61.42,
+price=61.60`. So Finviz itself told our scraper `Low=61.42` at 10:07 ET — 37 minutes after a
+day-low print of 61.01 had already happened. Confirmed this is **not** a parsing/column bug on
+our side (checked `screener_config.json`'s `morning` block id 88 → "Low" against
+`tests/test_collect_morning.py`'s fixture header — matches; `compute_atr_from_lod`'s math on the
+stored value is correct: `(61.60−61.42)/1.35=0.133→"0.1"`). Root cause is either a genuine
+Finviz delayed-quote lag/quirk specific to this narrow `t=`-filtered screener block, or something
+about our request timing — couldn't pin down which from this cloud sandbox (Cloudflare blocks
+live Finviz access here, per root `CLAUDE.md`).
+
+**Shipped (per owner's direction — go straight to the fix + a tracked watch-item, not further
+live-data investigation this session):**
+- `docs/index.html`: added a second "Low so far" input (`ws4-low-${ticker}`) in the trade
+  ticket, next to the existing "Price now" input — mirrors that field's override pattern exactly
+  (`ts.lowOverride`, `ws4LowForCalc()` alongside `ws4PriceForCalc()`), wired into both
+  `ws4Recompute` (live patch) and `ws4TicketHtml` (initial render). Previously "Price now" was
+  the *only* editable input despite the ticket's own copy claiming "both gates ... recompute off
+  your number" — the ATR-from-LoD gate's `low` input had no correction path at all, so a wrong or
+  stale scraped low stayed wrong for the rest of the session with no fix available. Deliberately
+  left the "Today low" stop-basis option (in the 4-way stop menu) on the raw scraped value —
+  different concept (a structural stop level, not a live chase-risk read); scope stayed to the
+  gate the owner actually reported on.
+- `tests/test_pwa_trade_ticket.py`: new `test_low_edit_recomputes_atr_from_lod_label`, mirrors
+  the existing price-edit test (AXON fixture: price=613.90, atr=14.20; typing low=590 pushes
+  `(613.90−590)/14.20=1.68` past the 1.0 chase-risk threshold). Verified locally via the
+  documented revision-symlink harness (`knowledge/investigations/playwright-cloud-session-testing.md`)
+  — full 8-test file green (was 7).
+- `.session/SPRINT.md`: `WS4-LOW` (done) under the WS4 section, plus a new **`DATA-FINVIZ-LOW`**
+  backlog watch-item under Data Pipeline — the open question (Finviz data lag vs. our request
+  timing) is *not* resolved by this fix, just made correctable in the UI. Next-session pickup
+  path documented there: cross-check a few more `reclaim`/`triggered` mornings' `low` column
+  against an independent source to see if this is a one-off or a systematic pattern.
+- No release triplet (`releases.json`/`sw.js` bump) — internal tool-correctness fix to an
+  existing ADR-014 ticket input, not a new user-facing feature per se; the owner can ask for one
+  in a follow-up if they want it announced in What's New.
+
+**Next steps:** none blocking. `DATA-FINVIZ-LOW` is a watch item, not an open task with a
+deadline — pick it up opportunistically next time a `reclaim`/`triggered` morning card looks off
+against a live chart, and log what's found (confirms Finviz-side lag vs. rules out our own code
+further).
+
+---
