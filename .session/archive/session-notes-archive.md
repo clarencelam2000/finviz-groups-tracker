@@ -4,6 +4,223 @@
 > Newest entries at the top.
 
 ---
+## 2026-08-25 — PR #366 follow-ups: WS-POSITIONS-TTL-BURN fixed + SEED groundwork (branch `claude/pr366-followup-tasks-e1b3zz`, PR #367)
+
+**Status: safe to close once PR #367 merges.** Staff-eng session picking up the leftover tracked
+follow-ups after WS-POSITIONS-STATUS (#366) merged. Owner scoped this session to **TTL-BURN** +
+**SEED groundwork** (MONITOR and the #366 `test_pwa_watchlist.py` verification loose end stay
+parked). Lead owned review/synthesis; both boots-on-ground pieces went to Sonnet subagents against
+locked specs and every line was reviewed.
+
+**WS-POSITIONS-TTL-BURN — DONE (owner chose "skip decrement until first real read").** `tickWatchlist()`
+(`worker-positions/src/watchlist.js`) decremented `sessions_remaining` for every active watch row
+each trading day, so a ticker added Saturday burned 2 of its 10 "mornings" by Monday delivering
+zero info. Fix: step-3 decrement now scoped `WHERE status='active' AND ticker IN (SELECT ticker
+FROM ticker_quotes)` — the exact `has_history` boundary #366 established, so an `awaiting_first_read`
+row stays at full TTL until its first EOD bar lands. Added a `skipped_no_history` count to the tick
+return (observability + the natural input to WS-POSITIONS-MONITOR). 3-places docs (in-code,
+`worker-positions/CLAUDE.md`, `README.md`). **295 vitest green.** Lead reviewed the diff line-by-line:
+boundary matches `has_history`, no NULL-in-subquery hazard (`ticker` is a NOT-NULL PK component),
+`NOT IN (empty set)` correctly skips-all when `ticker_quotes` is empty. The subagent also correctly
+fixed `test/index.test.js`'s `/watchlist/tick` route test (it had asserted `decremented:1` on a
+bar-less ticker — the very bug). No release triplet (worker/engine-only). Commit `61128a0`.
+
+**WS-POSITIONS-SEED — GROUNDWORK ONLY, verdict GO (no seed code; build still gated on owner sign-off).**
+Reversed the "held" status only far enough to close the prerequisites. FMP key was live in-session,
+so verified against the REAL API, not docs. Findings integrated into
+`planning/watchlist-status-honesty-and-seeding.md` § "WS-POSITIONS-SEED — groundwork findings":
+- Endpoint is `GET /stable/historical-price-eod/full` (returns genuine completed prior sessions;
+  confirmed distinct from `/stable/quote`, the running-quote endpoint the original review rejected).
+  **Split-adjusted** (verified against AAPL's real 2020-08 4:1 split), not dividend-adjusted — moot
+  over the 1-session lookback a seed needs, so OHLC taken as-is.
+- Seed scope: OHLC + volume + change_pct + prev_close only; `atr` null, `raw` at `'{}'` default
+  (verified null-tolerant end-to-end via `normalizeBar()`/`advance.js`).
+- `0006_ticker_quotes_source.sql` (`ADD COLUMN source TEXT NOT NULL DEFAULT 'finviz'`) — additive/
+  non-breaking against `ingestQuotes()`'s explicit `INGEST_COLS` + `sweep.js`'s `SELECT *`. **Key
+  finding: `source` is belt-and-suspenders, NOT a correctness requirement** — a `sweep.js` trace
+  showed a past-dated seed is always outside the strictly-`>` bar window, so it can never leak into
+  a real position's advance. The sma50 level-vs-%-distance trap is sidestepped by the OHLC-only scope.
+- No new job — the existing 15:30 ET `preclose_status` pass already reruns the full status engine.
+- **Two residual unverified items** (don't block starting, close before merging the writer):
+  Finviz's own OHLC adjustment convention (`collect_held.py`) and `refsFromRow()`'s exact read query.
+- Ordered 5-step build plan in the planning doc. SPRINT `WS-POSITIONS-SEED` row moved to GO.
+
+**Next steps:** merge PR #367 → `deploy-workers.yml` auto-deploys `finviz-positions` (backward-compatible
+TTL fix). Then the remaining backlog: **WS-POSITIONS-MONITOR** (healthchecks dead-man's-switch, now
+meaningful and with `skipped_no_history` as an input) and **WS-POSITIONS-SEED** (owner decides whether
+to green-light the build from the groundwork). The #366 `test_pwa_watchlist.py` Playwright verification
+loose end is still open (sandbox Chromium harness gap; needs a CI/local run).
+
+---
+
+## 2026-08-25 — WS-POSITIONS-STATUS: honest watchlist "first read" state (branch `claude/missing-additions-status-ghxbn2`)
+
+**Status: safe to close.** All changes committed and pushed on the designated branch; tests green;
+release triplet included.
+
+**Trigger:** owner reported the Morning tab's watchlist cards for 5 tickers (added Sat 2026-08-22)
+still showed "Adding — first morning check lands tomorrow AM" unchanged on Monday evening, and
+pushed back hard on an initial hand-wavy "expected lag, not broken" answer (rightly — that answer
+conflated the TTL tick counter decrementing with the pipeline actually working, which was wrong).
+
+**Root-caused live**, not inferred: queried D1 (`finviz-positions`) and the committed
+`morning_latest.csv` directly. Confirmed the 5 tickers DID get a real bar (17:30 ET held feed) and
+DID get a real `morning_latest.csv` row that morning (10:06 ET) — but tagged `no_quote`, copy
+"Morning feed missed this ticker," which is false: the 10:05 ET classification run simply executed
+before that ticker's first bar could exist (added 2 calendar days earlier, first trading-day tick
+was that Monday). Distinct from, but adjacent to, the actual 2026-08-20 `WS5-8b-OPS` incident
+(already fixed) where the union silently never ran at all.
+
+**Staff-level review requested and incorporated** (Opus subagent, asked to pressure-test the fix
+plan before building): found the original 3-workstream draft's "seed a bar via FMP on watchlist
+add" design (then called WS-A — bad placeholder naming, since renamed) doesn't work as scoped —
+FMP's `/stable/quote` returns the *current session's own running quote*, not a prior completed
+bar, so seeding it as `prior_high` could manufacture a false `triggered` read; also flagged a real
+correctness risk (a seeded row could permanently pollute `ticker_quotes`, which `advance()` also
+reads for real positions, with no `source` column to quarantine it) and that the monitoring
+follow-up should lead with a positive-assertion healthchecks.io ping, not a warn-and-exit step
+(same silent-failure shape as the original incident). Full review + this session's own findings:
+`planning/watchlist-status-honesty-and-seeding.md`.
+
+**What landed (this PR — WS-POSITIONS-STATUS only; SEED and MONITOR held/backlog per the review):**
+- `worker-positions/src/watchlist.js`: `/watchlist-tickers` (`watchlistTickerRefs`) gains
+  `has_history:boolean` (`q_trade_date != null` — the same check `refsFromRow` already makes).
+- `scripts/pick_status.py`: new `STATUS_AWAITING_FIRST_READ` + optional `has_history` param on
+  `compute_pick_status()` — returns it instead of `STATUS_NO_QUOTE` when `has_history is False`.
+  Default `None` (every picks caller) is byte-identical to prior behavior, same pattern as
+  `ref`/`STATUS_RECLAIM`.
+- `scripts/collect_morning.py`: `build_watch_levels()` threads `has_history` through;
+  `build_status_rows()`'s `compute_pick_status` call passes it.
+- `docs/index.html`: `watchCardHtml()` split from 2 states to 3 — `noBarYet` (unchanged),
+  new `awaitingFirstRead` (bar exists, no real classification yet → "Reference bar captured —
+  first live read after the next scheduled check" + the actual prior-high/prior-low levels), then
+  real status. `MORNING_STATUS_META.awaiting_first_read` added for completeness (never hit by
+  picks, same precedent as `reclaim`). Release `2026.08.25.1`, sw.js v81→v82.
+- Tests: 4 new `test_pick_status.py` cases, 3 new `test_collect_morning.py` cases (incl. an
+  end-to-end `build_status_rows` case), 2 new `worker-positions/test/watchlist.test.js` cases, 1
+  new `tests/test_pwa_watchlist.py` Playwright case. 719 non-Playwright pytest pass; 292 vitest
+  pass. **Playwright case not verified green in this cloud session** — the whole PWA app failed to
+  boot past the loading skeleton for every watchlist test in this sandbox, including the
+  pre-existing, unmodified baseline tests in the same file (`test_signed_out_...`,
+  `test_signed_in_watch_card_shows_ticker_pill...`), with and without the matching pinned Chromium
+  revision (1117) — confirmed a pre-existing sandbox-only harness gap, not a regression from this
+  change. Verified the JS change itself via `node --check` on the extracted inline script (valid
+  syntax) and by structural mirroring of the existing `noBarYet` branch. **Needs a real
+  CI/local-dev run to confirm `test_pwa_watchlist.py` is actually green** — flag if it isn't.
+- Tracking: `planning/watchlist-status-honesty-and-seeding.md` (design + review), `.session/SPRINT.md`
+  rows `WS-POSITIONS-STATUS` (done, this PR), `WS-POSITIONS-SEED` (backlog, held per review),
+  `WS-POSITIONS-MONITOR` (backlog, supersedes/refines `WS5-8b-MONITOR`'s scope),
+  `WS-POSITIONS-TTL-BURN` (backlog, new gap found this session: `sessions_remaining` decrements even
+  on a day with zero real read — not fixed, just flagged).
+
+**Naming note:** the original draft used placeholder `WS-A/B/C` labels — pure shorthand, not tied to
+any tracking scheme. Owner correctly called this out as bad naming given the repo already has a live
+`WS5-8b-*` convention for this exact area. Renamed to `WS-POSITIONS-*` per owner request; existing
+`WS5-8b-*` SPRINT rows were NOT renamed (other docs/session-notes cite those IDs by name already) —
+the new rows cross-reference them instead.
+
+**Next steps:** confirm `test_pwa_watchlist.py` passes in CI/local dev (it's on the CI Playwright
+ignore list, so this PR's `test` job won't reveal a break either way — a human or a
+Chromium-matched session needs to actually run it). Then pick up `WS-POSITIONS-MONITOR` (healthchecks
+dead-man's-switch) — it's now meaningful since `no_quote` means what it says again. `WS-POSITIONS-SEED`
+stays parked until an FMP EOD-history endpoint + `ticker_quotes.source` column are worked out.
+
+---
+
+## 2026-08-28 — Fix: Morning ticket "ATR from LoD" had no way to correct a wrong scraped Low
+
+**Status: safe to close — fixed, tested, PR to open.**
+
+**Report.** Owner flagged a RPRX Reclaim card's "ATR from LoD" reading (0.1, "ok to act") as
+implausible next to the actual chart. First pass (wrong): assumed the session low had simply
+kept falling *after* the 10:05 ET morning scrape (a staleness story). Owner corrected this —
+their broker's chart showed the day's actual low (61.01) printed in the very first 5-minute bar
+(9:30–9:35 ET), well *before* the 10:07:32 ET scrape. Pulled the real stored row
+(`data/picks/sessions/morning.csv`, 2026-08-27) to check: `open=61.44, high=61.67, low=61.42,
+price=61.60`. So Finviz itself told our scraper `Low=61.42` at 10:07 ET — 37 minutes after a
+day-low print of 61.01 had already happened. Confirmed this is **not** a parsing/column bug on
+our side (checked `screener_config.json`'s `morning` block id 88 → "Low" against
+`tests/test_collect_morning.py`'s fixture header — matches; `compute_atr_from_lod`'s math on the
+stored value is correct: `(61.60−61.42)/1.35=0.133→"0.1"`). Root cause is either a genuine
+Finviz delayed-quote lag/quirk specific to this narrow `t=`-filtered screener block, or something
+about our request timing — couldn't pin down which from this cloud sandbox (Cloudflare blocks
+live Finviz access here, per root `CLAUDE.md`).
+
+**Shipped (per owner's direction — go straight to the fix + a tracked watch-item, not further
+live-data investigation this session):**
+- `docs/index.html`: added a second "Low so far" input (`ws4-low-${ticker}`) in the trade
+  ticket, next to the existing "Price now" input — mirrors that field's override pattern exactly
+  (`ts.lowOverride`, `ws4LowForCalc()` alongside `ws4PriceForCalc()`), wired into both
+  `ws4Recompute` (live patch) and `ws4TicketHtml` (initial render). Previously "Price now" was
+  the *only* editable input despite the ticket's own copy claiming "both gates ... recompute off
+  your number" — the ATR-from-LoD gate's `low` input had no correction path at all, so a wrong or
+  stale scraped low stayed wrong for the rest of the session with no fix available. Deliberately
+  left the "Today low" stop-basis option (in the 4-way stop menu) on the raw scraped value —
+  different concept (a structural stop level, not a live chase-risk read); scope stayed to the
+  gate the owner actually reported on.
+- `tests/test_pwa_trade_ticket.py`: new `test_low_edit_recomputes_atr_from_lod_label`, mirrors
+  the existing price-edit test (AXON fixture: price=613.90, atr=14.20; typing low=590 pushes
+  `(613.90−590)/14.20=1.68` past the 1.0 chase-risk threshold). Verified locally via the
+  documented revision-symlink harness (`knowledge/investigations/playwright-cloud-session-testing.md`)
+  — full 8-test file green (was 7).
+- `.session/SPRINT.md`: `WS4-LOW` (done) under the WS4 section, plus a new **`DATA-FINVIZ-LOW`**
+  backlog watch-item under Data Pipeline — the open question (Finviz data lag vs. our request
+  timing) is *not* resolved by this fix, just made correctable in the UI. Next-session pickup
+  path documented there: cross-check a few more `reclaim`/`triggered` mornings' `low` column
+  against an independent source to see if this is a one-off or a systematic pattern.
+- No release triplet (`releases.json`/`sw.js` bump) — internal tool-correctness fix to an
+  existing ADR-014 ticket input, not a new user-facing feature per se; the owner can ask for one
+  in a follow-up if they want it announced in What's New.
+
+**Next steps:** none blocking. `DATA-FINVIZ-LOW` is a watch item, not an open task with a
+deadline — pick it up opportunistically next time a `reclaim`/`triggered` morning card looks off
+against a live chart, and log what's found (confirms Finviz-side lag vs. rules out our own code
+further).
+
+---
+
+## 2026-08-30 — PR #374 review follow-up: low override → Today-low stop + localStorage persistence
+
+**Status: safe to close — implemented, tested (12/12 trade-ticket + 731 non-PW suite green), PR to open.**
+
+Reviewed PR #374 (adds a "Low so far" override to the Morning trade ticket's ATR-from-LoD
+gate). Author OOTO; owner asked me to make two recommended changes directly on top of the PR
+branch. Built on `origin/claude/atr-lod-calculation-bug-9vqnwo` (the PR head) so the low-override
+code is present, branch `claude/pr374-review-emuagm`.
+
+**Change 1 — corrected low now flows to the `today_low` stop, not just the gate.** The PR wired
+`lowOverride` only into the ATR-from-LoD gate; `ws4StopLevels`'s `today_low` option still read raw
+`r.low`. That's the same fact ("today's low = X") feeding two consumers with different values —
+and worse, `ws5BuildPayload` (the real `POST /positions` payload) used the raw low, so a corrected
+low + "Today low" stop would have created a position with a stop the user had explicitly flagged
+as wrong. Fix: `ws4StopLevels(r, dm, ts)` reads `today_low` through `ws4LowForCalc`; `ts` optional
+(falls back to raw low). Updated all three call sites (`ws4Recompute`, `ws4TicketHtml`,
+`ws5BuildPayload`).
+
+**Change 2 — low override persists across reload.** Was in-memory (`state.morningTicket`), lost on
+refresh. Added `ws4LoadLowOverride`/`ws4SaveLowOverride`/`ws4HydrateLow`, keyed
+`ws4_low_override:<ticker>` storing `{date, value}` and gated on a date match at read time, so a
+new trading day's fresh scrape is never shadowed by a stale correction (no key enumeration/cleanup
+needed). Saved on every `oninput` (mirrors `ws4SaveRiskDefault`), hydrated once per session via a
+`ts.lowHydrated` guard. `priceOverride` deliberately stays session-only — "price now" is a live
+value the user re-checks, not a lasting factual fix.
+
+**Deliberately NOT done:** ATR editable (owner decision — 14-day average, doesn't move intraday);
+DATA-FINVIZ-LOW upstream investigation (owner not pursuing). No release triplet — internal
+correctness fix to an existing tool input, same category as PR #374 itself.
+
+**Tests:** 2 new Playwright tests in `tests/test_pwa_trade_ticket.py`
+(`test_low_override_flows_to_today_low_stop_and_sizing`,
+`test_low_override_persists_across_reload`). Added a `clear_storage=False` param to
+`_open_morning_tab` so the persistence test survives a reload (the harness's init script clears
+localStorage on every load otherwise). Verified in-sandbox via the pre-installed chromium-1234
+(matched this session's playwright build — no symlink trick needed this time). Full 12/12
+trade-ticket file green; 731 non-Playwright suite green.
+
+**Next steps:** none blocking. If the owner wants the Today-low-stop correctness fix called out in
+What's New, add a `releases.json`/`sw.js` triplet in a follow-up.
+
+---
 
 ## 2026-08-23 — Positions chart access + Morning gauge label collision fix
 
