@@ -123,9 +123,47 @@ A metric can also be a **filter/sort** and stand alone as a chip.
   - **Quiet pullback:** down day on **below-average / lower volume** = generally benign (a down
     day is OK if volume is light). Need exact def (down day AND volume < avg? < prior day?
     magnitude threshold).
-  - **Expansion / breakout confirmation:** **increased volume** on range expansion / breaking
-    **above prior-day highs** (or N-day high). This is the resolution side — "the money event."
-    Need exact def (close vs high; RelVol threshold; range-expansion threshold; gap handling).
+  - **Expansion / breakout confirmation:** see §5.5a — worked out in detail.
+
+### 5.5a Expansion trigger — worked out (2026-08-30)
+**Major realization: the price-breakout detector already exists.** `scripts/pick_status.py`
+`compute_pick_status(trigger=prior_high, stop=prior_low, price, open_, high, low)` is a pure,
+tested engine already emitting `triggered` (price ≥ prior high, genuine intraday break),
+`gapped_through` (open > prior high = chase risk), `failed_breakout` (poked high ≥ trigger, closed
+back below), `reclaim`, `invalidated`, `setting_up`. It has **NO volume and NO range dimension** —
+a breakout on no volume and one on 3× volume are identical to it. That gap IS the expansion signal.
+
+**Expansion = existing breakout state + two confirmation dimensions layered on:**
+1. **Break (price)** — reuse the engine. OPEN owner call: break of **prior-day high** (cheap,
+   already wired, noisy) vs **N-day high** (e.g. 20d, stronger, needs enough history per name,
+   §3 degradation applies). Surface both; owner picks which is *the* breakout.
+2. **Volume confirmation** — EOD we have **`Rel Volume` (col 64) directly**, no computation.
+   Expansion-on-volume = breakout day with RelVol > threshold (1.5? 2.0? owner's call).
+3. **Range expansion** — reuse **`range_atr` = (H−L)/ATR**; wide-range bar (>~1.5) = expansion.
+   Threshold owner's call.
+- **Gap = sub-flag, not disqualifier:** engine already separates `gapped_through`; a gap-up
+  breakout on heavy volume is legit but higher chase-risk → "Expansion↑ (gapped)" vs "(intraday
+  break)".
+
+**Intraday vs EOD — the real fork (data consequence):**
+- **Canonical = EOD derived signal.** On the wide picks/held scrape RelVol + range_atr +
+  prior/N-day high are all clean. Compute as a derived column in the picks pipeline. Recommended.
+- **Morning/intraday = provisional only.** The morning block scrapes **Volume but NOT Avg/Rel
+  Volume** (9-col config) — so an intraday volume read means cross-ref'ing prior-day Avg Volume
+  from `picks_latest`, AND intraday volume at 10:05 is *partial-day* so it understates vs a
+  full-day avg. **⚠️ UNVERIFIED, must check before relying on it:** whether Finviz "Rel Volume" is
+  time-of-day normalized. If yes, intraday RelVol is meaningful; if no, morning volume is noise.
+  Do NOT build the morning volume signal on this assumption — verify against live intraday data
+  first. Morning card can show the *price* break (existing engine) provisionally regardless.
+
+**Composition — the highest-value output:** a wide-range/high-volume day IN ISOLATION is just a
+move; the same day RESOLVING A COIL is the signal. Strongest "Expansion↑" = one preceded by a
+Coil/Squeeze/NR7 flag in the prior few sessions. This "was it compressed in the last N days, then
+just fired?" join falls out for free once both halves exist — arguably the single highest-value
+deliverable of the whole feature.
+
+**Expansion is an EVENT, not a persistent state** — fires on the breakout day; may carry a
+"recently fired (≤N sessions)" decay for surfacing.
 
 ### 5.6 Squeeze (TTM) — needs computed inputs
 - TTM Squeeze fires when Bollinger Bands (SMA20 ± 2σ of price) contract **inside** Keltner
