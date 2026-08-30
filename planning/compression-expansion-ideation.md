@@ -56,18 +56,32 @@ and is explicitly rejected.)
 
 ## 4. Surfacing philosophy (owner-endorsed)
 
-**Each signal is a first-class metric that can stand alone AND may optionally feed a score —
-never ONLY the score.** A blended black-box number is least trustworthy exactly when you most
-want to trust it (right before a breakout). Layering:
+### 4.0 GOVERNING PRINCIPLE (owner, 2026-08-30) — facts→flags, judgments→shown values
+**Do NOT invent thresholds. Do NOT gate continuous quantities into binary flags. Show the trader
+the facts and the raw values; let the trader assess.** A cutoff (RelVol > 1.5, range_atr > 1.5)
+throws away information and pre-decides for the trader — the owner explicitly does not want this.
+Rule:
+- **Factual / genuinely binary** (NR7 = literally the narrowest range of the last 7; higher low;
+  price above both MAs; MAs bunched; broke prior-day high) → MAY be a flag, because it states a
+  fact, not an opinion. No invented number.
+- **Continuous / judgment** (Vol W vs M, RelVol, projected RVol, range_atr, ATR trend) → **SHOW the
+  value or the sparkline. Never a cutoff.** The trader reads it and decides.
 
-- **Layer 1 — raw metrics, each individually visible.**
-- **Layer 2 — chips/flags** (cheap wins; extend the existing "Coiled" chip family): e.g. Coil,
-  Squeeze, NR7, Quiet pullback, Rule-of-Three, Expansion↑.
-- **Layer 3 — optional composite "Compression score"** shown NEXT TO its components, tappable to
-  decompose — never instead of them. May or may not fold into the existing Focus score (open).
+This dissolves the threshold problem and sets the asymmetry: **compression is the spine** (facts +
+shown values, robust/repeatable/proven); **expansion is a lightweight, honest secondary** — surface
+the raw break + shown volume/range, do NOT overpromise a "trigger," revisit later (§5.5a).
 
-Surfacing targets beyond the score: Picks cards, Lookup cards, Morning cards, Trade tickets.
-A metric can also be a **filter/sort** and stand alone as a chip.
+### 4.1 Layering
+- **Layer 1 — raw metrics, each individually visible** (the primary surface; per §4.0 most
+  continuous metrics stay HERE, shown, not thresholded).
+- **Layer 2 — flags** ONLY for the factual/binary items in §4.0. Extends the existing "Coiled" chip
+  family. NOT a home for thresholded judgment metrics.
+- **Layer 3 — optional composite score** — LOW priority / maybe never. Only ever shown NEXT TO its
+  decomposable components, never instead of them, never as a black box. Owner is wary of blended
+  scores; do not lead with this.
+
+Surfacing targets: Picks cards, Lookup cards, Morning cards, Trade tickets — as **shown values**,
+plus **filter/sort**, plus flags only where §4.0 permits.
 
 ## 5. Signal set (current thinking + owner corrections)
 
@@ -125,25 +139,30 @@ A metric can also be a **filter/sort** and stand alone as a chip.
     magnitude threshold).
   - **Expansion / breakout confirmation:** see §5.5a — worked out in detail.
 
-### 5.5a Expansion trigger — worked out (2026-08-30)
-**Major realization: the price-breakout detector already exists.** `scripts/pick_status.py`
-`compute_pick_status(trigger=prior_high, stop=prior_low, price, open_, high, low)` is a pure,
-tested engine already emitting `triggered` (price ≥ prior high, genuine intraday break),
-`gapped_through` (open > prior high = chase risk), `failed_breakout` (poked high ≥ trigger, closed
-back below), `reclaim`, `invalidated`, `setting_up`. It has **NO volume and NO range dimension** —
-a breakout on no volume and one on 3× volume are identical to it. That gap IS the expansion signal.
+### 5.5a Expansion — SECONDARY, lower-confidence (owner, 2026-08-30)
+**Owner posture: compression is the robust/proven half; expansion is more subjective and NOT
+nailed down — and that's fine. Proceed cautiously, don't overpromise, revisit.** Do NOT force a
+"trigger" or invent thresholds here (§4.0). Surface facts + shown values only.
 
-**Expansion = existing breakout state + two confirmation dimensions layered on:**
-1. **Break (price)** — reuse the engine. OPEN owner call: break of **prior-day high** (cheap,
-   already wired, noisy) vs **N-day high** (e.g. 20d, stronger, needs enough history per name,
-   §3 degradation applies). Surface both; owner picks which is *the* breakout.
-2. **Volume confirmation** — EOD we have **`Rel Volume` (col 64) directly**, no computation.
-   Expansion-on-volume = breakout day with RelVol > threshold (1.5? 2.0? owner's call).
-3. **Range expansion** — reuse **`range_atr` = (H−L)/ATR**; wide-range bar (>~1.5) = expansion.
-   Threshold owner's call.
-- **Gap = sub-flag, not disqualifier:** engine already separates `gapped_through`; a gap-up
-  breakout on heavy volume is legit but higher chase-risk → "Expansion↑ (gapped)" vs "(intraday
-  break)".
+**The one solid, factual piece already exists.** `scripts/pick_status.py`
+`compute_pick_status(trigger=prior_high, stop=prior_low, price, open_, high, low)` is a pure,
+tested engine already emitting `triggered` (price ≥ prior high), `gapped_through` (open > prior
+high = chase risk), `failed_breakout`, `reclaim`, `invalidated`, `setting_up`. **Broke prior-day
+high = a fact** → usable as a flag per §4.0. It has NO volume/range dimension.
+
+**What to SHOW alongside the break (values, NOT thresholded flags):**
+- **Volume / projected volume / projected RVol** — owner's idea: extrapolate full-day volume from
+  volume-so-far + time-elapsed/time-left, show projected volume AND projected RVol as *values*.
+  A shown projection, not a cutoff. (See §5.5b.)
+- **range_atr** — SHOWN as a value if useful, NOT as an "expansion buy signal." Owner: a wide-range
+  day is not something to act on (wouldn't enter >0.8 ATR off the LoD), so range_atr as a
+  breakout-confirm was over-claimed and is dropped as a *signal*; it may still be a shown context
+  value. (This corrects the earlier draft.)
+- **gap context** — engine already separates `gapped_through`; show it as context (gap-up = higher
+  chase-risk), not a disqualifier.
+
+**OPEN, deliberately unresolved (owner uncomfortable forcing this):** what "the breakout" even is
+(prior-day high vs N-day high vs pivot). Not simple; do not promise. Park it, revisit with data.
 
 **Intraday vs EOD — the real fork (data consequence):**
 - **Canonical = EOD derived signal.** On the wide picks/held scrape RelVol + range_atr +
@@ -156,20 +175,28 @@ a breakout on no volume and one on 3× volume are identical to it. That gap IS t
   Do NOT build the morning volume signal on this assumption — verify against live intraday data
   first. Morning card can show the *price* break (existing engine) provisionally regardless.
 
-**Composition — the highest-value output:** a wide-range/high-volume day IN ISOLATION is just a
-move; the same day RESOLVING A COIL is the signal. Strongest "Expansion↑" = one preceded by a
-Coil/Squeeze/NR7 flag in the prior few sessions. This "was it compressed in the last N days, then
-just fired?" join falls out for free once both halves exist — arguably the single highest-value
-deliverable of the whole feature.
+**Composition** — a move IN ISOLATION is just a move; a break preceded by a coil (NR7 in the prior
+few sessions) is more meaningful. Show "was compressed in the last N days, then broke" as context.
+Do not oversell it as a single composite trigger (§4.0).
 
-**Expansion is an EVENT, not a persistent state** — fires on the breakout day; may carry a
-"recently fired (≤N sessions)" decay for surfacing.
+### 5.5b Projected volume / projected RVol (owner idea, 2026-08-30)
+Intraday, extrapolate the full-day volume from volume-so-far, time-elapsed and time-left, and show
+**projected volume AND projected RVol as VALUES** on the morning card. A shown projection, not a
+threshold. Not claimed perfect — a display aid for the trader to assess. Fits §4.0 exactly.
+- Data note: the 10:05 morning store carries raw `Volume` but **not** Finviz `Rel Volume`, so prior
+  morning snapshots can't by themselves settle whether Finviz RVol is time-of-day normalized — check
+  on a live trading day (Sunday when raised). Projected RVol would use prior-day Avg Volume from
+  `picks_latest` as the denominator regardless.
 
-### 5.6 Squeeze (TTM) — needs computed inputs
+### 5.6 Squeeze (TTM) — DROPPED (owner, 2026-08-30)
+Owner asked to explain TTM/NR7 as concepts; Claude then over-promoted squeeze into the signal set
+and kept carrying it = scope creep off the original plot. **Dropped.** NR7 (range_atr) already
+captures "coiling" cheaply from columns we have; squeeze added a σ-computation dependency and a
+20-session-history requirement for marginal gain. Not in scope. (Original detail, for reference
+only, do not treat as planned work:)
 - TTM Squeeze fires when Bollinger Bands (SMA20 ± 2σ of price) contract **inside** Keltner
   Channels (SMA20 ± 1.5·ATR). We scrape SMA20 + ATR but **not** BB width / price σ — must compute
-  σ from a price-close series. Needs ~20 consecutive closes → per-name data-sufficiency applies
-  (§3 graceful degradation, not a population gate). Most "brand-name" compression flag; maps to a
+  σ from a price-close series. Needs ~20 consecutive closes. Maps to a
   "Squeeze on / fired" chip.
 
 ### 5.7 NR7 / NRn
@@ -255,10 +282,9 @@ justify its own small, time-sensitive list — phase 2.
 2. **Quiet-pullback** exact definition (§5.5).
 3. **Volume dry-up** metric definition for the VCP proxy (RelVol trend window/threshold).
 4. **NR7 range definition** (§5.7).
-5. **Squeeze** BB/σ computation + per-name data-sufficiency handling (§5.6/§3).
-6. **52W-high proximity** as apex context — threshold.
-7. **Scoring integration** — does the composite fold into Focus score or stay separate; weights;
-   keep decomposable.
+5. ~~Squeeze~~ — DROPPED (§5.6).
+6. **52W-high proximity** as apex context — SHOWN as distance-from-52W-high value, not a threshold.
+7. **Scoring integration** — LOW priority / maybe never; owner wary of blended scores (§4.1 L3).
 8. **Config constants** — every threshold triple-documented per repo rule (in-code + README +
    CLAUDE.md).
 9. **Graceful degradation** mechanics per-metric/per-name (§3) — the concrete "enough sessions?"
@@ -283,3 +309,22 @@ justify its own small, time-sensitive list — phase 2.
 - Wants full 84 cols on morning cards — scrape them or guarantee prior-day availability; verify
   before championing cross-ref.
 - Verify assumptions and double-confirm before championing to the owner.
+
+### 2026-08-30 (course-correction — owner frustrated/overwhelmed; recentered)
+- **DO NOT invent thresholds / cutoffs.** Asking the owner to assign RelVol 1.5/2.0 or range_atr
+  1.5 was the core frustration — those aren't knowable facts, and a binary cutoff is itself wrong
+  (throws away info, pre-decides for the trader). SHOW the value, let the trader assess. → §4.0.
+- **Facts→flags, judgments→shown values** is now the governing principle.
+- **range_atr is NOT an expansion buy-signal** — owner wouldn't enter >0.8 ATR off the LoD, so a
+  wide-range day isn't actionable; over-claimed. Demoted to a possible shown-context value only.
+- **Squeeze DROPPED** — Claude introduced it (owner only asked to *explain* it) and kept carrying
+  it = scope creep off the original plot. Out of scope. → §5.6.
+- **Compression is the spine** (robust, repeatable, proven, facts-only). **Expansion is secondary
+  and subjective — proceed cautiously, don't overpromise, revisit.** Owner explicitly less
+  confident in expansion; the "what is the breakout" question is genuinely hard and is PARKED, not
+  forced. → §5.5a.
+- **Projected volume / projected RVol** (extrapolate full-day from time-of-day) is a wanted SHOWN
+  value, not a threshold. → §5.5b.
+- Owner asked Claude to summarize their thoughts/feelings to confirm understanding before
+  proceeding — signal that the riff had drifted from first principles and added mental load.
+- Owner may close the session anytime → keep everything committed at every step.
