@@ -520,7 +520,12 @@
       // point-in-time scrape (the morning snapshot) that can be stale or, per a live 2026-08-28
       // owner report, simply wrong (Finviz's own screener under-reported a ticker's day low vs.
       // its broker's chart) — with no override, the ATR-from-LoD "don't-chase" gate had no way
-      // to reflect the real low, unlike price which already had this same edit affordance.
+      // to reflect the real low, unlike price which already had this same edit affordance. The
+      // corrected low also feeds the `today_low` STOP level (ws4StopLevels), sizing, and the
+      // real POST /positions stop — it's the same fact, so every consumer sees it. lowOverride
+      // persists across reloads per (ticker, date) via ws4LoadLowOverride/ws4SaveLowOverride
+      // (`lowHydrated` is a transient one-time-hydration guard, not persisted); priceOverride
+      // stays session-only (a "price now" value the user re-checks live, not a lasting fix).
       morningTicket: {},
       // WS5 phase 1 (#309) — per-ticker ephemeral UI state for the "I took it" -> real
       // POST /positions write flow. Survives renderMorning() re-renders the same way
@@ -5406,6 +5411,37 @@
       try { if (!isNaN(v) && v > 0) localStorage.setItem(WS4_RISK_KEY, String(v)); } catch (e) {}
     }
 
+    // Per-(ticker, trading-date) low override, persisted so a correction survives a page
+    // reload within the same session (the wrong scraped low is true all day, unlike "price
+    // now" which the user re-checks live — hence low persists but price stays session-only).
+    // Keyed WITH the row's date and gated on a date match at read time so tomorrow's fresh
+    // scrape is never shadowed by a stale correction — no key enumeration/cleanup needed.
+    const WS4_LOW_KEY = 'ws4_low_override';
+    function ws4LoadLowOverride(ticker, date) {
+      try {
+        const raw = localStorage.getItem(WS4_LOW_KEY + ':' + ticker);
+        if (!raw) return '';
+        const o = JSON.parse(raw);
+        return (o && o.date === date && o.value != null) ? String(o.value) : '';
+      } catch (e) { return ''; }
+    }
+    function ws4SaveLowOverride(ticker, date, value) {
+      try {
+        const key = WS4_LOW_KEY + ':' + ticker;
+        if (value === '' || value == null) { localStorage.removeItem(key); return; }
+        localStorage.setItem(key, JSON.stringify({ date, value: String(value) }));
+      } catch (e) {}
+    }
+    // Idempotent one-time hydration of ts.lowOverride from localStorage. `ts.lowHydrated`
+    // guards against re-reading storage after the user has cleared the field this session
+    // (cleared => '' saved => removeItem => a re-read would wrongly return '' anyway, but the
+    // flag also avoids repeated storage hits on every recompute/render).
+    function ws4HydrateLow(r, ts) {
+      if (ts.lowHydrated) return;
+      ts.lowHydrated = true;
+      if (!ts.lowOverride) ts.lowOverride = ws4LoadLowOverride(r.ticker, r.date);
+    }
+
     // Lazily creates and returns the per-ticker UI state, so it survives renderMorning()
     // re-renders (module-level state.morningTicket, not rebuilt each render).
     function ws4GetTicket(ticker) {
@@ -5504,10 +5540,16 @@
 
     // Four stop bases (ADR-014 §5). dm (deriveRiskMetrics(picksRow) result) supplies the
     // reconstructed 20MA/50MA dollar levels; null (no EOD match) leaves those two NaN.
-    function ws4StopLevels(r, dm) {
+    // `today_low` reads through ws4LowForCalc so a user-corrected low (see ws4LowForCalc /
+    // the 2026-08-28 owner report) flows to the STOP LEVEL too — not just the ATR-from-LoD
+    // gate. It's the same fact ("today's low = X"), so both consumers must see the same
+    // corrected value; otherwise sizing and the real POST /positions stop (ws5BuildPayload)
+    // would compute off a low the user has explicitly flagged as wrong. `ts` is optional so
+    // a caller without ticket state still gets the raw scraped low.
+    function ws4StopLevels(r, dm, ts) {
       return {
         prior_low: { label: 'Prior low', value: _pF(r.stop) },
-        today_low: { label: 'Today low', value: _pF(r.low) },
+        today_low: { label: 'Today low', value: ts ? ws4LowForCalc(r, ts) : _pF(r.low) },
         '20ma':    { label: '20MA',      value: dm ? dm.sma20Price : NaN },
         '50ma':    { label: '50MA',      value: dm ? dm.sma50Price : NaN },
       };
@@ -5542,8 +5584,9 @@
       if (priceEl) ts.priceOverride = priceEl.value;
       const priceForCalc = ws4PriceForCalc(r, ts);
 
+      ws4HydrateLow(r, ts);
       const lowEl = document.getElementById(`ws4-low-${ticker}`);
-      if (lowEl) ts.lowOverride = lowEl.value;
+      if (lowEl) { ts.lowOverride = lowEl.value; ws4SaveLowOverride(ticker, r.date, ts.lowOverride); }
       const lowForCalc = ws4LowForCalc(r, ts);
 
       // Gate 1: intraday ATR-from-LoD.
@@ -5569,7 +5612,7 @@
       }
 
       // Stop menu sizing.
-      const stops = ws4StopLevels(r, dm);
+      const stops = ws4StopLevels(r, dm, ts);
       const sel = stops[ts.stopBasis] || stops.prior_low;
       const riskShare = (!isNaN(priceForCalc) && !isNaN(sel.value)) ? priceForCalc - sel.value : NaN;
       const pctRisk = (!isNaN(riskShare) && priceForCalc > 0) ? (riskShare / priceForCalc * 100) : NaN;
@@ -5613,6 +5656,7 @@
       const priceForCalc = ws4PriceForCalc(r, ts);
       const focusScore = picksRow ? ws4FocusScore(picksRow) : null;
 
+      ws4HydrateLow(r, ts);
       const low = ws4LowForCalc(r, ts), atr = _pF(r.atr);
       const atrLod = (!isNaN(priceForCalc) && !isNaN(low) && !isNaN(atr) && atr > 0)
         ? (priceForCalc - low) / atr : NaN;
@@ -5626,7 +5670,7 @@
         atrExtLbl = ws4AtrExtLabel(atrExt);
       }
 
-      const stops = ws4StopLevels(r, dm);
+      const stops = ws4StopLevels(r, dm, ts);
       const basisOrder = ['prior_low', 'today_low', '20ma', '50ma'];
       const sel = stops[ts.stopBasis] || stops.prior_low;
       const riskShare = (!isNaN(priceForCalc) && !isNaN(sel.value)) ? priceForCalc - sel.value : NaN;
@@ -5905,7 +5949,8 @@
       const dm = picksRow ? deriveRiskMetrics(picksRow) : null;
 
       const entry_price = ws4PriceForCalc(r, ts);
-      const stops = ws4StopLevels(r, dm);
+      ws4HydrateLow(r, ts);
+      const stops = ws4StopLevels(r, dm, ts);
       const sel = stops[ts.stopBasis] || stops.prior_low;
       const initial_stop = sel.value;
       const riskShare = (!isNaN(entry_price) && !isNaN(initial_stop)) ? entry_price - initial_stop : NaN;

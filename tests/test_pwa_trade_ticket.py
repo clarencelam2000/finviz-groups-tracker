@@ -76,7 +76,7 @@ def _launch_server(port: int):
     )
 
 
-def _open_morning_tab(page, picks_body=None):
+def _open_morning_tab(page, picks_body=None, clear_storage=True):
     """Boot the PWA with stubbed CDNs + CSVs, intercept morning_latest.csv and
     picks_latest.csv, open the Morning tab. Route glob form per
     knowledge/investigations/playwright-cloud-session-testing.md ("**/filename.ext",
@@ -110,7 +110,10 @@ def _open_morning_tab(page, picks_body=None):
     page.route("**/finviz_sector_industry_map.json",
                lambda r: r.fulfill(body='{"sectors":{}}', content_type="application/json"))
 
-    page.add_init_script("try { localStorage.clear(); localStorage.setItem('fvt_intro_seen_v3','true'); } catch(e){}")
+    # clear_storage=False keeps persisted localStorage across a reload (needed to test the
+    # per-(ticker,date) low-override persistence); the intro-seen flag is still set either way.
+    _clear = "localStorage.clear(); " if clear_storage else ""
+    page.add_init_script("try { %slocalStorage.setItem('fvt_intro_seen_v3','true'); } catch(e){}" % _clear)
     page.goto(f"http://localhost:{PORT}/", wait_until="domcontentloaded")
     page.wait_for_timeout(1000)
     page.click("[data-tab='morning']")
@@ -228,6 +231,59 @@ def test_low_edit_recomputes_atr_from_lod_label(server):
         page.wait_for_timeout(200)
         label_after = page.inner_text("#ws4-atrlod-AXON")
         assert "chase risk" in label_after
+        browser.close()
+
+
+def test_low_override_flows_to_today_low_stop_and_sizing(server):
+    """A corrected low is the same fact for the ATR-from-LoD gate AND the 'Today low' stop
+    basis, so both must use it. Before this fix the stop menu read the raw scraped low even
+    after the user corrected it in the ticket, sizing the position off a low they'd flagged
+    as wrong. Typing low=590 then picking 'Today low' must size off 590, not the raw 613.00."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _open_morning_tab(page)
+        page.click("text=▾ Trade ticket >> nth=0")
+        page.wait_for_timeout(300)
+
+        # AXON: price=613.90, risk $ default=500. Correct the low, then select Today low.
+        page.fill("#ws4-low-AXON", "590")
+        page.wait_for_timeout(200)
+        page.click("button:has-text('Today low')")
+        page.wait_for_timeout(300)
+
+        # today_low now = corrected 590, not the raw 613.00. risk/share = 613.90-590 = 23.90;
+        # shares = floor(500/23.90) = 20 (the raw-low path would have shown 555 sh).
+        position = page.inner_text("#ws4-position-AXON")
+        assert "20 sh" in position
+        assert "555 sh" not in position
+        assert "23.90" in page.inner_text("#ws4-riskshare-AXON")
+        browser.close()
+
+
+def test_low_override_persists_across_reload(server):
+    """The corrected low is true all day, so it persists per (ticker, date) in localStorage
+    and survives a page reload — the user shouldn't have to re-type it every refresh."""
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _open_morning_tab(page, clear_storage=False)
+        page.click("text=▾ Trade ticket >> nth=0")
+        page.wait_for_timeout(300)
+        page.fill("#ws4-low-AXON", "590")
+        page.wait_for_timeout(300)  # oninput -> ws4SaveLowOverride
+
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_timeout(1000)
+        page.click("[data-tab='morning']")
+        page.wait_for_timeout(1000)
+        page.click("text=▾ Trade ticket >> nth=0")
+        page.wait_for_timeout(300)
+
+        assert page.input_value("#ws4-low-AXON") == "590"
+        assert "chase risk" in page.inner_text("#ws4-atrlod-AXON")
         browser.close()
 
 
