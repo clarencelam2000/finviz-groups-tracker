@@ -1,6 +1,18 @@
 {
-  "current": "2026.08.27.1",
+  "current": "2026.08.31",
   "releases": [
+    {
+      "version": "2026.08.31",
+      "date": "2026-08-31",
+      "title": "Volatility & setup on Picks cards",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "Expand any Picks card to see a new \"Volatility & setup\" section: weekly vs monthly volatility (Vol W / M), relative volume, and distance from the 52-week high.",
+        "These are raw facts shown as values — no hidden cut-offs or buy/sell calls. You read them and decide.",
+        "Vol W / M carries a small \"contracting\" or \"expanding\" note — simply which of the two is larger (this week calmer than the month = coiling)."
+      ]
+    },
     {
       "version": "2026.08.27.1",
       "date": "2026-08-27",

@@ -203,6 +203,50 @@ class TestPicksAtrRowAndEarnings:
 
             browser.close()
 
+    def test_volatility_setup_section_shows_raw_values(self):
+        """Expanded card's 'Volatility & setup' section shows Vol W/M, RelVol, From 52W high
+        as raw values, and the fact-derived 'contracting' read when Vol W < Vol M (Effort B,
+        issue #379, governing principle §4.0 — values shown, no invented thresholds)."""
+        from playwright.sync_api import sync_playwright
+
+        # ANET fixture: Vol W 4.29% (<) Vol M 4.61% -> contracting; RelVol 0.87; 52W High -7.98%
+        body = _single_row_csv({})
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            self._open_picks_tab(page, body)
+            self._expand_first_card(page)
+
+            panel_text = page.locator("[id^='risk-panel-']").first.inner_text()
+            assert "Volatility & setup" in panel_text, f"section header missing; got:\n{panel_text}"
+            assert "Vol W / M" in panel_text
+            assert "4.3% / 4.6%" in panel_text, f"expected raw Vol W/M values; got:\n{panel_text}"
+            assert "contracting" in panel_text, f"Vol W<M should read contracting; got:\n{panel_text}"
+            assert "0.87×" in panel_text, f"expected RelVol 0.87x; got:\n{panel_text}"
+            assert "From 52W high" in panel_text and "-8.0%" in panel_text, \
+                f"expected From-52W-high value; got:\n{panel_text}"
+
+            browser.close()
+
+    def test_volatility_setup_expanding_when_week_hotter(self):
+        """Vol W > Vol M reads 'expanding' (pure sign of W-M, no magnitude cutoff)."""
+        from playwright.sync_api import sync_playwright
+
+        body = _single_row_csv({"Volatility W": "6.20%", "Volatility M": "4.10%"})
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            self._open_picks_tab(page, body)
+            self._expand_first_card(page)
+
+            panel_text = page.locator("[id^='risk-panel-']").first.inner_text()
+            assert "6.2% / 4.1%" in panel_text, f"expected raw Vol W/M; got:\n{panel_text}"
+            assert "expanding" in panel_text, f"Vol W>M should read expanding; got:\n{panel_text}"
+
+            browser.close()
+
     def test_earnings_none_known_shows_dash(self):
         """Earnings == '-' (none known) renders as an em dash, no crash."""
         from playwright.sync_api import sync_playwright
