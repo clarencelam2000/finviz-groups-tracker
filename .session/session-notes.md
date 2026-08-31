@@ -6,6 +6,55 @@
 
 ---
 
+## 2026-08-31 — Effort B B-2: "Range tightening" (tightest-range flag + sparklines) on Picks cards
+
+**Status: safe to close — implemented, tested, PR to open.** Continues the compression/expansion
+workstream (planning doc + issues #378/#379); B-1 (PR #380) is merged. Owner picked B-2 next after
+I laid out the reasoning (compression spine, unblocked, single-card so no Effort-A dependency).
+Owner also made one call at a decision boundary: because `picks.csv` history is **gappy per-ticker**
+(a name only gets a row on days its group was selected), a true consecutive-session NR7 can't be
+guaranteed — owner chose **"honest-labeled over available bars"** (not strict NR7, not deferring).
+
+**What landed:**
+- **Pipeline (3 new `TRAILING_COLS`, additive superset migration).** `picks_config.py`:
+  `tight_range_7`, `range_atr_spark`, `atr_spark` + constants `TIGHT_RANGE_WINDOW`=7 /
+  `SPARK_WINDOW`=10 / `SPARK_MIN_BARS`=3 (triple-documented: in-code + README § Configurable
+  parameters + scripts/CLAUDE.md). `picks_metrics.compute_trailing_setup(latest_rows, history_rows)`
+  — pure, trailing-window over a ticker's **available** bars, **dedups same-date multi-bucket rows**
+  to one bar/date (a ticker can appear under several `list_category` buckets on one date, same
+  scrape). `tight_range_7` = 1 when today's raw H−L is the narrowest of the last 7 available bars
+  (a FACT, doc §4.0); the two `*_spark` are pipe-joined shown-value series. Wired into
+  `collect_picks.write_picks` (enrich latest slice **before** writing both files — latest_rows are
+  refs into all_rows) and `ensure_picks_csv` backfill. **Populated only on the max-date
+  picks_latest slice** the PWA reads; older picks.csv rows stay "" by design. Ran the migration on
+  real data: 60 tightest-range flags, 379/468 sparklines populated, blanks where history is thin.
+- **PWA (`docs/index.html`).** New `volSpark()` / `volSparkLast()` helpers + a "Range tightening"
+  block inside the B-1 "Volatility & setup" section of `renderPickRow`: honest green
+  "Tightest range · last 7 bars" flag when `tight_range_7==='1'` (never "NR7"), plus two mini SVG
+  sparklines (Range/ATR and ATR $) with the latest value labeled. `hasTightening` gate hides the
+  whole block for names with no series/flag (graceful degrade). No new PWA threshold constant.
+- **Release triplet:** `docs/releases.json` `2026.08.31.1` (feature, tab picks) + `current` bumped;
+  `docs/sw.js` v88→v89.
+
+**Tests (kept light per owner):** 4 unit tests for `compute_trailing_setup` in
+`tests/test_picks_metrics.py` (flag fires on narrowest / zero when a prior bar is tighter /
+graceful-degrade under-window / same-date dedup) + 1 PWA test in
+`tests/test_pwa_picks_atr_earnings.py` (already in CI `--ignore`) asserting the flag + 2 sparkline
+polylines + no "NR7" claim. Added the 3 trailing cols to `tests/fixtures/picks_latest.csv` (ANET
+populated). Verified: `test_picks_metrics.py` 43/43; `test_pwa_picks_atr_earnings.py` 9/9 via the
+revision-symlink harness (`ln -sfn chromium-1194 chromium-1117`); full non-Playwright suite 734
+passed. The 73 red PWA tests in a bare run are the known cloud-sandbox Chromium-1117 gap, not this
+change.
+
+**Next steps / decision for next session:** B-3 (volume dry-up — RelVol trend over a window, still
+Picks-card-only, no A dependency) is the natural next compression slice. The bigger open lever is
+**A-1** (the morning-card data-path decision: scrape-wide-84 vs cross-ref `picks_latest` ~85% + D1
+orphan backfill ~15%) — it's the gate that unblocks propagating both B-1 and B-2 to the
+Morning/Lookup/Ticket family (B-6, A-2/A-3). A-1 needs verification (scrape-time / Cloudflare
+exposure / exact coverage) before a recommendation — worth surfacing to the owner as the next fork.
+
+---
+
 ## 2026-08-31 — Effort B first slice: "Volatility & setup" section on Picks cards
 
 **Status: safe to close — implemented, tested (8/8 Playwright file + 731 non-PW suite green), PR to open.**
