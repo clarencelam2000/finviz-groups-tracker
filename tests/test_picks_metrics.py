@@ -25,6 +25,7 @@ from picks_metrics import (
     _float,
     _pct,
     compute_metrics_row,
+    compute_trailing_setup,
 )
 import picks_config as pc
 from collect_picks import ensure_picks_csv
@@ -306,3 +307,67 @@ def test_ensure_picks_csv_noop_when_cols_present(tmp_path):
 def test_ensure_picks_csv_noop_on_missing_file(tmp_path):
     """Missing file → no crash."""
     ensure_picks_csv(tmp_path / "nonexistent.csv")  # must not raise
+
+
+# ---------------------------------------------------------------------------
+# compute_trailing_setup (B-2, issue #379) — trailing-window compression columns
+# ---------------------------------------------------------------------------
+
+def _bar(ticker, date, high, low, atr, range_atr):
+    return {"ticker": ticker, "date": date, "High": str(high), "Low": str(low),
+            "ATR": str(atr), "range_atr": str(range_atr)}
+
+
+def test_trailing_tight_range_fires_when_today_narrowest():
+    """tight_range_7 = 1 when today's H-L is the narrowest of the last `window` bars."""
+    hist = [
+        _bar("X", "2026-08-20", 110, 100, 5, 2.0),  # range 10
+        _bar("X", "2026-08-21", 109, 100, 5, 1.8),  # range 9
+        _bar("X", "2026-08-22", 108, 100, 5, 1.6),  # range 8
+        _bar("X", "2026-08-25", 104, 100, 5, 0.8),  # range 4  <- today, narrowest
+    ]
+    latest = [dict(hist[-1])]
+    compute_trailing_setup(latest, hist, window=4, spark_window=10, spark_min=3)
+    assert latest[0]["tight_range_7"] == 1
+    # range_atr sparkline = last values oldest->newest
+    assert latest[0]["range_atr_spark"] == "2.00|1.80|1.60|0.80"
+    assert latest[0]["atr_spark"] == "5.00|5.00|5.00|5.00"
+
+
+def test_trailing_tight_range_zero_when_prior_bar_tighter():
+    hist = [
+        _bar("X", "2026-08-20", 103, 100, 5, 0.6),  # range 3 (tighter)
+        _bar("X", "2026-08-21", 109, 100, 5, 1.8),
+        _bar("X", "2026-08-22", 108, 100, 5, 1.6),
+        _bar("X", "2026-08-25", 105, 100, 5, 1.0),  # today range 5, not narrowest
+    ]
+    latest = [dict(hist[-1])]
+    compute_trailing_setup(latest, hist, window=4, spark_window=10, spark_min=3)
+    assert latest[0]["tight_range_7"] == 0
+
+
+def test_trailing_graceful_degrade_when_too_few_bars():
+    """<window bars -> tight flag ''; <spark_min bars -> spark ''."""
+    hist = [
+        _bar("X", "2026-08-24", 108, 100, 5, 1.6),
+        _bar("X", "2026-08-25", 105, 100, 5, 1.0),
+    ]
+    latest = [dict(hist[-1])]
+    compute_trailing_setup(latest, hist, window=7, spark_window=10, spark_min=3)
+    assert latest[0]["tight_range_7"] == ""      # only 2 bars, need 7
+    assert latest[0]["range_atr_spark"] == ""    # only 2 bars, need 3
+
+
+def test_trailing_dedups_same_date_multi_category_rows():
+    """A ticker appearing twice on one date (two buckets) counts as ONE bar, not two."""
+    hist = [
+        _bar("X", "2026-08-20", 110, 100, 5, 2.0),
+        _bar("X", "2026-08-21", 109, 100, 5, 1.8),
+        _bar("X", "2026-08-22", 108, 100, 5, 1.6),
+        _bar("X", "2026-08-25", 104, 100, 5, 0.8),
+        _bar("X", "2026-08-25", 104, 100, 5, 0.8),  # duplicate date (2nd bucket)
+    ]
+    latest = [dict(hist[-1])]
+    compute_trailing_setup(latest, hist, window=4, spark_window=10, spark_min=3)
+    # 4 unique dates -> spark has 4 points, not 5
+    assert len(latest[0]["range_atr_spark"].split("|")) == 4
