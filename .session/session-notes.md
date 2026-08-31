@@ -6,6 +6,54 @@
 
 ---
 
+## 2026-08-31 — Effort B first slice: "Volatility & setup" section on Picks cards
+
+**Status: safe to close — implemented, tested (8/8 Playwright file + 731 non-PW suite green), PR to open.**
+Continues the compression/expansion workstream from merged PR #377 (planning doc) + issues
+#378 (Effort A, card standardization) / #379 (Effort B, metrics). Owner directive: compression
+is the spine — surface the factual, repeatable, proven stuff (Vol W/M, ATR, range tightening,
+volume behavior, MA bunching); show raw values, let the trader assess; **never invent
+thresholds** (doc §4.0). Owner chose "B-spine on the Picks card first" for this slice (the card
+that already has all the data — no data decision, no pipeline change).
+
+**What landed (`docs/index.html`, `renderPickRow` expanded panel).** A new "Volatility & setup"
+section under the risk-basis grid, rendered once from the full row `r` (basis-independent, so it
+lives in `renderPickRow`, not `__buildRiskBasisContent`):
+- **Vol W / Vol M** — both raw (`_pPct`), e.g. `4.3% / 4.6%`. The one derived read is a
+  `contracting` (emerald) / `expanding` (amber) / `flat` label = pure sign of (Vol W − Vol M),
+  a *fact* (which is larger), not a magnitude cutoff. Neutral/blank when either is NaN.
+- **Rel volume** — `_pF(r['Rel Volume'])`, shown as `0.87×`.
+- **From 52W high** — `_pF(r['52W High'])` (Finviz's signed % distance, negative = below), shown
+  as-is, e.g. `−8.0%`.
+All four already flow daily in `picks_latest.csv` — **no scrape change, no new column, no new
+configurable constant** (the whole point of §4.0 — nothing to threshold, so nothing to
+triple-document). Verified the columns + formats against a live `picks_latest.csv` row and the
+ANET fixture before writing.
+
+**Why this shape.** Establishes the named "Setup/Volatility" card section that Effort A (#378)
+will propagate to the Morning-family cards, so Effort B doesn't hand-add chips to diverging code
+paths later (the doc §8 soft-ordering, honored without blocking on A's harder data decision).
+
+**Tests.** 2 new tests in `tests/test_pwa_picks_atr_earnings.py` (already in the CI `--ignore`
+list): `test_volatility_setup_section_shows_raw_values` (ANET: Vol W<M → contracting, RelVol,
+From-52W-high strings) and `test_volatility_setup_expanding_when_week_hotter` (override Vol W>M →
+expanding). Ran live via the revision-symlink harness (`ln -sfn chromium-1194 chromium-1117`,
+per `knowledge/investigations/playwright-cloud-session-testing.md`) — full 8/8 file green.
+Non-Playwright suite 731 passed. Release triplet: `docs/releases.json` `2026.08.31` (feature,
+tab picks) + `current` bumped; `docs/sw.js` v87→v88.
+
+**Next steps / open Effort-B slices (tracked, #379 + SPRINT EFFORTB-VOLSETUP-1):**
+- **NR7 flag + range_atr / ATR sparkline** — need per-name trailing session history → these are
+  *derived pipeline columns* (graceful-degrade per name/metric, doc §3), a bigger slice than pure
+  display. Next natural build.
+- **Rule-of-Three** MA-bunching confirmer (doc §5.3) — weakest signal, confirmer only.
+- **Propagate the section to Lookup + Morning cards** — rides Effort A's (#378) shared-component
+  seam; the §7.3 morning-data decision (scrape-wide vs cross-ref hybrid) is still open and
+  needs the verification the doc flags before championing either.
+- Expansion side stays parked/secondary per owner (doc §5.5a) — not touched here.
+
+---
+
 ## 2026-08-27 — Fix: Watchlist "⋯" kebab menu never opened (Remove unreachable)
 
 **Status: safe to close — fixed, tested, PR to open.**

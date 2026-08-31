@@ -4567,6 +4567,27 @@
       const perfWCls = isNaN(perfW) ? 'text-slate-400' : (perfW >= 0 ? 'text-emerald-400' : 'text-red-400');
       const perfMCls = isNaN(perfM) ? 'text-slate-400' : (perfM >= 0 ? 'text-emerald-400' : 'text-red-400');
 
+      // Compression spine (Effort B, issue #379) — raw single-day volatility/setup facts from
+      // picks_latest.csv, SHOWN as values, never gated behind an invented threshold (governing
+      // principle §4.0: facts→flags, judgments→shown values). The only derived read here is the
+      // contracting/expanding tint, which states a FACT (Vol W vs Vol M — which is larger), not a
+      // cutoff. Rendered in the expanded card's "Volatility & setup" section (see riskHtml below).
+      const volW = _pPct(r['Volatility W']);   // Finviz weekly volatility %, e.g. '3.92%'
+      const volM = _pPct(r['Volatility M']);   // Finviz monthly volatility %
+      const relVol = _pF(r['Rel Volume']);     // today's volume vs its own average (×)
+      const oh52 = _pF(r['52W High']);         // signed % from 52-week high (negative = below)
+      // Contraction read: W < M = this week is calmer than the month = coiling. Pure sign of
+      // (volW − volM); no magnitude threshold. Neutral when either is missing or they're equal.
+      let volTrendStr = '', volTrendCls = 'text-slate-500';
+      if (!isNaN(volW) && !isNaN(volM)) {
+        if (volW < volM)      { volTrendStr = 'contracting'; volTrendCls = 'text-emerald-400'; }
+        else if (volW > volM) { volTrendStr = 'expanding';   volTrendCls = 'text-amber-400'; }
+        else                  { volTrendStr = 'flat';        volTrendCls = 'text-slate-400'; }
+      }
+      const volWMStr = (isNaN(volW) ? '—' : volW.toFixed(1) + '%') + ' / ' + (isNaN(volM) ? '—' : volM.toFixed(1) + '%');
+      const relVolStr = isNaN(relVol) ? '—' : relVol.toFixed(2) + '×';
+      const oh52Str = isNaN(oh52) ? '—' : (oh52 >= 0 ? '+' : '') + oh52.toFixed(1) + '%';
+
       // Avg $ volume + earnings proximity — computed unconditionally (not just when
       // expandable) since the earnings badge below needs it in the always-visible
       // collapsed row too, not only inside the expanded risk panel.
@@ -4722,6 +4743,24 @@
             </div>
             <div id="risk-basis-content-${key}">
               ${window.__buildRiskBasisContent(rowData, cardBasis)}
+            </div>
+            <div class="mt-2 pt-2 border-t border-slate-700/50">
+              <div class="text-slate-400 font-semibold mb-1.5">Volatility &amp; setup</div>
+              <div class="grid grid-cols-3 gap-x-3 gap-y-2">
+                <div>
+                  <div class="text-slate-500 mb-0.5">Vol W / M</div>
+                  <div class="text-slate-300">${volWMStr}</div>
+                  ${volTrendStr ? `<div class="${volTrendCls} text-[0.65rem]">${volTrendStr}</div>` : ''}
+                </div>
+                <div>
+                  <div class="text-slate-500 mb-0.5">Rel volume</div>
+                  <div class="text-slate-300">${relVolStr}</div>
+                </div>
+                <div>
+                  <div class="text-slate-500 mb-0.5">From 52W high</div>
+                  <div class="text-slate-300">${oh52Str}</div>
+                </div>
+              </div>
             </div>
             ${scoreDebug}
             ${arielBreakdown}
