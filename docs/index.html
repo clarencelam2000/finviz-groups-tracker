@@ -4542,6 +4542,35 @@
         </div>`;
     };
 
+    // volSpark(seriesStr) — tiny inline sparkline for a pipe-joined "v1|v2|..." value series
+    // (Effort B / issue #379 B-2). SHOWN values, not thresholded (doc §4.0): the eye reads
+    // "tightening then popping" off the line, which the owner trusts over a lone slope number
+    // (doc §5.4). Returns '' for an empty/too-short series so the caller can show a '—' fallback.
+    function volSpark(seriesStr) {
+      if (!seriesStr) return '';
+      const vals = String(seriesStr).split('|').map(Number).filter(v => !isNaN(v));
+      if (vals.length < 2) return '';
+      const w = 60, h = 16, pad = 2;
+      const min = Math.min(...vals), max = Math.max(...vals);
+      const span = (max - min) || 1;
+      const n = vals.length;
+      const pts = vals.map((v, i) => {
+        const x = pad + (i / (n - 1)) * (w - 2 * pad);
+        const y = pad + (1 - (v - min) / span) * (h - 2 * pad);
+        return `${x.toFixed(1)},${y.toFixed(1)}`;
+      }).join(' ');
+      // preserveAspectRatio="none" lets the line fill its cell; only a polyline (no text) is
+      // drawn, so the horizontal stretch can't distort any glyphs (cf. rankSparkline's caveat).
+      return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" preserveAspectRatio="none" class="inline-block align-middle overflow-visible"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+    }
+    // Last value of a pipe-joined series, formatted, or '—' when empty.
+    function volSparkLast(seriesStr, digits) {
+      if (!seriesStr) return '—';
+      const vals = String(seriesStr).split('|').map(Number).filter(v => !isNaN(v));
+      if (!vals.length) return '—';
+      return vals[vals.length - 1].toFixed(digits == null ? 2 : digits);
+    }
+
     // renderPickRow(r, opts) — shared row renderer (3b.0).
     // Called from renderPicks (All + Focus views) and will be reused by 3c Lookup section.
     // opts: { rowIndex, expandable, showScore, showGroupSubtitle, score, base, penaltyFrac, group_n, tight_n, quiet_n }
@@ -4587,6 +4616,16 @@
       const volWMStr = (isNaN(volW) ? '—' : volW.toFixed(1) + '%') + ' / ' + (isNaN(volM) ? '—' : volM.toFixed(1) + '%');
       const relVolStr = isNaN(relVol) ? '—' : relVol.toFixed(2) + '×';
       const oh52Str = isNaN(oh52) ? '—' : (oh52 >= 0 ? '+' : '') + oh52.toFixed(1) + '%';
+
+      // Range tightening (B-2, issue #379) — trailing-window columns from picks_latest.csv.
+      // tight_range_7 is a FACT ('1' = today's raw H−L is the narrowest of the last 7 AVAILABLE
+      // bars; picks history is gappy per-name so it's "last 7 bars", NOT NR7 — labeled honestly).
+      // The two *_spark series are SHOWN values (doc §4.0). All degrade to '' when a name lacks
+      // enough history, so each piece self-hides rather than fabricating a read.
+      const tightRange7 = r['tight_range_7'];   // '1' | '0' | '' (blank = <7 bars of history)
+      const rangeAtrSpark = r['range_atr_spark'] || '';
+      const atrSpark = r['atr_spark'] || '';
+      const hasTightening = !!(rangeAtrSpark || atrSpark || tightRange7 === '1' || tightRange7 === '0');
 
       // Avg $ volume + earnings proximity — computed unconditionally (not just when
       // expandable) since the earnings badge below needs it in the always-visible
@@ -4761,6 +4800,23 @@
                   <div class="text-slate-300">${oh52Str}</div>
                 </div>
               </div>
+              ${hasTightening ? `
+              <div class="mt-2 pt-2 border-t border-slate-700/40">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-slate-500">Range tightening</span>
+                  ${tightRange7 === '1' ? '<span class="text-emerald-400 text-[0.6rem] px-1.5 py-0.5 rounded bg-emerald-500/10 font-medium">Tightest range · last 7 bars</span>' : ''}
+                </div>
+                <div class="grid grid-cols-2 gap-x-3">
+                  <div>
+                    <div class="text-slate-500 text-[0.65rem] mb-0.5">Range/ATR <span class="text-slate-400">${volSparkLast(rangeAtrSpark)}</span></div>
+                    <div class="text-sky-400/80">${volSpark(rangeAtrSpark) || '<span class="text-slate-600">—</span>'}</div>
+                  </div>
+                  <div>
+                    <div class="text-slate-500 text-[0.65rem] mb-0.5">ATR $ <span class="text-slate-400">${volSparkLast(atrSpark)}</span></div>
+                    <div class="text-sky-400/80">${volSpark(atrSpark) || '<span class="text-slate-600">—</span>'}</div>
+                  </div>
+                </div>
+              </div>` : ''}
             </div>
             ${scoreDebug}
             ${arielBreakdown}

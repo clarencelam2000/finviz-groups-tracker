@@ -1,6 +1,18 @@
 {
-  "current": "2026.08.31",
+  "current": "2026.08.31.1",
   "releases": [
+    {
+      "version": "2026.08.31.1",
+      "date": "2026-08-31",
+      "title": "Range tightening on Picks cards",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "The \"Volatility & setup\" section now shows a \"Range tightening\" read: two mini sparklines — day range as a multiple of ATR, and the ATR itself in dollars — so you can see at a glance whether a name has been coiling or expanding.",
+        "When today's raw high-low range is the narrowest of the last 7 bars we have for that name, a green \"Tightest range · last 7 bars\" tag appears. It's a plain fact, honestly labelled — history can be gappy, so it's the last 7 bars on file, not a strict NR7.",
+        "Sparklines and the tag self-hide for names without enough history — no fabricated readings."
+      ]
+    },
     {
       "version": "2026.08.31",
       "date": "2026-08-31",
