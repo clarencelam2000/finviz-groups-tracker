@@ -8,7 +8,7 @@
 
 ## 2026-08-31 — Effort B B-2: "Range tightening" (tightest-range flag + sparklines) on Picks cards
 
-**Status: safe to close — implemented, tested, PR to open.** Continues the compression/expansion
+**Status: safe to close — implemented, tested, PR #383 open.** Continues the compression/expansion
 workstream (planning doc + issues #378/#379); B-1 (PR #380) is merged. Owner picked B-2 next after
 I laid out the reasoning (compression spine, unblocked, single-card so no Effort-A dependency).
 Owner also made one call at a decision boundary: because `picks.csv` history is **gappy per-ticker**

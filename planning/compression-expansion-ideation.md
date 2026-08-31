@@ -363,7 +363,7 @@ justify its own small, time-sensitive list — phase 2.
 | ID | Slice | Doc ref | Status | PR / notes |
 |----|-------|---------|--------|------------|
 | B-1 | "Volatility & setup" section on Picks card — Vol W/M, RelVol, 52W-high dist (shown values) | §5.1, §10.6 | ✅ | **PR #380** (merged). Picks card only. Contracting/expanding tint = sign of (VolW−VolM), a fact. |
-| B-2 | Tightest-range flag + range_atr/ATR sparkline (range tightening) — derived pipeline columns, per-name history w/ graceful degrade | §5.4, §5.7, §3 | ✅ | **PR #___** (this session). 3 new `TRAILING_COLS` in the picks pipeline (`tight_range_7`, `range_atr_spark`, `atr_spark`), computed over trailing available bars, populated only on the picks_latest slice. Picks card "Range tightening" block: honest "Tightest range · last 7 bars" flag (owner 2026-08-31: NOT "NR7" — gappy history) + two mini sparklines. Graceful per-name degrade. |
+| B-2 | Tightest-range flag + range_atr/ATR sparkline (range tightening) — derived pipeline columns, per-name history w/ graceful degrade | §5.4, §5.7, §3 | ✅ | **PR #383**. 3 new `TRAILING_COLS` in the picks pipeline (`tight_range_7`, `range_atr_spark`, `atr_spark`), computed over trailing available bars, populated only on the picks_latest slice. Picks card "Range tightening" block: honest "Tightest range · last 7 bars" flag (owner 2026-08-31: NOT "NR7" — gappy history) + two mini sparklines. Graceful per-name degrade. |
 | B-3 | Volume dry-up sub-signal for VCP proxy (RelVol trend while price holds) | §5.2, §10.3 | ⬜ | Volume dry-up is the strongest/cheapest VCP piece (owner-named). Needs RelVol trend window def (a window, not a threshold). |
 | B-4 | VCP-style contraction proxy — shrinking pullback depth + tightening range + vol dry-up + 52W-high proximity. Label "Contraction (VCP-style)", never "VCP detected" | §5.2 | ⬜ | Composes B-2 + B-3. NOT "lower highs". |
 | B-5 | Rule-of-Three MA-bunching confirmer — MAs bunched, up-sloping, price above both, converging | §5.3 | ⬜ | Weakest signal; confirmer only, never a standalone trigger/score. |
@@ -388,7 +388,7 @@ justify its own small, time-sensitive list — phase 2.
 | "lower highs" as a VCP prerequisite | §5.2 | ❌ Wrong; removed from the design. |
 
 ### Progress log (newest first)
-- **2026-08-31 — B-2 done (PR #___).** Range tightening on the Picks card. Pipeline: 3 new
+- **2026-08-31 — B-2 done (PR #383).** Range tightening on the Picks card. Pipeline: 3 new
   `TRAILING_COLS` in `picks_config.py` (`tight_range_7`, `range_atr_spark`, `atr_spark`) +
   `picks_metrics.compute_trailing_setup()` (pure, trailing-window over a ticker's *available*
   bars, dedups same-date multi-bucket rows), wired into `collect_picks.write_picks` +
