@@ -10,6 +10,10 @@
 > - **Effort B — Compression/Expansion metrics**
 >
 > See § "Two efforts & ordering" for why they're separate and how they interleave.
+>
+> **▶ Resuming this workstream? Go to §12 "Living task tracker" first** — it's the single source
+> of truth for what's built vs. left, the ordering rule, and which subtask is next. §§1–11 are the
+> design; §12 is the status board (kept current in the same PR as each subtask).
 
 ---
 
@@ -328,3 +332,62 @@ justify its own small, time-sensitive list — phase 2.
 - Owner asked Claude to summarize their thoughts/feelings to confirm understanding before
   proceeding — signal that the riff had drifted from first principles and added mental load.
 - Owner may close the session anytime → keep everything committed at every step.
+
+---
+
+## 12. Living task tracker (single source of truth for progress)
+
+> **Read this section FIRST when resuming the workstream in a new session.** It maps every part
+> of the plan above to a status and the PR that moved it. The doc §§1–11 are the *design*; this
+> section is *what's built vs. left*. Update it in the SAME PR as any subtask — never let progress
+> live only in a PR description or chat (that's how work gets orphaned).
+>
+> **The A/B split is unchanged.** Effort A = card standardization (issue #378). Effort B =
+> compression/expansion metrics (issue #379). We are NOT re-splitting; slices below are just the
+> ordered pieces *inside* each effort.
+>
+> **Status key:** ✅ done · 🔨 in progress · ⏳ next up · ⬜ not started · 🅿️ parked (needs owner/verify) · ❌ dropped
+
+### Ordering rule (why the next subtask is what it is)
+1. **Compression before expansion** — compression is the spine (facts, proven); expansion is
+   secondary/subjective and mostly 🅿️ parked (§5.5a). Don't build expansion "triggers."
+2. **Effort A's shared-card seam should exist before Effort B metrics spread to 3+ cards** (§8).
+   A single-card B slice (Picks only) is safe and does NOT trip this — that's why B-1 went first.
+   The moment a B metric needs to appear on Picks AND Morning AND Lookup, the A seam must exist.
+3. **No invented thresholds, ever** (§4.0). A slice that would need the owner to pick a cutoff is
+   mis-scoped — show the value instead.
+4. **Graceful degradation, not population gating** (§3). A time-series slice ships with a
+   per-name "enough sessions?" fallback, never a held/watch-only restriction.
+
+### Effort B — compression/expansion metrics (issue #379)
+| ID | Slice | Doc ref | Status | PR / notes |
+|----|-------|---------|--------|------------|
+| B-1 | "Volatility & setup" section on Picks card — Vol W/M, RelVol, 52W-high dist (shown values) | §5.1, §10.6 | ✅ | **PR #380** (merged). Picks card only. Contracting/expanding tint = sign of (VolW−VolM), a fact. |
+| B-2 | NR7 flag + range_atr/ATR sparkline (range tightening) — derived pipeline columns, per-name history w/ graceful degrade | §5.4, §5.7, §3 | ⏳ | Next. Stays on Picks card (no A dependency). Needs trailing per-name sessions → new derived column(s) in the picks pipeline + backfill. |
+| B-3 | Volume dry-up sub-signal for VCP proxy (RelVol trend while price holds) | §5.2, §10.3 | ⬜ | Volume dry-up is the strongest/cheapest VCP piece (owner-named). Needs RelVol trend window def (a window, not a threshold). |
+| B-4 | VCP-style contraction proxy — shrinking pullback depth + tightening range + vol dry-up + 52W-high proximity. Label "Contraction (VCP-style)", never "VCP detected" | §5.2 | ⬜ | Composes B-2 + B-3. NOT "lower highs". |
+| B-5 | Rule-of-Three MA-bunching confirmer — MAs bunched, up-sloping, price above both, converging | §5.3 | ⬜ | Weakest signal; confirmer only, never a standalone trigger/score. |
+| B-6 | Propagate the "Volatility & setup" section to Lookup + Morning + Ticket cards | §4.1, §8 | 🅿️ | **Blocked on Effort A seam (A-2) and the §7.3 data decision (A-1).** This is the slice ordering rule #2 gates. |
+| B-7 | Optional composite score (decomposable, shown next to components) | §4.1 L3, §10.7 | 🅿️ | LOW priority / maybe never. Owner wary of blended scores. Do not lead with this. |
+| B-8 | Forward-return eval of the signals (does compression predict?) | §10.10 | ⬜ | Reuse `evaluate_picks.py` scaffolding. Do after ≥1 signal has history. |
+| B-X | Expansion side (projected vol/RVol §5.5b; break+coil context §5.5a) | §5.5, §5.5a, §5.5b | 🅿️ | Secondary/subjective per owner. Facts+shown-values only, no "trigger." Revisit later. |
+
+### Effort A — card standardization (issue #378)
+| ID | Slice | Doc ref | Status | PR / notes |
+|----|-------|---------|--------|------------|
+| A-1 | **Decide morning-card data path**: scrape-wide-84 vs cross-ref `picks_latest` (~85%) + D1 orphan backfill (~15%) | §7.3 | 🅿️ | **Owner decision, needs verification first** (scrape-time / Cloudflare exposure / exact coverage). The one gate for A. Do the verification, bring a recommendation. |
+| A-2 | Extract ONE shared card component/schema (superset fields + a "Setup/Volatility" section) reused across Picks-family and Morning-family | §7, §8 | ⬜ | The seam B-6 rides on. B-1's section is its reference layout. Depends on A-1 for the Morning-family data. |
+| A-3 | Apply the shared component to Morning card, Watchlist card, Trade ticket (the Morning family) | §7 | ⬜ | After A-2. |
+
+### Dropped / not in scope
+| Item | Doc ref | Status |
+|------|---------|--------|
+| TTM Squeeze | §5.6 | ❌ Dropped (scope creep; NR7 covers coiling cheaply). |
+| range_atr as an expansion buy-signal | §5.5a | ❌ Dropped as a signal (may remain a shown-context value only). |
+| Group-level vol-ratio | §2 | 🅿️ Deprioritized (differentiating but unclear alpha). |
+| "lower highs" as a VCP prerequisite | §5.2 | ❌ Wrong; removed from the design. |
+
+### Progress log (newest first)
+- **2026-08-31 — B-1 done (PR #380).** "Volatility & setup" section on the expanded Picks card:
+  Vol W/M, RelVol, 52W-high distance, all shown values; contracting/expanding tint = sign of
+  (VolW−VolM). No pipeline change, no new constant. Reference layout for A-2. Next: **B-2**.
