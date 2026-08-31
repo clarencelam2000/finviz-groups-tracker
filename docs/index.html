@@ -1512,17 +1512,6 @@
           fetchCSV(URLS[group].snap, force),
           fetchCSV(URLS[group].delta, force),
         ]);
-        // A CSV fetch cut short by a network blip (connection reset mid-download) can still
-        // resolve Papa.parse's `complete` callback with whatever partial rows arrived, rather
-        // than erroring — Papa reports the ragged trailing row as a parse error instead of
-        // silently dropping it. Reject on any parse error rather than caching a dataset that
-        // looks complete but is quietly missing names (the root cause behind a sector/industry
-        // showing a misleading "not tracked" card on the Lookup tab — see groupPerfCard).
-        // Leaves any previously-good cached data in place and surfaces the existing
-        // error+Retry banner instead.
-        if ((snapRes.errors && snapRes.errors.length > 0) || (deltaRes.errors && deltaRes.errors.length > 0)) {
-          throw new Error(`${group} data failed to parse cleanly — probably a dropped connection mid-download`);
-        }
         state.data[group].snap  = getLatest(snapRes.data);
         state.data[group].delta = getLatest(deltaRes.data);
         // Retain full delta history for the lookup-tab rank sparkline. Other

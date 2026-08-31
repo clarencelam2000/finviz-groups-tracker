@@ -367,12 +367,6 @@ for the full pipeline description. Unlike every other collector in this table, i
 
 These constants control when visual indicators appear or change state. All are near the top of the `<script>` block.
 
-> `loadGroup()` also rejects a sectors/industries CSV fetch outright if Papa Parse reports any
-> row-level parse errors, rather than caching a dataset that "completed" but is missing rows —
-> guards against a connection reset mid-download (network blip) leaving a truncated CSV that
-> would otherwise silently produce a misleading "not tracked" verdict on the Lookup tab (see
-> `groupPerfCard()`). Not a tunable constant, so it isn't in the table below.
-
 | Constant | Default | What it controls |
 |----------|---------|-----------------|
 | `REGIME_THRESHOLD` | `0.15` | Boundary between Emerging/Established/Fading buckets in Rotation view. Groups with `\|regime\| > 0.15` get a colored section header and card color; within ±0.15 = Established. |

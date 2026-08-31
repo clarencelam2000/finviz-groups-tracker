@@ -6,7 +6,7 @@
 
 ---
 
-## 2026-08-31 — Fix: misleading "not tracked" message on Lookup + data-load completeness guard
+## 2026-08-31 — Fix: misleading "not tracked" message on Lookup
 
 **Status: safe to close — implemented, tested (739 non-Playwright + `test_pwa_lookup_signal.py`
 8/8 green), PR to open.**
@@ -17,18 +17,18 @@ tracked in the Finviz data yet" — the industry *was* fully tracked (verified l
 latest date). Closing and reopening the app fixed it, pointing at a one-off data-load problem
 rather than a genuine coverage gap.
 
-**Root cause (best available evidence, not fully proven live).** `findGroupData()` can't tell
-"group genuinely isn't in Finviz's taxonomy" apart from "the CSV fetch was interrupted and this
-name's row never arrived" — both look like a missing row. Reproduced the failure mode
-end-to-end with a deliberately truncated `industries/snapshots.csv` fixture (Playwright, local
-harness, real code path): Papa Parse's `results.errors` flags the ragged trailing row from a
-cut-short download, confirming a truncated fetch *is* detectable and *was* previously being
-cached anyway.
+**Root cause: not confirmed, and don't overstate what was verified here.** `findGroupData()`
+can't tell "group genuinely isn't in Finviz's taxonomy" apart from "the last CSV load simply
+failed/hadn't happened" — both render as a missing row. A theory that Papa Parse's
+`download:true` mode could silently accept a network-truncated CSV (missing rows, no error) was
+investigated and **abandoned**: that mode uses `XMLHttpRequest`, and per the XHR spec a
+connection interrupted mid-download fires the `error` event, not a false "success" — so a
+genuinely truncated fetch is already caught by `loadGroup()`'s existing try/catch, no change
+needed. (Initially shipped a `loadGroup()` guard based on this unproven theory anyway — caught
+in owner review, reverted before merge. See that review exchange for the full reasoning trail.)
+The actual cause of the one-off failure the owner hit is still unknown.
 
-**What landed (`docs/index.html`):**
-- `loadGroup()` now rejects a sectors/industries fetch outright when Papa Parse reports any
-  row-level parse error, instead of silently caching a dataset that "completed" but is missing
-  rows. Leaves prior good data in place; surfaces the existing error+Retry banner.
+**What landed (`docs/index.html`) — copy-only fix, no behavior change:**
 - `groupPerfCard()`'s empty-state copy no longer asserts "not tracked" as settled fact — says
   data didn't load and adds a "↻ Refresh data" button (`window.__refresh()`).
 - `contextSignalCard()`'s "no tracked data for X yet" / "Not enough tracked history..." copy
@@ -36,21 +36,21 @@ cached anyway.
   loaded... right now" with a refresh nudge.
 - Confirmed for the owner: both the top-right refresh button and pull-to-refresh call
   `window.__refresh()`, which does a real cache-busted re-fetch (`?_=timestamp`) of
-  sectors/industries — not a cache replay. Either is a legitimate fix for this failure mode.
+  sectors/industries — not a cache replay. Either is a legitimate fix if this happens again.
 
-**Not fixed, flagged for a future session:** while reproducing, found that switching to the
-Industries group (Today tab) after its load has failed re-triggers `loadAndRender()` on every
-click via `switchGroup()`'s `if (!state.data[group].snap) loadAndRender()` check, and in the
-Playwright test harness this consistently threw inside `setLoading()` (`gainers-list` element
-not found) — but the same throw reproduces identically on a stashed, fully-unmodified checkout
-with no data at all, so it looks like a pre-existing headless/Tailwind-CDN test-harness quirk
-rather than something this session's change caused or fixed. Did not chase further — out of
-scope for this fix, and unconfirmed as a real production issue vs. a sandbox artifact.
+**Not fixed, flagged for a future session:** while reproducing (before the guard was reverted),
+found that switching to the Industries group (Today tab) after its load has failed re-triggers
+`loadAndRender()` on every click via `switchGroup()`'s `if (!state.data[group].snap)
+loadAndRender()` check, and in the Playwright test harness this consistently threw inside
+`setLoading()` (`gainers-list` element not found) — but the same throw reproduces identically on
+a stashed, fully-unmodified checkout with no data at all, so it looks like a pre-existing
+headless/Tailwind-CDN test-harness quirk rather than a real app bug. Did not chase further — out
+of scope for this fix, and unconfirmed as a real production issue vs. a sandbox artifact.
 
 **Release triplet:** `docs/releases.json` `2026.08.31.1` (fix, tab lookup) + `current` bumped;
 `docs/sw.js` v88→v89. Also updated `tests/test_pwa_lookup_signal.py`'s caveat-text assertion to
-match the new copy, and documented the fix in `docs/CLAUDE.md` + README § PWA display thresholds
-(no new tunable constant — the guard is unconditional, not threshold-based).
+match the new copy. `docs/CLAUDE.md` documents the investigated-and-abandoned theory so a future
+session doesn't re-propose the same unverified guard.
 
 ---
 
