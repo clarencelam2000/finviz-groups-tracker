@@ -484,3 +484,34 @@ trade-ticket file green; 731 non-Playwright suite green.
 What's New, add a `releases.json`/`sw.js` triplet in a follow-up.
 
 ---
+
+## 2026-08-23 — Picks selector yield / group-cap investigation (no code changes)
+
+**Status: safe to close.** Read-only investigation requested by the owner, written up for team
+prioritization and staff-eng/staff-product review. No selector or display code was touched.
+
+**What landed:**
+- `knowledge/investigations/picks-selector-yield-and-group-limits-2026-08-23.md` — full writeup,
+  explicitly split into a **Findings** section (verified facts, each reproducible from
+  `scripts/collect_picks.py`, `scripts/picks_config.py`, `data/industries/deltas.csv`,
+  `data/picks/picks.csv` — no external calls) and an **Opinions** section (my analysis/
+  recommendations as SDE2, marked as such, not to be read as verified fact). Covers: why the
+  selector yielded 18/22 slots on 2026-08-21 (traced bucket-by-bucket — `rs_new_high`'s
+  qualifying pool ran out, not the fetch cap); 10-session history of unique-group counts (16–20)
+  and day-over-day overlap (65–94%); near-miss candidate lists for `rs_new_high`/`emerging`/
+  `accel` with exact gaps to threshold; 10-session `GLOBAL_FETCH_CAP` usage (peaked 26/50, 52%);
+  confirmation the 40-tickers-per-group cutoff is sorted `-marketcap` (not 50MA extension); full
+  configurable-constant tables for both the Picks selector and the Morning tab; and what the PWA
+  does/doesn't surface about bucket membership (per-day `list_category` yes, cross-day streak/
+  entry/exit no, `eval/group_scores.csv` never fetched by the PWA at all).
+- `.session/SPRINT.md` — 4 new Backlog rows (`PICKS-SELCAP-1..4`) tracking every deferred idea
+  from the investigation, each linking back to the specific doc section: loosening
+  `EMERGING_RS_FLOOR`/`ACCEL_RS_FLOOR` to `>=0.5`, raising `DAILY_GROUP_CAP`, the new group
+  streak/entry-exit signal (unscoped — owner wants it, no design yet), and confirming whether
+  missed picks are a market-cap-sort issue (owner explicitly said not to start this one yet).
+
+**Blockers:** none.
+
+**Next steps:** none from me — this is handed to the owner to bring to the team/staff-eng/
+staff-product for prioritization. Whoever picks up any of `PICKS-SELCAP-1..4` should start from
+the linked investigation doc, not re-derive the numbers.
