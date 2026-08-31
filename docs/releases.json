@@ -1,6 +1,18 @@
 {
-  "current": "2026.08.31",
+  "current": "2026.08.31.1",
   "releases": [
+    {
+      "version": "2026.08.31.1",
+      "date": "2026-08-31",
+      "title": "Fix: misleading \"not tracked\" message on Lookup",
+      "tag": "fix",
+      "tab": "lookup",
+      "notes": [
+        "A sector/industry card on the Lookup tab could say a group was \"not separately tracked in the Finviz data yet\" even when it was — caused by a data load that got interrupted partway (e.g. a dropped connection), not a real gap in coverage.",
+        "The app now checks that a full day's worth of sector/industry rows actually arrived before using them, so an interrupted load shows a clear refresh prompt instead of a misleading \"not tracked\" message.",
+        "The message itself now says data didn't load and offers a one-tap refresh, rather than asserting the group isn't tracked."
+      ]
+    },
     {
       "version": "2026.08.31",
       "date": "2026-08-31",

@@ -214,7 +214,7 @@ class TestLookupSignalCard:
             result = page.locator("#lookup-result").inner_text()
             assert "SIGNAL: FAVORABLE" in result, result[:400]
             assert "Based on Technology only" in result
-            assert "no tracked data for NotTracked" in result
+            assert "no data loaded for NotTracked" in result
         self._run(
             check,
             industries_rows=[("Semiconductors", 1, STRONG), ("Coal", 2, WEAK)],

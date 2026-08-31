@@ -184,6 +184,8 @@ Full plan: `planning/lookup-tab-improvements.md`. ADRs: `knowledge/decisions/ADR
 | LOOK-B5 | AI rotation-phase line on sector card | `docs/index.html` | S | Deferred. |
 | LOOK-B6 | Promote Rank Floor to `compute_deltas.py` column (+ dashboard + tests) | `scripts/compute_deltas.py`, `dashboard/app.py`, `tests/` | M | Deferred. Product-wide consistency. |
 | LOOK-B7 | Revisit All-Green week gating; align dashboard | `docs/index.html`, `dashboard/app.py` | S | Deferred. See ADR-003. |
+| ~~LOOK-B8~~ | ~~Fix misleading "not tracked" message + data-load completeness guard~~ | `docs/index.html`, `docs/releases.json`, `docs/sw.js`, `tests/test_pwa_lookup_signal.py`, `README.md`, `docs/CLAUDE.md` | S | ✅ **Done 2026-08-31.** See session notes for full writeup. `loadGroup()` rejects a sectors/industries fetch with Papa-Parse row errors (truncated download) instead of caching it; `groupPerfCard()`/`contextSignalCard()` copy no longer asserts "not tracked" — says data didn't load, offers a refresh button. Release `2026.08.31.1`. |
+| LOOK-B9 | Investigate `switchGroup()`'s repeated `loadAndRender()` retry-storm when a group's load keeps failing, and the `setLoading()` crash (`gainers-list` null) hit while reproducing LOOK-B8 in the Playwright harness | `docs/index.html` | S | Deferred — found during LOOK-B8 repro, but the same crash reproduces identically on a clean unmodified checkout with a fully-stubbed empty-data page, so it looks like a pre-existing sandbox/Tailwind-CDN test-harness quirk rather than a change this session caused. Not confirmed as a real production issue. Needs a repro against a real deployed page (or local dev server without the CDN-stub workaround) before deciding if it's worth fixing. |
 
 ---
 
