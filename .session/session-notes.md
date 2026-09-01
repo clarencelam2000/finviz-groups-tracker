@@ -6,6 +6,57 @@
 
 ---
 
+## 2026-09-01 — Effort A A-1: decide morning data path (scrape-wide) + A-1-IMPL pipeline slice
+
+**Status: safe to close — decision made + implemented, tested (736 non-PW green), PR to open.**
+Continues the compression/expansion workstream (planning doc + #378/#379). B-1 (#380) and B-2
+(#383) are merged. This session took **A-1** — the one gate that unblocks propagating B-1/B-2 to
+the Morning/Lookup/Ticket family (B-6).
+
+**A-1 verification (planning doc §7.3a, subagent-assisted):**
+- Cross-ref orphan rate is **worse than the doc's ~15%**: measured on 2026-08-31 data, morning
+  **33.6%** (42/125) and pre-close **21%** (21/100) of tickers are NOT in `picks_latest` (watchlist
+  adds + setting-up names) → pure cross-ref leaves ~⅓ of morning cards blank on the volatility
+  section, disproportionately the pre-open action surface.
+- Scrape-wide's feared cost **does not materialize**: `collect_morning.fetch_ticker_quotes` `page.goto`
+  count is driven by ticker count (batched ≤50, 20 rows/page), NOT column count — switching 9→84
+  cols changes only the `c=` param. The 84-col `t=`-filtered scrape already runs in prod as
+  `block="held"` (collect_held.py). So scrape-wide = 100% coverage + fresh values at ~zero extra
+  Cloudflare exposure.
+- **Owner greenlit scrape-wide.**
+
+**A-1-IMPL (this session's shipped slice, `collect_morning.py`):**
+- New `WIDE_SCRAPE_BLOCK = "held"`; the single `fetch_ticker_quotes` call site now passes it, so the
+  live morning/pre_close run scrapes the 84-col block.
+- New `SETUP_COLUMNS = ["RSI","Volatility W","Volatility M","Rel Volume","52W High"]`, appended to
+  `STORE_COLUMNS` (superset-additive, write_store backfills "" on old rows). `build_status_rows`
+  carries these through **verbatim from the scraped quote, keyed by Finviz label** (raw strings like
+  "3.92%") for render symmetry with `picks_latest` — so B-6 can reuse B-1's render by the same keys.
+- B-2's derived sparkline cols (`tight_range_7`, `range_atr_spark`, `atr_spark`) are NOT scraped —
+  they'll reach the morning card via a client-side cross-ref to `picks_latest` (multi-day; last
+  night's values are current enough; orphans have no picks history under any path).
+- The narrow `morning` block stays in `screener_config.json` as documentation of the minimal status
+  set (no longer used live).
+- 3-places doc'd (in-code + README § Configurable parameters + scripts/CLAUDE.md § WS3). No release
+  triplet — backend/pipeline change, no PWA copy yet.
+
+**Tests (light, per owner):** 1 new unit test `test_build_status_rows_carries_setup_columns`
+(full wide row passes through; a 9-col thin quote and an absent quote both yield blank setup cols,
+never KeyError). Existing `set(r.keys()) == set(STORE_COLUMNS)` assertion auto-covers the schema
+widening. `test_collect_morning.py` 50/50; full non-Playwright suite 736 green.
+
+**Data note:** committed `morning_latest.csv`/`morning.csv` stay old-schema until the next Actions
+morning run rewrites them (can't scrape Finviz from cloud — Cloudflare). No manual migration:
+write_store rewrites with the full schema and backfills "". Setup columns will populate live on the
+next real run.
+
+**Next steps:** **A-2** — extract the shared card component (B-1's "Volatility & setup" layout as
+the reference) so B-6 rides one seam instead of hand-adding to 3+ diverging paths. Then **B-6**
+(render B-1 from the fresh morning store + B-2 via cross-ref on the Morning family). Alternative if
+the owner prefers to keep the single-card spine moving: **B-3** (volume dry-up, Picks-only).
+
+---
+
 ## 2026-08-31 — Effort B B-2: "Range tightening" (tightest-range flag + sparklines) on Picks cards
 
 **Status: safe to close — implemented, tested, PR #383 open.** Continues the compression/expansion
