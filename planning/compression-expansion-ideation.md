@@ -376,9 +376,14 @@ justify its own small, time-sensitive list — phase 2.
 | ID | Slice | Doc ref | Status | PR / notes |
 |----|-------|---------|--------|------------|
 | A-1 | **Decide morning-card data path**: scrape-wide-84 vs cross-ref `picks_latest` (~85%) + D1 orphan backfill (~15%) | §7.3 | 🅿️ | **Owner decision, needs verification first** (scrape-time / Cloudflare exposure / exact coverage). The one gate for A. Do the verification, bring a recommendation. |
-| A-1-FASTFOLLOW | **Scope which of the remaining 84 wide-scrape columns are worth storing** (SMA20/50/200, 52W Low, Beta, Gap, Change from Open, Earnings date, EPS/Revenue Surprise, Recom, Target Price, News) — PR #384 review finding: the morning scrape is wide at ~zero extra cost but only 5 columns (`SETUP_COLUMNS`) are carried into the store | §7.3a | ⬜ | Issue #385. Not a mandate to store all of them — a scoping pass. Fold into A-2/B-6 scoping (extending `SETUP_COLUMNS` is a one-line change once a card section would render the new fields); low priority, no urgency. |
 | A-2 | Extract ONE shared card component/schema (superset fields + a "Setup/Volatility" section) reused across Picks-family and Morning-family | §7, §8 | ⬜ | The seam B-6 rides on. B-1's section is its reference layout. Depends on A-1 for the Morning-family data. |
 | A-3 | Apply the shared component to Morning card, Watchlist card, Trade ticket (the Morning family) | §7 | ⬜ | After A-2. |
+
+### Cross-cutting follow-ups (not scoped to a single effort)
+
+| ID | Slice | Status | PR / notes |
+|----|-------|--------|------------|
+| WIDE-SCRAPE-FASTFOLLOW | **Scope which of the remaining 84 wide-scrape columns are worth storing** (SMA20/50/200, 52W Low, Beta, Gap, Change from Open, Earnings date, EPS/Revenue Surprise, Recom, Target Price, News) | ⬜ | Issue #385, PR #384 review finding, 2026-09-01. PR #384 made the morning/pre_close scrape wide (84 cols, `held` block) at ~zero extra `page.goto` cost, but only 5 columns (`SETUP_COLUMNS`) are carried into the store. **Deliberately NOT filed under Effort A** — card rendering (A-2/B-6) is one consumer, but Earnings/EPS/Revenue-Surprise and the SMA columns are equally relevant to WS4's trade-ticket earnings guardrail and WS5's `advance()` engine (earnings-approach overlay, reclaim-ref 50MA derivation), which have nothing to do with card display. Not a mandate to store all 84 — a scoping pass, low priority, no urgency. |
 
 ### Dropped / not in scope
 | Item | Doc ref | Status |
