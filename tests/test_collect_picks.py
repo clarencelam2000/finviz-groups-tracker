@@ -677,8 +677,12 @@ class TestSchema:
         # grp_* block is followed by METRICS_COLS (Phase 3a superset append)
         grp_start = 6 + 84
         assert cols[grp_start:grp_start + len(pc.PICKS_GRP_COLS)] == pc.PICKS_GRP_COLS
-        assert cols[-len(pc.METRICS_COLS):] == pc.METRICS_COLS
-        assert len(cols) == 6 + 84 + len(pc.PICKS_GRP_COLS) + len(pc.METRICS_COLS)
+        # METRICS_COLS (Phase 3a) then TRAILING_COLS (B-2) are the two trailing blocks.
+        metrics_start = grp_start + len(pc.PICKS_GRP_COLS)
+        assert cols[metrics_start:metrics_start + len(pc.METRICS_COLS)] == pc.METRICS_COLS
+        assert cols[-len(pc.TRAILING_COLS):] == pc.TRAILING_COLS
+        assert len(cols) == (6 + 84 + len(pc.PICKS_GRP_COLS)
+                             + len(pc.METRICS_COLS) + len(pc.TRAILING_COLS))
 
     def test_grp_cols_count_is_19(self):
         assert len(pc.PICKS_GRP_COLS) == 19

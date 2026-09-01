@@ -9,48 +9,62 @@
 ## 2026-08-31 — Fix: misleading "not tracked" message on Lookup
 
 **Status: safe to close — implemented, tested (739 non-Playwright + `test_pwa_lookup_signal.py`
-8/8 green), PR to open.**
+8/8 green).** `groupPerfCard()`/`contextSignalCard()` empty-state copy no longer asserts a group
+is "not tracked" as settled fact (traced to an owner report on "Asset Management" that turned out
+to be a one-off data-load hiccup, not a real coverage gap) — now says data didn't load and adds a
+"↻ Refresh data" button. Copy-only, no behavior change (an earlier `loadGroup()` parse-error guard
+was reverted after review — see PR #381). Root cause of the original load failure still unknown.
+Deferred: LOOK-B9 (`switchGroup()` retry-storm / `setLoading()` harness crash, unconfirmed as a
+real production issue).
 
-**Report.** Owner saw the Lookup tab's Industry card for "Asset Management" say "Not separately
-tracked in the Finviz data yet" — the industry *was* fully tracked (verified live: worker
-`/lookup` and both `data/industries/snapshots.csv`/`deltas.csv` had complete rows for the
-latest date). Closing and reopening the app fixed it, pointing at a one-off data-load problem
-rather than a genuine coverage gap.
+---
 
-**Root cause: not confirmed, and don't overstate what was verified here.** `findGroupData()`
-can't tell "group genuinely isn't in Finviz's taxonomy" apart from "the last CSV load simply
-failed/hadn't happened" — both render as a missing row. A theory that Papa Parse's
-`download:true` mode could silently accept a network-truncated CSV (missing rows, no error) was
-investigated and **abandoned**: that mode uses `XMLHttpRequest`, and per the XHR spec a
-connection interrupted mid-download fires the `error` event, not a false "success" — so a
-genuinely truncated fetch is already caught by `loadGroup()`'s existing try/catch, no change
-needed. (Initially shipped a `loadGroup()` guard based on this unproven theory anyway — caught
-in owner review, reverted before merge. See that review exchange for the full reasoning trail.)
-The actual cause of the one-off failure the owner hit is still unknown.
+## 2026-08-31 — Effort B B-2: "Range tightening" (tightest-range flag + sparklines) on Picks cards
 
-**What landed (`docs/index.html`) — copy-only fix, no behavior change:**
-- `groupPerfCard()`'s empty-state copy no longer asserts "not tracked" as settled fact — says
-  data didn't load and adds a "↻ Refresh data" button (`window.__refresh()`).
-- `contextSignalCard()`'s "no tracked data for X yet" / "Not enough tracked history..." copy
-  (same underlying `findGroupData()` root cause, same misleading pattern) reworded to "no data
-  loaded... right now" with a refresh nudge.
-- Confirmed for the owner: both the top-right refresh button and pull-to-refresh call
-  `window.__refresh()`, which does a real cache-busted re-fetch (`?_=timestamp`) of
-  sectors/industries — not a cache replay. Either is a legitimate fix if this happens again.
+**Status: safe to close — implemented, tested, PR #383 open.** Continues the compression/expansion
+workstream (planning doc + issues #378/#379); B-1 (PR #380) is merged. Owner picked B-2 next after
+I laid out the reasoning (compression spine, unblocked, single-card so no Effort-A dependency).
+Owner also made one call at a decision boundary: because `picks.csv` history is **gappy per-ticker**
+(a name only gets a row on days its group was selected), a true consecutive-session NR7 can't be
+guaranteed — owner chose **"honest-labeled over available bars"** (not strict NR7, not deferring).
 
-**Not fixed, flagged for a future session:** while reproducing (before the guard was reverted),
-found that switching to the Industries group (Today tab) after its load has failed re-triggers
-`loadAndRender()` on every click via `switchGroup()`'s `if (!state.data[group].snap)
-loadAndRender()` check, and in the Playwright test harness this consistently threw inside
-`setLoading()` (`gainers-list` element not found) — but the same throw reproduces identically on
-a stashed, fully-unmodified checkout with no data at all, so it looks like a pre-existing
-headless/Tailwind-CDN test-harness quirk rather than a real app bug. Did not chase further — out
-of scope for this fix, and unconfirmed as a real production issue vs. a sandbox artifact.
+**What landed:**
+- **Pipeline (3 new `TRAILING_COLS`, additive superset migration).** `picks_config.py`:
+  `tight_range_7`, `range_atr_spark`, `atr_spark` + constants `TIGHT_RANGE_WINDOW`=7 /
+  `SPARK_WINDOW`=10 / `SPARK_MIN_BARS`=3 (triple-documented: in-code + README § Configurable
+  parameters + scripts/CLAUDE.md). `picks_metrics.compute_trailing_setup(latest_rows, history_rows)`
+  — pure, trailing-window over a ticker's **available** bars, **dedups same-date multi-bucket rows**
+  to one bar/date (a ticker can appear under several `list_category` buckets on one date, same
+  scrape). `tight_range_7` = 1 when today's raw H−L is the narrowest of the last 7 available bars
+  (a FACT, doc §4.0); the two `*_spark` are pipe-joined shown-value series. Wired into
+  `collect_picks.write_picks` (enrich latest slice **before** writing both files — latest_rows are
+  refs into all_rows) and `ensure_picks_csv` backfill. **Populated only on the max-date
+  picks_latest slice** the PWA reads; older picks.csv rows stay "" by design. Ran the migration on
+  real data: 60 tightest-range flags, 379/468 sparklines populated, blanks where history is thin.
+- **PWA (`docs/index.html`).** New `volSpark()` / `volSparkLast()` helpers + a "Range tightening"
+  block inside the B-1 "Volatility & setup" section of `renderPickRow`: honest green
+  "Tightest range · last 7 bars" flag when `tight_range_7==='1'` (never "NR7"), plus two mini SVG
+  sparklines (Range/ATR and ATR $) with the latest value labeled. `hasTightening` gate hides the
+  whole block for names with no series/flag (graceful degrade). No new PWA threshold constant.
+- **Release triplet:** `docs/releases.json` `2026.08.31.1` (feature, tab picks) + `current` bumped;
+  `docs/sw.js` v88→v89.
 
-**Release triplet:** `docs/releases.json` `2026.08.31.1` (fix, tab lookup) + `current` bumped;
-`docs/sw.js` v88→v89. Also updated `tests/test_pwa_lookup_signal.py`'s caveat-text assertion to
-match the new copy. `docs/CLAUDE.md` documents the investigated-and-abandoned theory so a future
-session doesn't re-propose the same unverified guard.
+**Tests (kept light per owner):** 4 unit tests for `compute_trailing_setup` in
+`tests/test_picks_metrics.py` (flag fires on narrowest / zero when a prior bar is tighter /
+graceful-degrade under-window / same-date dedup) + 1 PWA test in
+`tests/test_pwa_picks_atr_earnings.py` (already in CI `--ignore`) asserting the flag + 2 sparkline
+polylines + no "NR7" claim. Added the 3 trailing cols to `tests/fixtures/picks_latest.csv` (ANET
+populated). Verified: `test_picks_metrics.py` 43/43; `test_pwa_picks_atr_earnings.py` 9/9 via the
+revision-symlink harness (`ln -sfn chromium-1194 chromium-1117`); full non-Playwright suite 734
+passed. The 73 red PWA tests in a bare run are the known cloud-sandbox Chromium-1117 gap, not this
+change.
+
+**Next steps / decision for next session:** B-3 (volume dry-up — RelVol trend over a window, still
+Picks-card-only, no A dependency) is the natural next compression slice. The bigger open lever is
+**A-1** (the morning-card data-path decision: scrape-wide-84 vs cross-ref `picks_latest` ~85% + D1
+orphan backfill ~15%) — it's the gate that unblocks propagating both B-1 and B-2 to the
+Morning/Lookup/Ticket family (B-6, A-2/A-3). A-1 needs verification (scrape-time / Cloudflare
+exposure / exact coverage) before a recommendation — worth surfacing to the owner as the next fork.
 
 ---
 

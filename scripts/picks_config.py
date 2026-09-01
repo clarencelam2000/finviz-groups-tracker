@@ -226,6 +226,34 @@ METRICS_COLS = [
     "stage2",          # 1 if price>50MA AND 50MA>200MA; 0 otherwise; NaN if SMAs absent
 ]
 
+# TRAILING_COLS — 3 compression-spine columns (Effort B / issue #379, B-2) derived from a
+# ticker's TRAILING available bars, NOT a per-row transform like METRICS_COLS. Computed at
+# write time (collect_picks.compute_trailing_setup) over the full picks.csv log and populated
+# only on the max-date (picks_latest) rows the PWA actually reads — older rows carry "" by
+# design. picks.csv history is gappy per-ticker, so these are the last N AVAILABLE daily bars,
+# not N guaranteed-consecutive trading days; the PWA labels the tight-range read honestly
+# ("tightest range, last 7 bars"), never "NR7" (owner decision 2026-08-31, doc §5.7/§10.4).
+# Facts→flags / judgments→shown-values (doc §4.0): tight_range_7 is a FACT (which bar is
+# narrowest), the two *_spark series are SHOWN values, no invented threshold anywhere.
+# Adding one later is a two-way-door superset migration (ensure_picks_csv pattern).
+# Triple-documented: here, README § Configurable parameters, CLAUDE.md § Picks pipeline.
+TRAILING_COLS = [
+    "tight_range_7",    # 1 if today's High−Low is the narrowest over the last TIGHT_RANGE_WINDOW
+                        #   available bars (incl. today); 0 if not; "" if fewer bars exist
+    "range_atr_spark",  # pipe-joined last ≤SPARK_WINDOW range_atr values, oldest→newest (sparkline)
+    "atr_spark",        # pipe-joined last ≤SPARK_WINDOW ATR values, oldest→newest (sparkline)
+]
+
+# TIGHT_RANGE_WINDOW — number of trailing AVAILABLE daily bars (incl. today) the tight-range
+# fact is evaluated over. Owner: "last 7 bars." A window, not a threshold (doc §4.0) — it
+# selects which bars to compare, it does not gate a continuous quantity into a verdict.
+TIGHT_RANGE_WINDOW = 7
+# SPARK_WINDOW — max points in the range_atr / ATR sparklines (oldest→newest, trailing).
+SPARK_WINDOW = 10
+# SPARK_MIN_BARS — minimum available bars before a sparkline is emitted at all; below this the
+# series column is "" (per-name graceful degradation, doc §3). A too-short line reads as noise.
+SPARK_MIN_BARS = 3
+
 
 def load_config() -> dict:
     return json.loads(CONFIG_PATH.read_text())
@@ -238,5 +266,6 @@ def finviz_cols(config: dict = None) -> list:
 
 
 def picks_columns(config: dict = None) -> list:
-    """Full ordered picks.csv header: lead (6) + Finviz (84) + grp_* (19) + metrics (5) = 114."""
-    return PICKS_LEAD_COLS + finviz_cols(config) + PICKS_GRP_COLS + METRICS_COLS
+    """Full ordered picks.csv header: lead (6) + Finviz (84) + grp_* (19) + metrics (5)
+    + trailing (3) = 117."""
+    return PICKS_LEAD_COLS + finviz_cols(config) + PICKS_GRP_COLS + METRICS_COLS + TRAILING_COLS

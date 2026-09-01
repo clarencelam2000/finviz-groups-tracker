@@ -13,20 +13,10 @@ are not derived from the CSV pipeline. Any change must also update `README.md` �
 parameters and, if it's a scoring/display constant tracked by the anti-drift guard, bump
 `data/picks/display_methodology.json` (see `scripts/CLAUDE.md` § Picks pipeline).
 
-> **Data-load-failure vs. genuinely-untracked, don't conflate them (2026-08-31).** A sector/industry
-> card on the Lookup tab (`groupPerfCard()`) or the SIGNAL card (`contextSignalCard()`) can render
-> "no data" for two very different reasons that look identical to `findGroupData()`: the group is a
-> real gap in Finviz's own taxonomy, or the last CSV load simply failed/hadn't happened. An owner
-> report ("Asset Management" showing "not separately tracked" when the CSV data was actually
-> complete) traced to the latter — closing and reopening the app fixed it, though the exact
-> mechanism was never confirmed (a theory that Papa Parse's `download:true` mode could silently
-> cache a truncated CSV was investigated and abandoned — it uses `XMLHttpRequest`, and per the XHR
-> spec an interrupted connection fires `error`, not a false "success", so that path is already
-> caught by `loadGroup()`'s existing try/catch; no guard was added for an unconfirmed failure mode).
-> The actual fix: the user-facing copy in both cards no longer asserts "not tracked" as settled
-> fact — it says data didn't load and offers a refresh action. Both the refresh button (top right)
-> and pull-to-refresh call `window.__refresh()`, which does a real cache-busted re-fetch
-> (`?_=timestamp`), not a cache replay — either is a legitimate fix if this happens again.
+> **Note (2026-08-31):** `groupPerfCard()`/`contextSignalCard()` empty-state copy doesn't assert
+> "not tracked" as fact anymore — `findGroupData()` can't distinguish a genuine taxonomy gap from
+> a failed/incomplete data load, so both now say data didn't load and offer a `window.__refresh()`
+> button instead. See PR #381.
 
 | Constant | Default | Controls |
 |----------|---------|---------|
