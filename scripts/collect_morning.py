@@ -74,6 +74,29 @@ def session_store_paths(session: str) -> tuple:
 # Store schema — exact column order (ADR-013 Decision 4). `session` is redundant with
 # the filename on purpose: rows stay self-describing once sessions are concatenated
 # later (session_config.PROVISIONAL_KEY_PREFIX == ("date", "session")).
+# WIDE_SCRAPE_BLOCK — which screener_config.json block the morning/pre_close scrape renders.
+# A-1 decision (2026-09-01, planning/compression-expansion-ideation.md §7.3a): the Morning-family
+# cards need the wide volatility/setup columns, so the morning run scrapes the full 84-column block
+# instead of the legacy 9-column "morning" block. "held" is the proven 84-col t=-filtered config
+# (empty base_filters, same columns as "wide") already run in prod by collect_held.py — reused
+# here rather than adding a duplicate block. This does NOT change the scrape's Cloudflare exposure:
+# fetch_ticker_quotes' page.goto count is driven by ticker count (batched ≤50, 20 rows/page), not
+# column count — only the c= param and the per-page payload size differ. The legacy "morning" block
+# stays in screener_config.json as documentation of the minimal status set (unused by the live run).
+WIDE_SCRAPE_BLOCK = "held"
+
+# SETUP_COLUMNS — wide scraped columns carried through into the session store (beyond the 9 status
+# fields) so the PWA can render the "Volatility & setup" (B-1) section on Morning-family cards from
+# the morning store directly, at 100% coverage and with fresh this-morning values (vs. a client-side
+# cross-ref to last night's picks_latest that leaves ~⅓ of morning tickers blank — see §7.3a).
+# Stored under their verbatim Finviz labels (not lowercased) so the PWA render can read them by the
+# SAME keys it already uses on picks_latest rows — render symmetry with the cross-ref path. Values
+# are carried through as the raw scraped strings (e.g. "3.92%", "-7.99%"), matching picks_latest.
+# Adding a column here is a two-way-door superset migration (write_store backfills "" on old rows);
+# removing one is one-way once data flows. 3-places documented (in-code here + README § Configurable
+# parameters + scripts/CLAUDE.md § WS3 morning status). Extend as later B slices reach these cards.
+SETUP_COLUMNS = ["RSI", "Volatility W", "Volatility M", "Rel Volume", "52W High"]
+
 STORE_COLUMNS = [
     "date", "session", "collected_at", "ticker", "group", "list_category",
     "trigger", "stop", "atr", "price", "open", "high", "low", "change",
@@ -84,6 +107,9 @@ STORE_COLUMNS = [
     # whole file each run and backfills "" for these on pre-existing rows via r.get(col, ""),
     # so no separate ensure/migration step is needed (same two-way-door pattern as grp_*).
     "reclaim_ref", "reclaim_ref_value",
+    # A-1 (2026-09-01) volatility/setup wide columns — see SETUP_COLUMNS above. Same
+    # superset-additive two-way-door pattern: blank-backfilled on pre-A-1 rows by write_store.
+    *SETUP_COLUMNS,
 ]
 
 # URL-length safety: batch the scrape universe into chunks of <= 50 per `t=` screener
@@ -535,7 +561,7 @@ def build_status_rows(pick_levels: list, quotes: list, collected_at: str, date: 
             if matched:
                 reclaim_ref, reclaim_ref_value = matched[0], _fmt(matched[1])
 
-        rows.append({
+        row = {
             "date": date,
             "session": session,
             "collected_at": collected_at,
@@ -554,7 +580,14 @@ def build_status_rows(pick_levels: list, quotes: list, collected_at: str, date: 
             "atr_from_lod": _fmt(atr_from_lod),
             "reclaim_ref": reclaim_ref,
             "reclaim_ref_value": reclaim_ref_value,
-        })
+        }
+        # A-1 (2026-09-01): carry the wide volatility/setup columns through verbatim from the
+        # scraped quote (raw Finviz strings, keyed by Finviz label — render symmetry with
+        # picks_latest). Blank when the scrape had no match or predates the wide scrape (e.g. an
+        # older 9-column fixture); the store schema is a superset so the column still exists.
+        for col in SETUP_COLUMNS:
+            row[col] = (q.get(col) if q else "") or ""
+        rows.append(row)
     return rows
 
 
@@ -774,7 +807,7 @@ def main() -> None:
             ignore_https_errors=True,
         )
         page = ctx.new_page()
-        quotes = fetch_ticker_quotes(page, tickers, config)
+        quotes = fetch_ticker_quotes(page, tickers, config, block=WIDE_SCRAPE_BLOCK)
         browser.close()
 
     collected_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

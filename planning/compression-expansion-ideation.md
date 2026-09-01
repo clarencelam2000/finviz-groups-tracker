@@ -251,6 +251,42 @@ cols, but **18 of 123 morning tickers are NOT in `picks_latest`** (~15%: AMD, AL
 OSCR, TSEM, …) — watchlist adds / setting-up names not in last night's EOD picks run. So cross-ref
 covers ~85% for free; ~15% render blank.
 
+### 7.3a A-1 verification (2026-09-01) — findings + recommendation
+Verification the doc §7.3 asked for, done. **Recommendation: scrape-wide (path a).**
+
+**Cost of scrape-wide is near-zero (the doc's feared downside does not hold).**
+`collect_morning.py::fetch_ticker_quotes` (`build_ticker_url`, lines ~138-211) scrapes a
+`t=`-filtered ticker list, batched ≤50/URL (`MORNING_BATCH_SIZE=50`), paginated 20 rows/page.
+The number of `page.goto()` calls — i.e. the Cloudflare surface — is driven **entirely by ticker
+count, not column count**. Morning universe = Focus top-100 + watchlist union (min22/median95/
+max100 names/day) → ≤2 batches. Switching the morning block from 9 cols to a wide 84-col block
+changes only the `c=` URL param: **identical goto count, identical Cloudflare exposure**, only a
+larger HTML payload per page. The 84-col `t=`-filtered scrape is already proven in prod —
+`build_ticker_url(..., block="held")` does exactly this for the WS5 held feed.
+
+**Cross-ref coverage is worse than the doc's ~15% estimate.** Measured on 2026-08-31 data:
+morning **33.6% orphans** (42/125), pre-close **21%** (21/100). Orphans = watchlist adds +
+setting-up names not in last night's EOD picks run. Cross-ref would leave ~⅓ of morning cards
+blank on the volatility/setup section — disproportionately the pre-open action surface.
+
+**What each B section needs (verified present in `picks_latest.csv`):**
+- B-1 (raw scraped): `RSI`, `Volatility W`, `Volatility M`, `Rel Volume`, `52W High`. Scrape-wide
+  provides these **fresh this-morning**; cross-ref provides last night's (fine for multi-day, staler
+  for RSI/RelVol).
+- B-2 (derived in the *picks* pipeline, NOT scraped): `tight_range_7`, `range_atr_spark`,
+  `atr_spark`. These come via **cross-ref regardless** — they're trailing/multi-day, so last night's
+  values are current enough; orphans have no picks history so they'd be blank under *any* path.
+
+**Existing join is already built + loaded:** `ws4FindPicksRow(ticker)` (exact-string match on
+`Ticker||ticker`), and `state.picksData` (picks_latest) is already resident on every render via
+`loadPicks()` — no new fetch needed for the cross-ref half.
+
+**Net recommendation:** scrape-wide the morning run for the B-1-family raw columns (100% coverage,
+fresh, ~zero extra Cloudflare cost, reuses proven `held` machinery); keep cross-ref to picks_latest
+for the B-2 derived sparkline columns (multi-day, no benefit from re-scraping). This matches the
+owner's stated §7.3 preference ("wants full 84 cols … prefers (a) if no blocking downside") now that
+"no blocking downside" is verified.
+
 ### 7.3 Owner decision on morning data
 **Owner wants the full 84 columns available on morning cards.** Two ways, to be decided:
 - **(a) Scrape the wide 84 in the morning run** — if no blocking downside, owner wants this.
@@ -375,8 +411,9 @@ justify its own small, time-sensitive list — phase 2.
 ### Effort A — card standardization (issue #378)
 | ID | Slice | Doc ref | Status | PR / notes |
 |----|-------|---------|--------|------------|
-| A-1 | **Decide morning-card data path**: scrape-wide-84 vs cross-ref `picks_latest` (~85%) + D1 orphan backfill (~15%) | §7.3 | 🅿️ | **Owner decision, needs verification first** (scrape-time / Cloudflare exposure / exact coverage). The one gate for A. Do the verification, bring a recommendation. |
-| A-2 | Extract ONE shared card component/schema (superset fields + a "Setup/Volatility" section) reused across Picks-family and Morning-family | §7, §8 | ⬜ | The seam B-6 rides on. B-1's section is its reference layout. Depends on A-1 for the Morning-family data. |
+| A-1 | **Decide morning-card data path**: scrape-wide-84 vs cross-ref `picks_latest` (~85%) + D1 orphan backfill (~15%) | §7.3 | ✅ | **DECIDED 2026-09-01: scrape-wide (owner greenlit).** Verification in §7.3a. Cross-ref orphan rate worse than doc's ~15% (measured 2026-08-31: morning **33.6%**, pre-close **21%**). Scrape-wide cost is near-zero (`fetch_ticker_quotes` goto-count = ticker count, not column count; 84-col `t=` scrape already runs in prod as `block="held"`). Implementation = widen the morning/pre_close scrape to the wide column set + superset-additive session-store schema (next slice A-1-IMPL). B-2 derived sparkline cols still come via cross-ref (multi-day). |
+| A-1-IMPL | **Widen the morning/pre_close scrape to the 84-col block + carry setup columns into the session store** (the pipeline realization of A-1) | §7.3a | ✅ | **PR (this session).** `collect_morning.py`: `WIDE_SCRAPE_BLOCK="held"` (84-col, reuses the proven held config), `SETUP_COLUMNS` (`RSI`, `Volatility W`, `Volatility M`, `Rel Volume`, `52W High`) carried through verbatim into `STORE_COLUMNS` (superset-additive). No PWA render yet (that's B-6). Live values land on the next Actions morning run; committed store CSVs stay old-schema until then (write_store backfills "" — no manual migration). |
+| A-2 | Extract ONE shared card component/schema (superset fields + a "Setup/Volatility" section) reused across Picks-family and Morning-family | §7, §8 | ⏳ | The seam B-6 rides on. B-1's section is its reference layout. **A-1 data path now unblocked** (A-1-IMPL landed the morning-side wide columns). |
 | A-3 | Apply the shared component to Morning card, Watchlist card, Trade ticket (the Morning family) | §7 | ⬜ | After A-2. |
 
 ### Dropped / not in scope
@@ -388,6 +425,16 @@ justify its own small, time-sensitive list — phase 2.
 | "lower highs" as a VCP prerequisite | §5.2 | ❌ Wrong; removed from the design. |
 
 ### Progress log (newest first)
+- **2026-09-01 — A-1 decided + A-1-IMPL done.** Verification (§7.3a) showed cross-ref orphan rate
+  worse than the doc's ~15% (morning 33.6%, pre-close 21% on 2026-08-31) and that scrape-wide's
+  feared cost is near-zero (goto count = ticker count, not column count; 84-col `t=` scrape already
+  in prod as `block="held"`). **Owner greenlit scrape-wide.** Implemented: `collect_morning.py`
+  scrapes the 84-col `held` block (`WIDE_SCRAPE_BLOCK`) for morning/pre_close and carries
+  `SETUP_COLUMNS` (RSI, Vol W/M, Rel Volume, 52W High) into the session store (superset-additive).
+  1 new unit test; 736 non-PW suite green. 3-places doc'd. **Next: A-2** (extract the shared card
+  component from B-1's layout) → then **B-6** (render B-1/B-2 on the Morning family, B-1 from the
+  fresh morning store, B-2 via cross-ref). B-3 (volume dry-up) remains the alternative Picks-only
+  spine slice if the owner prefers to keep single-card momentum first.
 - **2026-08-31 — B-2 done (PR #383).** Range tightening on the Picks card. Pipeline: 3 new
   `TRAILING_COLS` in `picks_config.py` (`tight_range_7`, `range_atr_spark`, `atr_spark`) +
   `picks_metrics.compute_trailing_setup()` (pure, trailing-window over a ticker's *available*
