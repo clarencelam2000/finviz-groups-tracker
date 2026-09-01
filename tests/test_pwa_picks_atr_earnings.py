@@ -247,6 +247,32 @@ class TestPicksAtrRowAndEarnings:
 
             browser.close()
 
+    def test_range_tightening_shows_flag_and_sparklines(self):
+        """B-2 (issue #379): the 'Range tightening' block shows the honest 'Tightest range ·
+        last 7 bars' flag when tight_range_7 == '1' and renders both *_spark sparklines as
+        SVG polylines (SHOWN values, doc §4.0). ANET fixture carries populated series."""
+        from playwright.sync_api import sync_playwright
+
+        body = _single_row_csv({})  # ANET: tight_range_7='1', both spark series populated
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            self._open_picks_tab(page, body)
+            self._expand_first_card(page)
+
+            panel = page.locator("[id^='risk-panel-']").first
+            panel_text = panel.inner_text()
+            assert "Range tightening" in panel_text, f"missing block; got:\n{panel_text}"
+            assert "Tightest range" in panel_text and "last 7 bars" in panel_text, \
+                f"expected honest tightest-range flag; got:\n{panel_text}"
+            # Two sparklines (range/ATR + ATR $) render as SVG polylines.
+            assert panel.locator("svg polyline").count() >= 2, "expected 2 sparkline polylines"
+            # Never claims 'NR7' (gappy history — labeled honestly).
+            assert "NR7" not in panel_text, f"must not claim NR7; got:\n{panel_text}"
+
+            browser.close()
+
     def test_earnings_none_known_shows_dash(self):
         """Earnings == '-' (none known) renders as an em dash, no crash."""
         from playwright.sync_api import sync_playwright

@@ -56,7 +56,7 @@ from picks_config import (
     GLOBAL_FETCH_CAP,
     PAGE_DELAY_S,
 )
-from picks_metrics import METRICS_COLS, compute_metrics_row
+from picks_metrics import METRICS_COLS, compute_metrics_row, compute_trailing_setup
 # Inherit the pure scrape/url/parse helpers from the Phase-1 probe — no need to
 # rewrite them. They are import-safe (Playwright is imported inside probe main()).
 from probe_picks import slugify_industry, _build_url, _parse_table, SCREENER_TABLE_SELECTOR
@@ -510,11 +510,19 @@ def write_picks(picks_csv, latest_csv, new_rows, date_str, columns):
     deduped = list(by_key.values())
 
     all_rows = kept + deduped
-    _write_csv(picks_csv, all_rows, columns)
 
-    # picks_latest.csv = max-date slice (written atomically alongside the append).
+    # picks_latest.csv = max-date slice. Enrich the TRAILING_COLS on that slice from the
+    # full log (B-2, issue #379) BEFORE writing either file — latest_rows are references
+    # into all_rows, so populating them here fills both picks.csv's max-date rows and
+    # picks_latest.csv in one pass. Older rows keep "" (they're never read by the PWA).
     max_date = max((r["date"] for r in all_rows), default=date_str)
     latest_rows = [r for r in all_rows if r.get("date") == max_date]
+    compute_trailing_setup(latest_rows, all_rows,
+                           window=pc.TIGHT_RANGE_WINDOW,
+                           spark_window=pc.SPARK_WINDOW,
+                           spark_min=pc.SPARK_MIN_BARS)
+
+    _write_csv(picks_csv, all_rows, columns)
     _write_csv(latest_csv, latest_rows, columns)
 
     return len(deduped), len(latest_rows)
@@ -574,7 +582,8 @@ def ensure_picks_csv(picks_csv, latest_csv=None):
     first_keys = set(existing[0].keys())
     needs_metrics = not all(c in first_keys for c in METRICS_COLS)
     needs_collected_at = "collected_at" not in first_keys
-    if not needs_metrics and not needs_collected_at:
+    needs_trailing = not all(c in first_keys for c in pc.TRAILING_COLS)
+    if not needs_metrics and not needs_collected_at and not needs_trailing:
         return  # already migrated
 
     if needs_metrics:
@@ -584,6 +593,9 @@ def ensure_picks_csv(picks_csv, latest_csv=None):
         print(f"ensure_picks_csv: backfilling collected_at (approximated from "
               f"cron time {pc.COLLECTED_AT_CRON_UTC}) into {picks_csv} "
               f"({len(existing)} rows)…")
+    if needs_trailing:
+        print(f"ensure_picks_csv: backfilling {pc.TRAILING_COLS} onto the max-date "
+              f"slice of {picks_csv}…")
 
     config = pc.load_config()
     columns = pc.picks_columns(config)
@@ -595,6 +607,17 @@ def ensure_picks_csv(picks_csv, latest_csv=None):
                 r[col] = _f(m[col])
         if needs_collected_at:
             r["collected_at"] = f"{r.get('date', '')}T{pc.COLLECTED_AT_CRON_UTC}Z"
+
+    # TRAILING_COLS are trailing-window derived, populated only on the max-date slice the
+    # PWA reads (older rows stay "" via _write_csv's r.get(col, "")). Compute after the
+    # per-row backfills above so range_atr is present for the range_atr_spark series.
+    if needs_trailing and existing:
+        max_date = max(r.get("date", "") for r in existing)
+        latest_rows = [r for r in existing if r.get("date") == max_date]
+        compute_trailing_setup(latest_rows, existing,
+                               window=pc.TIGHT_RANGE_WINDOW,
+                               spark_window=pc.SPARK_WINDOW,
+                               spark_min=pc.SPARK_MIN_BARS)
 
     picks_csv.parent.mkdir(parents=True, exist_ok=True)
     _write_csv(picks_csv, existing, columns)

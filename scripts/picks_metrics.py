@@ -146,3 +146,74 @@ def compute_metrics_row(row: dict) -> dict:
         "range_atr":     range_atr,
         "stage2":        stage2,
     }
+
+
+def _hl_range(row) -> float:
+    """Today's raw daily range = High − Low. NaN if either is missing/unparseable."""
+    high = _float(row.get("High"))
+    low = _float(row.get("Low"))
+    if _isnan(high) or _isnan(low):
+        return _NAN
+    return high - low
+
+
+def compute_trailing_setup(latest_rows, history_rows,
+                           window=7, spark_window=10, spark_min=3):
+    """Populate TRAILING_COLS (tight_range_7, range_atr_spark, atr_spark) on each row in
+    `latest_rows` IN PLACE, from that ticker's trailing available bars in `history_rows`.
+
+    `history_rows` is the full picks.csv log; `latest_rows` are a subset of it (the max-date
+    slice the PWA reads). Compression spine, Effort B / issue #379 B-2 — doc §5.4/§5.7/§3.
+
+    picks.csv history is gappy per-ticker (a name only appears on days its group was
+    selected), so "the last N bars" here means the last N AVAILABLE daily bars, NOT N
+    guaranteed-consecutive trading days. The tight-range read is therefore over available
+    bars and is labeled honestly by the PWA ("tightest range, last 7 bars"), never "NR7"
+    (owner decision 2026-08-31). Per-name graceful degradation (doc §3): a column is ""
+    (blank) when the ticker lacks enough bars, never a fabricated value.
+
+    Pure — no I/O. Returns `latest_rows` (also mutated in place). Values written are
+    CSV-ready (int 0/1, pipe-joined string, or "").
+    """
+    from collections import defaultdict
+
+    # One representative bar per (ticker, date): a ticker can appear on the same date under
+    # multiple list_category buckets (scraped once, tagged per bucket) — those rows share
+    # identical High/Low/ATR/range_atr, so collapse to one bar per date to avoid
+    # double-counting a single session in a trailing window.
+    bars_by_ticker = defaultdict(dict)  # ticker -> {date: row}
+    for r in history_rows:
+        t = r.get("ticker")
+        if t is None:
+            continue
+        bars_by_ticker[t][r.get("date", "")] = r  # identical values → last write wins
+
+    for row in latest_rows:
+        t = row.get("ticker")
+        d = row.get("date", "")
+        dates = sorted(dt for dt in bars_by_ticker.get(t, {}) if dt <= d)
+        bars = [bars_by_ticker[t][dt] for dt in dates]
+
+        # tight_range_7 (a FACT, doc §4.0): today's raw H−L range is the narrowest of the
+        # last `window` available bars. "" when fewer than `window` bars exist, or when any
+        # bar in the window is missing High/Low (can't fairly compare).
+        tight = ""
+        if len(bars) >= window:
+            ranges = [_hl_range(b) for b in bars[-window:]]
+            if not any(_isnan(x) for x in ranges):
+                tight = 1 if ranges[-1] <= min(ranges) else 0
+        row["tight_range_7"] = tight
+
+        # *_spark (SHOWN values, doc §4.0): last ≤`spark_window` available values,
+        # oldest→newest, pipe-joined. "" when fewer than `spark_min` valid points.
+        def _series(col):
+            vals = [_float(b.get(col)) for b in bars[-spark_window:]]
+            vals = [v for v in vals if not _isnan(v)]
+            if len(vals) < spark_min:
+                return ""
+            return "|".join(f"{v:.2f}" for v in vals)
+
+        row["range_atr_spark"] = _series("range_atr")
+        row["atr_spark"] = _series("ATR")
+
+    return latest_rows
