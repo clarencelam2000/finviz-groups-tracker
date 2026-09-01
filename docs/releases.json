@@ -1,6 +1,18 @@
 {
-  "current": "2026.08.31.1",
+  "current": "2026.09.01",
   "releases": [
+    {
+      "version": "2026.09.01",
+      "date": "2026-09-01",
+      "title": "Volume dry-up on Picks cards",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "The \"Volatility & setup\" section now shows a \"Volume dry-up\" read: a mini sparkline of relative volume over the last few bars we have for that name, so you can see whether volume is quietly drying up as the range tightens — the classic coiling tell.",
+        "It's a shown trend, not a threshold — the line and its latest value are there for you to read; nothing is gated behind an invented cutoff.",
+        "Self-hides for names without enough history — no fabricated readings."
+      ]
+    },
     {
       "version": "2026.08.31.1",
       "date": "2026-08-31",

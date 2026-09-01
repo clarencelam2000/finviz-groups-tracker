@@ -4627,6 +4627,13 @@
       const atrSpark = r['atr_spark'] || '';
       const hasTightening = !!(rangeAtrSpark || atrSpark || tightRange7 === '1' || tightRange7 === '0');
 
+      // Volume dry-up (B-3, issue #379) — Rel Volume trend over trailing bars, from picks_latest.
+      // A SHOWN value (doc §4.0, §5.2): the trader reads whether volume is drying up (series
+      // sloping below 1.0×) as the range tightens. Owner named this the strongest/cheapest VCP
+      // sub-signal. Never thresholded; self-hides when the name lacks enough history.
+      const relVolSpark = r['relvol_spark'] || '';
+      const hasVolDryup = !!relVolSpark;
+
       // Avg $ volume + earnings proximity — computed unconditionally (not just when
       // expandable) since the earnings badge below needs it in the always-visible
       // collapsed row too, not only inside the expanded risk panel.
@@ -4816,6 +4823,12 @@
                     <div class="text-sky-400/80">${volSpark(atrSpark) || '<span class="text-slate-600">—</span>'}</div>
                   </div>
                 </div>
+              </div>` : ''}
+              ${hasVolDryup ? `
+              <div class="mt-2 pt-2 border-t border-slate-700/40">
+                <div class="text-slate-500 mb-1">Volume dry-up</div>
+                <div class="text-slate-500 text-[0.65rem] mb-0.5">Rel volume · last bars <span class="text-slate-400">${volSparkLast(relVolSpark)}×</span></div>
+                <div class="text-sky-400/80">${volSpark(relVolSpark) || '<span class="text-slate-600">—</span>'}</div>
               </div>` : ''}
             </div>
             ${scoreDebug}
