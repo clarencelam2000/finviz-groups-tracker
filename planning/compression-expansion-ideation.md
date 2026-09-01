@@ -416,6 +416,12 @@ justify its own small, time-sensitive list — phase 2.
 | A-2 | Extract ONE shared card component/schema (superset fields + a "Setup/Volatility" section) reused across Picks-family and Morning-family | §7, §8 | ⏳ | The seam B-6 rides on. B-1's section is its reference layout. **A-1 data path now unblocked** (A-1-IMPL landed the morning-side wide columns). |
 | A-3 | Apply the shared component to Morning card, Watchlist card, Trade ticket (the Morning family) | §7 | ⬜ | After A-2. |
 
+### Cross-cutting follow-ups (not scoped to a single effort)
+
+| ID | Slice | Status | PR / notes |
+|----|-------|--------|------------|
+| WIDE-SCRAPE-FASTFOLLOW | **Scope which of the remaining 84 wide-scrape columns are worth storing** (SMA20/50/200, 52W Low, Beta, Gap, Change from Open, Earnings date, EPS/Revenue Surprise, Recom, Target Price, News) | ⬜ | Issue #385, PR #384 review finding, 2026-09-01. PR #384 made the morning/pre_close scrape wide (84 cols, `held` block) at ~zero extra `page.goto` cost, but only 5 columns (`SETUP_COLUMNS`) are carried into the store. **Deliberately NOT filed under Effort A** — card rendering (A-2/B-6) is one consumer, but Earnings/EPS/Revenue-Surprise and the SMA columns are equally relevant to WS4's trade-ticket earnings guardrail and WS5's `advance()` engine (earnings-approach overlay, reclaim-ref 50MA derivation), which have nothing to do with card display. Not a mandate to store all 84 — a scoping pass, low priority, no urgency. |
+
 ### Dropped / not in scope
 | Item | Doc ref | Status |
 |------|---------|--------|
