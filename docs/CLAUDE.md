@@ -30,7 +30,7 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `MIN_MARKET_CAP_B` | `5` | Picks tab base display filter (C6); rows below this market cap ($B) are hidden. |
 | `ATR_EXT_ACTIONABLE` | `4.0` | ATR-extension emerald band cap; also the Focus hard-DQ line (Phase 3b). |
 | `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start; flags a held position as a trim-10% candidate. |
-| `ATR_FROM_LOD_CLEAN` / `ATR_FROM_LOD_CHASE` | `0.8` / `1.0` | Morning tab (WS3, ADR-013) entry-quality bands on `atr_from_lod` = (price − session low) / ATR, shown only on actionable cards (Triggered / Gapped-through). `<= 0.8` clean entry (emerald "ok to act"), `> 1.0` chasing (red), between = caution (amber). Owner-set 2026-08-08. |
+| `ATR_FROM_LOD_CLEAN` / `ATR_FROM_LOD_CHASE` | `0.8` / `1.0` | Morning tab (WS3, ADR-013) entry-quality bands on `atr_from_lod` = (price − session low) / ATR, shown on every Morning/Watch card status (owner decision 2026-09-02 dropped the original actionable-only gate — see below). `<= 0.8` clean entry (emerald "ok to act"), `> 1.0` chasing (red), between = caution (amber), same bands regardless of status. Owner-set 2026-08-08. |
 | `LAUNCH_NEAR_HIGH_PCT` | `8` | Launch-ready chip (Picks tab, Phase 1, `computeLaunchReady()`): `ohMag` (% below 52-week high) `<=` this = "near the high" (little overhead supply). Display-only, no scoring effect. |
 | `LAUNCH_CALM_EXT_MAX` | `3` | Launch-ready chip: `atr_ext_50` `<=` this (and `> 0`) alongside near-high = `Coiled`; `>` this = `Extended`. |
 | `LAUNCH_OVERHEAD_PCT` | `20` | Launch-ready chip: `ohMag >` this = `Overhead` (deep below high, heavy overhead supply). |
@@ -165,19 +165,35 @@ the empty state — a 404 is expected, never an error.
   (both order 1) → Failed breakout → Setting up → Invalidated → No quote. This is the *display*
   order and is deliberately different from the engine's evaluation precedence
   (`pick_status.STATUS_PRECEDENCE`).
-- **`atr_from_lod` and the "I took it" button render only on actionable states** (Triggered /
-  Gapped-through / **Reclaimed** — 2026-08-27, `reclaim.actionable:true`), gated by
-  `MORNING_STATUS_META[*].actionable`. Picks now emit `reclaim` (against their prior low OR a
-  derived 50MA); the `reclaim` case in `morningCardBody` names the reclaimed level from the
-  `reclaim_ref`/`reclaim_ref_value` CSV columns (50MA prefixed `~` — a stale derived level).
+- **`atr_from_lod` + Rel volume render on every status (owner decision 2026-09-02); the "I
+  took it" button stays actionable-only.** Originally `atr_from_lod` was computed and shown
+  only for Triggered / Gapped-through / **Reclaimed** (`MORNING_STATUS_META[*].actionable`,
+  `reclaim.actionable:true` since 2026-08-27); the owner asked for real-time entry-quality
+  context (ATR-from-LoD + Rel volume, both live scrape-wide values, unlike the B-2/B-3
+  trailing cols below) on every card regardless of tradeability, so `compute_atr_from_lod`
+  is now called unconditionally in `collect_morning.py` and both `morningCardBody` and
+  `watchCardHtml` render the two rows on every status branch, same color bands throughout.
+  `MORNING_STATUS_META[*].actionable` still gates the trade ticket / "I took it" CTA — that
+  part of the actionable/non-actionable split is unchanged. Picks emit `reclaim` (against
+  their prior low OR a derived 50MA); the `reclaim` case in `morningCardBody` names the
+  reclaimed level from the `reclaim_ref`/`reclaim_ref_value` CSV columns (50MA prefixed `~`
+  — a stale derived level). **`watchCardHtml`'s reclaim branch was a known inconsistency**
+  (a separate hand-built body that predated the shared atrRow/rvolRow rows and never
+  rendered them) — fixed here so all watch card states render the same rows; tracked as
+  closed in `.session/SPRINT.md` (was open as a standardization gap).
 - **Compression "Volatility & setup" section (B-6, issue #379).** Every morning picks card
   (`morningCardBody`, all live statuses) and every watch card (`watchCardHtml`) renders the shared
-  `volSetupSectionHtml(r)` section (the A-2 seam, defined near `volSpark`) — the same one the Picks
-  card uses: B-1 Vol W/M (+ contracting/expanding fact tint) · Rel volume · 52W-high dist, B-2
-  range tightening, B-3 volume dry-up. It's inserted after the card's metric rows and before the
-  trade ticket / CTA (context before action). The row it renders from is built by
+  `volSetupSectionHtml(r, {staleTrailing:true})` section (the A-2 seam, defined near `volSpark`)
+  — the same one the Picks card uses (`renderPickRow` omits `staleTrailing`): B-1 Vol W/M (+
+  contracting/expanding fact tint) · Rel volume · 52W-high dist, B-2 range tightening, B-3 volume
+  dry-up. `staleTrailing:true` labels the B-2/B-3 sub-headers "Range/Volume over last 10 sessions
+  (as of last close M/D)" — those two sub-blocks alone come from the picks_latest cross-ref
+  (last night's close), unlike the fresh B-1 row above them or the Picks tab (where the whole
+  card is same-EOD-run, so no lag to caveat). It's inserted after the card's metric rows and
+  before the trade ticket / CTA (context before action). The row it renders from is built by
   `setupRowForCard(ticker, freshRow)`: base = the `ws4FindPicksRow` cross-ref to `picks_latest`
-  (carries the B-2/B-3 trailing sparkline cols, multi-day), with the B-1 raw cols overridden by
+  (carries the B-2/B-3 trailing sparkline cols, multi-day, plus its own `date` — the as-of date
+  shown in the caveat), with the B-1 raw cols overridden by
   this-morning's fresh scrape-wide values from the morning store row (`r`) / watch public read
   (`pub`) — those columns are on the morning store since A-1-IMPL (scrape-wide). Self-hides (returns
   `''`) for an orphan with no picks history and no fresh scrape. The **trade ticket** deliberately

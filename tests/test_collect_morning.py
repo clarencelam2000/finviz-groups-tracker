@@ -357,12 +357,14 @@ def test_build_status_rows_each_status_and_no_quote():
     assert by_ticker["FAILED"]["status"] == "failed_breakout"
     assert by_ticker["ABSENT"]["status"] == "no_quote"
 
-    # atr_from_lod only populated for actionable states
+    # atr_from_lod (owner decision 2026-09-02) is populated for every status with a
+    # usable price/low/atr, regardless of actionability -- only a missing quote
+    # (ABSENT, no_quote) leaves it blank.
     assert by_ticker["TRIG"]["atr_from_lod"] != ""
     assert by_ticker["GAP"]["atr_from_lod"] != ""
-    assert by_ticker["SETUP"]["atr_from_lod"] == ""
-    assert by_ticker["INVALID"]["atr_from_lod"] == ""
-    assert by_ticker["FAILED"]["atr_from_lod"] == ""
+    assert by_ticker["SETUP"]["atr_from_lod"] != ""
+    assert by_ticker["INVALID"]["atr_from_lod"] != ""
+    assert by_ticker["FAILED"]["atr_from_lod"] != ""
     assert by_ticker["ABSENT"]["atr_from_lod"] == ""
 
     for r in rows:

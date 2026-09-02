@@ -7,7 +7,8 @@ Decisions 3/5. Rendered by renderMorning() in docs/index.html.
 Covered:
   1. All six statuses render, in the ADR/mock actionability order.
   2. Provisional banner + "not settled" chrome is present (ADR-011, non-negotiable).
-  3. ATR-from-LoD band labels render only on actionable states, with correct color words.
+  3. ATR-from-LoD band labels render on every card with a quote (not gated to actionable
+     states, since 2026-09-02), with correct color words.
   4. "I took it" CTA appears only on actionable states (Triggered / Gapped-through).
   5. Signed out, tapping "I took it" routes to sign-in (WS5 phase 1 #309 — it now creates a
      real authenticated position, not the old localStorage-only marker; signed-in path in
@@ -118,7 +119,10 @@ def test_provisional_chrome_present(server):
         browser.close()
 
 
-def test_atr_from_lod_bands_actionable_only(server):
+def test_atr_from_lod_bands_every_status(server):
+    # Owner decision 2026-09-02: ATR-from-LoD is no longer gated to actionable states — it
+    # renders (same color bands) on every card that has a quote, including failed_breakout/
+    # setting_up/invalidated. Only no_quote (PWR, blank atr_from_lod) has nothing to show.
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -128,8 +132,7 @@ def test_atr_from_lod_bands_actionable_only(server):
         # AXON triggered atr_from_lod=0.6 (<=0.8) → ok to act; VRT gapped=1.8 (>1.0) → chase risk.
         assert "ok to act" in html
         assert "chase risk" in html
-        # Non-actionable states (setting_up/failed/invalidated/no_quote) must not show ATR-from-LoD.
-        assert html.count("ATR from LoD") == 2, "ATR-from-LoD should render on the 2 actionable cards only"
+        assert html.count("ATR from LoD") == 5, "ATR-from-LoD should render on every card with a quote (5 of 6; PWR has no_quote)"
         browser.close()
 
 
@@ -254,7 +257,9 @@ def _open_morning_with_picks(page, morning_body: str, picks_body: str):
 def test_volatility_setup_section_on_morning_card(server):
     # A triggered morning card whose fresh scrape-wide setup cols say Vol W (1.7%) < Vol M (2.5%)
     # → the section shows the raw values + a "contracting" fact tint, and the picks cross-ref
-    # supplies the "Volume dry-up" + range-tightening sparklines.
+    # (dated 2026-09-01) supplies the renamed "Volume over last 10 sessions" + range sparklines,
+    # each carrying an "as of last close 9/1" caveat (owner decision 2026-09-02) since that block
+    # alone is a session behind the fresh B-1 values above it.
     from playwright.sync_api import sync_playwright
     morning = _B6_MORNING_HEADER + (
         "2026-09-01,morning,2026-09-01T14:05:00Z,CAH,Healthcare,leaders,236.97,230,5.4,"
@@ -271,7 +276,9 @@ def test_volatility_setup_section_on_morning_card(server):
         assert "1.7% / 2.5%" in html, "raw Vol W / M values shown"
         assert "contracting" in html, "Vol W < Vol M is a fact tint = contracting"
         assert "0.31×" in html, "Rel volume shown"
-        assert "Volume dry-up" in html, "B-3 sub-block from the picks cross-ref"
+        assert "Volume over last 10 sessions" in html, "B-3 sub-block from the picks cross-ref, renamed 2026-09-02"
+        assert "Range over last 10 sessions" in html, "B-2 sub-block from the picks cross-ref, renamed 2026-09-02"
+        assert html.count("as of last close 9/1") == 2, "both stale sub-blocks name the picks-row date"
         assert "<polyline" in html, "at least one sparkline rendered"
         browser.close()
 
