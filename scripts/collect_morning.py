@@ -33,7 +33,7 @@ import session_config  # noqa: E402
 from collect import NYSE_HOLIDAYS, _is_trading_day  # noqa: E402  (reuse holiday table only — NOT trading_date's rollback)
 from pick_status import (  # noqa: E402
     compute_pick_status, compute_atr_from_lod, matched_reclaim_ref,
-    ACTIONABLE_STATUSES, STATUS_RECLAIM,
+    STATUS_RECLAIM,
 )
 
 # NOTE: `collect_held.py` imports FROM this module (CONFIG_PATH, _to_float,
@@ -511,10 +511,11 @@ def build_status_rows(pick_levels: list, quotes: list, collected_at: str, date: 
     PURE — the main in-cloud-tested function. `quotes` is the flat list returned
     by fetch_ticker_quotes (or an equivalent fixture); tickers with no matching
     quote row, or an unparseable price/open/high/low, get status=no_quote via
-    compute_pick_status's own missing-value check. atr_from_lod is computed only
-    for actionable statuses (triggered/gapped_through/reclaim) per ADR-013
-    Decision 3 (extended by P2 lead decision 2) — left as "" otherwise, matching
-    the CSV empty-value convention.
+    compute_pick_status's own missing-value check. atr_from_lod is computed for
+    every status with a usable price/low/atr (owner decision 2026-09-02: every
+    card shows the entry-quality line, not just actionable ones — same color
+    bands everywhere) — it's still "" when any of those three inputs is
+    missing, matching the CSV empty-value convention.
 
     Reclaim refs: Focus pick levels carry `reclaim_refs` (ordered prior_low + derived
     50MA — 2026-08-27); watch levels carry the scalar `ref=sma50`. `compute_pick_status`
@@ -544,9 +545,7 @@ def build_status_rows(pick_levels: list, quotes: list, collected_at: str, date: 
                                       ref=lvl.get("ref"), has_history=lvl.get("has_history"),
                                       reclaim_refs=lvl.get("reclaim_refs"))
 
-        atr_from_lod = None
-        if status in ACTIONABLE_STATUSES:
-            atr_from_lod = compute_atr_from_lod(price, low, lvl["atr"])
+        atr_from_lod = compute_atr_from_lod(price, low, lvl["atr"])
 
         # On a reclaim row, re-derive WHICH reference fired (same helper the engine used,
         # so the two can't diverge) for the PWA's "Reclaimed <level>" copy. Picks carry

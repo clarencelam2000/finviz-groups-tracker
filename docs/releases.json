@@ -1,6 +1,17 @@
 {
-  "current": "2026.09.02",
+  "current": "2026.09.02.1",
   "releases": [
+    {
+      "version": "2026.09.02.1",
+      "date": "2026-09-02",
+      "title": "Entry-quality rows on every Morning/Watch card",
+      "tag": "feature",
+      "tab": "morning",
+      "notes": [
+        "ATR-from-LoD and relative volume now show on every Morning and Watchlist card — not just Triggered/Gapped-through/Reclaimed. Same color bands throughout, so you get real-time entry-quality context even on Setting-up, Failed-breakout and Invalidated names.",
+        "The Range/Volume sparklines inside \"Volatility & setup\" are now labeled \"Range over last 10 sessions\" / \"Volume over last 10 sessions\", with an \"as of last close M/D\" note on Morning and Watchlist cards — that data comes from last night's close, one session behind the fresh numbers above it. The Picks tab doesn't need the note since its whole card is from the same run."
+      ]
+    },
     {
       "version": "2026.09.02",
       "date": "2026-09-02",

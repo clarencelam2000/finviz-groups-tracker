@@ -75,11 +75,13 @@ STATUS_PRECEDENCE = [
     STATUS_SETTING_UP,
 ]
 
-# States considered "actionable" — Phase C shows ATR-from-LoD only for these, and
-# Decision 5's "I took it" button only appears for these states. STATUS_RECLAIM was
-# added here in P2 (lead decision 2) so a reclaimed watch ticker gets atr_from_lod
-# computed and the PWA's "I took it" affordance — picks callers never pass `ref`, so
-# they never produce STATUS_RECLAIM and this addition is zero-impact for them.
+# States considered "actionable" — Decision 5's "I took it" button only appears for
+# these states (owner decision 2026-09-02 moved ATR-from-LoD off this gate: it's now
+# computed and shown for every status with a usable quote, not just these — see
+# compute_atr_from_lod's docstring). STATUS_RECLAIM was added here in P2 (lead
+# decision 2) so a reclaimed watch ticker gets the PWA's "I took it" affordance —
+# picks callers never pass `ref`, so they never produce STATUS_RECLAIM and this
+# addition is zero-impact for them.
 ACTIONABLE_STATUSES = {STATUS_TRIGGERED, STATUS_GAPPED_THROUGH, STATUS_RECLAIM}
 
 
@@ -232,11 +234,13 @@ def _reclaim_candidates(ref, reclaim_refs):
 def compute_atr_from_lod(price, low, atr):
     """Return (price - low) / atr, or None if atr is missing/zero or an input is missing.
 
-    Per ADR-013 Decision 3 this metric is only *meaningful* for actionable states
-    (triggered / gapped_through) — an entry-quality gate (display thresholds,
-    owner-set 2026-08-08: <=0.8 clean entry, >1.0 chasing, 0.8<x<=1.0 caution;
-    live in docs/index.html + docs/CLAUDE.md). Kept pure and unconditional here;
-    the caller decides when to compute/display it.
+    An entry-quality read (display thresholds, owner-set 2026-08-08: <=0.8 clean
+    entry, >1.0 chasing, 0.8<x<=1.0 caution; live in docs/index.html +
+    docs/CLAUDE.md). Originally shown only on actionable states (ADR-013 Decision
+    3); owner decision 2026-09-02 made `collect_morning.py` compute and the PWA
+    show it on every status with a usable quote, same color bands throughout —
+    kept pure and unconditional here regardless, the caller decides when to
+    compute/display it.
     """
     if _is_missing(price) or _is_missing(low) or _is_missing(atr):
         return None

@@ -4176,6 +4176,13 @@
       if (!v || v === '-') return NaN;
       return parseFloat(String(v).replace(/,/g, ''));
     }
+    // 'YYYY-MM-DD' -> 'M/D' (e.g. '2026-08-31' -> '8/31'). '' on anything unparseable —
+    // caller omits the whole caveat clause rather than printing a garbled date.
+    function _mdDate(dateStr) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr || '');
+      if (!m) return '';
+      return `${parseInt(m[2], 10)}/${parseInt(m[3], 10)}`;
+    }
 
     // Launch-ready chip (display-only, thresholds defined near CATEGORY_CHIP_CLS ~line 613).
     // Classifies a pick by overhead supply (distance below 52-week high) and short-term
@@ -4588,8 +4595,19 @@
     // via per-name graceful degrade (§3), so a row missing the derived columns still shows the
     // raw B-1 values it does have. Returns '' when the row has NOTHING to show (e.g. a morning
     // orphan with no scrape and no picks cross-ref), so the caller can omit the section entirely.
-    function volSetupSectionHtml(r) {
+    function volSetupSectionHtml(r, opts) {
       r = r || {};
+      opts = opts || {};
+      // staleTrailing (B-6 follow-up, owner 2026-09-02): the Range/Volume sub-blocks below
+      // read the B-2/B-3 trailing-window columns, which come from the picks_latest cross-ref
+      // (last night's close), NOT this-morning's fresh scrape — unlike the B-1 row above them.
+      // Morning/Watchlist callers pass this so the two sub-headers name the actual as-of date;
+      // the Picks tab (renderPickRow) never does, since there the whole card — B-1 AND the
+      // trailing cols — is from the same EOD run, so there's no lag to caveat.
+      const asOf = opts.staleTrailing ? _mdDate(r['date']) : '';
+      const asOfHtml = asOf
+        ? `<span class="text-slate-600 text-[0.55rem] ml-1">as of last close ${asOf}</span>`
+        : '';
       const volW = _pPct(r['Volatility W']);   // Finviz weekly volatility %, e.g. '3.92%'
       const volM = _pPct(r['Volatility M']);   // Finviz monthly volatility %
       const relVol = _pF(r['Rel Volume']);     // today's volume vs its own average (×)
@@ -4644,8 +4662,8 @@
               </div>
               ${hasTightening ? `
               <div class="mt-2 pt-2 border-t border-slate-700/40">
-                <div class="flex items-center gap-2 mb-1">
-                  <span class="text-slate-500">Range tightening</span>
+                <div class="flex items-center gap-2 mb-1 flex-wrap">
+                  <span class="text-slate-500">Range over last 10 sessions</span>${asOfHtml}
                   ${tightRange7 === '1' ? '<span class="text-emerald-400 text-[0.6rem] px-1.5 py-0.5 rounded bg-emerald-500/10 font-medium">Tightest range · last 7 bars</span>' : ''}
                 </div>
                 <div class="grid grid-cols-2 gap-x-3">
@@ -4661,7 +4679,7 @@
               </div>` : ''}
               ${hasVolDryup ? `
               <div class="mt-2 pt-2 border-t border-slate-700/40">
-                <div class="text-slate-500 mb-1">Volume dry-up</div>
+                <div class="mb-1"><span class="text-slate-500">Volume over last 10 sessions</span>${asOfHtml}</div>
                 <div class="text-slate-500 text-[0.65rem] mb-0.5">Rel volume · last bars <span class="text-slate-400">${volSparkLast(relVolSpark)}×</span></div>
                 <div class="text-sky-400/80">${volSpark(relVolSpark) || '<span class="text-slate-600">—</span>'}</div>
               </div>` : ''}
@@ -5444,16 +5462,25 @@
     function morningCardBody(r) {
       const meta = MORNING_STATUS_META[r.status] || MORNING_STATUS_META.no_quote;
       const now = `${_mNum(r.price)} · ${_mChange(r.change)}`;
+      // ATR from LoD (owner decision 2026-09-02: shown on every status now, not just
+      // actionable ones — same emerald/amber/red entry-quality bands throughout) + Rel
+      // volume, both live scrape-wide values (fresh every morning, unlike the B-2/B-3
+      // trailing cols in setupSection below) so a trader can gauge real-time participation
+      // before deciding to act, on any card type.
       const atr = morningAtrLabel(r.atr_from_lod);
       const atrRow = atr
         ? `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">ATR from LoD</span><span class="${atr.cls} font-medium tabular-nums">${atr.text}</span></div>`
+        : '';
+      const rvol = _pF(r['Rel Volume']);
+      const rvolRow = !isNaN(rvol)
+        ? `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">Rel volume</span><span class="text-slate-200 font-medium tabular-nums">${rvol.toFixed(2)}×</span></div>`
         : '';
 
       // B-6: the shared compression "Volatility & setup" section (A-2 seam). B-1 raw cols come
       // fresh from this morning's scrape-wide store (the row `r` itself); B-2/B-3 sparkline cols
       // come via a picks_latest cross-ref inside setupRowForCard. Rendered once here, inserted
       // after each status's metric rows (context before action). Self-hides on a data-less row.
-      const setupSection = volSetupSectionHtml(setupRowForCard(r.ticker, r));
+      const setupSection = volSetupSectionHtml(setupRowForCard(r.ticker, r), { staleTrailing: true });
 
       // WS5 phase 1 (#309): the CTA now has four states — taken (real position logged),
       // confirm (payload built, awaiting Confirm/Cancel), note (sign-in prompt or a
@@ -5474,11 +5501,11 @@
       let body;
       switch (r.status) {
         case 'triggered':
-          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + atrRow + setupSection
+          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + atrRow + rvolRow + setupSection
                + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
           break;
         case 'gapped_through':
-          body = _mKv('Trigger', _mNum(r.trigger)) + _mKv('Opened', `${_mNum(r.open)} · ${_mChange(r.change)} gap`) + atrRow + setupSection
+          body = _mKv('Trigger', _mNum(r.trigger)) + _mKv('Opened', `${_mNum(r.open)} · ${_mChange(r.change)} gap`) + atrRow + rvolRow + setupSection
                + _mNote('Entry here has poor R vs the planned stop.')
                + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
           break;
@@ -5495,21 +5522,25 @@
           const refRow = isFinite(refValRaw)
             ? _mKv(`Reclaimed ${refLabel}`, `${isMa ? '~' : ''}${refValRaw.toFixed(2)}`)
             : '';
-          body = refRow + _mKv('Now', now) + atrRow + setupSection
+          body = refRow + _mKv('Now', now) + atrRow + rvolRow + setupSection
                + _mNote('Undercut and reclaimed — failed breakdown. Confirm the recovery before entering.')
                + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
           break;
         }
+        // failed_breakout/setting_up/invalidated (below) are not actionable — no trade
+        // ticket or "I took it" CTA — but owner decision 2026-09-02 standardized the
+        // entry-quality rows (ATR-from-LoD + Rel volume) onto every card regardless, so
+        // they render here identically to the actionable branches above.
         case 'failed_breakout':
-          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', `${_mNum(r.price)} · below trigger`) + setupSection
+          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', `${_mNum(r.price)} · below trigger`) + atrRow + rvolRow + setupSection
                + _mNote('Broke out and failed. Don\'t chase a re-break blindly.');
           break;
         case 'setting_up':
-          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + setupSection
+          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + atrRow + rvolRow + setupSection
                + _mNote('Below trigger. Nothing to do yet.');
           break;
         case 'invalidated':
-          body = _mKv('Planned stop (prior low)', _mNum(r.stop)) + _mKv('Now', `${_mNum(r.price)} — below stop`) + setupSection
+          body = _mKv('Planned stop (prior low)', _mNum(r.stop)) + _mKv('Now', `${_mNum(r.price)} — below stop`) + atrRow + rvolRow + setupSection
                + _mNote('Setup dead. Drop from watch.');
           break;
         default: // no_quote
@@ -8296,6 +8327,19 @@
           </div>`;
       }
 
+      // ATR from LoD + Rel volume (owner decision 2026-09-02): standardized onto every watch
+      // card state, including reclaim — previously reclaim's body was a separate hand-built
+      // branch that never rendered these two rows at all, an inconsistency with the
+      // non-reclaim branch below, not a deliberate design choice.
+      const atr = morningAtrLabel(pub.atr_from_lod);
+      const atrRow = atr
+        ? `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">ATR from day low</span><span class="${atr.cls} font-medium tabular-nums">${atr.text}</span></div>`
+        : '';
+      const rvol = _pF(pub['Rel Volume']);
+      const rvolRow = !isNaN(rvol)
+        ? `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">Rel volume</span><span class="text-slate-200 font-medium tabular-nums">${rvol.toFixed(2)}×</span></div>`
+        : '';
+
       const useReclaim = pub.status === 'reclaim' && entry.sma50 != null;
       let body;
       if (useReclaim) {
@@ -8309,20 +8353,17 @@
           : _mNum(pub.low);
         body = _mKv('Ref (50MA)', _mNum(entry.sma50))
              + _mKv('Day low', lowLabel)
-             + _mKv('Now', `<span class="text-emerald-400">${_mNum(pub.price)} — back above</span>`);
+             + _mKv('Now', `<span class="text-emerald-400">${_mNum(pub.price)} — back above</span>`)
+             + atrRow + rvolRow;
       } else {
         const now = `${_mNum(pub.price)} · ${_mChange(pub.change)}`;
-        const atr = morningAtrLabel(pub.atr_from_lod);
-        const atrRow = atr
-          ? `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">ATR from day low</span><span class="${atr.cls} font-medium tabular-nums">${atr.text}</span></div>`
-          : '';
-        body = _mKv('Trigger (prior high)', _mNum(pub.trigger)) + _mKv('Now', now) + atrRow;
+        body = _mKv('Trigger (prior high)', _mNum(pub.trigger)) + _mKv('Now', now) + atrRow + rvolRow;
       }
 
       // B-6: shared compression "Volatility & setup" section (A-2 seam). Watch tickers ride the
       // morning scrape-wide run too, so `pub` carries the fresh B-1 raw cols; B-2/B-3 sparkline
       // cols come via the picks_latest cross-ref in setupRowForCard. Self-hides on a data-less row.
-      const setupSection = volSetupSectionHtml(setupRowForCard(ticker, pub));
+      const setupSection = volSetupSectionHtml(setupRowForCard(ticker, pub), { staleTrailing: true });
 
       const yourLevel = watchYourLevelHtml(entry, pub);
 

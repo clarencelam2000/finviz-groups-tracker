@@ -235,7 +235,9 @@ def test_watch_card_shows_volatility_setup_section(server):
         assert "Volatility &amp; setup" in html, "section renders on the watch card"
         assert "1.7% / 2.5%" in html, "raw Vol W / M shown"
         assert "contracting" in html, "Vol W < Vol M fact tint"
-        assert "Volume dry-up" in html, "B-3 sub-block from the picks cross-ref"
+        assert "0.31×" in html, "Rel volume row (entry-quality section) shown"
+        assert "Volume over last 10 sessions" in html, "B-3 sub-block from the picks cross-ref, renamed 2026-09-02"
+        assert "as of last close 8/14" in html, "stale sub-block names the picks-row date"
         assert "<polyline" in html, "at least one sparkline rendered"
         browser.close()
 

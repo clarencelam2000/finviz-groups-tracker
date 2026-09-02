@@ -248,9 +248,14 @@ class TestPicksAtrRowAndEarnings:
             browser.close()
 
     def test_range_tightening_shows_flag_and_sparklines(self):
-        """B-2 (issue #379): the 'Range tightening' block shows the honest 'Tightest range ·
-        last 7 bars' flag when tight_range_7 == '1' and renders both *_spark sparklines as
-        SVG polylines (SHOWN values, doc §4.0). ANET fixture carries populated series."""
+        """B-2 (issue #379): the 'Range over last 10 sessions' block (renamed from 'Range
+        tightening' 2026-09-02 — same rename applies everywhere volSetupSectionHtml renders,
+        Picks included, since it's clearer copy; only the Morning/Watch 'as of last close'
+        caveat is conditional) shows the honest 'Tightest range · last 7 bars' flag when
+        tight_range_7 == '1' and renders both *_spark sparklines as SVG polylines (SHOWN
+        values, doc §4.0). ANET fixture carries populated series. The Picks tab never gets
+        the 'as of last close' caveat — there the whole card, trailing cols included, is
+        from the same EOD run, so there's no lag to caveat."""
         from playwright.sync_api import sync_playwright
 
         body = _single_row_csv({})  # ANET: tight_range_7='1', both spark series populated
@@ -263,11 +268,12 @@ class TestPicksAtrRowAndEarnings:
 
             panel = page.locator("[id^='risk-panel-']").first
             panel_text = panel.inner_text()
-            assert "Range tightening" in panel_text, f"missing block; got:\n{panel_text}"
+            assert "Range over last 10 sessions" in panel_text, f"missing block; got:\n{panel_text}"
+            assert "as of last close" not in panel_text, f"Picks tab must not show the staleness caveat; got:\n{panel_text}"
             assert "Tightest range" in panel_text and "last 7 bars" in panel_text, \
                 f"expected honest tightest-range flag; got:\n{panel_text}"
-            # B-3 (issue #379): the 'Volume dry-up' block shows the Rel Volume trend series.
-            assert "Volume dry-up" in panel_text, f"missing B-3 block; got:\n{panel_text}"
+            # B-3 (issue #379): the 'Volume over last 10 sessions' block shows the Rel Volume trend series.
+            assert "Volume over last 10 sessions" in panel_text, f"missing B-3 block; got:\n{panel_text}"
             # Three sparklines now (range/ATR + ATR $ + rel-volume) as SVG polylines.
             assert panel.locator("svg polyline").count() >= 3, "expected 3 sparkline polylines"
             # Never claims 'NR7' (gappy history — labeled honestly).
