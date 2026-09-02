@@ -6,6 +6,28 @@
 
 ---
 
+## 2026-09-02 — PR #387 merge-conflict fix (picks.csv/picks_latest.csv)
+
+**Status: safe to close.** PR #387 (B-3 relvol_spark) went `mergeable_state: dirty` because two
+new picks runs (2026-08-31, 2026-09-01) landed on default while the PR was open, appending newer
+rows to `data/picks/picks.csv`/`picks_latest.csv` without the PR's new `relvol_spark` column —
+diverging whole-file content, not a line-level conflict.
+
+**Fix:** merged default into the PR branch (`claude/volatility-compression-expansion-pcvzda`);
+took default's `data/picks/picks.csv` + `picks_latest.csv` (theirs — the newer, larger append-only
+dataset) over the PR's stale version, then re-ran `collect_picks.ensure_picks_csv()` against the
+merged data to backfill `relvol_spark` (+ the other `TRAILING_COLS`) onto the new max-date
+(2026-09-01) slice — same migration path the PR's `write_picks()` already exercises on every
+scrape, so this is not a new mechanism. All other files (scripts, docs, other data CSVs) merged
+clean with no conflicts. Verified: no `(date, list_category, ticker)` dupes, 118 cols matching in
+both files, single max-date slice in `picks_latest.csv`, `pytest tests/ -q` with the CI ignore
+list — 737 passed. Pushed to the PR's own branch (`d261c27`).
+
+**Next steps:** none — just confirm PR #387 shows green/mergeable after GitHub recomputes
+`mergeable_state` (was `unknown` immediately post-push).
+
+---
+
 ## 2026-09-01 — Effort B B-3: "Volume dry-up" (RelVol trend sparkline) on Picks cards
 
 **Status: safe to close — implemented, tested (737 non-PW green + PWA green), PR to open.**
