@@ -13,7 +13,6 @@ ADR-007 (selector policy), ADR-008 (collection architecture).
 
 import math
 
-from picks_config import POWER_OF_3_ATR_MULT
 
 # METRICS_COLS — the 6 backend-derived columns appended AFTER the 19 grp_* block.
 # Computed from already-stored Finviz columns at write time; no selector_version bump
@@ -21,7 +20,7 @@ from picks_config import POWER_OF_3_ATR_MULT
 # Order is sticky — adding a new column is a two-way-door superset migration via
 # ensure_picks_csv(); renaming/removing one is one-way once data flows.
 # Triple-documented: here, README § Configurable parameters, CLAUDE.md § Picks pipeline.
-METRICS_COLS = ["atr_ext_50", "risk_20ma_pct", "risk_50ma_pct", "range_atr", "stage2", "power_of_3"]
+METRICS_COLS = ["atr_ext_50", "risk_20ma_pct", "risk_50ma_pct", "range_atr", "stage2"]
 
 _NAN = float("nan")
 
@@ -73,12 +72,12 @@ def _isnan(x) -> bool:
 
 
 def compute_metrics_row(row: dict) -> dict:
-    """Compute the 6 derived columns for one picks.csv row.
+    """Compute the 5 derived columns for one picks.csv row.
 
     Returns a dict with exactly the METRICS_COLS keys. Any blank/NaN/absent input
     propagates NaN for that metric; the function never raises.
 
-    Formulas (ADR-008 / Phase 3a spec; power_of_3 is B-5, issue #379):
+    Formulas (ADR-008 / Phase 3a spec):
       SMA20/SMA50/SMA200 in picks.csv are the Finviz "% of price ABOVE that MA"
       columns (e.g., SMA50=3.52 means price is 3.52% above the 50MA). Reconstruct
       the dollar-level MA price as: sma_price = Price / (1 + SMA_pct/100).
@@ -89,10 +88,11 @@ def compute_metrics_row(row: dict) -> dict:
       range_atr    = (High − Low) / ATR                    [day tightness proxy, C1]
       stage2       = 1 if (SMA50 > 0) AND (SMA200 > SMA50) else 0
                    [SMA50>0 ↔ price>50MA; SMA200>SMA50 ↔ 50MA>200MA — proven equivalent]
-      power_of_3   = 1 if max(price,sma20_price,sma50_price) − min(...) <=
-                     POWER_OF_3_ATR_MULT × ATR else 0
-                   [price/20MA/50MA all bunched inside one POWER_OF_3_ATR_MULT-wide ATR
-                    band; NaN if price, sma20_price, sma50_price, or ATR is NaN, or ATR == 0]
+
+    NOTE: the Pre-Power of 3 MA-bunching flag is NOT computed here. It's a pure single-row
+    function of Price/ATR/SMA20/SMA50 and is config-dependent, so it lives client-side in the
+    PWA (docs/index.html `volSetupSectionHtml`), never persisted to the CSV — see
+    `.claude/rules/data-pipeline.md` § Schema changes to ground-truth CSVs.
     """
     price     = _float(row.get("Price"))
     atr       = _float(row.get("ATR"))
@@ -145,24 +145,12 @@ def compute_metrics_row(row: dict) -> dict:
     else:
         stage2 = _NAN
 
-    # power_of_3 (B-5, issue #379): 1 if price, the 20MA and the 50MA are all bunched
-    # inside one POWER_OF_3_ATR_MULT×ATR-wide band; 0 otherwise; NaN if any input is
-    # missing. Owner-specified band width (picks_config.POWER_OF_3_ATR_MULT), not an
-    # invented cutoff — see that constant's comment for the doc §4.0 rationale.
-    if (not _isnan(price) and not _isnan(sma20_price) and not _isnan(sma50_price)
-            and not _isnan(atr) and atr != 0.0):
-        spread = max(price, sma20_price, sma50_price) - min(price, sma20_price, sma50_price)
-        power_of_3 = 1 if spread <= POWER_OF_3_ATR_MULT * atr else 0
-    else:
-        power_of_3 = _NAN
-
     return {
         "atr_ext_50":    atr_ext_50,
         "risk_20ma_pct": risk_20ma_pct,
         "risk_50ma_pct": risk_50ma_pct,
         "range_atr":     range_atr,
         "stage2":        stage2,
-        "power_of_3":    power_of_3,
     }
 
 

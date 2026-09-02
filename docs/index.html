@@ -697,6 +697,14 @@
     // Triple-documented: here, README § Configurable parameters, docs/CLAUDE.md threshold table.
     const ATR_FROM_LOD_CLEAN = 0.8;  // <= this = clean entry (emerald, "ok to act")
     const ATR_FROM_LOD_CHASE = 1.0;  // > this = chasing (red); between CLEAN and CHASE = caution (amber)
+    // POWER_OF_3_ATR_MULT (B-5, issue #379): the "Pre-Power of 3" MA-bunching chip in the
+    // Volatility & setup section fires when price, the 20MA and the 50MA all fit inside one band
+    // this many ATRs wide. Owner-set band (domain authority per doc §4.0 — a fact, not an invented
+    // cutoff); larger = looser. Computed client-side in volSetupSectionHtml from the raw
+    // Price/ATR/SMA20/SMA50 columns — deliberately NOT a stored CSV column (a config-dependent pure
+    // single-row value belongs at render time; see .claude/rules/data-pipeline.md § Schema changes).
+    // Triple-documented: here, README § Configurable parameters, docs/CLAUDE.md § PWA display thresholds.
+    const POWER_OF_3_ATR_MULT = 2.0;
     // Focus List constants (Phase 3b). score = base × (1 − penalty_fraction). Triple-documented:
     // here, README § Configurable parameters, CLAUDE.md § PWA display thresholds.
     // Extension penalty ramps from 0 at PENALTY_START to PENALTY_MAX at ATR_EXT_ACTIONABLE (=4.0).
@@ -4589,8 +4597,9 @@
     //   • B-3 (§5.2) volume dry-up — Rel Volume trend sparkline (owner's strongest/cheapest
     //     VCP sub-signal).
     //   • B-5 (§5.3) Pre-Power of 3 — MA-bunching COIL PRECONDITION chip (price/20MA/50MA within a
-    //     2×ATR band, a fact precomputed in the pipeline) + the two SHOWN SMA % distances and the
-    //     classic MA-to-MA cluster spread %. NOT the full undercut→reclaim trigger (that's B-5b).
+    //     2×ATR band, computed client-side here from raw Price/ATR/SMA20/SMA50 — not a stored CSV
+    //     column) + the two SHOWN SMA % distances and the classic MA-to-MA cluster spread %. NOT the
+    //     full undercut→reclaim trigger (that's B-5b).
     // Extracted verbatim from renderPickRow so the Morning family (B-6) can render the IDENTICAL
     // section from a row assembled out of the morning store (B-1 raw cols, fresh from the A-1
     // scrape-wide run) plus a cross-ref to picks_latest (B-2/B-3 trailing sparkline cols) — one
@@ -4643,28 +4652,37 @@
       // This is the COIL PRECONDITION only, honestly labeled "Pre-Power of 3" — NOT the full
       // Power-of-3 setup, which is bunched → undercut the cluster → reclaim the highest MA (the
       // reclaim is the trigger). That undercut→reclaim trigger is a later slice (B-5b) built on the
-      // pick_status reclaim engine. `power_of_3` is a FACT precomputed in the picks pipeline
-      // (picks_metrics) against the owner-specified POWER_OF_3_ATR_MULT band — the domain authority
-      // set that band, so a binary chip is legitimate (doc §4.0), and the PWA just reads the flag
-      // (single source of truth, no PWA-side threshold to drift). price/20/50 only — we don't scrape
-      // the 10MA and the 200 isn't this pattern's third line. The two SMA % distances AND the classic
-      // MA-to-MA cluster spread % are SHOWN values so the trader sees WHY it is/isn't bunched. Blank
-      // flag ('' — a morning orphan with no picks cross-ref, or a name missing price/SMA/ATR) → the
-      // block self-hides.
+      // pick_status reclaim engine. The bunched flag is computed HERE, client-side, from the raw
+      // Price/ATR/SMA20/SMA50 columns — it is NOT a stored CSV column. It's a pure single-row
+      // function of already-scraped values and depends on the tunable POWER_OF_3_ATR_MULT, so
+      // persisting it as ground truth would silently go stale if that constant changed (see
+      // `.claude/rules/data-pipeline.md` § Schema changes to ground-truth CSVs). Computing it at
+      // render time also makes it real-time on Morning/Watch cards: SMA20/SMA50/Price/ATR are in
+      // _SETUP_FRESH_COLS, so setupRowForCard overrides them with this-morning's scrape, and the
+      // chip re-fires off fresh MA levels rather than last night's close. price/20/50 only — we
+      // don't scrape the 10MA and the 200 isn't this pattern's third line. Owner set the 2×ATR band
+      // (domain authority per doc §4.0), so a binary chip is legitimate. The two SMA % distances AND
+      // the classic MA-to-MA cluster spread % are SHOWN values so the trader sees WHY it is/isn't
+      // bunched. Missing price/SMA/ATR (a morning orphan, thin scrape) → the block self-hides.
       const sma20 = _pF(r['SMA20']);   // Finviz signed % of price above the 20MA
       const sma50 = _pF(r['SMA50']);   // Finviz signed % of price above the 50MA
-      const pow3 = r['power_of_3'];    // '1' (bunched) | '0' (not) | '' (inputs absent / orphan)
-      const hasPow3 = !!(pow3 === '1' || pow3 === '0' || !isNaN(sma20) || !isNaN(sma50));
-      // MA-to-MA cluster spread (classic Power-of-3 tightness): |20MA − 50MA| as % of price, a SHOWN
-      // value. Reconstruct each MA $ level from its Finviz %-above-price the same way picks_metrics
-      // does, then express the gap as a % of price. '' when price/either SMA is missing.
       const _price = _pF(r['Price']);
-      let maSpreadStr = '';
+      const _atr = _pF(r['ATR']);
+      // Reconstruct each MA's $ level from its Finviz %-above-price (sma$ = price / (1 + pct/100)).
+      let _sma20p = NaN, _sma50p = NaN, maSpreadStr = '', pow3 = '';
       if (!isNaN(_price) && _price > 0 && !isNaN(sma20) && !isNaN(sma50)) {
-        const _sma20p = _price / (1 + sma20 / 100);
-        const _sma50p = _price / (1 + sma50 / 100);
+        _sma20p = _price / (1 + sma20 / 100);
+        _sma50p = _price / (1 + sma50 / 100);
+        // Cluster spread (classic Power-of-3 tightness): |20MA − 50MA| as % of price, SHOWN.
         maSpreadStr = (Math.abs(_sma20p - _sma50p) / _price * 100).toFixed(2) + '%';
+        // Pre-Power of 3 chip fires when price/20MA/50MA all fit inside one POWER_OF_3_ATR_MULT×ATR
+        // band. '1' bunched / '0' not; stays '' (no chip) when ATR is missing.
+        if (!isNaN(_atr) && _atr > 0) {
+          const _span = Math.max(_price, _sma20p, _sma50p) - Math.min(_price, _sma20p, _sma50p);
+          pow3 = (_span <= POWER_OF_3_ATR_MULT * _atr) ? '1' : '0';
+        }
       }
+      const hasPow3 = !!(pow3 === '1' || pow3 === '0' || !isNaN(sma20) || !isNaN(sma50));
       const sma20Str = isNaN(sma20) ? '—' : (sma20 >= 0 ? '+' : '') + sma20.toFixed(1) + '%';
       const sma50Str = isNaN(sma50) ? '—' : (sma50 >= 0 ? '+' : '') + sma50.toFixed(1) + '%';
 
@@ -4740,13 +4758,17 @@
     // Morning-family card (Effort B B-6). Base = the picks_latest cross-ref (ws4FindPicksRow), which
     // carries the B-2/B-3 trailing sparkline cols (range_atr_spark/atr_spark/relvol_spark/
     // tight_range_7 — multi-day, so last night's are current enough) AND a B-1 fallback. Then the
-    // B-1 raw cols (Vol W/M, Rel Volume, 52W High) are overridden with THIS-MORNING's fresh
-    // scrape-wide values from `freshRow` (the morning store row, or a watch card's public read) when
-    // present — the A-1 scrape-wide run put those on the morning store keyed by the same Finviz
-    // labels volSetupSectionHtml reads. Returns {} when neither source has anything → the section
-    // self-hides (graceful degrade §3: a morning orphan not in picks and not freshly scraped shows
-    // no section rather than a wall of dashes).
-    const _SETUP_FRESH_COLS = ['Volatility W', 'Volatility M', 'Rel Volume', '52W High'];
+    // B-1 raw cols (Vol W/M, Rel Volume, 52W High) PLUS the B-5 MA-bunching inputs (Price, SMA20,
+    // SMA50, ATR) are overridden with THIS-MORNING's fresh scrape-wide values from `freshRow` (the
+    // morning store row, or a watch card's public read) when present — collect_morning's
+    // SETUP_COLUMNS put those on the morning store keyed by the same Finviz labels
+    // volSetupSectionHtml reads. Overriding Price/SMA20/SMA50/ATR is what makes the client-side
+    // Pre-Power of 3 chip + MA distances real-time on Morning/Watch instead of last night's close
+    // (SMA %-distances track live price, so a stale pair mis-locates the MA level). Returns {} when
+    // neither source has anything → the section self-hides (graceful degrade §3: a morning orphan
+    // not in picks and not freshly scraped shows no section rather than a wall of dashes).
+    const _SETUP_FRESH_COLS = ['Volatility W', 'Volatility M', 'Rel Volume', '52W High',
+                               'Price', 'SMA20', 'SMA50', 'ATR'];
     function setupRowForCard(ticker, freshRow) {
       const picksRow = (typeof ws4FindPicksRow === 'function') ? ws4FindPicksRow(ticker) : null;
       const merged = Object.assign({}, picksRow || {});

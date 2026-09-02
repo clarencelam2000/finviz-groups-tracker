@@ -32,6 +32,7 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start; flags a held position as a trim-10% candidate. |
 | `ATR_FROM_LOD_CLEAN` / `ATR_FROM_LOD_CHASE` | `0.8` / `1.0` | Morning tab (WS3, ADR-013) entry-quality bands on `atr_from_lod` = (price − session low) / ATR, shown on every Morning/Watch card status (owner decision 2026-09-02 dropped the original actionable-only gate — see below). `<= 0.8` clean entry (emerald "ok to act"), `> 1.0` chasing (red), between = caution (amber), same bands regardless of status. Owner-set 2026-08-08. |
 | `LAUNCH_NEAR_HIGH_PCT` | `8` | Launch-ready chip (Picks tab, Phase 1, `computeLaunchReady()`): `ohMag` (% below 52-week high) `<=` this = "near the high" (little overhead supply). Display-only, no scoring effect. |
+| `POWER_OF_3_ATR_MULT` | `2.0` | "Pre-Power of 3" MA-bunching chip (B-5, issue #379) in the Volatility & setup section (`volSetupSectionHtml`): fires when price, the 20MA and the 50MA all fit inside one band this many ATRs wide. Owner-set band (a fact, doc §4.0 — not an invented cutoff); larger = looser. **Computed client-side from the raw Price/ATR/SMA20/SMA50 columns — deliberately NOT a stored CSV column** (a config-dependent pure single-row value belongs at render time — see `.claude/rules/data-pipeline.md` § Schema changes to ground-truth CSVs). Real-time on Morning/Watch because those four are in `_SETUP_FRESH_COLS`. Not tracked by `display_methodology.json` (a display fact, not part of the All/Focus scoring). |
 | `LAUNCH_CALM_EXT_MAX` | `3` | Launch-ready chip: `atr_ext_50` `<=` this (and `> 0`) alongside near-high = `Coiled`; `>` this = `Extended`. |
 | `LAUNCH_OVERHEAD_PCT` | `20` | Launch-ready chip: `ohMag >` this = `Overhead` (deep below high, heavy overhead supply). |
 | `ATR_EXT_PENALTY_START` | `2.5` | Focus-score extension penalty ramp start; 0 penalty below this, ramps to `PENALTY_MAX` at `ATR_EXT_ACTIONABLE`. |
@@ -187,9 +188,12 @@ the empty state — a 404 is expected, never an error.
   — the same one the Picks card uses (`renderPickRow` omits `staleTrailing`): B-1 Vol W/M (+
   contracting/expanding fact tint) · Rel volume · 52W-high dist, B-2 range tightening, B-3 volume
   dry-up, B-5 Pre-Power of 3 (MA-bunching COIL-PRECONDITION chip — price/20MA/50MA within a
-  2×ATR band, a fact precomputed in the picks pipeline as `power_of_3`; plus the two shown SMA %
-  distances and the classic MA-to-MA cluster spread %; the full undercut→reclaim trigger is a
-  later slice, B-5b). `staleTrailing:true` labels the B-2/B-3 sub-headers "Range/Volume over last
+  `POWER_OF_3_ATR_MULT`×ATR band, computed **client-side** in `volSetupSectionHtml` from raw
+  Price/ATR/SMA20/SMA50 — NOT a stored CSV column, since it's a config-dependent pure single-row
+  value; plus the two shown SMA % distances and the classic MA-to-MA cluster spread %; the full
+  undercut→reclaim trigger is a later slice, B-5b). Because it's computed at render time and
+  Price/SMA20/SMA50/ATR are in `_SETUP_FRESH_COLS`, the B-5 chip is **real-time** on Morning/Watch
+  (fresh MA levels), unlike the B-2/B-3 trailing sparklines which stay last-close (see below). `staleTrailing:true` labels the B-2/B-3 sub-headers "Range/Volume over last
   10 sessions (as of last close M/D)" — those two sub-blocks alone come from the picks_latest
   cross-ref (last night's close), unlike the fresh B-1 row above them or the Picks tab (where the
   whole card is same-EOD-run, so no lag to caveat). It's inserted after the card's metric rows

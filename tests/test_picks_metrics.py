@@ -6,7 +6,6 @@ Covers:
   - compute_metrics_row on the four spec worked examples (EOD 2026-06-25)
   - NaN safety when ATR / SMA fields are blank
   - stage2 truth table
-  - power_of_3 bunching flag (B-5, issue #379)
   - ensure_picks_csv migration (old 108-col rows gain the 6 new columns)
 """
 import csv
@@ -229,50 +228,6 @@ def test_stage2_nan_when_sma200_blank():
     row = {"Price": "100", "SMA50": "3%", "SMA200": ""}
     m = compute_metrics_row(row)
     assert math.isnan(m["stage2"])
-
-
-# ---------------------------------------------------------------------------
-# power_of_3 bunching flag (B-5, issue #379)
-# ---------------------------------------------------------------------------
-
-def test_power_of_3_fires_when_bunched_within_band():
-    # Price=100, ATR=5 -> band width = POWER_OF_3_ATR_MULT * ATR = 10.
-    # SMA20=1% -> sma20_price = 100/1.01 = 99.01; SMA50=2% -> sma50_price = 100/1.02 = 98.04.
-    # spread = 100 - 98.04 = 1.96 <= 10 -> fires.
-    row = {"Price": "100", "ATR": "5", "SMA20": "1%", "SMA50": "2%",
-           "SMA200": "10%", "High": "102", "Low": "98"}
-    m = compute_metrics_row(row)
-    assert m["power_of_3"] == 1
-
-
-def test_power_of_3_zero_when_50ma_far_below_price():
-    # Price=100, ATR=1 -> band width = 2. SMA50=20% -> sma50_price = 100/1.20 = 83.33.
-    # spread = 100 - 83.33 = 16.67 > 2 -> does not fire.
-    row = {"Price": "100", "ATR": "1", "SMA20": "1%", "SMA50": "20%",
-           "SMA200": "25%", "High": "102", "Low": "98"}
-    m = compute_metrics_row(row)
-    assert m["power_of_3"] == 0
-
-
-def test_power_of_3_nan_when_sma_missing():
-    row = {"Price": "100", "ATR": "5", "SMA20": "", "SMA50": "2%",
-           "SMA200": "10%", "High": "102", "Low": "98"}
-    m = compute_metrics_row(row)
-    assert math.isnan(m["power_of_3"])
-
-
-def test_power_of_3_nan_when_atr_blank():
-    row = {"Price": "100", "ATR": "", "SMA20": "1%", "SMA50": "2%",
-           "SMA200": "10%", "High": "102", "Low": "98"}
-    m = compute_metrics_row(row)
-    assert math.isnan(m["power_of_3"])
-
-
-def test_power_of_3_nan_when_atr_zero():
-    row = {"Price": "100", "ATR": "0", "SMA20": "1%", "SMA50": "2%",
-           "SMA200": "10%", "High": "102", "Low": "98"}
-    m = compute_metrics_row(row)
-    assert math.isnan(m["power_of_3"])
 
 
 # ---------------------------------------------------------------------------

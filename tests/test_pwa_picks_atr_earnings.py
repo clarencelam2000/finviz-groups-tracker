@@ -283,12 +283,13 @@ class TestPicksAtrRowAndEarnings:
 
     def test_power_of_3_chip_and_ma_distances(self):
         """B-5 (issue #379): the 'MA bunching' block shows the green 'Pre-Power of 3' coil-precondition
-        chip when price/20MA/50MA are bunched within the 2xATR band (power_of_3 == '1'), plus the two
-        shown SMA % distances and the classic MA-to-MA cluster spread % (SHOWN values, doc §4.0). ANET
-        fixture: Price 165.45, SMA20 1.16%, SMA50 3.52%, power_of_3 == '1' → spread ~2.25%."""
+        chip when price/20MA/50MA are bunched within the 2xATR band, plus the two shown SMA % distances
+        and the classic MA-to-MA cluster spread % (SHOWN values, doc §4.0). The chip is computed
+        CLIENT-SIDE from raw Price/ATR/SMA20/SMA50 — no stored power_of_3 column. ANET fixture: Price
+        165.45, ATR 8.39, SMA20 1.16%, SMA50 3.52% → span ~5.6 <= 2×8.39 → bunched; spread ~2.25%."""
         from playwright.sync_api import sync_playwright
 
-        body = _single_row_csv({})  # ANET: power_of_3='1' (bunched)
+        body = _single_row_csv({})  # ANET: raw cols → client computes bunched
 
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
@@ -308,11 +309,12 @@ class TestPicksAtrRowAndEarnings:
             browser.close()
 
     def test_power_of_3_no_chip_when_not_bunched(self):
-        """power_of_3 == '0' shows the MA-distance values but NOT the 'Pre-Power of 3' chip — the chip
-        is a fact that either fires or doesn't, never a score (doc §4.0)."""
+        """Pushing the 50MA far from price (SMA50 30% → 50MA$ ~127 vs price 165.45, span ~38 > 2×ATR)
+        shows the MA-distance values but NOT the 'Pre-Power of 3' chip — the client-computed chip is a
+        fact that either fires or doesn't, never a score (doc §4.0)."""
         from playwright.sync_api import sync_playwright
 
-        body = _single_row_csv({"power_of_3": "0"})
+        body = _single_row_csv({"SMA50": "30%"})  # 50MA far below price → client computes not-bunched
 
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)

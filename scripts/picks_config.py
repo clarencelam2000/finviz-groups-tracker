@@ -213,10 +213,15 @@ PICKS_GRP_COLS = [
     "grp_rs_slope",
 ]
 
-# METRICS_COLS — 6 backend-derived columns appended AFTER grp_* (Phase 3a, ADR-008).
+# METRICS_COLS — 5 backend-derived columns appended AFTER grp_* (Phase 3a, ADR-008).
 # Deterministic transforms of already-stored Finviz columns; computed at write time in
 # collect_picks.py. No selector_version bump needed. Adding one later is a two-way-door
 # superset migration (ensure_picks_csv pattern). Renaming/removing is one-way once data flows.
+# NOTE (2026-09-02): these all need either a cross-row or a multi-day comparison that a single
+# client row can't do (stage2 excepted — it's grandfathered). A NEW pure single-row transform of
+# already-stored Finviz columns (e.g. a config-dependent MA-bunching flag) does NOT belong here —
+# compute it client-side at render/analysis time, per `.claude/rules/data-pipeline.md`
+# § Schema changes to ground-truth CSVs (Pre-Power of 3 was moved out for exactly this reason).
 # Triple-documented: here, README § Configurable parameters, CLAUDE.md § Picks pipeline.
 METRICS_COLS = [
     "atr_ext_50",      # (price − sma50_price) / ATR; ATR multiples from 50MA (CEO "rubber-band")
@@ -224,7 +229,6 @@ METRICS_COLS = [
     "risk_50ma_pct",   # (price − sma50_price) / price; fraction at risk to 50MA stop
     "range_atr",       # (High − Low) / ATR; day-tightness proxy (C1)
     "stage2",          # 1 if price>50MA AND 50MA>200MA; 0 otherwise; NaN if SMAs absent
-    "power_of_3",      # 1 if price/20MA/50MA all within POWER_OF_3_ATR_MULT×ATR (bunched "Power of 3"); 0 else; NaN if inputs absent
 ]
 
 # TRAILING_COLS — 3 compression-spine columns (Effort B / issue #379, B-2) derived from a
@@ -259,13 +263,10 @@ SPARK_WINDOW = 10
 # SPARK_MIN_BARS — minimum available bars before a sparkline is emitted at all; below this the
 # series column is "" (per-name graceful degradation, doc §3). A too-short line reads as noise.
 SPARK_MIN_BARS = 3
-
-# POWER_OF_3_ATR_MULT — width (in ATR multiples) of the band that price, the 20MA and the
-# 50MA must all fit inside for the "Power of 3" MA-bunching chip to fire (B-5, issue #379).
-# Owner-specified value (the domain authority sets this band — it is NOT an invented cutoff),
-# so a binary chip is legitimate here per doc §4.0. Larger = looser (fires more often).
-# Triple-documented: here, README § Configurable parameters, scripts/CLAUDE.md § Picks pipeline.
-POWER_OF_3_ATR_MULT = 2.0
+# NOTE: POWER_OF_3_ATR_MULT lives in the PWA (docs/index.html), NOT here. The Pre-Power of 3
+# MA-bunching chip is a pure single-row function of already-stored Price/ATR/SMA20/SMA50 and is
+# config-dependent, so it's computed client-side at render time — never persisted to picks.csv.
+# See `.claude/rules/data-pipeline.md` § Schema changes to ground-truth CSVs.
 
 
 def load_config() -> dict:
@@ -279,6 +280,6 @@ def finviz_cols(config: dict = None) -> list:
 
 
 def picks_columns(config: dict = None) -> list:
-    """Full ordered picks.csv header: lead (6) + Finviz (84) + grp_* (19) + metrics (6)
-    + trailing (4) = 119."""
+    """Full ordered picks.csv header: lead (6) + Finviz (84) + grp_* (19) + metrics (5)
+    + trailing (4) = 118."""
     return PICKS_LEAD_COLS + finviz_cols(config) + PICKS_GRP_COLS + METRICS_COLS + TRAILING_COLS

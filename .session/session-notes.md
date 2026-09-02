@@ -62,14 +62,40 @@ Re-verified: picks+morning+watch PWA **29/29** green (relabel is in the shared s
 ANET spread = 2.25% exact; `test_guide_releases` 5/5. The `power_of_3` **data column name is
 unchanged** (it's the bunched fact) — only the user-facing label moved.
 
-**Next steps:** **B-5b** (the full undercut→reclaim Power-of-3 trigger — gate on B-5's bunched flag,
+**Amendment 2 (2026-09-02, same PR #392) — moved power_of_3 OUT of the CSV to client-side + made
+Morning/Watch real-time (owner review changes-requested).** Two correct owner findings: (1) SMA20/
+SMA50 render off *last night's close* on Morning/Watch (setupRowForCard only overrode 4 B-1 cols),
+and Finviz's SMA%-distance columns track the **live** price so they DO go stale intraday — my "MAs
+barely move intraday" assumption was wrong, corrected on the record. (2) `power_of_3` never needed a
+CSV column: it's a pure single-row function of already-stored Price/ATR/SMA20/SMA50 and is
+**config-dependent** (POWER_OF_3_ATR_MULT), so persisting it as ground truth would silently drift if
+the constant changed — exactly what the new `.claude/rules/data-pipeline.md` § Schema-changes rule
+(#393, merged to default) forbids. **What I did:** reverted the pipeline change entirely
+(`picks_metrics.py`/`picks_config.py` back to 5 METRICS_COLS / 118 cols; restored picks.csv,
+picks_latest.csv, and the test fixture from default — no more 13k-row backfill, no more merge-
+conflict surface); moved the chip to a **client-side** computation in `volSetupSectionHtml` (reads
+Price/ATR/SMA20/SMA50, reconstructs the MA $ levels, fires the chip on the 2×ATR span);
+`POWER_OF_3_ATR_MULT` is now a **PWA display constant** (docs/index.html), triple-documented in the
+PWA tables. **Real-time fix:** added `Price`,`SMA20`,`SMA50`,`ATR` to `collect_morning.SETUP_COLUMNS`
+(morning store) and to `_SETUP_FRESH_COLS` (PWA), so setupRowForCard overrides them with this-
+morning's scrape → the chip + MA distances re-fire off fresh MA levels on Morning/Watch. B-5b (the
+trigger) needs this same fresh-MA plumbing. Tests: reverted the 5 pipeline unit tests; the 2 PWA
+tests now drive the chip via raw cols (bunched via ANET; not-bunched via `SMA50:30%`); extended
+`test_build_status_rows_carries_setup_columns` for the 4 new cols. Re-verified: picks_metrics +
+collect_picks + collect_morning 152 green; the 2 PWA power_of_3 tests green (client-computed); JS
+parses. Also **synced first**: another Claude rebased the B-5 stack onto post-#391 default; I reset
+local to origin/2ljelo before working.
+
+**Next steps:** **B-5b** (the full undercut→reclaim Power-of-3 trigger — gate on B-5's bunched read,
 detect undercut below the cluster low = min MA, fire on reclaim above the cluster high = max MA;
-actionable morning read, entry on reclaim / stop under undercut low; reclaim is a fact so §4.0-clean;
-**verify the reclaim-engine wiring before building**). Alternatively **B-4** (VCP-style contraction
-proxy from B-2+B-3+52W; label "Contraction (VCP-style)", never "VCP detected", NOT "lower highs").
-Remaining tracked follow-ups (planning §12): orphan sparkline backfill from D1 `ticker_quotes`
-(§7.3 option-b), projected vol/RVol (§5.5b, parked/expansion), filter-sort + "Triggers today" (§9),
-fuller card superset (RSI/Perf/Avg$Vol/Earnings — #378 broad Effort A). B-7/B-8 stay parked.
+actionable *real-time* morning read, entry on reclaim / stop under undercut low; computed per-run in
+`collect_morning`/`pick_status` and stored in the **session** store — a live status, NOT a persisted
+historical fact, so it honors #393 by construction; reclaim is a fact so §4.0-clean; **verify the
+reclaim-engine wiring before building**). Alternatively **B-4** (VCP-style contraction proxy from
+B-2+B-3+52W; label "Contraction (VCP-style)", never "VCP detected", NOT "lower highs"). Remaining
+tracked follow-ups (planning §12): orphan sparkline backfill from D1 `ticker_quotes` (§7.3 option-b),
+projected vol/RVol (§5.5b, parked), filter-sort + "Triggers today" (§9), fuller card superset
+(RSI/Perf/Avg$Vol/Earnings — #378). B-7/B-8 stay parked.
 
 ---
 
