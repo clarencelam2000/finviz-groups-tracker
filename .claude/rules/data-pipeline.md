@@ -72,3 +72,47 @@ All scripts must handle header-only CSVs (0 data rows) without crashing. Check `
 - `data/sectors/deltas.csv`
 - `data/industries/snapshots.csv`
 - `data/industries/deltas.csv`
+
+## Schema changes to ground-truth CSVs — owner approval required, pure-function-first
+
+Ground-truth CSVs (`data/**/snapshots.csv`, `data/**/deltas.csv`, `data/picks/picks.csv`,
+`data/picks/picks_latest.csv`, `data/benchmark/snapshots.csv`, `data/picks/sessions/*.csv`) are
+append-only historical records. Adding, removing, or renaming a column in one of these is a
+**high-cost, hard-to-reverse action** — even an "additive, backfilled, two-way-door" migration
+still means touching every historical row, permanently growing the file, and coupling every
+downstream consumer (export_db, dashboard, PWA, evaluate_picks) to the new shape. Treat it with
+the same care as a database schema migration, not as a normal code change.
+
+**Before adding a column, ask: does this actually need to live in the pipeline?**
+
+A derived value only belongs in the backend/CSV if it needs either:
+- **Cross-row computation** — ranking or comparison against other rows (e.g. `rank_*`), which a
+  single client-side row can't do on its own, or
+- **Multi-day trailing computation** — a scan over several days of history that would be
+  expensive or impractical to reconstruct at render/analysis time (e.g. `tight_range_7`).
+
+If a value is a **pure, single-row function of columns that are already present in that row**
+(no cross-row ranking, no trailing window), it does NOT need a backend column. Compute it where
+it's consumed instead — client-side in the PWA (`docs/index.html`), or on the fly in whatever
+analysis script needs it. The PWA already does this for several derived reads (SMA-distance %,
+ATR-extension multiple) reconstructed straight from raw Finviz columns already in the row — new
+derived facts of the same shape should follow that pattern, not add a column.
+
+**A value that depends on a tunable config constant must never be persisted as if it were
+observed ground truth.** If the constant changes later, every historical row's persisted value
+silently stops matching what the current config would compute, and the only fix is a re-migration
+every time the config changes. Config-dependent flags/scores belong computed at
+render/analysis time from the constant + the already-stored raw inputs — same treatment as the
+PWA's existing display-threshold constants (see `docs/CLAUDE.md` § PWA display thresholds).
+
+**Concrete cautionary example:** PR #392 added a `power_of_3` column to `picks.csv` /
+`picks_latest.csv` — a pure single-row function of `Price`/`ATR`/`SMA20`/`SMA50` (all already
+present in every row) gated by a tunable ATR-multiple constant. It could have been a few lines of
+client-side JS with zero migration. Instead it bumped the picks schema 118→119 columns, backfilled
+13,395 historical rows, touched two pipeline files, and produced a merge-conflict-prone diff.
+
+**Rule:** before implementing any schema change to a ground-truth CSV, write out — and get the
+owner's explicit approval for, *before* implementing — why the value can't be a pure function
+computed where it's consumed. This applies even to a migration that looks "safe" because it's
+additive/superset/two-way-door. Build first, ask forgiveness later is not acceptable here; the
+cost of undoing a shipped, backfilled schema change is far higher than the cost of asking first.
