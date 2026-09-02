@@ -159,11 +159,13 @@ def _hl_range(row) -> float:
 
 def compute_trailing_setup(latest_rows, history_rows,
                            window=7, spark_window=10, spark_min=3):
-    """Populate TRAILING_COLS (tight_range_7, range_atr_spark, atr_spark) on each row in
-    `latest_rows` IN PLACE, from that ticker's trailing available bars in `history_rows`.
+    """Populate TRAILING_COLS (tight_range_7, range_atr_spark, atr_spark, relvol_spark) on each
+    row in `latest_rows` IN PLACE, from that ticker's trailing available bars in `history_rows`.
 
     `history_rows` is the full picks.csv log; `latest_rows` are a subset of it (the max-date
-    slice the PWA reads). Compression spine, Effort B / issue #379 B-2 — doc §5.4/§5.7/§3.
+    slice the PWA reads). Compression spine, Effort B / issue #379 — doc §5.4/§5.7/§3 (B-2:
+    tight_range_7 + the two range/ATR sparks) and doc §5.2/§10.3 (B-3: relvol_spark, the volume
+    dry-up trend — a SHOWN value, owner-named as the strongest/cheapest VCP sub-signal).
 
     picks.csv history is gappy per-ticker (a name only appears on days its group was
     selected), so "the last N bars" here means the last N AVAILABLE daily bars, NOT N
@@ -215,5 +217,8 @@ def compute_trailing_setup(latest_rows, history_rows,
 
         row["range_atr_spark"] = _series("range_atr")
         row["atr_spark"] = _series("ATR")
+        # relvol_spark (B-3): the Rel Volume trend — volume dry-up shows as this series sloping
+        # below 1.0 while the range tightens. A SHOWN value (doc §4.0), never gated to a flag.
+        row["relvol_spark"] = _series("Rel Volume")
 
     return latest_rows

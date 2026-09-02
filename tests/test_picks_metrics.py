@@ -358,6 +358,23 @@ def test_trailing_graceful_degrade_when_too_few_bars():
     assert latest[0]["range_atr_spark"] == ""    # only 2 bars, need 3
 
 
+def test_trailing_relvol_spark_series_and_degrade():
+    """relvol_spark (B-3) = trailing Rel Volume series oldest->newest; '' below spark_min.
+    A SHOWN value (doc §4.0) — volume dry-up reads off the series, never a threshold."""
+    def _rv(date, rv):
+        return {"ticker": "X", "date": date, "High": "10", "Low": "9",
+                "ATR": "1", "range_atr": "1", "Rel Volume": str(rv)}
+    hist = [_rv("2026-08-20", 1.4), _rv("2026-08-21", 1.1),
+            _rv("2026-08-22", 0.9), _rv("2026-08-25", 0.7)]  # drying up
+    latest = [dict(hist[-1])]
+    compute_trailing_setup(latest, hist, window=4, spark_window=10, spark_min=3)
+    assert latest[0]["relvol_spark"] == "1.40|1.10|0.90|0.70"
+    # graceful degrade: fewer than spark_min bars -> blank, never a fabricated series
+    latest2 = [dict(hist[-1])]
+    compute_trailing_setup(latest2, hist[-2:], window=7, spark_window=10, spark_min=3)
+    assert latest2[0]["relvol_spark"] == ""
+
+
 def test_trailing_dedups_same_date_multi_category_rows():
     """A ticker appearing twice on one date (two buckets) counts as ONE bar, not two."""
     hist = [

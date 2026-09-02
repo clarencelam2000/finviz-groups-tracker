@@ -400,10 +400,10 @@ justify its own small, time-sensitive list — phase 2.
 |----|-------|---------|--------|------------|
 | B-1 | "Volatility & setup" section on Picks card — Vol W/M, RelVol, 52W-high dist (shown values) | §5.1, §10.6 | ✅ | **PR #380** (merged). Picks card only. Contracting/expanding tint = sign of (VolW−VolM), a fact. |
 | B-2 | Tightest-range flag + range_atr/ATR sparkline (range tightening) — derived pipeline columns, per-name history w/ graceful degrade | §5.4, §5.7, §3 | ✅ | **PR #383**. 3 new `TRAILING_COLS` in the picks pipeline (`tight_range_7`, `range_atr_spark`, `atr_spark`), computed over trailing available bars, populated only on the picks_latest slice. Picks card "Range tightening" block: honest "Tightest range · last 7 bars" flag (owner 2026-08-31: NOT "NR7" — gappy history) + two mini sparklines. Graceful per-name degrade. |
-| B-3 | Volume dry-up sub-signal for VCP proxy (RelVol trend while price holds) | §5.2, §10.3 | ⬜ | Volume dry-up is the strongest/cheapest VCP piece (owner-named). Needs RelVol trend window def (a window, not a threshold). |
+| B-3 | Volume dry-up sub-signal for VCP proxy (RelVol trend while price holds) | §5.2, §10.3 | ✅ | **PR (this session).** New 4th `TRAILING_COLS` col `relvol_spark` (pipe-joined trailing Rel Volume series, same trailing-window/graceful-degrade machinery as B-2's sparks — window is `SPARK_WINDOW`, not a new constant). Picks card "Volume dry-up" sub-block under the B-1 "Volatility & setup" section renders it via the existing `volSpark()` helper (a SHOWN trend, doc §4.0 — no threshold, no flag). Migration backfilled 487/535 latest rows. Composes into B-4. |
 | B-4 | VCP-style contraction proxy — shrinking pullback depth + tightening range + vol dry-up + 52W-high proximity. Label "Contraction (VCP-style)", never "VCP detected" | §5.2 | ⬜ | Composes B-2 + B-3. NOT "lower highs". |
 | B-5 | Rule-of-Three MA-bunching confirmer — MAs bunched, up-sloping, price above both, converging | §5.3 | ⬜ | Weakest signal; confirmer only, never a standalone trigger/score. |
-| B-6 | Propagate the "Volatility & setup" section to Lookup + Morning + Ticket cards | §4.1, §8 | 🅿️ | **Blocked on Effort A seam (A-2) and the §7.3 data decision (A-1).** This is the slice ordering rule #2 gates. |
+| B-6 | Propagate the "Volatility & setup" section (B-1 + B-2 + B-3) to Lookup + Morning + Ticket cards | §4.1, §8 | 🅿️ | **Blocked on Effort A seam (A-2).** A-1 data path now landed (A-1-IMPL). This is the slice ordering rule #2 gates. B-1 raw cols come fresh from the morning store; B-2/B-3 sparkline cols via cross-ref to `picks_latest` (multi-day). |
 | B-7 | Optional composite score (decomposable, shown next to components) | §4.1 L3, §10.7 | 🅿️ | LOW priority / maybe never. Owner wary of blended scores. Do not lead with this. |
 | B-8 | Forward-return eval of the signals (does compression predict?) | §10.10 | ⬜ | Reuse `evaluate_picks.py` scaffolding. Do after ≥1 signal has history. |
 | B-X | Expansion side (projected vol/RVol §5.5b; break+coil context §5.5a) | §5.5, §5.5a, §5.5b | 🅿️ | Secondary/subjective per owner. Facts+shown-values only, no "trigger." Revisit later. |
@@ -431,6 +431,18 @@ justify its own small, time-sensitive list — phase 2.
 | "lower highs" as a VCP prerequisite | §5.2 | ❌ Wrong; removed from the design. |
 
 ### Progress log (newest first)
+- **2026-09-01 — B-3 done (volume dry-up).** Chose B-3 over A-2→B-6 this session: it moves the
+  compression spine with an owner-named fact, is a contained single-card slice (ephemeral-session
+  safe, no A dependency, doesn't trip ordering rule #2), and B-6 propagates the whole "Volatility &
+  setup" section at once regardless of how many signals live in it — so landing B-3 first is free.
+  Implementation mirrored B-2 exactly: 4th `TRAILING_COLS` col `relvol_spark` (trailing Rel Volume
+  series via the same `compute_trailing_setup` machinery, reusing `SPARK_WINDOW`/`SPARK_MIN_BARS` —
+  no new constant, nothing to threshold per §4.0), a "Volume dry-up" sub-block in `renderPickRow`
+  via the existing `volSpark()` helper. Migration backfilled 487/535 picks_latest rows. 1 new unit
+  test + extended the B-2 PWA test (3 polylines, "Volume dry-up" present); 737 non-PW green, PWA test
+  green (chromium-1234). Release `2026.09.01` / sw.js v89→v90. **Next: A-2** (extract the shared card
+  component from B-1's layout) → **B-6** (propagate B-1/B-2/B-3 to the Morning family). A-2 is the
+  strategic next lever (cashes in A-1) but is a cross-card refactor better suited to a fresh session.
 - **2026-09-01 — A-1 decided + A-1-IMPL done.** Verification (§7.3a) showed cross-ref orphan rate
   worse than the doc's ~15% (morning 33.6%, pre-close 21% on 2026-08-31) and that scrape-wide's
   feared cost is near-zero (goto count = ticker count, not column count; 84-col `t=` scrape already

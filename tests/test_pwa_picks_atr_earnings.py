@@ -266,8 +266,10 @@ class TestPicksAtrRowAndEarnings:
             assert "Range tightening" in panel_text, f"missing block; got:\n{panel_text}"
             assert "Tightest range" in panel_text and "last 7 bars" in panel_text, \
                 f"expected honest tightest-range flag; got:\n{panel_text}"
-            # Two sparklines (range/ATR + ATR $) render as SVG polylines.
-            assert panel.locator("svg polyline").count() >= 2, "expected 2 sparkline polylines"
+            # B-3 (issue #379): the 'Volume dry-up' block shows the Rel Volume trend series.
+            assert "Volume dry-up" in panel_text, f"missing B-3 block; got:\n{panel_text}"
+            # Three sparklines now (range/ATR + ATR $ + rel-volume) as SVG polylines.
+            assert panel.locator("svg polyline").count() >= 3, "expected 3 sparkline polylines"
             # Never claims 'NR7' (gappy history — labeled honestly).
             assert "NR7" not in panel_text, f"must not claim NR7; got:\n{panel_text}"
 

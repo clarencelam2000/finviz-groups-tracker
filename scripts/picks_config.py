@@ -242,6 +242,11 @@ TRAILING_COLS = [
                         #   available bars (incl. today); 0 if not; "" if fewer bars exist
     "range_atr_spark",  # pipe-joined last ≤SPARK_WINDOW range_atr values, oldest→newest (sparkline)
     "atr_spark",        # pipe-joined last ≤SPARK_WINDOW ATR values, oldest→newest (sparkline)
+    "relvol_spark",     # pipe-joined last ≤SPARK_WINDOW Rel Volume values, oldest→newest (B-3,
+                        #   issue #379): the volume dry-up surface — a SHOWN trend, never a
+                        #   threshold (doc §4.0, §5.2). Owner-named as the strongest/cheapest VCP
+                        #   sub-signal; the trader reads whether volume is drying up as the range
+                        #   tightens. Same trailing-window/graceful-degrade rules as the two above.
 ]
 
 # TIGHT_RANGE_WINDOW — number of trailing AVAILABLE daily bars (incl. today) the tight-range
@@ -267,5 +272,5 @@ def finviz_cols(config: dict = None) -> list:
 
 def picks_columns(config: dict = None) -> list:
     """Full ordered picks.csv header: lead (6) + Finviz (84) + grp_* (19) + metrics (5)
-    + trailing (3) = 117."""
+    + trailing (4) = 118."""
     return PICKS_LEAD_COLS + finviz_cols(config) + PICKS_GRP_COLS + METRICS_COLS + TRAILING_COLS

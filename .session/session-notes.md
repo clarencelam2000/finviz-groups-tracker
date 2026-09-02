@@ -6,6 +6,84 @@
 
 ---
 
+## 2026-09-02 — PR #387 merge-conflict fix (picks.csv/picks_latest.csv)
+
+**Status: safe to close.** PR #387 (B-3 relvol_spark) went `mergeable_state: dirty` because two
+new picks runs (2026-08-31, 2026-09-01) landed on default while the PR was open, appending newer
+rows to `data/picks/picks.csv`/`picks_latest.csv` without the PR's new `relvol_spark` column —
+diverging whole-file content, not a line-level conflict.
+
+**Fix:** merged default into the PR branch (`claude/volatility-compression-expansion-pcvzda`);
+took default's `data/picks/picks.csv` + `picks_latest.csv` (theirs — the newer, larger append-only
+dataset) over the PR's stale version, then re-ran `collect_picks.ensure_picks_csv()` against the
+merged data to backfill `relvol_spark` (+ the other `TRAILING_COLS`) onto the new max-date
+(2026-09-01) slice — same migration path the PR's `write_picks()` already exercises on every
+scrape, so this is not a new mechanism. All other files (scripts, docs, other data CSVs) merged
+clean with no conflicts. Verified: no `(date, list_category, ticker)` dupes, 118 cols matching in
+both files, single max-date slice in `picks_latest.csv`, `pytest tests/ -q` with the CI ignore
+list — 737 passed. Pushed to the PR's own branch (`d261c27`).
+
+**Next steps:** none — just confirm PR #387 shows green/mergeable after GitHub recomputes
+`mergeable_state` (was `unknown` immediately post-push).
+
+---
+
+## 2026-09-01 — Effort B B-3: "Volume dry-up" (RelVol trend sparkline) on Picks cards
+
+**Status: safe to close — implemented, tested (737 non-PW green + PWA green), PR to open.**
+Continues the compression/expansion workstream (planning doc + #378/#379). B-1 (#380), B-2 (#383),
+A-1/A-1-IMPL (#384) merged.
+
+**Decision — chose B-3 over the PR384 author's recommended A-2→B-6.** Reasoning surfaced to owner:
+(1) B-3 matches the owner's re-stated first principle — the spine is *content* (Vol W/M, ATR, range
+tightening, **volume behavior**, MA bunching); volume dry-up is the one signal the doc records the
+owner naming as the strongest/cheapest VCP piece. A-2 adds zero new signal (pure plumbing).
+(2) Ephemeral-safe: B-3 is a contained pipeline + single-card slice mirroring B-1/B-2 exactly,
+shippable in one focused session; A-2 is a cross-card refactor whose worst failure is being left
+half-extracted — better for a fresh session. (3) Ordering rule #2: Picks-only B slices are safe.
+(4) Deferring B-6 costs ~nothing — B-6 propagates the whole "Volatility & setup" section at once
+regardless of how many signals live in it, so landing B-3 first just makes the section more complete.
+
+**What landed:**
+- **Pipeline:** new 4th `TRAILING_COLS` col `relvol_spark` in `picks_config.py`;
+  `picks_metrics.compute_trailing_setup` now also emits `row["relvol_spark"] = _series("Rel Volume")`
+  — same trailing-window/dedup/graceful-degrade machinery as B-2's sparks, reusing `SPARK_WINDOW`
+  (10) / `SPARK_MIN_BARS` (3). **No new constant, nothing thresholded** (doc §4.0 — a SHOWN trend).
+  `picks_columns()` count 117→118 (4 trailing). No selector_version bump (deterministic transform).
+  Ran `ensure_picks_csv` migration on real data: backfilled `relvol_spark` onto 487/535 picks_latest
+  rows (blank where <3 bars); picks.csv header widened to 118 cols (older rows "").
+- **PWA (`docs/index.html`):** `relvol_spark` read + a "Volume dry-up" sub-block under the B-1
+  "Volatility & setup" section in `renderPickRow`, rendered via the existing `volSpark()`/
+  `volSparkLast()` helpers (Rel volume · last bars, latest value labeled `×`). `hasVolDryup` gate
+  hides it for names without a series. No new PWA threshold constant → no `display_methodology.json`
+  bump needed.
+- **Docs (3-places):** README § Configurable parameters (`SPARK_WINDOW` row now lists `relvol_spark`),
+  scripts/CLAUDE.md (117→118 / 3→4 trailing, picks_metrics row), in-code comments in both scripts.
+- **Release triplet:** `docs/releases.json` `2026.09.01` (feature, tab picks) + `current` bumped;
+  `docs/sw.js` v89→v90.
+
+**Tests (light per owner):** 1 new unit test `test_trailing_relvol_spark_series_and_degrade` in
+`tests/test_picks_metrics.py` (series built oldest→newest + graceful-degrade blank under spark_min);
+extended the existing B-2 PWA test `test_range_tightening_shows_flag_and_sparklines` to also assert
+the "Volume dry-up" block + a 3rd sparkline polyline (ANET fixture now carries `relvol_spark`).
+Verified: `test_picks_metrics.py` + `test_collect_picks.py` 102 passed; full non-Playwright suite
+737 passed (was 736 + 1 new); PWA test green in-sandbox (chromium-1234 matched playwright 1.62 — no
+symlink trick needed this session). The column-count asserts in `test_collect_picks.py` derive from
+`TRAILING_COLS`, so they auto-adapted.
+
+**Data note:** committed `picks.csv`/`picks_latest.csv` now carry `relvol_spark` (migration ran in
+cloud — this is a pure derived-column backfill, no Finviz scrape). Live values refresh on the next
+Actions picks run like any other trailing column.
+
+**Next steps:** **A-2** — extract ONE shared card component from B-1's "Volatility & setup" layout
+(now B-1+B-2+B-3) so B-6 rides one seam. Then **B-6** — render the section on the Morning/Lookup/
+Ticket cards (B-1 raw cols fresh from the A-1 morning store; B-2/B-3 sparkline cols via cross-ref to
+`picks_latest`). A-2 is the strategic lever that cashes in A-1 — recommend a fresh session for it
+(cross-card refactor, wants uninterrupted context). Remaining Picks-only spine slices if preferred:
+B-4 (compose VCP proxy from B-2+B-3+52W), B-5 (Rule-of-Three MA bunching).
+
+---
+
 ## 2026-09-01 — Effort A A-1: decide morning data path (scrape-wide) + A-1-IMPL pipeline slice
 
 **Status: safe to close — decision made + implemented, tested (736 non-PW green), PR to open.**

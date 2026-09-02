@@ -20,9 +20,9 @@ screener and logs them to an append-only event log. **Phase 2 of
 | File | Role |
 |------|------|
 | `scripts/collect_picks.py` | `select_groups()` (pure selector) + paginated scrape + append. Inherits `slugify_industry`/`_build_url`/`_parse_table` from `probe_picks.py`. |
-| `scripts/picks_config.py` | Single source of truth: schema (`picks_columns()`, 117 cols = 6 lead + 84 Finviz + 19 `grp_*` + 5 metrics + 3 trailing) + all tunable constants. |
-| `scripts/picks_metrics.py` | Pure helper module: parsers + `compute_metrics_row()` → 5 `METRICS_COLS` (`atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`, `range_atr`, `stage2`) + `compute_trailing_setup()` → 3 `TRAILING_COLS` (`tight_range_7`, `range_atr_spark`, `atr_spark`; B-2, compression spine). Fully unit-tested. |
-| `data/picks/picks.csv` | Append-only log; 117 cols per row. Lead (incl. `collected_at`, the per-run UTC scrape timestamp) + 84 Finviz + 19 `grp_*` + 5 metrics + 3 trailing. **Offline attribution only — never fetched by the PWA.** |
+| `scripts/picks_config.py` | Single source of truth: schema (`picks_columns()`, 118 cols = 6 lead + 84 Finviz + 19 `grp_*` + 5 metrics + 4 trailing) + all tunable constants. |
+| `scripts/picks_metrics.py` | Pure helper module: parsers + `compute_metrics_row()` → 5 `METRICS_COLS` (`atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`, `range_atr`, `stage2`) + `compute_trailing_setup()` → 4 `TRAILING_COLS` (`tight_range_7`, `range_atr_spark`, `atr_spark` from B-2; `relvol_spark` — volume dry-up trend — from B-3; compression spine). Fully unit-tested. |
+| `data/picks/picks.csv` | Append-only log; 118 cols per row. Lead (incl. `collected_at`, the per-run UTC scrape timestamp) + 84 Finviz + 19 `grp_*` + 5 metrics + 4 trailing. **Offline attribution only — never fetched by the PWA.** |
 | `data/picks/picks_latest.csv` | Max-date slice of `picks.csv` — **this is what the PWA fetches.** |
 | `data/picks/screener_config.json` | Modular URL config (`wide` net + `button`); 84-col `c=` list. Labels stay verbatim-synced to `tests/fixtures/probe_header_84col.txt`. |
 | `data/picks/finviz_industry_slugs.csv` | 144 industry→slug rows. `validated` flips to `true` the first time a group scrapes >0 rows (G4). |
