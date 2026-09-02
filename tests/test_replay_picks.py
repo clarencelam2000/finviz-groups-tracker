@@ -15,6 +15,7 @@ ROOT = Path(__file__).parent.parent
 FIXTURE_CSV = ROOT / "tests" / "fixtures" / "replay_picks_fixture.csv"
 FIXTURE_V2_CSV = ROOT / "tests" / "fixtures" / "replay_picks_v2_fixture.csv"
 FIXTURE_V4_CSV = ROOT / "tests" / "fixtures" / "replay_picks_v4_fixture.csv"
+FIXTURE_V6_CSV = ROOT / "tests" / "fixtures" / "replay_picks_v6_fixture.csv"
 
 
 # ---------------------------------------------------------------------------
@@ -371,6 +372,51 @@ class TestReplayV4Fixture:
         near = out[out["ticker"] == "NEARHIGH"]["focus_score"].iloc[0]
         stale = out[out["ticker"] == "STALEHIGH"]["focus_score"].iloc[0]
         assert math.isclose(near, stale, rel_tol=1e-9)
+
+    def teardown_method(self):
+        rp.PICKS_CSV = ROOT / "data" / "picks" / "picks.csv"
+
+
+# ---------------------------------------------------------------------------
+# v6 volatility floor gate (2026-09-02) -- see docs/index.html
+# passesVolatilityFloor()/VOLATILITY_FLOOR_PCT and this file's own
+# passes_volatility_floor()/atr_pct_of_price().
+# ---------------------------------------------------------------------------
+
+class TestReplayV6Fixture:
+    def setup_method(self):
+        rp.PICKS_CSV = FIXTURE_V6_CSV
+
+    def test_v6_methodology_selected_for_date(self):
+        m = rp.load_methodology("2026-09-02")
+        assert m["version"] == "v6"
+
+    def test_all_view_excludes_low_volatility_w_only(self):
+        # LOWVOL has Volatility W=0.50% (< 1.0% floor) but ATR/Price=3.0% (well above) --
+        # OR logic means either metric alone is enough to exclude.
+        out = rp.replay(date="2026-09-02", view="all")
+        assert "LOWVOL" not in out["ticker"].values
+
+    def test_all_view_excludes_low_atr_pct_only(self):
+        # LOWATR has Volatility W=2.0% (fine) but ATR/Price=0.30/100*100=0.30% (< floor).
+        out = rp.replay(date="2026-09-02", view="all")
+        assert "LOWATR" not in out["ticker"].values
+
+    def test_all_view_keeps_row_with_both_metrics_above_floor(self):
+        out = rp.replay(date="2026-09-02", view="all")
+        assert "NORMAL" in out["ticker"].values
+
+    def test_all_view_missing_data_passes_through(self):
+        # NODATA has '-' for both Volatility W and ATR -- NaN means "unknown", not
+        # "low", so it must not be excluded by the volatility floor.
+        out = rp.replay(date="2026-09-02", view="all")
+        assert "NODATA" in out["ticker"].values
+
+    def test_focus_view_also_excludes_below_floor_rows(self):
+        # isFocusEligible() enforces the same gate independently of passesPicksBaseFilter
+        # -- confirm the Focus view (not just All) drops LOWVOL/LOWATR too.
+        out = rp.replay(date="2026-09-02", view="focus")
+        assert set(out["ticker"].values) == {"NORMAL", "NODATA"}
 
     def teardown_method(self):
         rp.PICKS_CSV = ROOT / "data" / "picks" / "picks.csv"

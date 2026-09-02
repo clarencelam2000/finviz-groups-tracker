@@ -6,6 +6,66 @@
 
 ---
 
+## 2026-09-02 — Volatility floor gate: hide near-dead stocks from Picks/Focus/Morning
+
+**Status: safe to close — implemented, tested (740 non-PW + 5/5 new volatility-gate PWA green,
+verified no regression in Focus/Morning/Lookup/methodology suites), PR to open.** Follow-up to
+the B-5 "Pre-Power of 3" session above: owner spotted APGE (a buyout-frozen biotech) showing a
+false "Coiled 2.8x" chip in the Volatility & setup section — its MAs and price were only
+bunched because the stock barely moves at all (Vol W 0.07%, ATR/Price 0.26%), not because it's
+a genuine coil.
+
+**Investigation before building:** owner asked for a histogram of the live picks pool's
+Volatility W % and ATR/Price % (published as an Artifact) before locking a threshold. Result:
+both distributions are bimodal with a real gap between ~0.5% and ~1.2% — a 1.0% floor sits
+exactly in that gap, catching only 5 tickers today (APGE, CRNX, OGN, TECH — all read as
+halted/frozen biotech/spin-off names — plus STRC, which turned out to not even be a common
+stock: "Strategy Inc - VR PRF PERPETUAL Series A", a perpetual preferred). Going to 1.5% would
+have started cutting legitimate low-vol mega-caps (Novartis, JNJ, ADP, Shell, Enterprise
+Products) that are just boring, not dead. Validated the choice wasn't an eyeball guess.
+
+**Decision (owner, locked in-session):** `VOLATILITY_FLOOR_PCT = 1.0`. Gate fires on
+`Volatility W % < 1.0 OR ATR/Price % < 1.0` (either trips it — both already-scraped columns,
+no new CSV data). Hides the row from Picks (`passesPicksBaseFilter`), Focus (`isFocusEligible`
+— duplicated at the predicate level since 2 of 3 call sites don't also call
+`passesPicksBaseFilter`), and the Morning tab's picks-confirmation read (`renderMorning`'s
+non-watchlist filter). Missing data (NaN) passes through — this only excludes what's
+positively measured as too quiet, never an unknown. **Exempt: the user's own watchlist**
+(explicit intent — those tickers ride the same morning scrape but the exclusion filter is
+only applied to `list_category !== 'watchlist'` rows) **and a direct Lookup ticker search**
+(explicit intent — shown with a new amber "Low volatility" warning chip in
+`tickerContextHtml` instead of being hidden).
+
+**Why client-side, not scrape-time (owner asked, both options presented):** `Volatility W`,
+`Volatility M`, `ATR`, `Price` are already scraped/stored in picks.csv/picks_latest.csv and
+morning.csv/morning_latest.csv — nothing new to collect. `.claude/rules/data-pipeline.md`
+treats those CSVs as append-only, irreplaceable ground truth; a scrape-time drop would make a
+wrongly-excluded (or later-retuned-threshold) row unrecoverable. Every existing per-stock
+exclusion in this codebase (`passesPicksBaseFilter`'s market-cap/MA filter, `isFocusEligible`'s
+liquidity gate, the Ariel match filter's own ATR%-band precedent) is already a client-side view
+filter, not a scrape-time drop — followed that precedent.
+
+**Shipped:** `VOLATILITY_FLOOR_PCT` constant + `atrPctOfPrice()`/`passesVolatilityFloor()`
+helpers in `docs/index.html`, wired into `passesPicksBaseFilter`/`isFocusEligible`/
+`renderMorning`, Lookup warning chip in `tickerContextHtml`/`findTickerPickInfo`.
+`display_methodology.json` v6 (base_filter + focus_dq `volatility_floor` block).
+`tests/test_picks_methodology.py` updated (v6 current, v5 preserved, 2 new sync tests).
+New `tests/test_pwa_volatility_gate.py` (5 tests: Picks-All exclusion, Focus exclusion,
+OR-logic via ATR-alone, Morning-card exclusion, Lookup warning-chip-not-hidden) — added to the
+CI Playwright `--ignore=` list. README § Configurable parameters + `docs/CLAUDE.md` § PWA
+display thresholds updated. Release surface: `releases.json` 2026.09.02.3 + `sw.js`
+finviz-v93→v94, same PR per the hard rule.
+
+**Not done / explicitly deferred:** no warning chip added to the Watchlist card itself (its
+existing "Volatility & setup" section already shows raw Vol W/ATR values, so the data is
+visible without a new badge) — flagged as an assumption in the PR description in case the
+owner wants the same amber chip there too.
+
+**Next steps:** open the PR, watch CI, then resume B-5b (the full undercut→reclaim Power-of-3
+trigger) from the prior session's notes above, unless the owner redirects.
+
+---
+
 ## 2026-09-02 — Effort B B-5: "Power of 3" MA-bunching chip + shown MA distances
 
 **Status: safe to close — implemented, tested (742 non-PW + 11/11 picks PWA + 18/18 morning/watch

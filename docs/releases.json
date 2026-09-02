@@ -1,6 +1,17 @@
 {
-  "current": "2026.09.02.2",
+  "current": "2026.09.02.3",
   "releases": [
+    {
+      "version": "2026.09.02.3",
+      "date": "2026-09-02",
+      "title": "Low-volatility names hidden from Picks/Focus/Morning",
+      "tag": "improvement",
+      "tab": "picks",
+      "notes": [
+        "Stocks with essentially no movement — weekly volatility or ATR/price under 1% — are now hidden from the Picks tab, Focus, and the Morning picks-confirmation cards. These are usually buyout-frozen, halted, or non-common names (a perpetual preferred showed up in the pool) whose tight range could otherwise look like a real coiled setup.",
+        "Your watchlist and a direct ticker search on the Lookup tab are unaffected — searching a low-volatility ticker still shows it, now with a \"Low volatility\" warning chip so you know why it's this quiet."
+      ]
+    },
     {
       "version": "2026.09.02.2",
       "date": "2026-09-02",

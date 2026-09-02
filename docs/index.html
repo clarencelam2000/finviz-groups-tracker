@@ -705,6 +705,19 @@
     // single-row value belongs at render time; see .claude/rules/data-pipeline.md § Schema changes).
     // Triple-documented: here, README § Configurable parameters, docs/CLAUDE.md § PWA display thresholds.
     const POWER_OF_3_ATR_MULT = 2.0;
+    // VOLATILITY_FLOOR_PCT (2026-09-02, owner call after the APGE false-"coiled" case): a hard
+    // exclusion gate on Picks/Focus/Morning (system-selected surfaces) — a row is hidden when
+    // its Volatility W % OR ATR/Price % is below this floor, i.e. it's provably near-dead
+    // (buyout-frozen, halted, a perpetual preferred) rather than a genuine tight coil. Watchlist
+    // and a direct Lookup ticker search are exempt (explicit user intent) and get a "low
+    // volatility" warning chip instead of being hidden — see passesVolatilityFloor(). Volatility
+    // W and ATR/Price are already-scraped columns; this is a row-visibility decision, not a new
+    // CSV column (see .claude/rules/data-pipeline.md § Schema changes to ground-truth CSVs).
+    // Validated against the live picks pool (2026-09-02): both distributions have a real gap
+    // between ~0.5% and ~1.2%, so 1.0% catches only the isolated dead cluster, not legitimate
+    // low-vol mega-caps (which start at 1.2%+). Triple-documented: here, README § Configurable
+    // parameters, docs/CLAUDE.md § PWA display thresholds.
+    const VOLATILITY_FLOOR_PCT = 1.0;
     // Focus List constants (Phase 3b). score = base × (1 − penalty_fraction). Triple-documented:
     // here, README § Configurable parameters, CLAUDE.md § PWA display thresholds.
     // Extension penalty ramps from 0 at PENALTY_START to PENALTY_MAX at ATR_EXT_ACTIONABLE (=4.0).
@@ -3710,6 +3723,9 @@
         earnings: parseEarningsInfo(row['Earnings']),
         focusScore: focus ? focus.score : null,
         launchReady: computeLaunchReady(row),
+        // 2026-09-02: unlike Picks/Focus/Morning, a direct Lookup search is explicit user
+        // intent, so a below-floor stock isn't hidden here — just flagged (see VOLATILITY_FLOOR_PCT).
+        lowVolatility: !passesVolatilityFloor(row),
       };
     }
 
@@ -3721,9 +3737,12 @@
       const launchReadyChip = info.launchReady
         ? `<span class="text-[0.6rem] px-1.5 py-0.5 rounded-full font-bold ${info.launchReady.cls}" title="Launch-ready: overhead supply vs. 52-week high + short-term extension">${info.launchReady.label}</span>`
         : '';
+      const lowVolChip = info.lowVolatility
+        ? `<span class="text-[0.6rem] px-1.5 py-0.5 rounded-full font-bold bg-amber-500/15 text-amber-400" title="Volatility W % or ATR/Price % is below ${VOLATILITY_FLOOR_PCT}% — hidden from Picks/Focus/Morning as likely near-dead (buyout-frozen, halted, or a preferred share), shown here because you searched it directly">Low volatility</span>`
+        : '';
       const chips = info.categories
         .map(c => `<span class="text-[0.6rem] px-1.5 py-0.5 rounded-full ${CATEGORY_CHIP_CLS[c] || 'bg-slate-700/60 text-slate-300'}">${CATEGORY_LABEL[c] || c}</span>`)
-        .join('') + launchReadyChip;
+        .join('') + launchReadyChip + lowVolChip;
       const extHtml = !isNaN(info.ext)
         ? `<span class="${atrTextColor(info.ext)}">${info.ext.toFixed(1)}× ATR ext</span>` : '';
       const earnHtml = info.earnings && info.earnings.daysUntil !== null && info.earnings.daysUntil <= EARNINGS_CAUTION_DAYS
@@ -4293,10 +4312,35 @@
       return (!isNaN(vol) && !isNaN(price)) ? vol * price : NaN;
     }
 
+    // ATR as % of price — shared by the volatility floor gate below (ATR and Price are already
+    // plain-number scraped columns, no new data needed).
+    function atrPctOfPrice(r) {
+      const atr = _pF(r['ATR']);
+      const price = _pF(r['Price']);
+      return (!isNaN(atr) && !isNaN(price) && price > 0) ? (atr / price) * 100 : NaN;
+    }
+
+    // Volatility floor gate (2026-09-02): hides a row from Picks/Focus/Morning when it's
+    // provably too quiet to be a real setup — Volatility W % OR ATR/Price % below
+    // VOLATILITY_FLOOR_PCT. Missing data passes through (NaN means "unknown", not "low") — this
+    // only excludes what we can positively measure as near-dead. Shared by passesPicksBaseFilter
+    // (Picks tab / ws4FocusScore's base gate) and isFocusEligible (every Focus-candidate pool,
+    // including the two sites below that don't also call passesPicksBaseFilter) so the floor
+    // can't drift between call sites, same discipline as the liquidity/ATR-extension gates.
+    function passesVolatilityFloor(r) {
+      const vw = _pPct(r['Volatility W']);
+      if (!isNaN(vw) && vw < VOLATILITY_FLOOR_PCT) return false;
+      const atrPct = atrPctOfPrice(r);
+      if (!isNaN(atrPct) && atrPct < VOLATILITY_FLOOR_PCT) return false;
+      return true;
+    }
+
     // Focus membership gate (Phase 3b/3d): must be actionable (price above 50MA, not
-    // over-extended) AND liquid enough to actually build/exit a position in. Shared by all
-    // three Focus-candidate filter sites so the two gates can't drift out of sync.
+    // over-extended), liquid enough to actually build/exit a position in, and not below the
+    // volatility floor. Shared by all three Focus-candidate filter sites so the gates can't
+    // drift out of sync.
     function isFocusEligible(r) {
+      if (!passesVolatilityFloor(r)) return false;
       const ext = _pF(r.atr_ext_50);
       if (isNaN(ext) || ext <= 0 || ext > ATR_EXT_ACTIONABLE) return false;
       const dolVol = focusDollarVol(r);
@@ -5183,12 +5227,13 @@
       renderPicks();
     };
 
-    // C6 base display filter: Market Cap > MIN_MARKET_CAP_B AND
+    // C6 base display filter: not below the volatility floor, Market Cap > MIN_MARKET_CAP_B, AND
     // (price>50MA OR price>200MA OR 20MA>50MA). Shared by renderPicks() (the Picks tab
     // itself) and ws4FocusScore() (WS4 trade ticket) so the "which rows are even
     // candidates" gate can't drift between the two call sites — a row that wouldn't show
     // up in the Picks tab at all must not silently get a Focus score on the ticket.
     function passesPicksBaseFilter(r) {
+      if (!passesVolatilityFloor(r)) return false;
       const capB = _pCapB(r['Market Cap']);
       if (isNaN(capB) || capB <= MIN_MARKET_CAP_B) return false;
       const sma50  = _pPct(r['SMA50']);
@@ -8564,8 +8609,11 @@
       };
       const toggle = `<div class="flex items-center gap-1 mb-3"><span class="text-xs text-slate-500 mr-1">Read:</span>${seg('morning', 'Morning')}${seg('preclose', 'Pre-close')}</div>`;
 
-      // WS5 §8b P3: exclude watchlist rows (they feed renderWatchlistSection()).
-      const rows = activeSessionRows().filter(r => (r.list_category || '') !== 'watchlist');
+      // WS5 §8b P3: exclude watchlist rows (they feed renderWatchlistSection()). Also exclude
+      // rows below the volatility floor (2026-09-02) — this is the system-selected picks
+      // confirmation read, same treatment as Picks/Focus; the watchlist itself is explicit user
+      // intent and is exempt (see VOLATILITY_FLOOR_PCT).
+      const rows = activeSessionRows().filter(r => (r.list_category || '') !== 'watchlist' && passesVolatilityFloor(r));
       if (!rows || rows.length === 0) {
         el.innerHTML = toggle + `<p class="text-slate-400 text-sm text-center py-8">${copy.empty}</p>`;
         return;
