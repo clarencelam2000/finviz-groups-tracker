@@ -6,6 +6,99 @@
 
 ---
 
+## 2026-09-02 — Effort B B-5: "Power of 3" MA-bunching chip + shown MA distances
+
+**Status: safe to close — implemented, tested (742 non-PW + 11/11 picks PWA + 18/18 morning/watch
+PWA green), PR to open.** Continues the compression/expansion workstream (planning doc + #378/#379);
+A-2/B-6/A-3 (#390) merged last session. Owner picked B-5 next and gave a decisive spec correction.
+
+**Owner spec (2026-09-02, locked in-session):** it's **"Power of 3"**, not "Rule of Three". Power
+of 3 normally uses price/10/20/50 MAs — we don't scrape the 10MA so drop it, and the 200 isn't this
+pattern's third line, so **price/20MA/50MA only**. The chip fires when all three sit inside a single
+**2×ATR band** — a band the OWNER specified (domain authority per §4.0), which dissolves the
+threshold tension: a binary chip is legit because the trader set the number, not me. "Values AND the
+chip"; render on the shared seam (all card families).
+
+**What landed:**
+- **Pipeline (Sonnet subagent):** new 6th `METRICS_COLS` col `power_of_3` in
+  `picks_metrics.compute_metrics_row` = `1 if spread(price,20MA$,50MA$) ≤ POWER_OF_3_ATR_MULT×ATR
+  else 0`, NaN if any input missing — computed next to `stage2`, reusing its reconstructed MA
+  prices. New constant `POWER_OF_3_ATR_MULT = 2.0` in `picks_config.py`, imported into
+  picks_metrics (no cycle). `picks_columns()` 118→119. `ensure_picks_csv` migration backfilled
+  picks.csv (13,395 rows) + picks_latest.csv (119 cols; power_of_3 138×'1' / 297×'0', no NaN in the
+  latest slice). 5 new unit tests. 3-places doc'd (in-code + README § Configurable parameters +
+  scripts/CLAUDE.md).
+- **PWA (`docs/index.html`):** "MA bunching" sub-block added to the shared `volSetupSectionHtml`
+  (A-2 seam) — a green "Power of 3" chip when `power_of_3==='1'` + the two SHOWN SMA % distances
+  (Price vs 20MA / 50MA). **No PWA constant** — the flag is precomputed in the pipeline (single
+  source of truth), the PWA just reads it (same pattern as `tight_range_7`). Reaches Picks +
+  Morning + Watchlist + Ticket for free via B-6's existing `setupRowForCard` cross-ref (SMA/
+  power_of_3 come from picks_latest, not the morning store — MAs barely move intraday); orphans
+  self-hide. Placed last in the section (weakest confirmer, §5.3).
+- **Release triplet:** `docs/releases.json` `2026.09.02.1` (feature, tab picks) + `current` bumped;
+  `docs/sw.js` v91→v92.
+- **Tests:** 2 new picks PWA tests (`test_power_of_3_chip_and_ma_distances`,
+  `..._no_chip_when_not_bunched`); added `power_of_3` to `tests/fixtures/picks_latest.csv` (computed
+  via the real `compute_metrics_row` — ANET bunched→'1', TESTBLK no-ATR→''). Verified live headless
+  via the executable_path override (`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`; pip
+  playwright expected -1234, sandbox has -1194 — Root Cause 1 in the playwright-cloud investigation,
+  NOT committed). picks file 11/11, morning+watch 18/18 (seam inheritance, no regression).
+
+**Delegation:** pipeline half done by a Sonnet subagent (self-contained metric+migration+unit
+tests+pipeline docs, ~125k tokens); PWA render/test/release/planning kept in the main loop.
+
+**Amendment (2026-09-02, same PR #392, still unmerged) — relabel to "Pre-Power of 3" + show the
+cluster spread %.** Owner shared the full Power-of-3 definition: it's a *sequence*
+(bunched → undercut the cluster → **reclaim** the highest MA = the trigger), not a static state.
+What B-5 ships is only step 1 (the tight cluster). Owner decision: **relabel the chip "Pre-Power of
+3"** (honest — it's the coil precondition, not the trigger), keep the 2×ATR gate, and **also show
+the classic MA-to-MA cluster spread %** (`|20MA$−50MA$|/price`, derived client-side from
+Price/SMA20/SMA50 — no new column). The full undercut→reclaim trigger is a new next slice **B-5b**,
+which composes on `pick_status.py`'s existing reclaim engine (`compute_reclaim`/`reclaim_refs`,
+already an `ACTIONABLE_STATUS`). Changed: chip text + a `maSpreadStr` header value in
+`volSetupSectionHtml`; the 2 picks PWA tests (assert "Pre-Power of 3" + "spread 2.25%" for ANET);
+`releases.json` `2026.09.02.1` title/notes; planning §5.3/§12 (+ B-5b ⏳ row); docs/CLAUDE.md; SPRINT.
+Re-verified: picks+morning+watch PWA **29/29** green (relabel is in the shared seam); JS parses;
+ANET spread = 2.25% exact; `test_guide_releases` 5/5. The `power_of_3` **data column name is
+unchanged** (it's the bunched fact) — only the user-facing label moved.
+
+**Amendment 2 (2026-09-02, same PR #392) — moved power_of_3 OUT of the CSV to client-side + made
+Morning/Watch real-time (owner review changes-requested).** Two correct owner findings: (1) SMA20/
+SMA50 render off *last night's close* on Morning/Watch (setupRowForCard only overrode 4 B-1 cols),
+and Finviz's SMA%-distance columns track the **live** price so they DO go stale intraday — my "MAs
+barely move intraday" assumption was wrong, corrected on the record. (2) `power_of_3` never needed a
+CSV column: it's a pure single-row function of already-stored Price/ATR/SMA20/SMA50 and is
+**config-dependent** (POWER_OF_3_ATR_MULT), so persisting it as ground truth would silently drift if
+the constant changed — exactly what the new `.claude/rules/data-pipeline.md` § Schema-changes rule
+(#393, merged to default) forbids. **What I did:** reverted the pipeline change entirely
+(`picks_metrics.py`/`picks_config.py` back to 5 METRICS_COLS / 118 cols; restored picks.csv,
+picks_latest.csv, and the test fixture from default — no more 13k-row backfill, no more merge-
+conflict surface); moved the chip to a **client-side** computation in `volSetupSectionHtml` (reads
+Price/ATR/SMA20/SMA50, reconstructs the MA $ levels, fires the chip on the 2×ATR span);
+`POWER_OF_3_ATR_MULT` is now a **PWA display constant** (docs/index.html), triple-documented in the
+PWA tables. **Real-time fix:** added `Price`,`SMA20`,`SMA50`,`ATR` to `collect_morning.SETUP_COLUMNS`
+(morning store) and to `_SETUP_FRESH_COLS` (PWA), so setupRowForCard overrides them with this-
+morning's scrape → the chip + MA distances re-fire off fresh MA levels on Morning/Watch. B-5b (the
+trigger) needs this same fresh-MA plumbing. Tests: reverted the 5 pipeline unit tests; the 2 PWA
+tests now drive the chip via raw cols (bunched via ANET; not-bunched via `SMA50:30%`); extended
+`test_build_status_rows_carries_setup_columns` for the 4 new cols. Re-verified: picks_metrics +
+collect_picks + collect_morning 152 green; the 2 PWA power_of_3 tests green (client-computed); JS
+parses. Also **synced first**: another Claude rebased the B-5 stack onto post-#391 default; I reset
+local to origin/2ljelo before working.
+
+**Next steps:** **B-5b** (the full undercut→reclaim Power-of-3 trigger — gate on B-5's bunched read,
+detect undercut below the cluster low = min MA, fire on reclaim above the cluster high = max MA;
+actionable *real-time* morning read, entry on reclaim / stop under undercut low; computed per-run in
+`collect_morning`/`pick_status` and stored in the **session** store — a live status, NOT a persisted
+historical fact, so it honors #393 by construction; reclaim is a fact so §4.0-clean; **verify the
+reclaim-engine wiring before building**). Alternatively **B-4** (VCP-style contraction proxy from
+B-2+B-3+52W; label "Contraction (VCP-style)", never "VCP detected", NOT "lower highs"). Remaining
+tracked follow-ups (planning §12): orphan sparkline backfill from D1 `ticker_quotes` (§7.3 option-b),
+projected vol/RVol (§5.5b, parked), filter-sort + "Triggers today" (§9), fuller card superset
+(RSI/Perf/Avg$Vol/Earnings — #378). B-7/B-8 stay parked.
+
+---
+
 ## 2026-09-02 — Effort A A-2 + B-6/A-3: compression "Volatility & setup" section on the Morning family
 
 **Status: safe to close — implemented, tested, PR #390 open (ready).** Owner chose the strategic

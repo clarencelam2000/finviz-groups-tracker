@@ -383,11 +383,14 @@ def test_build_status_rows_carries_setup_columns(monkeypatch):
         {"ticker": "ABSENT", "group": "G", "list_category": "leaders", "trigger": 10.0, "stop": 8.0, "atr": 2.0},
     ]
     quotes = [
-        # full wide row
+        # full wide row — incl. the B-5 MA-bunching inputs (Price/SMA20/SMA50/ATR)
         {"Ticker": "WIDE", "Price": "9.0", "Open": "8.5", "High": "9.2", "Low": "8.4", "Change": "0%",
          "RSI": "77.26", "Volatility W": "3.92%", "Volatility M": "3.57%",
-         "Rel Volume": "1.24", "52W High": "-7.99%"},
-        # a 9-column-only (legacy/thin) quote → setup cols blank, never KeyError
+         "Rel Volume": "1.24", "52W High": "-7.99%",
+         "SMA20": "1.16%", "SMA50": "3.52%", "ATR": "8.39"},
+        # a 9-column-only (legacy/thin) quote → setup cols the quote lacks are blank, never KeyError.
+        # Note: "Price" is BOTH a status field and (since B-5) a SETUP_COLUMN, so a thin quote that
+        # carries Price passes it through — only the genuinely-absent setup cols go blank.
         {"Ticker": "THIN", "Price": "9.0", "Open": "8.5", "High": "9.2", "Low": "8.4", "Change": "0%"},
         # ABSENT: no quote at all
     ]
@@ -396,9 +399,17 @@ def test_build_status_rows_carries_setup_columns(monkeypatch):
     assert by["WIDE"]["RSI"] == "77.26"
     assert by["WIDE"]["Volatility W"] == "3.92%"
     assert by["WIDE"]["52W High"] == "-7.99%"
+    # B-5 real-time inputs carried through verbatim from the wide quote:
+    assert by["WIDE"]["Price"] == "9.0"
+    assert by["WIDE"]["SMA20"] == "1.16%"
+    assert by["WIDE"]["SMA50"] == "3.52%"
+    assert by["WIDE"]["ATR"] == "8.39"
+    # THIN carries only Price among the setup cols; the rest are blank.
+    assert by["THIN"]["Price"] == "9.0"
     for col in cm.SETUP_COLUMNS:
-        assert by["THIN"][col] == ""
-        assert by["ABSENT"][col] == ""
+        if col != "Price":
+            assert by["THIN"][col] == "", f"THIN {col} should be blank"
+        assert by["ABSENT"][col] == "", f"ABSENT {col} should be blank"
 
 
 # ---------------------------------------------------------------------------

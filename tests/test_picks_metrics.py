@@ -6,7 +6,7 @@ Covers:
   - compute_metrics_row on the four spec worked examples (EOD 2026-06-25)
   - NaN safety when ATR / SMA fields are blank
   - stage2 truth table
-  - ensure_picks_csv migration (old 108-col rows gain the 5 new columns)
+  - ensure_picks_csv migration (old 108-col rows gain the 6 new columns)
 """
 import csv
 import io

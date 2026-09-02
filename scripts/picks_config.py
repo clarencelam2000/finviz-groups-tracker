@@ -217,6 +217,11 @@ PICKS_GRP_COLS = [
 # Deterministic transforms of already-stored Finviz columns; computed at write time in
 # collect_picks.py. No selector_version bump needed. Adding one later is a two-way-door
 # superset migration (ensure_picks_csv pattern). Renaming/removing is one-way once data flows.
+# NOTE (2026-09-02): these all need either a cross-row or a multi-day comparison that a single
+# client row can't do (stage2 excepted — it's grandfathered). A NEW pure single-row transform of
+# already-stored Finviz columns (e.g. a config-dependent MA-bunching flag) does NOT belong here —
+# compute it client-side at render/analysis time, per `.claude/rules/data-pipeline.md`
+# § Schema changes to ground-truth CSVs (Pre-Power of 3 was moved out for exactly this reason).
 # Triple-documented: here, README § Configurable parameters, CLAUDE.md § Picks pipeline.
 METRICS_COLS = [
     "atr_ext_50",      # (price − sma50_price) / ATR; ATR multiples from 50MA (CEO "rubber-band")
@@ -258,6 +263,10 @@ SPARK_WINDOW = 10
 # SPARK_MIN_BARS — minimum available bars before a sparkline is emitted at all; below this the
 # series column is "" (per-name graceful degradation, doc §3). A too-short line reads as noise.
 SPARK_MIN_BARS = 3
+# NOTE: POWER_OF_3_ATR_MULT lives in the PWA (docs/index.html), NOT here. The Pre-Power of 3
+# MA-bunching chip is a pure single-row function of already-stored Price/ATR/SMA20/SMA50 and is
+# config-dependent, so it's computed client-side at render time — never persisted to picks.csv.
+# See `.claude/rules/data-pipeline.md` § Schema changes to ground-truth CSVs.
 
 
 def load_config() -> dict:

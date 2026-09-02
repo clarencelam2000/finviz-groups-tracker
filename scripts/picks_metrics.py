@@ -13,7 +13,8 @@ ADR-007 (selector policy), ADR-008 (collection architecture).
 
 import math
 
-# METRICS_COLS — the 5 backend-derived columns appended AFTER the 19 grp_* block.
+
+# METRICS_COLS — the 6 backend-derived columns appended AFTER the 19 grp_* block.
 # Computed from already-stored Finviz columns at write time; no selector_version bump
 # needed (they are deterministic transforms of stored values, not selection-logic changes).
 # Order is sticky — adding a new column is a two-way-door superset migration via
@@ -87,6 +88,11 @@ def compute_metrics_row(row: dict) -> dict:
       range_atr    = (High − Low) / ATR                    [day tightness proxy, C1]
       stage2       = 1 if (SMA50 > 0) AND (SMA200 > SMA50) else 0
                    [SMA50>0 ↔ price>50MA; SMA200>SMA50 ↔ 50MA>200MA — proven equivalent]
+
+    NOTE: the Pre-Power of 3 MA-bunching flag is NOT computed here. It's a pure single-row
+    function of Price/ATR/SMA20/SMA50 and is config-dependent, so it lives client-side in the
+    PWA (docs/index.html `volSetupSectionHtml`), never persisted to the CSV — see
+    `.claude/rules/data-pipeline.md` § Schema changes to ground-truth CSVs.
     """
     price     = _float(row.get("Price"))
     atr       = _float(row.get("ATR"))

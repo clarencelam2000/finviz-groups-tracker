@@ -95,7 +95,16 @@ WIDE_SCRAPE_BLOCK = "held"
 # Adding a column here is a two-way-door superset migration (write_store backfills "" on old rows);
 # removing one is one-way once data flows. 3-places documented (in-code here + README § Configurable
 # parameters + scripts/CLAUDE.md § WS3 morning status). Extend as later B slices reach these cards.
-SETUP_COLUMNS = ["RSI", "Volatility W", "Volatility M", "Rel Volume", "52W High"]
+SETUP_COLUMNS = ["RSI", "Volatility W", "Volatility M", "Rel Volume", "52W High",
+                 # B-5 (issue #379): Price/SMA20/SMA50/ATR carried through so the PWA's client-side
+                 # Pre-Power of 3 chip + MA-distance/cluster-spread read off THIS-MORNING's values on
+                 # Morning/Watch cards. Finviz's SMA20/SMA50 screener columns are %-distance-from-
+                 # *live*-price (they move intraday like price), and the reconstructed MA $ level pairs
+                 # today's price with today's %, so all four must be fresh together — a stale price
+                 # with a fresh % would mis-locate the MA level. Also feeds B-5b's real-time trigger.
+                 # (Note: the status engine also stores lowercase `price`/`atr`; these Finviz-labelled
+                 # keys are what the setup section reads, matching picks_latest — render symmetry.)
+                 "Price", "SMA20", "SMA50", "ATR"]
 
 STORE_COLUMNS = [
     "date", "session", "collected_at", "ticker", "group", "list_category",
