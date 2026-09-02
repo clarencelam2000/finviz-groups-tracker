@@ -10,9 +10,13 @@ Mirrors the JS logic in docs/index.html (renderPicks / computeFocusScores). v1 c
 the original Phase 3b formula; v2 (effective 2026-07-01) adds the Phase 3d Focus
 liquidity gate/penalty and earnings-proximity penalty; v3 (2026-07-16) rebalances
 Focus score weights; v4 (2026-08-12, Phase 2) adds an overhead-supply penalty based
-on % below the 52-week high. Still NOT modeled by any version: the opt-in Phase 4
-Ariel-match filter (see data/picks/ariel_match_config.json — documentation-only,
-no anti-drift guard, by design).
+on % below the 52-week high; v6 (2026-09-02) adds the volatility floor gate
+(passesVolatilityFloor(), VOLATILITY_FLOOR_PCT) to both the base filter and the Focus
+DQ band. Still NOT modeled by any version: the opt-in Phase 4 Ariel-match filter (see
+data/picks/ariel_match_config.json — documentation-only, no anti-drift guard, by
+design) and renderMorning's use of the same volatility-floor gate (that surface isn't
+governed by base_filter/focus_dq to begin with — see display_methodology.json v6's
+known_gaps note).
 
 IMPORTANT caveat for the earnings penalty: docs/index.html always computes
 "days until earnings" relative to the viewer's wall-clock `now` at render time, not
@@ -106,6 +110,25 @@ def avg_dollar_volume(df: pd.DataFrame) -> pd.Series:
     vol = _parse_vol_raw(df["Avg Volume"])
     price = pd.to_numeric(df["Price"], errors="coerce")
     return vol * price
+
+
+def atr_pct_of_price(df: pd.DataFrame) -> pd.Series:
+    """ATR as % of price. Mirrors JS atrPctOfPrice(). NaN when ATR/Price is
+    unparseable or Price <= 0."""
+    atr = pd.to_numeric(df["ATR"], errors="coerce")
+    price = pd.to_numeric(df["Price"], errors="coerce")
+    return (atr / price * 100).where(price > 0)
+
+
+def passes_volatility_floor(df: pd.DataFrame, params: dict) -> pd.Series:
+    """Mirrors JS passesVolatilityFloor(): a row fails when 'Volatility W' % OR
+    ATR/Price % is below params['min_exclusive_pct']. Missing data passes through
+    (NaN means "unknown", not "low") -- only a positively-measured low value excludes."""
+    floor = params["min_exclusive_pct"]
+    vw = _parse_pct(df["Volatility W"])
+    atr_pct = atr_pct_of_price(df)
+    fails = (vw.notna() & (vw < floor)) | (atr_pct.notna() & (atr_pct < floor))
+    return ~fails
 
 
 def parse_earnings_days_until(value, as_of: dt.date):
@@ -258,6 +281,13 @@ def _load_and_filter_to_date(target_date: str) -> pd.DataFrame:
 
 
 def _apply_base_filter(df: pd.DataFrame, p: dict) -> pd.DataFrame:
+    # Volatility floor (v6, 2026-09-02): mirrors passesPicksBaseFilter's first check
+    # in docs/index.html. Absent in pre-v6 methodology entries -> no-op, matching the
+    # live PWA before VOLATILITY_FLOOR_PCT existed.
+    vol_floor = p["base_filter"].get("volatility_floor")
+    if vol_floor is not None:
+        df = df[passes_volatility_floor(df, vol_floor)].copy()
+
     cap_b = _parse_cap_b(df["Market Cap"])
     df = df[cap_b > p["base_filter"]["min_market_cap_b"]].copy()
 
@@ -299,6 +329,12 @@ def _replay_focus(df: pd.DataFrame, p: dict, as_of: dt.date) -> pd.DataFrame:
 
     atr = pd.to_numeric(df["atr_ext_50"], errors="coerce")
     dq_mask = (atr > atr_dq["min_exclusive"]) & (atr <= atr_dq["max_inclusive"])
+
+    # Volatility floor (v6, 2026-09-02): mirrors isFocusEligible's first check in
+    # docs/index.html. Absent in pre-v6 methodology entries -> no-op.
+    vol_floor_dq = focus_dq.get("volatility_floor")
+    if vol_floor_dq is not None:
+        dq_mask = dq_mask & passes_volatility_floor(df, vol_floor_dq)
 
     liquidity_dq = focus_dq.get("liquidity")
     if liquidity_dq is not None:
