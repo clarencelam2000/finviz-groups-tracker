@@ -121,6 +121,25 @@ plus **filter/sort**, plus flags only where §4.0 permits.
 - **Confirmer, not a trigger** (owner agree). Weakest signal of the set; small confirming tick
   inside a setup section, never a headline metric, never scored alone.
 
+**Owner spec locked (2026-09-02) — it's "Power of 3", not "Rule of Three".** Power of 3 is
+normally price / 10 / 20 / 50 MAs bunched; **we don't scrape the 10MA, so drop it** (and drop the
+200 — it's not the third line of this pattern). The build uses **price / 20MA / 50MA** only.
+- **The chip is a fact the OWNER specified — dissolves the §4.0 threshold tension.** It fires when
+  price, 20MA and 50MA all sit within a single **2×ATR** band:
+  `max(price, 20MA$, 50MA$) − min(price, 20MA$, 50MA$) ≤ 2 × ATR`. The 2×ATR band is the owner's
+  own number (the domain authority per §4.0), not an invented cutoff — so a binary chip is
+  legitimate here (genuinely-binary fact). Constant `POWER_OF_3_ATR_MULT = 2.0`, triple-documented.
+- **Shown alongside the chip:** price's distance to 20MA and to 50MA (Finviz `SMA20`/`SMA50` %),
+  so the trader sees *why* it is/isn't bunched.
+- **Compute site:** a 6th `METRICS_COLS` entry `power_of_3` in `picks_metrics.compute_pick_metrics`
+  (single-bar; reuses the `sma20_price`/`sma50_price`/`ATR` that function already reconstructs,
+  right next to `stage2`). NaN when price/either MA/ATR is missing.
+- **Render:** a "Power of 3" sub-block in the shared `volSetupSectionHtml` (A-2 seam) → shows on
+  Picks + Morning + Watchlist + inherited Ticket at once. On the Morning family it rides the
+  picks_latest cross-ref (last night's EOD MA/ATR), same as B-2/B-3 — the morning store carries no
+  SMA/ATR, and MAs barely move intraday. Fresh intraday Power-of-3 = a later follow-up (add
+  SMA20/SMA50/ATR to the morning `SETUP_COLUMNS`), tracked under WIDE-SCRAPE-FASTFOLLOW (#385).
+
 ### 5.4 ATR trend — sparkline for eyes, slope for score
 - **Mini sparkline** is the trustworthy human-facing surface (owner: yes). A human reads
   "tightening then popping" off a sparkline and rightly distrusts a lone slope number.
@@ -402,7 +421,7 @@ justify its own small, time-sensitive list — phase 2.
 | B-2 | Tightest-range flag + range_atr/ATR sparkline (range tightening) — derived pipeline columns, per-name history w/ graceful degrade | §5.4, §5.7, §3 | ✅ | **PR #383**. 3 new `TRAILING_COLS` in the picks pipeline (`tight_range_7`, `range_atr_spark`, `atr_spark`), computed over trailing available bars, populated only on the picks_latest slice. Picks card "Range tightening" block: honest "Tightest range · last 7 bars" flag (owner 2026-08-31: NOT "NR7" — gappy history) + two mini sparklines. Graceful per-name degrade. |
 | B-3 | Volume dry-up sub-signal for VCP proxy (RelVol trend while price holds) | §5.2, §10.3 | ✅ | **PR (this session).** New 4th `TRAILING_COLS` col `relvol_spark` (pipe-joined trailing Rel Volume series, same trailing-window/graceful-degrade machinery as B-2's sparks — window is `SPARK_WINDOW`, not a new constant). Picks card "Volume dry-up" sub-block under the B-1 "Volatility & setup" section renders it via the existing `volSpark()` helper (a SHOWN trend, doc §4.0 — no threshold, no flag). Migration backfilled 487/535 latest rows. Composes into B-4. |
 | B-4 | VCP-style contraction proxy — shrinking pullback depth + tightening range + vol dry-up + 52W-high proximity. Label "Contraction (VCP-style)", never "VCP detected" | §5.2 | ⬜ | Composes B-2 + B-3. NOT "lower highs". |
-| B-5 | Rule-of-Three MA-bunching confirmer — MAs bunched, up-sloping, price above both, converging | §5.3 | ⬜ | Weakest signal; confirmer only, never a standalone trigger/score. |
+| B-5 | **Power of 3** MA-bunching chip + shown MA distances — price/20MA/50MA within a 2×ATR band | §5.3 | 🔨 | **In progress (this session).** Owner-renamed "Power of 3" (not Rule of Three); price/20/50 only (no 10MA scraped, 200 dropped). Chip = single fact `spread(price,20MA$,50MA$) ≤ POWER_OF_3_ATR_MULT(2.0)×ATR` — owner-set band, §4.0-clean. New 6th `METRICS_COLS` col `power_of_3`; renders via shared `volSetupSectionHtml` (all card families). |
 | B-6 | Propagate the "Volatility & setup" section (B-1 + B-2 + B-3) to Lookup + Morning + Ticket cards | §4.1, §8 | ✅ | **PR (this session).** Renders the shared `volSetupSectionHtml` (A-2 seam) on morning picks cards (`morningCardBody`, all live statuses) + watch cards (`watchCardHtml`), via `setupRowForCard(ticker, freshRow)` = picks_latest cross-ref (B-2/B-3 sparklines) + morning-store fresh B-1 override. Trade ticket inherits it from the morning card (no duplicate render). Lookup Stage-2 already had it (reuses `renderPickRow`). Owner-approved mock: `planning/mocks/b6-morning-volatility-setup.html`. 2 morning + 1 watch PWA tests. Release `2026.09.02` / sw.js v91. |
 | B-7 | Optional composite score (decomposable, shown next to components) | §4.1 L3, §10.7 | 🅿️ | LOW priority / maybe never. Owner wary of blended scores. Do not lead with this. |
 | B-8 | Forward-return eval of the signals (does compression predict?) | §10.10 | ⬜ | Reuse `evaluate_picks.py` scaffolding. Do after ≥1 signal has history. |

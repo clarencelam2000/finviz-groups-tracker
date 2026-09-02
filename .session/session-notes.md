@@ -6,6 +6,57 @@
 
 ---
 
+## 2026-09-02 — Effort B B-5: "Power of 3" MA-bunching chip + shown MA distances
+
+**Status: safe to close — implemented, tested (742 non-PW + 11/11 picks PWA + 18/18 morning/watch
+PWA green), PR to open.** Continues the compression/expansion workstream (planning doc + #378/#379);
+A-2/B-6/A-3 (#390) merged last session. Owner picked B-5 next and gave a decisive spec correction.
+
+**Owner spec (2026-09-02, locked in-session):** it's **"Power of 3"**, not "Rule of Three". Power
+of 3 normally uses price/10/20/50 MAs — we don't scrape the 10MA so drop it, and the 200 isn't this
+pattern's third line, so **price/20MA/50MA only**. The chip fires when all three sit inside a single
+**2×ATR band** — a band the OWNER specified (domain authority per §4.0), which dissolves the
+threshold tension: a binary chip is legit because the trader set the number, not me. "Values AND the
+chip"; render on the shared seam (all card families).
+
+**What landed:**
+- **Pipeline (Sonnet subagent):** new 6th `METRICS_COLS` col `power_of_3` in
+  `picks_metrics.compute_metrics_row` = `1 if spread(price,20MA$,50MA$) ≤ POWER_OF_3_ATR_MULT×ATR
+  else 0`, NaN if any input missing — computed next to `stage2`, reusing its reconstructed MA
+  prices. New constant `POWER_OF_3_ATR_MULT = 2.0` in `picks_config.py`, imported into
+  picks_metrics (no cycle). `picks_columns()` 118→119. `ensure_picks_csv` migration backfilled
+  picks.csv (13,395 rows) + picks_latest.csv (119 cols; power_of_3 138×'1' / 297×'0', no NaN in the
+  latest slice). 5 new unit tests. 3-places doc'd (in-code + README § Configurable parameters +
+  scripts/CLAUDE.md).
+- **PWA (`docs/index.html`):** "MA bunching" sub-block added to the shared `volSetupSectionHtml`
+  (A-2 seam) — a green "Power of 3" chip when `power_of_3==='1'` + the two SHOWN SMA % distances
+  (Price vs 20MA / 50MA). **No PWA constant** — the flag is precomputed in the pipeline (single
+  source of truth), the PWA just reads it (same pattern as `tight_range_7`). Reaches Picks +
+  Morning + Watchlist + Ticket for free via B-6's existing `setupRowForCard` cross-ref (SMA/
+  power_of_3 come from picks_latest, not the morning store — MAs barely move intraday); orphans
+  self-hide. Placed last in the section (weakest confirmer, §5.3).
+- **Release triplet:** `docs/releases.json` `2026.09.02.1` (feature, tab picks) + `current` bumped;
+  `docs/sw.js` v91→v92.
+- **Tests:** 2 new picks PWA tests (`test_power_of_3_chip_and_ma_distances`,
+  `..._no_chip_when_not_bunched`); added `power_of_3` to `tests/fixtures/picks_latest.csv` (computed
+  via the real `compute_metrics_row` — ANET bunched→'1', TESTBLK no-ATR→''). Verified live headless
+  via the executable_path override (`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`; pip
+  playwright expected -1234, sandbox has -1194 — Root Cause 1 in the playwright-cloud investigation,
+  NOT committed). picks file 11/11, morning+watch 18/18 (seam inheritance, no regression).
+
+**Delegation:** pipeline half done by a Sonnet subagent (self-contained metric+migration+unit
+tests+pipeline docs, ~125k tokens); PWA render/test/release/planning kept in the main loop.
+
+**Next steps:** **B-4** (compose the VCP-style contraction proxy from B-2 tightening + B-3 dry-up +
+52W proximity — the last named spine composite; label "Contraction (VCP-style)", never "VCP
+detected", NOT "lower highs"). Then the spine's named signals are all built; remaining tracked
+follow-ups (planning §12): orphan sparkline backfill from D1 `ticker_quotes` (§7.3 option-b),
+projected vol/RVol (§5.5b, parked/expansion), filter-sort + "Triggers today" list (§9), fuller card
+superset (RSI/Perf/Avg$Vol/Earnings — issue #378 broad Effort A). B-7 (composite score) / B-8 (eval)
+stay parked.
+
+---
+
 ## 2026-09-02 — Effort A A-2 + B-6/A-3: compression "Volatility & setup" section on the Morning family
 
 **Status: safe to close — implemented, tested, PR #390 open (ready).** Owner chose the strategic
