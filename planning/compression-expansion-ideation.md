@@ -403,7 +403,7 @@ justify its own small, time-sensitive list — phase 2.
 | B-3 | Volume dry-up sub-signal for VCP proxy (RelVol trend while price holds) | §5.2, §10.3 | ✅ | **PR (this session).** New 4th `TRAILING_COLS` col `relvol_spark` (pipe-joined trailing Rel Volume series, same trailing-window/graceful-degrade machinery as B-2's sparks — window is `SPARK_WINDOW`, not a new constant). Picks card "Volume dry-up" sub-block under the B-1 "Volatility & setup" section renders it via the existing `volSpark()` helper (a SHOWN trend, doc §4.0 — no threshold, no flag). Migration backfilled 487/535 latest rows. Composes into B-4. |
 | B-4 | VCP-style contraction proxy — shrinking pullback depth + tightening range + vol dry-up + 52W-high proximity. Label "Contraction (VCP-style)", never "VCP detected" | §5.2 | ⬜ | Composes B-2 + B-3. NOT "lower highs". |
 | B-5 | Rule-of-Three MA-bunching confirmer — MAs bunched, up-sloping, price above both, converging | §5.3 | ⬜ | Weakest signal; confirmer only, never a standalone trigger/score. |
-| B-6 | Propagate the "Volatility & setup" section (B-1 + B-2 + B-3) to Lookup + Morning + Ticket cards | §4.1, §8 | 🅿️ | **Blocked on Effort A seam (A-2).** A-1 data path now landed (A-1-IMPL). This is the slice ordering rule #2 gates. B-1 raw cols come fresh from the morning store; B-2/B-3 sparkline cols via cross-ref to `picks_latest` (multi-day). |
+| B-6 | Propagate the "Volatility & setup" section (B-1 + B-2 + B-3) to Lookup + Morning + Ticket cards | §4.1, §8 | ✅ | **PR (this session).** Renders the shared `volSetupSectionHtml` (A-2 seam) on morning picks cards (`morningCardBody`, all live statuses) + watch cards (`watchCardHtml`), via `setupRowForCard(ticker, freshRow)` = picks_latest cross-ref (B-2/B-3 sparklines) + morning-store fresh B-1 override. Trade ticket inherits it from the morning card (no duplicate render). Lookup Stage-2 already had it (reuses `renderPickRow`). Owner-approved mock: `planning/mocks/b6-morning-volatility-setup.html`. 2 morning + 1 watch PWA tests. Release `2026.09.02` / sw.js v91. |
 | B-7 | Optional composite score (decomposable, shown next to components) | §4.1 L3, §10.7 | 🅿️ | LOW priority / maybe never. Owner wary of blended scores. Do not lead with this. |
 | B-8 | Forward-return eval of the signals (does compression predict?) | §10.10 | ⬜ | Reuse `evaluate_picks.py` scaffolding. Do after ≥1 signal has history. |
 | B-X | Expansion side (projected vol/RVol §5.5b; break+coil context §5.5a) | §5.5, §5.5a, §5.5b | 🅿️ | Secondary/subjective per owner. Facts+shown-values only, no "trigger." Revisit later. |
@@ -414,7 +414,7 @@ justify its own small, time-sensitive list — phase 2.
 | A-1 | **Decide morning-card data path**: scrape-wide-84 vs cross-ref `picks_latest` (~85%) + D1 orphan backfill (~15%) | §7.3 | ✅ | **DECIDED 2026-09-01: scrape-wide (owner greenlit).** Verification in §7.3a. Cross-ref orphan rate worse than doc's ~15% (measured 2026-08-31: morning **33.6%**, pre-close **21%**). Scrape-wide cost is near-zero (`fetch_ticker_quotes` goto-count = ticker count, not column count; 84-col `t=` scrape already runs in prod as `block="held"`). Implementation = widen the morning/pre_close scrape to the wide column set + superset-additive session-store schema (next slice A-1-IMPL). B-2 derived sparkline cols still come via cross-ref (multi-day). |
 | A-1-IMPL | **Widen the morning/pre_close scrape to the 84-col block + carry setup columns into the session store** (the pipeline realization of A-1) | §7.3a | ✅ | **PR (this session).** `collect_morning.py`: `WIDE_SCRAPE_BLOCK="held"` (84-col, reuses the proven held config), `SETUP_COLUMNS` (`RSI`, `Volatility W`, `Volatility M`, `Rel Volume`, `52W High`) carried through verbatim into `STORE_COLUMNS` (superset-additive). No PWA render yet (that's B-6). Live values land on the next Actions morning run; committed store CSVs stay old-schema until then (write_store backfills "" — no manual migration). |
 | A-2 | Extract ONE shared card component/schema (superset fields + a "Setup/Volatility" section) reused across Picks-family and Morning-family | §7, §8 | ✅ | **PR (this session).** Extracted the "Volatility & setup" section (B-1 + B-2 + B-3) out of `renderPickRow` into one shared `volSetupSectionHtml(r)` in `docs/index.html`. **Pure refactor — Picks card renders byte-identically** (its 9 PWA tests green). Returns '' when a row has nothing to show (graceful degrade for morning orphans). This is the seam B-6 rides on. |
-| A-3 | Apply the shared component to Morning card, Watchlist card, Trade ticket (the Morning family) | §7 | ⏳ | Realized by B-6 (same section, Morning family). Mock built for owner green light: `planning/mocks/b6-morning-volatility-setup.html`. |
+| A-3 | Apply the shared component to Morning card, Watchlist card, Trade ticket (the Morning family) | §7 | ✅ | **Realized by B-6** (same PR): `volSetupSectionHtml` now renders on the morning picks card, the watch card, and (inherited) the trade ticket. This is the "Setup/Volatility" section slice of A-3; the fuller card-schema superset (RSI/Perf/Avg$Vol/Earnings) is future Effort-A work, not required to unblock the compression spine. |
 
 ### Cross-cutting follow-ups (not scoped to a single effort)
 
@@ -431,6 +431,19 @@ justify its own small, time-sensitive list — phase 2.
 | "lower highs" as a VCP prerequisite | §5.2 | ❌ Wrong; removed from the design. |
 
 ### Progress log (newest first)
+- **2026-09-02 — B-6 done (compression section on the Morning family) + A-3 realized.** Owner
+  approved the mock and said "wire it into the morning family." Added `setupRowForCard(ticker,
+  freshRow)` (picks_latest cross-ref for B-2/B-3 sparklines + fresh morning-store B-1 override) and
+  rendered `volSetupSectionHtml` on `morningCardBody` (all live statuses, after the metric rows,
+  before ticket/CTA) and `watchCardHtml` (after the body). The trade ticket inherits it from the
+  morning card (no duplicate). Lookup Stage-2 already had it via `renderPickRow`. Graceful degrade:
+  orphans with no picks history + no fresh scrape show no section. Tests: 2 new morning PWA
+  (`test_volatility_setup_section_on_morning_card`, `..._hidden_for_orphan`) + 1 watch PWA
+  (`test_watch_card_shows_volatility_setup_section`); also added a `pre_close_latest.csv` stub to
+  `test_pwa_morning.py::_open_morning_tab` so that file runs in the cloud sandbox (was hanging on
+  the unreachable domain). Release `2026.09.02` (feature, tab morning) / sw.js v90→v91. This closes
+  A-2/A-3/B-6 — the compression spine now reaches the pre-open workflow. **Next: B-5 (MA bunching /
+  Rule-of-Three, the last named spine item) or B-4 (compose the VCP-style proxy).**
 - **2026-09-02 — A-2 done (shared card seam) + B-6 mock for owner review.** Owner chose the
   strategic A-2→B-6 lever over the contained Picks-only spine slices (B-4/B-5) for this fresh
   session. **A-2:** extracted the "Volatility & setup" section (B-1 Vol W/M·RelVol·52W + B-2 range

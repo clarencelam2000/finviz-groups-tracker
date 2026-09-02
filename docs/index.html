@@ -4668,6 +4668,28 @@
             </div>`;
     }
 
+    // setupRowForCard(ticker, freshRow) — assemble a picks-shaped row for volSetupSectionHtml on a
+    // Morning-family card (Effort B B-6). Base = the picks_latest cross-ref (ws4FindPicksRow), which
+    // carries the B-2/B-3 trailing sparkline cols (range_atr_spark/atr_spark/relvol_spark/
+    // tight_range_7 — multi-day, so last night's are current enough) AND a B-1 fallback. Then the
+    // B-1 raw cols (Vol W/M, Rel Volume, 52W High) are overridden with THIS-MORNING's fresh
+    // scrape-wide values from `freshRow` (the morning store row, or a watch card's public read) when
+    // present — the A-1 scrape-wide run put those on the morning store keyed by the same Finviz
+    // labels volSetupSectionHtml reads. Returns {} when neither source has anything → the section
+    // self-hides (graceful degrade §3: a morning orphan not in picks and not freshly scraped shows
+    // no section rather than a wall of dashes).
+    const _SETUP_FRESH_COLS = ['Volatility W', 'Volatility M', 'Rel Volume', '52W High'];
+    function setupRowForCard(ticker, freshRow) {
+      const picksRow = (typeof ws4FindPicksRow === 'function') ? ws4FindPicksRow(ticker) : null;
+      const merged = Object.assign({}, picksRow || {});
+      const fr = freshRow || {};
+      _SETUP_FRESH_COLS.forEach(k => {
+        const v = fr[k];
+        if (v !== undefined && v !== null && String(v).trim() !== '') merged[k] = v;
+      });
+      return merged;
+    }
+
     // renderPickRow(r, opts) — shared row renderer (3b.0).
     // Called from renderPicks (All + Focus views) and will be reused by 3c Lookup section.
     // opts: { rowIndex, expandable, showScore, showGroupSubtitle, score, base, penaltyFrac, group_n, tight_n, quiet_n }
@@ -5427,6 +5449,12 @@
         ? `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">ATR from LoD</span><span class="${atr.cls} font-medium tabular-nums">${atr.text}</span></div>`
         : '';
 
+      // B-6: the shared compression "Volatility & setup" section (A-2 seam). B-1 raw cols come
+      // fresh from this morning's scrape-wide store (the row `r` itself); B-2/B-3 sparkline cols
+      // come via a picks_latest cross-ref inside setupRowForCard. Rendered once here, inserted
+      // after each status's metric rows (context before action). Self-hides on a data-less row.
+      const setupSection = volSetupSectionHtml(setupRowForCard(r.ticker, r));
+
       // WS5 phase 1 (#309): the CTA now has four states — taken (real position logged),
       // confirm (payload built, awaiting Confirm/Cancel), note (sign-in prompt or a
       // validation/submit error under the button), or the plain idle button. The `taken:`
@@ -5446,11 +5474,11 @@
       let body;
       switch (r.status) {
         case 'triggered':
-          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + atrRow
+          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + atrRow + setupSection
                + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
           break;
         case 'gapped_through':
-          body = _mKv('Trigger', _mNum(r.trigger)) + _mKv('Opened', `${_mNum(r.open)} · ${_mChange(r.change)} gap`) + atrRow
+          body = _mKv('Trigger', _mNum(r.trigger)) + _mKv('Opened', `${_mNum(r.open)} · ${_mChange(r.change)} gap`) + atrRow + setupSection
                + _mNote('Entry here has poor R vs the planned stop.')
                + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
           break;
@@ -5467,21 +5495,21 @@
           const refRow = isFinite(refValRaw)
             ? _mKv(`Reclaimed ${refLabel}`, `${isMa ? '~' : ''}${refValRaw.toFixed(2)}`)
             : '';
-          body = refRow + _mKv('Now', now) + atrRow
+          body = refRow + _mKv('Now', now) + atrRow + setupSection
                + _mNote('Undercut and reclaimed — failed breakdown. Confirm the recovery before entering.')
                + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
           break;
         }
         case 'failed_breakout':
-          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', `${_mNum(r.price)} · below trigger`)
+          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', `${_mNum(r.price)} · below trigger`) + setupSection
                + _mNote('Broke out and failed. Don\'t chase a re-break blindly.');
           break;
         case 'setting_up':
-          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now)
+          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + setupSection
                + _mNote('Below trigger. Nothing to do yet.');
           break;
         case 'invalidated':
-          body = _mKv('Planned stop (prior low)', _mNum(r.stop)) + _mKv('Now', `${_mNum(r.price)} — below stop`)
+          body = _mKv('Planned stop (prior low)', _mNum(r.stop)) + _mKv('Now', `${_mNum(r.price)} — below stop`) + setupSection
                + _mNote('Setup dead. Drop from watch.');
           break;
         default: // no_quote
@@ -8291,6 +8319,11 @@
         body = _mKv('Trigger (prior high)', _mNum(pub.trigger)) + _mKv('Now', now) + atrRow;
       }
 
+      // B-6: shared compression "Volatility & setup" section (A-2 seam). Watch tickers ride the
+      // morning scrape-wide run too, so `pub` carries the fresh B-1 raw cols; B-2/B-3 sparkline
+      // cols come via the picks_latest cross-ref in setupRowForCard. Self-hides on a data-less row.
+      const setupSection = volSetupSectionHtml(setupRowForCard(ticker, pub));
+
       const yourLevel = watchYourLevelHtml(entry, pub);
 
       const gaugeShown = !!state.watchGauge[ticker];
@@ -8312,6 +8345,7 @@
         <div class="bg-slate-800 border border-slate-700 border-l-4 ${stripe} rounded-lg px-3.5 py-3">
           ${header}
           ${body}
+          ${setupSection}
           ${yourLevel}
           ${gaugeToggle}
           ${watchChartAffordance(ticker)}

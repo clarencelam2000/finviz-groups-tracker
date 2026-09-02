@@ -1,6 +1,18 @@
 {
-  "current": "2026.09.01",
+  "current": "2026.09.02",
   "releases": [
+    {
+      "version": "2026.09.02",
+      "date": "2026-09-02",
+      "title": "Volatility & setup section on Morning cards",
+      "tag": "feature",
+      "tab": "morning",
+      "notes": [
+        "The \"Volatility & setup\" compression section — Vol W/M, relative volume, distance from the 52-week high, plus the range-tightening and volume-dry-up sparklines — now appears on your Morning picks and Watchlist cards, not just the Picks tab. The coil read is right there when you're deciding pre-open.",
+        "The raw Vol W/M, relative volume and 52-week-high values are fresh from this morning's scrape; the range/volume sparklines come from the last few days of history for that name.",
+        "Same facts-only rule as before: shown values and a plain contracting/expanding tint (whichever of Vol W or Vol M is larger), never an invented threshold. A name with no history simply shows no section instead of a row of dashes."
+      ]
+    },
     {
       "version": "2026.09.01",
       "date": "2026-09-01",

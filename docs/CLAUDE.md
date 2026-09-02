@@ -170,6 +170,19 @@ the empty state — a 404 is expected, never an error.
   `MORNING_STATUS_META[*].actionable`. Picks now emit `reclaim` (against their prior low OR a
   derived 50MA); the `reclaim` case in `morningCardBody` names the reclaimed level from the
   `reclaim_ref`/`reclaim_ref_value` CSV columns (50MA prefixed `~` — a stale derived level).
+- **Compression "Volatility & setup" section (B-6, issue #379).** Every morning picks card
+  (`morningCardBody`, all live statuses) and every watch card (`watchCardHtml`) renders the shared
+  `volSetupSectionHtml(r)` section (the A-2 seam, defined near `volSpark`) — the same one the Picks
+  card uses: B-1 Vol W/M (+ contracting/expanding fact tint) · Rel volume · 52W-high dist, B-2
+  range tightening, B-3 volume dry-up. It's inserted after the card's metric rows and before the
+  trade ticket / CTA (context before action). The row it renders from is built by
+  `setupRowForCard(ticker, freshRow)`: base = the `ws4FindPicksRow` cross-ref to `picks_latest`
+  (carries the B-2/B-3 trailing sparkline cols, multi-day), with the B-1 raw cols overridden by
+  this-morning's fresh scrape-wide values from the morning store row (`r`) / watch public read
+  (`pub`) — those columns are on the morning store since A-1-IMPL (scrape-wide). Self-hides (returns
+  `''`) for an orphan with no picks history and no fresh scrape. The **trade ticket** deliberately
+  does NOT render it separately — it lives inside the morning card, which already shows it above the
+  ticket, so a second copy would duplicate.
 - **"I took it" creates a real position (WS5 phase 1, #309).** It is login-gated: signed out, the
   tap shows a "Sign in on the Positions tab" note (no write); signed in, it opens an inline confirm
   (entry/stop/qty captured from the trade ticket's current state via `ws5BuildPayload`) → `POST

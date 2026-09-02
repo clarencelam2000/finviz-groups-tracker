@@ -58,6 +58,10 @@ def _open_morning_tab(page, morning_body: str):
                lambda r: r.fulfill(body="date,name\n", content_type="text/plain"))
     page.route("**/picks_latest.csv",
                lambda r: r.fulfill(body="date,ticker\n", content_type="text/plain"))
+    # Morning tab fetches the pre-close read on first visit; without a stub Chromium hangs on
+    # the unreachable domain in an offline sandbox (see playwright-cloud-session-testing.md).
+    page.route("**/sessions/pre_close_latest.csv",
+               lambda r: r.fulfill(body="date,session,collected_at,ticker,group,list_category,trigger,stop,atr,price,open,high,low,change,status,atr_from_lod\n", content_type="text/plain"))
     page.route("**/fetch_log.csv", lambda r: r.fulfill(body="", content_type="text/plain"))
     page.route("**/releases.json",
                lambda r: r.fulfill(body='{"current":"","releases":[]}', content_type="application/json"))
@@ -205,4 +209,87 @@ def test_empty_store_shows_empty_state(server):
         html = page.inner_html("#morning-list")
         assert "No morning check yet" in html
         assert html.count("border-l-4") == 0
+        browser.close()
+
+
+# ── B-6 (issue #379 / A-2 seam): the shared "Volatility & setup" compression section on the
+#    Morning family. B-1 raw cols (Vol W/M, Rel Volume, 52W High) come fresh from the A-1
+#    scrape-wide morning store; B-2/B-3 sparkline cols come via a picks_latest cross-ref
+#    (setupRowForCard → ws4FindPicksRow). Rendered by the shared volSetupSectionHtml(). ──
+
+# Morning header WITH the A-1 SETUP_COLUMNS appended (matches collect_morning.STORE_COLUMNS order:
+# the wide setup cols follow the 9-col status set, plus RSI).
+_B6_MORNING_HEADER = ("date,session,collected_at,ticker,group,list_category,trigger,stop,atr,"
+                      "price,open,high,low,change,status,atr_from_lod,"
+                      "RSI,Volatility W,Volatility M,Rel Volume,52W High\n")
+
+
+def _open_morning_with_picks(page, morning_body: str, picks_body: str):
+    """Same as _open_morning_tab but serves a real picks_latest.csv for the B-6 cross-ref."""
+    papaparse_js = (ROOT / "tests" / "fixtures" / "papaparse.min.js").read_text(encoding="utf-8")
+    page.route("**/cdn.tailwindcss.com/**",
+               lambda r: r.fulfill(body="/* tailwind stub */", content_type="application/javascript"))
+    page.route("**/cdnjs.cloudflare.com/**",
+               lambda r: r.fulfill(body=papaparse_js, content_type="application/javascript"))
+    page.route("**/sessions/morning_latest.csv",
+               lambda r: r.fulfill(body=morning_body, content_type="text/plain"))
+    page.route("**/sessions/pre_close_latest.csv",
+               lambda r: r.fulfill(body=_B6_MORNING_HEADER, content_type="text/plain"))
+    page.route("**/snapshots.csv",
+               lambda r: r.fulfill(body="date,collected_at,group_type,name,stocks,market_cap,pe,fwd_pe,perf_day,perf_week,perf_month,perf_quarter,perf_half,perf_year,perf_ytd,avg_volume,rel_volume,change\n", content_type="text/plain"))
+    page.route("**/deltas.csv", lambda r: r.fulfill(body="date,name\n", content_type="text/plain"))
+    page.route("**/picks_latest.csv", lambda r: r.fulfill(body=picks_body, content_type="text/plain"))
+    page.route("**/fetch_log.csv", lambda r: r.fulfill(body="", content_type="text/plain"))
+    page.route("**/releases.json",
+               lambda r: r.fulfill(body='{"current":"","releases":[]}', content_type="application/json"))
+    page.route("**/finviz_sector_industry_map.json",
+               lambda r: r.fulfill(body='{"sectors":{}}', content_type="application/json"))
+    page.add_init_script("try { localStorage.clear(); localStorage.setItem('fvt_intro_seen_v3','true'); } catch(e){}")
+    page.goto(f"http://localhost:{PORT}/", wait_until="domcontentloaded")
+    page.wait_for_timeout(1000)
+    page.click("[data-tab='morning']")
+    page.wait_for_timeout(1000)
+
+
+def test_volatility_setup_section_on_morning_card(server):
+    # A triggered morning card whose fresh scrape-wide setup cols say Vol W (1.7%) < Vol M (2.5%)
+    # → the section shows the raw values + a "contracting" fact tint, and the picks cross-ref
+    # supplies the "Volume dry-up" + range-tightening sparklines.
+    from playwright.sync_api import sync_playwright
+    morning = _B6_MORNING_HEADER + (
+        "2026-09-01,morning,2026-09-01T14:05:00Z,CAH,Healthcare,leaders,236.97,230,5.4,"
+        "238.48,236,239,237,1.65,triggered,0.45,58,1.70%,2.54%,0.31,-7.67%\n"
+    )
+    picks = ("date,Ticker,tight_range_7,range_atr_spark,atr_spark,relvol_spark\n"
+             "2026-09-01,CAH,,0.67|1.07|0.71|0.64|0.87,5.13|5.16|5.15|5.40|5.45,1.10|1.13|0.61|0.76|0.61\n")
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _open_morning_with_picks(page, morning, picks)
+        html = page.inner_html("#morning-list")
+        assert "Volatility &amp; setup" in html, "section header should render on the morning card"
+        assert "1.7% / 2.5%" in html, "raw Vol W / M values shown"
+        assert "contracting" in html, "Vol W < Vol M is a fact tint = contracting"
+        assert "0.31×" in html, "Rel volume shown"
+        assert "Volume dry-up" in html, "B-3 sub-block from the picks cross-ref"
+        assert "<polyline" in html, "at least one sparkline rendered"
+        browser.close()
+
+
+def test_volatility_setup_section_hidden_for_orphan(server):
+    # A morning name with blank setup cols AND no picks_latest row (a watchlist-add orphan) must
+    # render NO section — graceful degrade, never a wall of dashes.
+    from playwright.sync_api import sync_playwright
+    morning = _B6_MORNING_HEADER + (
+        "2026-09-01,morning,2026-09-01T14:05:00Z,ORPH,Group X,leaders,50,47,1.5,"
+        "51,50,51.5,49.9,1.0,triggered,0.5,55,,,,\n"
+    )
+    picks = "date,Ticker,tight_range_7,range_atr_spark,atr_spark,relvol_spark\n"  # ORPH absent
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _open_morning_with_picks(page, morning, picks)
+        html = page.inner_html("#morning-list")
+        assert "border-l-4" in html, "the orphan card itself still renders"
+        assert "Volatility &amp; setup" not in html, "no section when there's no data (graceful degrade)"
         browser.close()
