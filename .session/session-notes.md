@@ -47,13 +47,29 @@ chip"; render on the shared seam (all card families).
 **Delegation:** pipeline half done by a Sonnet subagent (self-contained metric+migration+unit
 tests+pipeline docs, ~125k tokens); PWA render/test/release/planning kept in the main loop.
 
-**Next steps:** **B-4** (compose the VCP-style contraction proxy from B-2 tightening + B-3 dry-up +
-52W proximity — the last named spine composite; label "Contraction (VCP-style)", never "VCP
-detected", NOT "lower highs"). Then the spine's named signals are all built; remaining tracked
-follow-ups (planning §12): orphan sparkline backfill from D1 `ticker_quotes` (§7.3 option-b),
-projected vol/RVol (§5.5b, parked/expansion), filter-sort + "Triggers today" list (§9), fuller card
-superset (RSI/Perf/Avg$Vol/Earnings — issue #378 broad Effort A). B-7 (composite score) / B-8 (eval)
-stay parked.
+**Amendment (2026-09-02, same PR #392, still unmerged) — relabel to "Pre-Power of 3" + show the
+cluster spread %.** Owner shared the full Power-of-3 definition: it's a *sequence*
+(bunched → undercut the cluster → **reclaim** the highest MA = the trigger), not a static state.
+What B-5 ships is only step 1 (the tight cluster). Owner decision: **relabel the chip "Pre-Power of
+3"** (honest — it's the coil precondition, not the trigger), keep the 2×ATR gate, and **also show
+the classic MA-to-MA cluster spread %** (`|20MA$−50MA$|/price`, derived client-side from
+Price/SMA20/SMA50 — no new column). The full undercut→reclaim trigger is a new next slice **B-5b**,
+which composes on `pick_status.py`'s existing reclaim engine (`compute_reclaim`/`reclaim_refs`,
+already an `ACTIONABLE_STATUS`). Changed: chip text + a `maSpreadStr` header value in
+`volSetupSectionHtml`; the 2 picks PWA tests (assert "Pre-Power of 3" + "spread 2.25%" for ANET);
+`releases.json` `2026.09.02.1` title/notes; planning §5.3/§12 (+ B-5b ⏳ row); docs/CLAUDE.md; SPRINT.
+Re-verified: picks+morning+watch PWA **29/29** green (relabel is in the shared seam); JS parses;
+ANET spread = 2.25% exact; `test_guide_releases` 5/5. The `power_of_3` **data column name is
+unchanged** (it's the bunched fact) — only the user-facing label moved.
+
+**Next steps:** **B-5b** (the full undercut→reclaim Power-of-3 trigger — gate on B-5's bunched flag,
+detect undercut below the cluster low = min MA, fire on reclaim above the cluster high = max MA;
+actionable morning read, entry on reclaim / stop under undercut low; reclaim is a fact so §4.0-clean;
+**verify the reclaim-engine wiring before building**). Alternatively **B-4** (VCP-style contraction
+proxy from B-2+B-3+52W; label "Contraction (VCP-style)", never "VCP detected", NOT "lower highs").
+Remaining tracked follow-ups (planning §12): orphan sparkline backfill from D1 `ticker_quotes`
+(§7.3 option-b), projected vol/RVol (§5.5b, parked/expansion), filter-sort + "Triggers today" (§9),
+fuller card superset (RSI/Perf/Avg$Vol/Earnings — #378 broad Effort A). B-7/B-8 stay parked.
 
 ---
 

@@ -4588,8 +4588,9 @@
     //     ATR $ sparklines.
     //   • B-3 (§5.2) volume dry-up — Rel Volume trend sparkline (owner's strongest/cheapest
     //     VCP sub-signal).
-    //   • B-5 (§5.3) Power of 3 — MA bunching chip (price/20MA/50MA within a 2×ATR band, a fact
-    //     precomputed in the pipeline) + the two SHOWN SMA % distances.
+    //   • B-5 (§5.3) Pre-Power of 3 — MA-bunching COIL PRECONDITION chip (price/20MA/50MA within a
+    //     2×ATR band, a fact precomputed in the pipeline) + the two SHOWN SMA % distances and the
+    //     classic MA-to-MA cluster spread %. NOT the full undercut→reclaim trigger (that's B-5b).
     // Extracted verbatim from renderPickRow so the Morning family (B-6) can render the IDENTICAL
     // section from a row assembled out of the morning store (B-1 raw cols, fresh from the A-1
     // scrape-wide run) plus a cross-ref to picks_latest (B-2/B-3 trailing sparkline cols) — one
@@ -4638,18 +4639,32 @@
       const relVolSpark = r['relvol_spark'] || '';
       const hasVolDryup = !!relVolSpark;
 
-      // Power of 3 (B-5, §5.3) — MA bunching: price, 20MA and 50MA all inside one 2×ATR band.
-      // `power_of_3` is a FACT precomputed in the picks pipeline (picks_metrics) against the
-      // owner-specified POWER_OF_3_ATR_MULT band — the domain authority set that band, so a binary
-      // chip is legitimate (doc §4.0), and the PWA just reads the flag (single source of truth, no
-      // PWA-side threshold to drift). Same "Power of 3", not "Rule of Three": price/20/50 only — we
-      // don't scrape the 10MA and the 200 isn't this pattern's third line. The two SMA % distances
-      // are SHOWN values so the trader sees WHY it is/isn't bunched. Blank flag ('' — a morning
-      // orphan with no picks cross-ref, or a name missing price/SMA/ATR) → the block self-hides.
+      // Pre-Power of 3 (B-5, §5.3) — MA bunching: price, 20MA and 50MA all inside one 2×ATR band.
+      // This is the COIL PRECONDITION only, honestly labeled "Pre-Power of 3" — NOT the full
+      // Power-of-3 setup, which is bunched → undercut the cluster → reclaim the highest MA (the
+      // reclaim is the trigger). That undercut→reclaim trigger is a later slice (B-5b) built on the
+      // pick_status reclaim engine. `power_of_3` is a FACT precomputed in the picks pipeline
+      // (picks_metrics) against the owner-specified POWER_OF_3_ATR_MULT band — the domain authority
+      // set that band, so a binary chip is legitimate (doc §4.0), and the PWA just reads the flag
+      // (single source of truth, no PWA-side threshold to drift). price/20/50 only — we don't scrape
+      // the 10MA and the 200 isn't this pattern's third line. The two SMA % distances AND the classic
+      // MA-to-MA cluster spread % are SHOWN values so the trader sees WHY it is/isn't bunched. Blank
+      // flag ('' — a morning orphan with no picks cross-ref, or a name missing price/SMA/ATR) → the
+      // block self-hides.
       const sma20 = _pF(r['SMA20']);   // Finviz signed % of price above the 20MA
       const sma50 = _pF(r['SMA50']);   // Finviz signed % of price above the 50MA
       const pow3 = r['power_of_3'];    // '1' (bunched) | '0' (not) | '' (inputs absent / orphan)
       const hasPow3 = !!(pow3 === '1' || pow3 === '0' || !isNaN(sma20) || !isNaN(sma50));
+      // MA-to-MA cluster spread (classic Power-of-3 tightness): |20MA − 50MA| as % of price, a SHOWN
+      // value. Reconstruct each MA $ level from its Finviz %-above-price the same way picks_metrics
+      // does, then express the gap as a % of price. '' when price/either SMA is missing.
+      const _price = _pF(r['Price']);
+      let maSpreadStr = '';
+      if (!isNaN(_price) && _price > 0 && !isNaN(sma20) && !isNaN(sma50)) {
+        const _sma20p = _price / (1 + sma20 / 100);
+        const _sma50p = _price / (1 + sma50 / 100);
+        maSpreadStr = (Math.abs(_sma20p - _sma50p) / _price * 100).toFixed(2) + '%';
+      }
       const sma20Str = isNaN(sma20) ? '—' : (sma20 >= 0 ? '+' : '') + sma20.toFixed(1) + '%';
       const sma50Str = isNaN(sma50) ? '—' : (sma50 >= 0 ? '+' : '') + sma50.toFixed(1) + '%';
 
@@ -4704,7 +4719,8 @@
               <div class="mt-2 pt-2 border-t border-slate-700/40">
                 <div class="flex items-center gap-2 mb-1">
                   <span class="text-slate-500">MA bunching</span>
-                  ${pow3 === '1' ? '<span class="text-emerald-400 text-[0.6rem] px-1.5 py-0.5 rounded bg-emerald-500/10 font-medium">Power of 3</span>' : ''}
+                  ${maSpreadStr ? `<span class="text-slate-400 text-[0.65rem]">spread ${maSpreadStr}</span>` : ''}
+                  ${pow3 === '1' ? '<span class="text-emerald-400 text-[0.6rem] px-1.5 py-0.5 rounded bg-emerald-500/10 font-medium">Pre-Power of 3</span>' : ''}
                 </div>
                 <div class="grid grid-cols-2 gap-x-3">
                   <div>

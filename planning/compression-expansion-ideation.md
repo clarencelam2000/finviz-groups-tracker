@@ -124,21 +124,40 @@ plus **filter/sort**, plus flags only where §4.0 permits.
 **Owner spec locked (2026-09-02) — it's "Power of 3", not "Rule of Three".** Power of 3 is
 normally price / 10 / 20 / 50 MAs bunched; **we don't scrape the 10MA, so drop it** (and drop the
 200 — it's not the third line of this pattern). The build uses **price / 20MA / 50MA** only.
-- **The chip is a fact the OWNER specified — dissolves the §4.0 threshold tension.** It fires when
-  price, 20MA and 50MA all sit within a single **2×ATR** band:
-  `max(price, 20MA$, 50MA$) − min(price, 20MA$, 50MA$) ≤ 2 × ATR`. The 2×ATR band is the owner's
-  own number (the domain authority per §4.0), not an invented cutoff — so a binary chip is
-  legitimate here (genuinely-binary fact). Constant `POWER_OF_3_ATR_MULT = 2.0`, triple-documented.
-- **Shown alongside the chip:** price's distance to 20MA and to 50MA (Finviz `SMA20`/`SMA50` %),
-  so the trader sees *why* it is/isn't bunched.
-- **Compute site:** a 6th `METRICS_COLS` entry `power_of_3` in `picks_metrics.compute_pick_metrics`
-  (single-bar; reuses the `sma20_price`/`sma50_price`/`ATR` that function already reconstructs,
-  right next to `stage2`). NaN when price/either MA/ATR is missing.
-- **Render:** a "Power of 3" sub-block in the shared `volSetupSectionHtml` (A-2 seam) → shows on
-  Picks + Morning + Watchlist + inherited Ticket at once. On the Morning family it rides the
-  picks_latest cross-ref (last night's EOD MA/ATR), same as B-2/B-3 — the morning store carries no
-  SMA/ATR, and MAs barely move intraday. Fresh intraday Power-of-3 = a later follow-up (add
-  SMA20/SMA50/ATR to the morning `SETUP_COLUMNS`), tracked under WIDE-SCRAPE-FASTFOLLOW (#385).
+
+**The full setup is a SEQUENCE, not a static state (owner notes, 2026-09-02):** (1) the three MAs
++ price bunch tightly (ideally the MAs within ~1–1.5% of each other); (2) the 50MA is flat or
+rising; (3) price **undercuts** the whole cluster (dips below the lowest MA) — a liquidity/stop
+grab; (4) price **reclaims** back above the highest MA — *the reclaim is the trigger*. Entry on the
+reclaim, stop under the undercut/reclaim-day low, prefer strong-RS names. The edge is the
+bunched→undercut→reclaim sequence, distinct from a simple single-MA pullback.
+
+**Split into two slices (owner-approved 2026-09-02):**
+- **B-5 = the COIL PRECONDITION only, honestly labeled "Pre-Power of 3".** Ships now. It flags
+  step (1) — the tight cluster — and nothing more. It fires on a fact the OWNER specified (dissolves
+  the §4.0 threshold tension): price, 20MA and 50MA all inside a single **2×ATR** band,
+  `max(price, 20MA$, 50MA$) − min(price, 20MA$, 50MA$) ≤ 2 × ATR`. The 2×ATR band is the owner's own
+  number (domain authority per §4.0), not an invented cutoff → a binary chip is legitimate.
+  Constant `POWER_OF_3_ATR_MULT = 2.0`, triple-documented.
+  - **Shown alongside the chip:** price's distance to 20MA and to 50MA (Finviz `SMA20`/`SMA50` %)
+    AND the classic MA-to-MA cluster spread % (`|20MA$ − 50MA$| / price`, derived client-side from
+    `Price`/`SMA20`/`SMA50` — no new column), so the trader sees *why* it is/isn't bunched.
+  - **Compute site:** a 6th `METRICS_COLS` entry `power_of_3` in `picks_metrics.compute_metrics_row`
+    (single-bar; reuses the `sma20_price`/`sma50_price`/`ATR` that function already reconstructs,
+    right next to `stage2`). NaN when price/either MA/ATR is missing.
+  - **Render:** a "MA bunching" sub-block (green "Pre-Power of 3" chip) in the shared
+    `volSetupSectionHtml` (A-2 seam) → shows on Picks + Morning + Watchlist + inherited Ticket at
+    once. On the Morning family it rides the picks_latest cross-ref (last night's EOD MA/ATR), same
+    as B-2/B-3 — the morning store carries no SMA/ATR, and MAs barely move intraday. Fresh intraday
+    reads = a later follow-up (add SMA20/SMA50/ATR to the morning `SETUP_COLUMNS`), tracked under
+    WIDE-SCRAPE-FASTFOLLOW (#385).
+- **B-5b = the full undercut→reclaim TRIGGER (next slice).** Composes on `pick_status.py`'s existing
+  reclaim engine (`compute_reclaim`/`reclaim_refs`, already an `ACTIONABLE_STATUS`): gate on
+  Pre-Power-of-3 bunched, detect undercut below the cluster low (min of the two MAs), and fire on a
+  reclaim of the cluster high (max of the two MAs). Actionable morning read (entry on reclaim, stop
+  under the undercut low) — matching how the owner described using it. The reclaim is a fact (price
+  crossed a level), not a judgment, so it stays §4.0-clean. Verify the exact engine wiring before
+  building.
 
 ### 5.4 ATR trend — sparkline for eyes, slope for score
 - **Mini sparkline** is the trustworthy human-facing surface (owner: yes). A human reads
@@ -421,7 +440,8 @@ justify its own small, time-sensitive list — phase 2.
 | B-2 | Tightest-range flag + range_atr/ATR sparkline (range tightening) — derived pipeline columns, per-name history w/ graceful degrade | §5.4, §5.7, §3 | ✅ | **PR #383**. 3 new `TRAILING_COLS` in the picks pipeline (`tight_range_7`, `range_atr_spark`, `atr_spark`), computed over trailing available bars, populated only on the picks_latest slice. Picks card "Range tightening" block: honest "Tightest range · last 7 bars" flag (owner 2026-08-31: NOT "NR7" — gappy history) + two mini sparklines. Graceful per-name degrade. |
 | B-3 | Volume dry-up sub-signal for VCP proxy (RelVol trend while price holds) | §5.2, §10.3 | ✅ | **PR (this session).** New 4th `TRAILING_COLS` col `relvol_spark` (pipe-joined trailing Rel Volume series, same trailing-window/graceful-degrade machinery as B-2's sparks — window is `SPARK_WINDOW`, not a new constant). Picks card "Volume dry-up" sub-block under the B-1 "Volatility & setup" section renders it via the existing `volSpark()` helper (a SHOWN trend, doc §4.0 — no threshold, no flag). Migration backfilled 487/535 latest rows. Composes into B-4. |
 | B-4 | VCP-style contraction proxy — shrinking pullback depth + tightening range + vol dry-up + 52W-high proximity. Label "Contraction (VCP-style)", never "VCP detected" | §5.2 | ⬜ | Composes B-2 + B-3. NOT "lower highs". |
-| B-5 | **Power of 3** MA-bunching chip + shown MA distances — price/20MA/50MA within a 2×ATR band | §5.3 | 🔨 | **In progress (this session).** Owner-renamed "Power of 3" (not Rule of Three); price/20/50 only (no 10MA scraped, 200 dropped). Chip = single fact `spread(price,20MA$,50MA$) ≤ POWER_OF_3_ATR_MULT(2.0)×ATR` — owner-set band, §4.0-clean. New 6th `METRICS_COLS` col `power_of_3`; renders via shared `volSetupSectionHtml` (all card families). |
+| B-5 | **Pre-Power of 3** MA-bunching chip + shown MA distances/spread — price/20MA/50MA within a 2×ATR band | §5.3 | ✅ | **PR #392 (this session).** The COIL PRECONDITION only, honestly labeled "Pre-Power of 3" (owner call — the chip is step 1 of the bunched→undercut→reclaim setup, not the trigger). price/20/50 only (no 10MA scraped, 200 dropped). Chip = single fact `spread(price,20MA$,50MA$) ≤ POWER_OF_3_ATR_MULT(2.0)×ATR` — owner-set band, §4.0-clean. New 6th `METRICS_COLS` col `power_of_3`; renders via shared `volSetupSectionHtml` (all card families) with the two SMA % distances + the classic MA-to-MA cluster spread % (client-derived). |
+| B-5b | **Power of 3 full trigger** — bunched → undercut the cluster → reclaim the highest MA (actionable) | §5.3 | ⏳ | **Next up.** Composes on `pick_status.py`'s reclaim engine (`compute_reclaim`/`reclaim_refs`, already actionable): gate on B-5's bunched flag, undercut below cluster low (min MA), reclaim above cluster high (max MA). Morning actionable read (entry on reclaim, stop under undercut low). Reclaim = a fact, §4.0-clean. Verify engine wiring first. |
 | B-6 | Propagate the "Volatility & setup" section (B-1 + B-2 + B-3) to Lookup + Morning + Ticket cards | §4.1, §8 | ✅ | **PR (this session).** Renders the shared `volSetupSectionHtml` (A-2 seam) on morning picks cards (`morningCardBody`, all live statuses) + watch cards (`watchCardHtml`), via `setupRowForCard(ticker, freshRow)` = picks_latest cross-ref (B-2/B-3 sparklines) + morning-store fresh B-1 override. Trade ticket inherits it from the morning card (no duplicate render). Lookup Stage-2 already had it (reuses `renderPickRow`). Owner-approved mock: `planning/mocks/b6-morning-volatility-setup.html`. 2 morning + 1 watch PWA tests. Release `2026.09.02` / sw.js v91. |
 | B-7 | Optional composite score (decomposable, shown next to components) | §4.1 L3, §10.7 | 🅿️ | LOW priority / maybe never. Owner wary of blended scores. Do not lead with this. |
 | B-8 | Forward-return eval of the signals (does compression predict?) | §10.10 | ⬜ | Reuse `evaluate_picks.py` scaffolding. Do after ≥1 signal has history. |

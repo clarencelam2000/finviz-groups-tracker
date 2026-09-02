@@ -186,14 +186,14 @@ the empty state — a 404 is expected, never an error.
   `volSetupSectionHtml(r, {staleTrailing:true})` section (the A-2 seam, defined near `volSpark`)
   — the same one the Picks card uses (`renderPickRow` omits `staleTrailing`): B-1 Vol W/M (+
   contracting/expanding fact tint) · Rel volume · 52W-high dist, B-2 range tightening, B-3 volume
-  dry-up, B-5 Pre-Power of 3 (MA-bunching chip — price/20MA/50MA within a 2×ATR band, a fact
-  precomputed in the picks pipeline as `power_of_3`; plus the two shown SMA % distances and the
-  MA-to-MA cluster spread %). `staleTrailing:true` labels the B-2/B-3 sub-headers "Range/Volume
-  over last 10 sessions (as of last close M/D)" — those two sub-blocks alone come from the
-  picks_latest cross-ref (last night's close), unlike the fresh B-1 row above them or the Picks
-  tab (where the whole card is same-EOD-run, so no lag to caveat). It's inserted after the card's
-  metric rows and before the trade ticket / CTA (context before action). The row it renders from
-  is built by
+  dry-up, B-5 Pre-Power of 3 (MA-bunching COIL-PRECONDITION chip — price/20MA/50MA within a
+  2×ATR band, a fact precomputed in the picks pipeline as `power_of_3`; plus the two shown SMA %
+  distances and the classic MA-to-MA cluster spread %; the full undercut→reclaim trigger is a
+  later slice, B-5b). `staleTrailing:true` labels the B-2/B-3 sub-headers "Range/Volume over last
+  10 sessions (as of last close M/D)" — those two sub-blocks alone come from the picks_latest
+  cross-ref (last night's close), unlike the fresh B-1 row above them or the Picks tab (where the
+  whole card is same-EOD-run, so no lag to caveat). It's inserted after the card's metric rows
+  and before the trade ticket / CTA (context before action). The row it renders from is built by
   `setupRowForCard(ticker, freshRow)`: base = the `ws4FindPicksRow` cross-ref to `picks_latest`
   (carries the B-2/B-3 trailing sparkline cols, multi-day, plus its own `date` — the as-of date
   shown in the caveat), with the B-1 raw cols overridden by

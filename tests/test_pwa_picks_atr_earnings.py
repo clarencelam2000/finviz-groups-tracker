@@ -282,10 +282,10 @@ class TestPicksAtrRowAndEarnings:
             browser.close()
 
     def test_power_of_3_chip_and_ma_distances(self):
-        """B-5 (issue #379): the 'MA bunching' block shows the green 'Power of 3' chip when
-        price/20MA/50MA are bunched within the 2xATR band (power_of_3 == '1'), plus the two shown
-        SMA % distances (SHOWN values, doc §4.0). ANET fixture: SMA20 1.16%, SMA50 3.52%,
-        power_of_3 == '1'."""
+        """B-5 (issue #379): the 'MA bunching' block shows the green 'Pre-Power of 3' coil-precondition
+        chip when price/20MA/50MA are bunched within the 2xATR band (power_of_3 == '1'), plus the two
+        shown SMA % distances and the classic MA-to-MA cluster spread % (SHOWN values, doc §4.0). ANET
+        fixture: Price 165.45, SMA20 1.16%, SMA50 3.52%, power_of_3 == '1' → spread ~2.25%."""
         from playwright.sync_api import sync_playwright
 
         body = _single_row_csv({})  # ANET: power_of_3='1' (bunched)
@@ -298,7 +298,8 @@ class TestPicksAtrRowAndEarnings:
 
             panel_text = page.locator("[id^='risk-panel-']").first.inner_text()
             assert "MA bunching" in panel_text, f"missing block; got:\n{panel_text}"
-            assert "Power of 3" in panel_text, f"expected chip when bunched; got:\n{panel_text}"
+            assert "Pre-Power of 3" in panel_text, f"expected chip when bunched; got:\n{panel_text}"
+            assert "spread 2.25%" in panel_text, f"expected MA-to-MA cluster spread; got:\n{panel_text}"
             assert "Price vs 20MA" in panel_text and "+1.2%" in panel_text, \
                 f"expected 20MA distance; got:\n{panel_text}"
             assert "Price vs 50MA" in panel_text and "+3.5%" in panel_text, \
@@ -307,7 +308,7 @@ class TestPicksAtrRowAndEarnings:
             browser.close()
 
     def test_power_of_3_no_chip_when_not_bunched(self):
-        """power_of_3 == '0' shows the MA-distance values but NOT the 'Power of 3' chip — the chip
+        """power_of_3 == '0' shows the MA-distance values but NOT the 'Pre-Power of 3' chip — the chip
         is a fact that either fires or doesn't, never a score (doc §4.0)."""
         from playwright.sync_api import sync_playwright
 
@@ -321,7 +322,7 @@ class TestPicksAtrRowAndEarnings:
 
             panel_text = page.locator("[id^='risk-panel-']").first.inner_text()
             assert "MA bunching" in panel_text, f"block should still show distances; got:\n{panel_text}"
-            assert "Power of 3" not in panel_text, f"chip must be absent when not bunched; got:\n{panel_text}"
+            assert "Pre-Power of 3" not in panel_text, f"chip must be absent when not bunched; got:\n{panel_text}"
 
             browser.close()
 
