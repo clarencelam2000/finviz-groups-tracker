@@ -208,6 +208,38 @@ def test_signed_in_watch_card_shows_ticker_pill_and_your_level(server):
         browser.close()
 
 
+def test_watch_card_shows_volatility_setup_section(server):
+    """B-6 (issue #379 / A-2 seam): the shared "Volatility & setup" compression section renders
+    on a watch card. B-1 raw cols come fresh from the watch ticker's morning scrape-wide read
+    (`pub`); B-2/B-3 sparkline cols come via the picks_latest cross-ref (setupRowForCard)."""
+    from playwright.sync_api import sync_playwright
+    morning_wide = (
+        "date,session,collected_at,ticker,group,list_category,trigger,stop,atr,price,open,high,"
+        "low,change,status,atr_from_lod,RSI,Volatility W,Volatility M,Rel Volume,52W High\n"
+        "2026-08-14,morning,2026-08-14T14:05:00Z,AXON,Aerospace & Defense,watchlist,140.00,130.00,"
+        "5.00,145.10,144.00,145.50,143.80,0.9,triggered,0.26,58,1.70%,2.54%,0.31,-7.67%\n"
+    )
+    picks = ("date,list_category,Ticker,tight_range_7,range_atr_spark,atr_spark,relvol_spark\n"
+             "2026-08-14,leaders,AXON,,0.67|1.07|0.71|0.64|0.87,5.13|5.16|5.15|5.40|5.45,1.10|1.13|0.61|0.76|0.61\n")
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page, morning_csv=morning_wide)
+        page.route("**/picks_latest.csv", lambda r: r.fulfill(body=picks, content_type="text/plain"))
+        _mock_worker(page, watchlist_rows=[WATCH_ENTRY])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='morning']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#watchlist-section")
+        assert "Volatility &amp; setup" in html, "section renders on the watch card"
+        assert "1.7% / 2.5%" in html, "raw Vol W / M shown"
+        assert "contracting" in html, "Vol W < Vol M fact tint"
+        assert "Volume dry-up" in html, "B-3 sub-block from the picks cross-ref"
+        assert "<polyline" in html, "at least one sparkline rendered"
+        browser.close()
+
+
 def test_signed_in_watch_card_shows_awaiting_first_read_not_no_quote(server):
     """WS-POSITIONS-STATUS (2026-08-25): a watch ticker whose first bar has landed (prior_high/
     prior_low set) but has no morning_latest.csv row yet must show the honest "reference bar
