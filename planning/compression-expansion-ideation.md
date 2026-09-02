@@ -169,6 +169,33 @@ bunched→undercut→reclaim sequence, distinct from a simple single-MA pullback
   crossed a level), not a judgment, so it stays §4.0-clean. Verify the exact engine wiring before
   building.
 
+  **B-5b design forks (riffing 2026-09-02, pre-impl — NOT yet locked).** Verified the engine wiring
+  first (`pick_status.py` read end-to-end). The forks the owner and I need to settle before code:
+  1. **Compute site — client-side (extend B-5's chip) vs. pipeline status engine (extend reclaim).**
+     The existing `compute_reclaim(price, today_low, prior_low, ref)` uses ONE level for both the
+     undercut and the reclaim (`price > ref and (today_low < ref or prior_low < ref)`). Power of 3
+     wants **two different levels** — undercut below the cluster LOW (min MA), reclaim above the
+     cluster HIGH (max MA) — so it is NOT a drop-in reuse; it needs a new pure function either way.
+     And the "bunched" precondition is the same config-dependent single-row fact (`POWER_OF_3_ATR_MULT`)
+     that B-5's Amendment 2 deliberately moved OUT of the pipeline to client-side per #393. **Claude's
+     lean:** build it CLIENT-SIDE in `volSetupSectionHtml`, extending the Pre-Power-of-3 chip into a
+     "Power of 3 ✓ triggered" state — same seam, already renders on the actionable morning card, honors
+     #393 by construction, no session-store schema change beyond adding `Low`. (Owner's B-5b note
+     leaned pipeline/"actionable status"; the tension is real — see fork 2.)
+  2. **Own actionable status vs. enrichment on the existing reclaim.** A bunched name that reclaims its
+     50MA ALREADY fires the actionable `reclaim` status ("Reclaimed ~50MA", "I took it", stop wired)
+     today. So B-5b may be minimal ADDITIVE CONTEXT — "this reclaim is also a Power-of-3 (bunched
+     cluster undercut+reclaim)" — a chip alongside the existing pill, NOT a new actionable code path.
+     Open: does the owner want a distinct actionable Power-of-3 status/CTA, or the enrichment chip?
+  3. **Single-bar vs. multi-day undercut→reclaim.** The clean, data-cheap read is single-bar: today's
+     `low` dipped below the cluster low AND `price` now above the cluster high (an intraday flush+reclaim
+     day) — a pure single-row function, exactly B-5's shape. A true multi-day "undercut Tue, reclaim Thu"
+     needs gappy per-name trailing history. Open: single-bar (recommended, honest, graceful) or attempt
+     multi-day with degradation?
+  4. **"Undercut the cluster" = min/max of the two MAs (confirm).** Cluster low = min(20MA$,50MA$),
+     cluster high = max(20MA$,50MA$); price is the thing doing the undercutting/reclaiming, so it's the
+     MA pair that defines the band, not price. Assumed — worth a one-line owner confirm.
+
 ### 5.4 ATR trend — sparkline for eyes, slope for score
 - **Mini sparkline** is the trustworthy human-facing surface (owner: yes). A human reads
   "tightening then popping" off a sparkline and rightly distrusts a lone slope number.
@@ -451,7 +478,7 @@ justify its own small, time-sensitive list — phase 2.
 | B-3 | Volume dry-up sub-signal for VCP proxy (RelVol trend while price holds) | §5.2, §10.3 | ✅ | **PR (this session).** New 4th `TRAILING_COLS` col `relvol_spark` (pipe-joined trailing Rel Volume series, same trailing-window/graceful-degrade machinery as B-2's sparks — window is `SPARK_WINDOW`, not a new constant). Picks card "Volume dry-up" sub-block under the B-1 "Volatility & setup" section renders it via the existing `volSpark()` helper (a SHOWN trend, doc §4.0 — no threshold, no flag). Migration backfilled 487/535 latest rows. Composes into B-4. |
 | B-4 | VCP-style contraction proxy — shrinking pullback depth + tightening range + vol dry-up + 52W-high proximity. Label "Contraction (VCP-style)", never "VCP detected" | §5.2 | ⬜ | Composes B-2 + B-3. NOT "lower highs". |
 | B-5 | **Pre-Power of 3** MA-bunching chip + shown MA distances/spread — price/20MA/50MA within a 2×ATR band | §5.3 | ✅ | **PR #392 (this session).** The COIL PRECONDITION only, honestly labeled "Pre-Power of 3" (owner call — step 1 of the bunched→undercut→reclaim setup, not the trigger). price/20/50 only (no 10MA scraped, 200 dropped). Chip = single fact `span(price,20MA$,50MA$) ≤ POWER_OF_3_ATR_MULT(2.0)×ATR` — owner-set band, §4.0-clean. **Computed CLIENT-SIDE in `volSetupSectionHtml` from raw Price/ATR/SMA20/SMA50 — NOT a stored CSV column** (PR #392 review + `.claude/rules/data-pipeline.md`: config-dependent pure single-row value belongs at render time). Renders on all card families with the two SMA % distances + MA-to-MA cluster spread %. **Real-time on Morning/Watch** (Price/SMA20/SMA50/ATR added to `SETUP_COLUMNS` + `_SETUP_FRESH_COLS`). |
-| B-5b | **Power of 3 full trigger** — bunched → undercut the cluster → reclaim the highest MA (actionable) | §5.3 | ⏳ | **Next up.** Composes on `pick_status.py`'s reclaim engine (`compute_reclaim`/`reclaim_refs`, already actionable): gate on B-5's bunched flag, undercut below cluster low (min MA), reclaim above cluster high (max MA). Morning actionable read (entry on reclaim, stop under undercut low). Reclaim = a fact, §4.0-clean. Verify engine wiring first. |
+| B-5b | **Power of 3 full trigger** — bunched → undercut the cluster → reclaim the highest MA (actionable) | §5.3 | 🔨 | **Riffing (pre-impl).** Engine wiring verified; 4 design forks open in §5.3 (compute site, own-status-vs-enrichment, single-bar-vs-multi-day, cluster-band def) — aligning with owner before code. Composes on `pick_status.py`'s reclaim engine (`compute_reclaim`/`reclaim_refs`, already actionable): gate on B-5's bunched flag, undercut below cluster low (min MA), reclaim above cluster high (max MA). Morning actionable read (entry on reclaim, stop under undercut low). Reclaim = a fact, §4.0-clean. Verify engine wiring first. |
 | B-6 | Propagate the "Volatility & setup" section (B-1 + B-2 + B-3) to Lookup + Morning + Ticket cards | §4.1, §8 | ✅ | **PR (this session).** Renders the shared `volSetupSectionHtml` (A-2 seam) on morning picks cards (`morningCardBody`, all live statuses) + watch cards (`watchCardHtml`), via `setupRowForCard(ticker, freshRow)` = picks_latest cross-ref (B-2/B-3 sparklines) + morning-store fresh B-1 override. Trade ticket inherits it from the morning card (no duplicate render). Lookup Stage-2 already had it (reuses `renderPickRow`). Owner-approved mock: `planning/mocks/b6-morning-volatility-setup.html`. 2 morning + 1 watch PWA tests. Release `2026.09.02` / sw.js v91. |
 | B-7 | Optional composite score (decomposable, shown next to components) | §4.1 L3, §10.7 | 🅿️ | LOW priority / maybe never. Owner wary of blended scores. Do not lead with this. |
 | B-8 | Forward-return eval of the signals (does compression predict?) | §10.10 | ⬜ | Reuse `evaluate_picks.py` scaffolding. Do after ≥1 signal has history. |
