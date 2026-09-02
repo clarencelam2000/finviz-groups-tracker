@@ -6,6 +6,53 @@
 
 ---
 
+## 2026-09-02 — Effort A A-2 + B-6/A-3: compression "Volatility & setup" section on the Morning family
+
+**Status: safe to close — implemented, tested, PR #390 open (ready).** Owner chose the strategic
+A-2→B-6 lever this session (over the contained Picks-only B-4/B-5 slices). Two slices landed in one
+PR because A-2 has no standalone value (it's the seam B-6 rides on).
+
+**A-2 (shared card seam).** Extracted the "Volatility & setup" section (B-1 Vol W/M·RelVol·52W +
+B-2 range tightening + B-3 volume dry-up) out of `renderPickRow` into one shared
+`volSetupSectionHtml(r)` in `docs/index.html`. **Pure refactor — Picks card byte-identical** (its
+9 PWA tests green). Returns `''` when a row has nothing → graceful degrade for morning orphans.
+Fulfills §8's "shared-component seam before B metrics spread" + ordering rule #2.
+
+**B-6 / A-3 (render on the Morning family).** New `setupRowForCard(ticker, freshRow)` assembles the
+render row: base = `ws4FindPicksRow` cross-ref to `picks_latest` (B-2/B-3 trailing sparkline cols,
+multi-day), with the B-1 raw cols (Vol W/M, Rel Volume, 52W High) overridden by this-morning's fresh
+scrape-wide values from the morning store `r` / watch public read `pub` (those cols landed on the
+morning store in A-1-IMPL / #384). Rendered in `morningCardBody` (all live statuses, after the metric
+rows, before the ticket/CTA — context before action, matching the owner-approved mock) and
+`watchCardHtml` (after `body`). **Trade ticket deliberately NOT rendered separately** — it lives
+inside the morning card which already shows the section above it (a second render would duplicate).
+Lookup Stage-2 already had it (reuses `renderPickRow`). Orphans with no picks history + no fresh
+scrape show no section (graceful degrade §3).
+
+**Owner interaction:** built a real-data before/after mock (`planning/mocks/b6-morning-volatility-setup.html`,
+published as an Artifact) using the actual `volSetupSectionHtml` output on a real CAH morning card.
+Owner approved ("wire it into the morning family"), then I implemented.
+
+**Tests:** `test_pwa_morning.py` +2 (`test_volatility_setup_section_on_morning_card`, `..._hidden_for_orphan`)
+and a `pre_close_latest.csv` stub added to that file's shared `_open_morning_tab` harness so the file
+runs in the cloud sandbox (it was hanging on the unreachable domain — the documented Root Cause 2, not
+a regression; now all 9 pass in-sandbox). `test_pwa_watchlist.py` +1 (`test_watch_card_shows_volatility_setup_section`,
+9/9). `test_pwa_picks_atr_earnings.py` 9/9 (A-2 unchanged Picks card). Also rendered the real morning
+card headlessly to confirm placement/values match the mock. Release triplet `2026.09.02` (feature, tab
+morning) / `sw.js` v90→v91; `test_guide_releases.py` 5/5.
+
+**Docs (3-places-style):** `docs/CLAUDE.md` § Morning tab new B-6 subsection; planning doc §12
+(A-2/A-3/B-6 ✅ + progress log). No new configurable constant (reuses B-1/B-2/B-3 metrics).
+
+**Next steps:** **B-5** (MA bunching / Rule-of-Three — the last *named* spine item still unbuilt) or
+**B-4** (compose the VCP-style contraction proxy from B-2+B-3+52W). Both Picks-only, contained,
+ephemeral-safe. Deferred/tracked (planning §12): orphan sparkline backfill from D1 `ticker_quotes`
+(§7.3 option-b), projected vol/RVol (§5.5b), filter/sort + "Triggers today" list (§9). **Don't merge
+#390 until the owner has eyeballed the live Morning tab** (or is comfortable from the mock) — CI's
+Playwright jobs validate the morning/positions files that only hang in this sandbox.
+
+---
+
 ## 2026-09-02 — PR #387 merge-conflict fix (picks.csv/picks_latest.csv)
 
 **Status: safe to close.** PR #387 (B-3 relvol_spark) went `mergeable_state: dirty` because two
