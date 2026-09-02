@@ -281,6 +281,50 @@ class TestPicksAtrRowAndEarnings:
 
             browser.close()
 
+    def test_power_of_3_chip_and_ma_distances(self):
+        """B-5 (issue #379): the 'MA bunching' block shows the green 'Power of 3' chip when
+        price/20MA/50MA are bunched within the 2xATR band (power_of_3 == '1'), plus the two shown
+        SMA % distances (SHOWN values, doc §4.0). ANET fixture: SMA20 1.16%, SMA50 3.52%,
+        power_of_3 == '1'."""
+        from playwright.sync_api import sync_playwright
+
+        body = _single_row_csv({})  # ANET: power_of_3='1' (bunched)
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            self._open_picks_tab(page, body)
+            self._expand_first_card(page)
+
+            panel_text = page.locator("[id^='risk-panel-']").first.inner_text()
+            assert "MA bunching" in panel_text, f"missing block; got:\n{panel_text}"
+            assert "Power of 3" in panel_text, f"expected chip when bunched; got:\n{panel_text}"
+            assert "Price vs 20MA" in panel_text and "+1.2%" in panel_text, \
+                f"expected 20MA distance; got:\n{panel_text}"
+            assert "Price vs 50MA" in panel_text and "+3.5%" in panel_text, \
+                f"expected 50MA distance; got:\n{panel_text}"
+
+            browser.close()
+
+    def test_power_of_3_no_chip_when_not_bunched(self):
+        """power_of_3 == '0' shows the MA-distance values but NOT the 'Power of 3' chip — the chip
+        is a fact that either fires or doesn't, never a score (doc §4.0)."""
+        from playwright.sync_api import sync_playwright
+
+        body = _single_row_csv({"power_of_3": "0"})
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+            self._open_picks_tab(page, body)
+            self._expand_first_card(page)
+
+            panel_text = page.locator("[id^='risk-panel-']").first.inner_text()
+            assert "MA bunching" in panel_text, f"block should still show distances; got:\n{panel_text}"
+            assert "Power of 3" not in panel_text, f"chip must be absent when not bunched; got:\n{panel_text}"
+
+            browser.close()
+
     def test_earnings_none_known_shows_dash(self):
         """Earnings == '-' (none known) renders as an em dash, no crash."""
         from playwright.sync_api import sync_playwright

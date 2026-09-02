@@ -1,6 +1,18 @@
 {
-  "current": "2026.09.02.1",
+  "current": "2026.09.02.2",
   "releases": [
+    {
+      "version": "2026.09.02.2",
+      "date": "2026-09-02",
+      "title": "Power of 3 — MA bunching on setup cards",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "The \"Volatility & setup\" section now shows a Pre-Power of 3 read: price, the 20-day MA and the 50-day MA, and a green \"Pre-Power of 3\" chip when all three are bunched inside a 2× ATR band — the coiled-against-the-MAs setup.",
+        "It shows the distance from price to the 20MA and 50MA, plus the MA-to-MA cluster spread %, as plain values so you can see why it is (or isn't) bunched. Appears everywhere the setup section does — Picks, Morning, Watchlist and the trade ticket.",
+        "The 2× ATR band is a fixed fact, not a score — the chip either fires or it doesn't. On Morning cards the MAs come from last night's close (they barely move intraday)."
+      ]
+    },
     {
       "version": "2026.09.02.1",
       "date": "2026-09-02",
