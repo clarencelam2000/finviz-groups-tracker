@@ -1,0 +1,213 @@
+<title>Morning Card · Volatility Setup</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0;
+    background: #020617;
+    color: #cbd5e1;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 28px 18px 60px; }
+  .eyebrow { letter-spacing: .14em; text-transform: uppercase; font-size: .68rem; }
+  .card-col { display: flex; flex-direction: column; gap: 8px; }
+  .mock-card {
+    background: #0f172a;
+    border: 1px solid rgba(51,65,85,.6);
+    border-left-width: 3px;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .tabular-nums { font-variant-numeric: tabular-nums; }
+  .badge-new {
+    display: inline-block; font-size: .58rem; letter-spacing: .06em;
+    padding: 2px 6px; border-radius: 5px;
+    background: rgba(56,189,248,.14); color: #7dd3fc; font-weight: 700;
+  }
+  @media (max-width: 720px) { .grid-cmp { grid-template-columns: 1fr !important; } }
+</style>
+
+<div class="wrap">
+
+  <header style="margin-bottom: 26px;">
+    <div class="eyebrow" style="color:#38bdf8; margin-bottom:8px;">Effort B · B-6 · for your green light</div>
+    <h1 style="font-size:1.5rem; font-weight:700; color:#f1f5f9; margin:0 0 10px; text-wrap:balance;">
+      The compression spine, on your pre-open cards
+    </h1>
+    <p style="max-width:60ch; line-height:1.55; margin:0; color:#94a3b8; font-size:.92rem;">
+      Today the <strong style="color:#cbd5e1;">Volatility&nbsp;&amp;&nbsp;setup</strong> section (Vol&nbsp;W/M,
+      volume dry-up, range tightening) lives only on the <strong style="color:#cbd5e1;">Picks</strong> card.
+      B-6 renders the <em>identical</em> section on the <strong style="color:#cbd5e1;">Morning</strong> family —
+      Morning picks, Watchlist, and the Trade ticket — so the coil read is in front of you when you're deciding
+      pre-open, not one tab away. Below is a real <span class="tabular-nums">CAH</span> card
+      (triggered, 2026-09-01) shown before and after. Nothing is invented or thresholded — raw facts and shown
+      sparklines only.
+    </p>
+  </header>
+
+  <div class="grid-cmp" style="display:grid; grid-template-columns:1fr 1fr; gap:18px; align-items:start;">
+    <!-- BEFORE -->
+    <div class="card-col">
+      <div class="eyebrow" style="color:#64748b;">Today</div>
+      <div class="mock-card" style="border-left-color:#10b981;" id="card-before"></div>
+      <p style="font-size:.74rem; color:#64748b; margin:4px 2px 0; line-height:1.45;">
+        Trigger, price, and entry-quality only. No read on whether CAH coiled into this move.
+      </p>
+    </div>
+    <!-- AFTER -->
+    <div class="card-col">
+      <div class="eyebrow" style="color:#38bdf8;">Proposed <span class="badge-new">+ SECTION</span></div>
+      <div class="mock-card" style="border-left-color:#10b981;" id="card-after"></div>
+      <p style="font-size:.74rem; color:#64748b; margin:4px 2px 0; line-height:1.45;">
+        Same card, plus the coil read: <span style="color:#34d399;">contracting</span> (Vol&nbsp;W&nbsp;1.7% &lt;
+        Vol&nbsp;M&nbsp;2.5%), Rel&nbsp;volume 0.31&times; and a drying-up trend — a textbook compression into the break.
+      </p>
+    </div>
+  </div>
+
+  <div style="margin-top:34px; padding:16px 18px; border:1px solid rgba(51,65,85,.5); border-radius:10px; background:#0b1220;">
+    <div class="eyebrow" style="color:#94a3b8; margin-bottom:10px;">What ships in B-6</div>
+    <ul style="margin:0; padding-left:18px; line-height:1.7; font-size:.86rem; color:#94a3b8;">
+      <li>One shared component (the A-2 seam, already merged-refactor here) renders on <strong style="color:#cbd5e1;">Morning picks, Watchlist cards, and the Trade ticket</strong> — the Picks card is unchanged.</li>
+      <li><strong style="color:#cbd5e1;">Vol W/M, Rel volume, 52W-high</strong> come fresh from this morning's scrape-wide run (A-1). <strong style="color:#cbd5e1;">Range tightening &amp; volume dry-up sparklines</strong> come from last night's picks history (multi-day — current enough).</li>
+      <li><strong style="color:#cbd5e1;">Graceful degrade:</strong> a name with no picks history shows just the raw values it has; a name with nothing at all shows no section (never a wall of dashes).</li>
+    </ul>
+  </div>
+
+  <p style="margin-top:22px; font-size:.72rem; color:#475569; text-align:center;">
+    Real data · CAH · morning_latest.csv + picks_latest.csv (2026-09-01). Rendered by the actual
+    <code style="color:#64748b;">volSetupSectionHtml()</code> component.
+  </p>
+</div>
+
+<script>
+  // ── Real component code, copied verbatim from docs/index.html so the "after" card
+  //    below is the ACTUAL output, not a hand-drawn approximation. ──
+  function _pPct(v){ if(!v||v==='-')return NaN; return parseFloat(String(v).replace('%','')); }
+  function _pF(v){ if(!v||v==='-')return NaN; return parseFloat(String(v).replace(/,/g,'')); }
+
+  function volSpark(seriesStr){
+    if(!seriesStr) return '';
+    const vals = String(seriesStr).split('|').map(Number).filter(v=>!isNaN(v));
+    if(vals.length<2) return '';
+    const w=60,h=16,pad=2;
+    const min=Math.min(...vals),max=Math.max(...vals);
+    const span=(max-min)||1, n=vals.length;
+    const pts=vals.map((v,i)=>{
+      const x=pad+(i/(n-1))*(w-2*pad);
+      const y=pad+(1-(v-min)/span)*(h-2*pad);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" preserveAspectRatio="none" class="inline-block align-middle overflow-visible"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+  }
+  function volSparkLast(seriesStr,digits){
+    if(!seriesStr) return '—';
+    const vals=String(seriesStr).split('|').map(Number).filter(v=>!isNaN(v));
+    if(!vals.length) return '—';
+    return vals[vals.length-1].toFixed(digits==null?2:digits);
+  }
+
+  function volSetupSectionHtml(r){
+    r=r||{};
+    const volW=_pPct(r['Volatility W']), volM=_pPct(r['Volatility M']);
+    const relVol=_pF(r['Rel Volume']), oh52=_pF(r['52W High']);
+    let volTrendStr='',volTrendCls='text-slate-500';
+    if(!isNaN(volW)&&!isNaN(volM)){
+      if(volW<volM){volTrendStr='contracting';volTrendCls='text-emerald-400';}
+      else if(volW>volM){volTrendStr='expanding';volTrendCls='text-amber-400';}
+      else{volTrendStr='flat';volTrendCls='text-slate-400';}
+    }
+    const volWMStr=(isNaN(volW)?'—':volW.toFixed(1)+'%')+' / '+(isNaN(volM)?'—':volM.toFixed(1)+'%');
+    const relVolStr=isNaN(relVol)?'—':relVol.toFixed(2)+'×';
+    const oh52Str=isNaN(oh52)?'—':(oh52>=0?'+':'')+oh52.toFixed(1)+'%';
+    const tightRange7=r['tight_range_7'];
+    const rangeAtrSpark=r['range_atr_spark']||'';
+    const atrSpark=r['atr_spark']||'';
+    const hasTightening=!!(rangeAtrSpark||atrSpark||tightRange7==='1'||tightRange7==='0');
+    const relVolSpark=r['relvol_spark']||'';
+    const hasVolDryup=!!relVolSpark;
+    const hasB1=!isNaN(volW)||!isNaN(volM)||!isNaN(relVol)||!isNaN(oh52);
+    if(!hasB1&&!hasTightening&&!hasVolDryup) return '';
+    return `
+      <div class="mt-2 pt-2 border-t border-slate-700/50">
+        <div class="text-slate-400 font-semibold mb-1.5">Volatility &amp; setup</div>
+        <div class="grid grid-cols-3 gap-x-3 gap-y-2">
+          <div>
+            <div class="text-slate-500 mb-0.5">Vol W / M</div>
+            <div class="text-slate-300">${volWMStr}</div>
+            ${volTrendStr?`<div class="${volTrendCls} text-[0.65rem]">${volTrendStr}</div>`:''}
+          </div>
+          <div>
+            <div class="text-slate-500 mb-0.5">Rel volume</div>
+            <div class="text-slate-300">${relVolStr}</div>
+          </div>
+          <div>
+            <div class="text-slate-500 mb-0.5">From 52W high</div>
+            <div class="text-slate-300">${oh52Str}</div>
+          </div>
+        </div>
+        ${hasTightening?`
+        <div class="mt-2 pt-2 border-t border-slate-700/40">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-slate-500">Range tightening</span>
+            ${tightRange7==='1'?'<span class="text-emerald-400 text-[0.6rem] px-1.5 py-0.5 rounded bg-emerald-500/10 font-medium">Tightest range · last 7 bars</span>':''}
+          </div>
+          <div class="grid grid-cols-2 gap-x-3">
+            <div>
+              <div class="text-slate-500 text-[0.65rem] mb-0.5">Range/ATR <span class="text-slate-400">${volSparkLast(rangeAtrSpark)}</span></div>
+              <div class="text-sky-400/80">${volSpark(rangeAtrSpark)||'<span class="text-slate-600">—</span>'}</div>
+            </div>
+            <div>
+              <div class="text-slate-500 text-[0.65rem] mb-0.5">ATR $ <span class="text-slate-400">${volSparkLast(atrSpark)}</span></div>
+              <div class="text-sky-400/80">${volSpark(atrSpark)||'<span class="text-slate-600">—</span>'}</div>
+            </div>
+          </div>
+        </div>`:''}
+        ${hasVolDryup?`
+        <div class="mt-2 pt-2 border-t border-slate-700/40">
+          <div class="text-slate-500 mb-1">Volume dry-up</div>
+          <div class="text-slate-500 text-[0.65rem] mb-0.5">Rel volume · last bars <span class="text-slate-400">${volSparkLast(relVolSpark)}×</span></div>
+          <div class="text-sky-400/80">${volSpark(relVolSpark)||'<span class="text-slate-600">—</span>'}</div>
+        </div>`:''}
+      </div>`;
+  }
+
+  // ── Real CAH row (morning_latest.csv + picks_latest.csv cross-ref, 2026-09-01) ──
+  const CAH = {
+    ticker:'CAH', status:'triggered', trigger:'236.97', price:'238.48', change:'1.65',
+    atr_from_lod:'0.4555555555555517',
+    'Volatility W':'1.70%', 'Volatility M':'2.54%', 'Rel Volume':'0.31', '52W High':'-7.67%',
+    tight_range_7:'', range_atr_spark:'0.67|1.07|0.71|0.64|0.87',
+    atr_spark:'5.13|5.16|5.15|5.40|5.45', relvol_spark:'1.10|1.13|0.61|0.76|0.61'
+  };
+
+  // Faithful reproduction of the Morning card header + triggered body (morningCardBody).
+  function _mNum(raw,dp=2){const v=parseFloat(raw);return isNaN(v)?'—':v.toFixed(dp);}
+  function kv(label,val,cls){return `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">${label}</span><span class="${cls||'text-slate-200'} font-medium tabular-nums">${val}</span></div>`;}
+
+  function morningCard(r, withSection){
+    const now = `${_mNum(r.price)} · <span class="text-emerald-400">+${(+r.change).toFixed(1)}%</span>`;
+    const atr = (+r.atr_from_lod).toFixed(1) + ' — ok to act';
+    const body =
+      kv('Trigger (prior high)', _mNum(r.trigger)) +
+      `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">Now</span><span class="font-medium tabular-nums">${now}</span></div>` +
+      kv('ATR from LoD', atr, 'text-emerald-400') +
+      (withSection ? volSetupSectionHtml(r) : '') +
+      `<div class="mt-2 pt-2 border-t border-slate-700"><button class="w-full text-center text-xs font-semibold text-sky-400 py-1.5 rounded bg-sky-500/10">I took it →</button></div>`;
+    return `
+      <div class="px-3 py-2.5">
+        <div class="flex items-center justify-between mb-1.5">
+          <div class="flex items-center gap-2">
+            <span class="font-bold text-slate-100">${r.ticker}</span>
+            <span class="text-[0.62rem] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 font-semibold">Triggered</span>
+          </div>
+          <span class="text-slate-500 text-xs">Cardinal Health</span>
+        </div>
+        ${body}
+      </div>`;
+  }
+
+  document.getElementById('card-before').innerHTML = morningCard(CAH, false);
+  document.getElementById('card-after').innerHTML  = morningCard(CAH, true);
+</script>

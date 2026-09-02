@@ -413,8 +413,8 @@ justify its own small, time-sensitive list — phase 2.
 |----|-------|---------|--------|------------|
 | A-1 | **Decide morning-card data path**: scrape-wide-84 vs cross-ref `picks_latest` (~85%) + D1 orphan backfill (~15%) | §7.3 | ✅ | **DECIDED 2026-09-01: scrape-wide (owner greenlit).** Verification in §7.3a. Cross-ref orphan rate worse than doc's ~15% (measured 2026-08-31: morning **33.6%**, pre-close **21%**). Scrape-wide cost is near-zero (`fetch_ticker_quotes` goto-count = ticker count, not column count; 84-col `t=` scrape already runs in prod as `block="held"`). Implementation = widen the morning/pre_close scrape to the wide column set + superset-additive session-store schema (next slice A-1-IMPL). B-2 derived sparkline cols still come via cross-ref (multi-day). |
 | A-1-IMPL | **Widen the morning/pre_close scrape to the 84-col block + carry setup columns into the session store** (the pipeline realization of A-1) | §7.3a | ✅ | **PR (this session).** `collect_morning.py`: `WIDE_SCRAPE_BLOCK="held"` (84-col, reuses the proven held config), `SETUP_COLUMNS` (`RSI`, `Volatility W`, `Volatility M`, `Rel Volume`, `52W High`) carried through verbatim into `STORE_COLUMNS` (superset-additive). No PWA render yet (that's B-6). Live values land on the next Actions morning run; committed store CSVs stay old-schema until then (write_store backfills "" — no manual migration). |
-| A-2 | Extract ONE shared card component/schema (superset fields + a "Setup/Volatility" section) reused across Picks-family and Morning-family | §7, §8 | ⏳ | The seam B-6 rides on. B-1's section is its reference layout. **A-1 data path now unblocked** (A-1-IMPL landed the morning-side wide columns). |
-| A-3 | Apply the shared component to Morning card, Watchlist card, Trade ticket (the Morning family) | §7 | ⬜ | After A-2. |
+| A-2 | Extract ONE shared card component/schema (superset fields + a "Setup/Volatility" section) reused across Picks-family and Morning-family | §7, §8 | ✅ | **PR (this session).** Extracted the "Volatility & setup" section (B-1 + B-2 + B-3) out of `renderPickRow` into one shared `volSetupSectionHtml(r)` in `docs/index.html`. **Pure refactor — Picks card renders byte-identically** (its 9 PWA tests green). Returns '' when a row has nothing to show (graceful degrade for morning orphans). This is the seam B-6 rides on. |
+| A-3 | Apply the shared component to Morning card, Watchlist card, Trade ticket (the Morning family) | §7 | ⏳ | Realized by B-6 (same section, Morning family). Mock built for owner green light: `planning/mocks/b6-morning-volatility-setup.html`. |
 
 ### Cross-cutting follow-ups (not scoped to a single effort)
 
@@ -431,6 +431,17 @@ justify its own small, time-sensitive list — phase 2.
 | "lower highs" as a VCP prerequisite | §5.2 | ❌ Wrong; removed from the design. |
 
 ### Progress log (newest first)
+- **2026-09-02 — A-2 done (shared card seam) + B-6 mock for owner review.** Owner chose the
+  strategic A-2→B-6 lever over the contained Picks-only spine slices (B-4/B-5) for this fresh
+  session. **A-2:** extracted the "Volatility & setup" section (B-1 Vol W/M·RelVol·52W + B-2 range
+  tightening + B-3 volume dry-up) from `renderPickRow` into one shared `volSetupSectionHtml(r)` in
+  `docs/index.html` — a pure refactor, Picks card byte-identical (9/9 PWA green). The function
+  returns '' when a row has nothing to show, so a morning orphan self-hides (graceful degrade §3).
+  **B-6 (pending owner green light):** built a real-data before/after mock of a Morning CAH card
+  with the section (`planning/mocks/b6-morning-volatility-setup.html`, published as an Artifact).
+  B-6 will render the identical section on Morning picks / Watchlist / Trade-ticket cards — B-1 raw
+  cols fresh from the A-1 scrape-wide morning store, B-2/B-3 sparkline cols via `ws4FindPicksRow`
+  cross-ref to picks_latest. **Next: on approval, wire B-6 into the Morning family + release triplet.**
 - **2026-09-01 — B-3 done (volume dry-up).** Chose B-3 over A-2→B-6 this session: it moves the
   compression spine with an owner-named fact, is a contained single-card slice (ephemeral-session
   safe, no A dependency, doesn't trip ordering rule #2), and B-6 propagates the whole "Volatility &
