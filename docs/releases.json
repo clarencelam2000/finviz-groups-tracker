@@ -1,6 +1,17 @@
 {
-  "current": "2026.09.02.3",
+  "current": "2026.09.03",
   "releases": [
+    {
+      "version": "2026.09.03",
+      "date": "2026-09-03",
+      "title": "Picks group tap opens a quick detail sheet",
+      "tag": "improvement",
+      "tab": "picks",
+      "notes": [
+        "Tapping a group name on the Picks tab now opens the same quick detail sheet the AI tab's group mentions use, landed straight on the full breakdown — rank, performance, and momentum deep dive — instead of jumping away to the Lookup tab. \"Full lookup ↗\" inside the sheet still gets you there if you want more.",
+        "Each group header on the Picks tab now shows the same reason chips (Leaders, Emerging, Accel, RS New High, All Green) the Lookup tab shows, so you can see at a glance every bucket a group qualified for today, not just the section it's listed under."
+      ]
+    },
     {
       "version": "2026.09.02.3",
       "date": "2026-09-02",
