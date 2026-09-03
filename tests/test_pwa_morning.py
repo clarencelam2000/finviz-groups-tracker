@@ -132,7 +132,9 @@ def test_atr_from_lod_bands_every_status(server):
         # AXON triggered atr_from_lod=0.6 (<=0.8) → ok to act; VRT gapped=1.8 (>1.0) → chase risk.
         assert "ok to act" in html
         assert "chase risk" in html
-        assert html.count("ATR from LoD") == 5, "ATR-from-LoD should render on every card with a quote (5 of 6; PWR has no_quote)"
+        # 5 per-card occurrences (PWR has no_quote) + 1 permanent "ATR from LoD" sort-pill label
+        # in the new sort toggle (2026-09-03) — see docs/CLAUDE.md § Morning tab sort/filter.
+        assert html.count("ATR from LoD") == 6, "ATR-from-LoD should render on every card with a quote (5 of 6; PWR has no_quote) plus the sort pill"
         browser.close()
 
 
@@ -196,8 +198,9 @@ def test_reclaim_pick_renders_actionable_with_named_level(server):
         assert "42.15" in html
         assert "Reclaimed 50MA" in html
         assert "~39.80" in html
-        # Actionable: ATR-from-LoD row + "I took it" CTA on both reclaim cards.
-        assert html.count("ATR from LoD") == 2
+        # Actionable: ATR-from-LoD row + "I took it" CTA on both reclaim cards. +1 for the
+        # permanent "ATR from LoD" sort-pill label (2026-09-03 sort toggle).
+        assert html.count("ATR from LoD") == 3
         assert html.count("I took it") == 2
         browser.close()
 
@@ -299,4 +302,121 @@ def test_volatility_setup_section_hidden_for_orphan(server):
         html = page.inner_html("#morning-list")
         assert "border-l-4" in html, "the orphan card itself still renders"
         assert "Volatility &amp; setup" not in html, "no section when there's no data (graceful degrade)"
+        browser.close()
+
+
+# ── Sort / launch-ready filter / bucket collapse + mini-nav (owner decision 2026-09-03) —
+#    see docs/CLAUDE.md § Morning tab sort/filter. Status-bucket grouping (order from
+#    MORNING_STATUS_META) always applies; these options only choose the tiebreak WITHIN each
+#    bucket, except Rel volume's optional 'global' scope which flattens grouping entirely. ──
+
+def _sort_morning_body() -> str:
+    # Three 'setting_up' rows (one bucket, to exercise the intra-bucket tiebreak) with distinct
+    # ATR-from-LoD and Rel Volume, plus one 'triggered' row (DDD) so there are two non-empty
+    # buckets for the mini-nav/collapse tests.
+    return _B6_MORNING_HEADER + (
+        "2026-09-03,morning,2026-09-03T14:05:00Z,AAA,Group A,leaders,50,47,1.5,51,50,51.5,49.9,1.0,setting_up,0.5,55,1.0%,1.0%,0.50,-3\n"
+        "2026-09-03,morning,2026-09-03T14:05:00Z,BBB,Group B,leaders,50,47,1.5,51,50,51.5,49.9,1.0,setting_up,0.9,55,1.0%,1.0%,2.50,-25\n"
+        "2026-09-03,morning,2026-09-03T14:05:00Z,CCC,Group C,leaders,50,47,1.5,51,50,51.5,49.9,1.0,setting_up,0.2,55,1.0%,1.0%,1.20,-6\n"
+        "2026-09-03,morning,2026-09-03T14:05:00Z,DDD,Group D,leaders,50,47,1.5,51,50,51.5,49.9,1.0,triggered,0.3,55,1.0%,1.0%,1.00,-4\n"
+    )
+
+
+def _sort_picks_body() -> str:
+    # AAA is the only picks_latest row, so it's the sole Focus candidate (computeFocusScores'
+    # n==1 branch always yields a real, non-null score) and its 52W High (-5 -> 5% below high)
+    # + atr_ext_50 (1.5) land it in the Coiled launch-ready band (LAUNCH_NEAR_HIGH_PCT=8,
+    # LAUNCH_CALM_EXT_MAX=3) — one fixture row exercising both the Focus chip and the filter.
+    header = ("date,list_category,Ticker,Price,ATR,SMA20,SMA50,SMA200,Market Cap,Earnings,"
+              "Avg Volume,atr_ext_50,risk_20ma_pct,risk_50ma_pct,range_atr,grp_sum_mid_rank,52W High\n")
+    row = "2026-09-03,leaders,AAA,51.00,1.5,2.00%,5.00%,10.00%,10,,5000000,1.5,0.03,0.05,1.0,50,-5\n"
+    return header + row
+
+
+def test_default_sort_is_focus_with_chip_and_sort_bar(server):
+    from playwright.sync_api import sync_playwright
+    import re
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _open_morning_with_picks(page, _sort_morning_body(), _sort_picks_body())
+        html = page.inner_html("#morning-list")
+        assert "Sort:" in html and "Setup:" in html, "sort + launch-filter bars should render"
+        assert re.search(r"Focus \d+%", html), "AAA's real Focus score should render as a card chip"
+        browser.close()
+
+
+def test_atr_lod_sort_reorders_within_bucket(server):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _open_morning_with_picks(page, _sort_morning_body(), _sort_picks_body())
+        page.click('button[onclick="__setMorningSort(\'atr_lod\')"]')
+        page.wait_for_timeout(300)
+        html = page.inner_html("#morning-list")
+        # Ascending ATR-from-LoD within the setting_up bucket: CCC(0.2) < AAA(0.5) < BBB(0.9).
+        assert html.find("CCC") < html.find("AAA") < html.find("BBB"), "expected CCC, AAA, BBB order"
+        browser.close()
+
+
+def test_rel_volume_scope_toggle_and_global_flatten(server):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _open_morning_with_picks(page, _sort_morning_body(), _sort_picks_body())
+        page.click('button[onclick="__setMorningSort(\'rel_volume\')"]')
+        page.wait_for_timeout(300)
+        html = page.inner_html("#morning-list")
+        assert "In bucket" in html, "scope switch should appear only for the Rel volume sort"
+
+        page.click('button[onclick="__setMorningSortScope(\'global\')"]')
+        page.wait_for_timeout(300)
+        html2 = page.inner_html("#morning-list")
+        assert "__toggleMorningBucket" not in html2, "global scope flattens — no bucket headers/mini-nav"
+        assert html2.count("border-l-4") == 4, "all 4 cards still render, just unbucketed"
+        # Descending Rel volume across ALL statuses: BBB(2.5) > CCC(1.2) > DDD(1.0) > AAA(0.5).
+        assert html2.find("BBB") < html2.find("CCC") < html2.find("DDD") < html2.find("AAA")
+        browser.close()
+
+
+def test_launch_ready_filter_narrows_and_shows_empty_state(server):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _open_morning_with_picks(page, _sort_morning_body(), _sort_picks_body())
+        page.click('button[onclick="__setMorningLaunchFilter(\'Coiled\')"]')
+        page.wait_for_timeout(300)
+        html = page.inner_html("#morning-list")
+        assert html.count("border-l-4") == 1, "only AAA (Coiled) should remain"
+        assert "AAA" in html
+
+        page.click('button[onclick="__setMorningLaunchFilter(\'Overhead\')"]')
+        page.wait_for_timeout(300)
+        html2 = page.inner_html("#morning-list")
+        assert "try All" in html2, "no Overhead setups today -> filter empty-state copy"
+        browser.close()
+
+
+def test_collapse_expand_and_mininav_force_expand(server):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _open_morning_with_picks(page, _sort_morning_body(), _sort_picks_body())
+        total = page.inner_html("#morning-list").count("border-l-4")
+        assert total == 4
+
+        page.click('button[onclick="__toggleMorningBucket(\'setting_up\')"]')
+        page.wait_for_timeout(300)
+        collapsed_html = page.inner_html("#morning-list")
+        assert collapsed_html.count("border-l-4") == total - 3, "collapsing setting_up hides its 3 cards"
+
+        # Jumping via the mini-nav must force-expand the collapsed bucket back.
+        page.click('button[onclick="__jumpToMorningBucket(\'setting_up\')"]')
+        page.wait_for_timeout(400)
+        expanded_html = page.inner_html("#morning-list")
+        assert expanded_html.count("border-l-4") == total, "mini-nav jump must force-expand a collapsed bucket"
         browser.close()

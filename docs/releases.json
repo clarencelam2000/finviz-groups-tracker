@@ -1,6 +1,19 @@
 {
-  "current": "2026.09.03",
+  "current": "2026.09.03.1",
   "releases": [
+    {
+      "version": "2026.09.03.1",
+      "date": "2026-09-03",
+      "title": "Morning tab: sort, setup filter, and bucket navigation",
+      "tag": "improvement",
+      "tab": "morning",
+      "notes": [
+        "The Morning tab's picks list now sorts by Focus score within each status group by default, instead of just alphabetically — the best-quality setups surface first. Switch to A–Z, ATR from LoD, or Rel volume (with an \"All\" option that ignores status entirely) from the new Sort row.",
+        "A new Setup filter narrows the list to just Coiled, Extended, or Overhead launch-ready setups.",
+        "Each status group (Triggered, Setting up, etc.) can now be collapsed, and a sticky mini-nav at the top jumps straight to any group and shows its count.",
+        "Cards now show a Focus score chip when the ticker is a Focus candidate today."
+      ]
+    },
     {
       "version": "2026.09.03",
       "date": "2026-09-03",

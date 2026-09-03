@@ -512,6 +512,30 @@
       // primary job, watchlist is the user's opt-in radar.
       morningSubtab: 'picks',
       morningViewUserSet: false,
+      // Morning tab sort/filter (owner decision 2026-09-03). Status-bucket grouping (Triggered
+      // -> Gapped/Reclaimed -> Failed breakout -> Setting up -> Invalidated -> No quote) ALWAYS
+      // applies regardless of sort mode — these four options only choose the tiebreak used
+      // WITHIN each bucket. 'focus' (default) ranks by ws4FocusScore's shared pool-relative
+      // score; 'az' is today's plain ticker order kept as an explicit choice; 'atr_lod' reuses
+      // the same "ATR from LoD" entry-quality metric already on every card; 'rel_volume' can
+      // additionally go cross-bucket via morningSortScope. Session-only, resets on reload —
+      // same convention as morningView/morningSubtab.
+      morningSort: 'focus',       // 'az' | 'focus' | 'atr_lod' | 'rel_volume'
+      // Only read when morningSort === 'rel_volume'. 'bucket' (default) keeps the status
+      // grouping and just reorders within each bucket like the other three sort modes;
+      // 'global' flattens ALL buckets into one Rel-volume-ranked list (no section headers,
+      // no mini-nav/collapse — "what's most active right now, regardless of status").
+      morningSortScope: 'bucket', // 'bucket' | 'global'
+      // Launch-ready filter (computeLaunchReady): 'all' or one of its labels ('Coiled' |
+      // 'Extended' | 'Overhead'). Independent axis from sort — narrows which rows render,
+      // then sort orders whatever's left. Session-only.
+      morningLaunchFilter: 'all',
+      // Set of status keys whose bucket section is collapsed. Starts empty (everything
+      // expanded, matching pre-existing behavior) — the user collapses buckets manually via
+      // the bucket header or the mini-nav jump (which force-expands the target). Module-level
+      // state would also work here, but this lives on `state` since __toggleMorningBucket
+      // mutates it the same way morningView/morningLaunchFilter do.
+      morningCollapsed: new Set(),
       // WS4 Phase B (ADR-014) trade-ticket UI state, keyed by ticker. Survives renderMorning()
       // re-renders (module-level, not rebuilt each render). { expanded, stopBasis, priceOverride,
       // lowOverride }. priceOverride/lowOverride are strings (raw input value) so an in-progress
@@ -5836,25 +5860,39 @@
       return known.concat(unknown);
     }
 
-    // Focus score for a single ticket row, computed against the SAME candidate pool the
-    // Picks tab's own Focus badges use (`allFocusCandidates` in renderPicks(): the C6 base
-    // filter — passesPicksBaseFilter — THEN isFocusEligible, not deduped by ticker), so
-    // the number shown here matches what the Picks tab shows for this ticker today. An
-    // earlier version deduped by ticker and skipped the C6 filter (mirroring the Lookup
-    // tab's globalFocusCandidates instead) — verified against live picks_latest.csv, that
-    // pool wrongly included ~16% of Focus-eligible tickers that fail the C6 gate (mostly
-    // sub-$5B market cap) and would never actually appear in the Picks tab's Focus view.
-    // Caveat: this always uses the DEFAULT Picks-tab settings (Ariel filter off, 'last'
-    // price basis) — if the user has an Ariel filter active in the Picks tab right now,
-    // this number can legitimately differ from what they currently see there, since the
-    // Ariel filter further narrows that view's candidate pool. Returns null when the row
-    // fails either gate — the footnote renders its own "not a Focus candidate" message.
+    // Shared Focus-score pool + scoring pass — the SAME candidate derivation ws4FocusScore has
+    // always used (C6 base filter — passesPicksBaseFilter — THEN isFocusEligible over
+    // state.picksData, not deduped by ticker), so this matches what the Picks tab's own Focus
+    // badges show for this ticker today. Pulled out into its own function (2026-09-03) so the
+    // Morning tab's card chip + sort + this ticket footnote all read ONE computed map instead
+    // of three separate call sites that happen to agree today — a future change to the Focus
+    // formula or its candidate pool then updates all three for free, per this repo's rule that
+    // a config-driven value lives in one place (see .claude/rules/data-pipeline.md).
+    function focusScoreMapForPool() {
+      const candidates = (state.picksData || []).filter(row => passesPicksBaseFilter(row) && isFocusEligible(row));
+      const scored = computeFocusScores(candidates);
+      const map = new Map();
+      scored.forEach(s => map.set(s.r.Ticker || s.r.ticker || '', s.score));
+      return map;
+    }
+    // Set once per renderMorning() call (before any card is built) so every card's chip, the
+    // sort comparator, and ws4FocusScore's ticket-footnote lookup below all read the exact same
+    // map in that render — never three fresh computeFocusScores() passes that could disagree on
+    // ties. null outside a Morning render (or before the first one); ws4FocusScore falls back to
+    // computing fresh in that case so it still works for any future non-Morning caller.
+    let _morningFocusMap = null;
+
+    // Focus score for a single ticket row. Caveat: this always uses the DEFAULT Picks-tab
+    // settings (Ariel filter off, 'last' price basis) — if the user has an Ariel filter active
+    // in the Picks tab right now, this number can legitimately differ from what they currently
+    // see there, since the Ariel filter further narrows that view's candidate pool. Returns
+    // null when the row fails either gate — the footnote renders its own "not a Focus
+    // candidate" message.
     function ws4FocusScore(picksRow) {
       if (!picksRow || !passesPicksBaseFilter(picksRow) || !isFocusEligible(picksRow)) return null;
-      const candidates = (state.picksData || []).filter(row => passesPicksBaseFilter(row) && isFocusEligible(row));
       const ticker = picksRow.Ticker || picksRow.ticker || '';
-      const hit = computeFocusScores(candidates).find(s => (s.r.Ticker || s.r.ticker || '') === ticker);
-      return hit ? hit.score : null;
+      const map = _morningFocusMap || focusScoreMapForPool();
+      return map.has(ticker) ? map.get(ticker) : null;
     }
 
     // ATR-ext-from-50MA -> colored band label. Reuses the EXISTING Focus/positional bands
@@ -8667,39 +8705,232 @@
         return '';
       };
 
-      // Actionability sort (ADR/mock), stable ticker tiebreak within a status bucket. Sort on the
-      // display status so a pre-close gapped→triggered remap buckets with the other triggers.
-      const sorted = [...rows].sort((a, b) => {
-        const oa = (MORNING_STATUS_META[sessionDisplayRow(a).status] || MORNING_STATUS_META.no_quote).order;
-        const ob = (MORNING_STATUS_META[sessionDisplayRow(b).status] || MORNING_STATUS_META.no_quote).order;
-        return oa - ob || String(a.ticker).localeCompare(String(b.ticker));
-      });
+      // Shared Focus-score map, built ONCE for this render (see focusScoreMapForPool's comment)
+      // — read by the per-card chip below, sortMorningEntries's 'focus' branch, AND
+      // ws4FocusScore's ticket-footnote lookup later in this same synchronous render pass, so
+      // all three can never disagree on a ticker's score within one render.
+      _morningFocusMap = focusScoreMapForPool();
 
-      const cards = sorted.map(r0 => {
+      // Enrich each row once (display row, status meta, EOD cross-ref, launch-ready label,
+      // Focus score, ATR-from-LoD, Rel volume) — everything the filter/sort/grouping/render
+      // steps below need, computed a single time per row instead of scattered across separate
+      // map() passes. Sort on the display status so a pre-close gapped→triggered remap buckets
+      // with the other triggers (unchanged from the prior single-pass implementation).
+      const enriched = rows.map(r0 => {
         const r = sessionDisplayRow(r0);
         const meta = MORNING_STATUS_META[r.status] || MORNING_STATUS_META.no_quote;
-        const grp = r.group ? `<span class="text-xs text-slate-500">· ${r.group}</span>` : '';
         // GH #305: overhead-supply chip, joined off the prior-EOD picks_latest row via the
         // same ws4FindPicksRow() the trade ticket already uses (session store itself carries
         // neither 52W High nor atr_ext_50) — reuses computeLaunchReady() as-is, so a name with
         // no EOD match just renders no chip (silence = no signal).
         const picksRow = ws4FindPicksRow(r.ticker);
         const launchReady = picksRow ? computeLaunchReady(picksRow) : null;
-        const launchReadyChip = launchReady
-          ? `<span class="text-[0.55rem] px-1 rounded font-bold ml-1 ${launchReady.cls}" title="Launch-ready: overhead supply vs. 52-week high + short-term extension">${launchReady.label}</span>`
-          : '';
-        return `
-          <div class="bg-slate-800 border border-slate-700 border-l-4 ${meta.stripe} rounded-lg px-3.5 py-3">
-            <div class="flex justify-between items-center">
-              <span><span class="font-bold text-sm tracking-wide">${r.ticker}</span>${launchReadyChip}${deltaChip(r0)} ${grp}</span>
-              <span class="text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${meta.pill}">${meta.label}</span>
-            </div>
-            ${morningCardBody(r)}
-          </div>`;
-      }).join('');
+        const focusScore = _morningFocusMap.has(r.ticker) ? _morningFocusMap.get(r.ticker) : null;
+        const atrLodRaw = parseFloat(r.atr_from_lod);
+        const relVolRaw = _pF(r['Rel Volume']);
+        return {
+          r0, r, meta, launchReady, focusScore,
+          atrLod: isNaN(atrLodRaw) ? null : atrLodRaw,
+          relVol: isNaN(relVolRaw) ? null : relVolRaw,
+        };
+      });
 
-      el.innerHTML = toggle + header + cards;
+      // Launch-ready filter — independent axis from sort (docs/CLAUDE.md § Morning tab).
+      // Counts on the filter pills themselves are computed off `enriched` (the unfiltered
+      // pool), not `filtered`, so a pill always shows how many rows selecting it would show.
+      const filterVal = state.morningLaunchFilter;
+      const filtered = filterVal === 'all'
+        ? enriched
+        : enriched.filter(e => e.launchReady && e.launchReady.label === filterVal);
+
+      const launchFilterBar = morningLaunchFilterHtml(enriched);
+      const sortBar = morningSortBarHtml();
+
+      if (filtered.length === 0) {
+        el.innerHTML = toggle + header + launchFilterBar + sortBar +
+          `<p class="text-slate-400 text-sm text-center py-8">No ${escapeHtml(filterVal)} setups right now — try All.</p>`;
+        return;
+      }
+
+      let bodyHtml;
+      if (state.morningSort === 'rel_volume' && state.morningSortScope === 'global') {
+        // Flattened (the one case bucket grouping doesn't apply): a single list ordered purely
+        // by Rel volume, ignoring status entirely — "what's most active right now" is a
+        // different question from "what's most active among my Triggered names," so it earns
+        // its own cross-bucket mode. Each card still carries its own status pill. No mini-nav
+        // or collapsible sections here — there are no bucket boundaries to jump to or collapse.
+        const globalSorted = [...filtered].sort((a, b) => {
+          if (a.relVol === null && b.relVol === null) return String(a.r.ticker).localeCompare(String(b.r.ticker));
+          if (a.relVol === null) return 1;
+          if (b.relVol === null) return -1;
+          return b.relVol - a.relVol;
+        });
+        bodyHtml = globalSorted.map(e => morningCardHtml(e, deltaChip)).join('');
+      } else {
+        // Bucket-preserving (default for every sort mode): group by exact status, order
+        // buckets by MORNING_STATUS_META.order (status key A–Z as a stable tiebreak for the
+        // gapped_through/reclaim tie at order 1), then sort each bucket's own cards by the
+        // chosen key. Only non-empty buckets render — an empty bucket after filtering
+        // contributes zero pixels rather than a dead "Coiled (0)" header.
+        const buckets = new Map();
+        filtered.forEach(e => {
+          const key = e.r.status;
+          if (!buckets.has(key)) buckets.set(key, []);
+          buckets.get(key).push(e);
+        });
+        const bucketOrder = [...buckets.keys()].sort((a, b) => {
+          const oa = (MORNING_STATUS_META[a] || MORNING_STATUS_META.no_quote).order;
+          const ob = (MORNING_STATUS_META[b] || MORNING_STATUS_META.no_quote).order;
+          return oa - ob || a.localeCompare(b);
+        });
+
+        const miniNav = morningMiniNavHtml(bucketOrder, buckets);
+        bodyHtml = miniNav + bucketOrder.map(status => {
+          const entries = sortMorningEntries(buckets.get(status), state.morningSort);
+          const meta = MORNING_STATUS_META[status] || MORNING_STATUS_META.no_quote;
+          const collapsed = state.morningCollapsed.has(status);
+          return `
+            <div id="morning-bucket-${status}" class="mb-2">
+              <button onclick="__toggleMorningBucket('${status}')" class="w-full flex items-center justify-between px-1 py-1.5 text-xs font-semibold text-slate-300">
+                <span>${meta.label} <span class="text-slate-500 font-normal tabular-nums">(${entries.length})</span></span>
+                <span class="text-slate-500">${collapsed ? '▸' : '▾'}</span>
+              </button>
+              ${collapsed ? '' : `<div class="space-y-2">${entries.map(e => morningCardHtml(e, deltaChip)).join('')}</div>`}
+            </div>`;
+        }).join('');
+      }
+
+      el.innerHTML = toggle + header + launchFilterBar + sortBar + bodyHtml;
     }
+
+    // One morning card's outer chrome (ticker line + status pill + body) — extracted from
+    // renderMorning() so the bucket-grouped and flattened (global Rel-volume) render paths
+    // share one card renderer.
+    function morningCardHtml(e, deltaChip) {
+      const { r0, r, meta, launchReady, focusScore } = e;
+      const grp = r.group ? `<span class="text-xs text-slate-500">· ${r.group}</span>` : '';
+      const launchReadyChip = launchReady
+        ? `<span class="text-[0.55rem] px-1 rounded font-bold ml-1 ${launchReady.cls}" title="Launch-ready: overhead supply vs. 52-week high + short-term extension">${launchReady.label}</span>`
+        : '';
+      // Reuses the exact score focusScoreMapForPool()/ws4FocusScore compute — see that
+      // function's comment. null (not a Focus candidate today) renders nothing, same
+      // silence = no signal convention as launchReadyChip above.
+      const focusChip = focusScore !== null
+        ? `<span class="text-[0.55rem] px-1 rounded font-bold ml-1 bg-sky-500/15 text-sky-400" title="Focus score: pool-relative vs today's other Focus candidates">Focus ${Math.round(focusScore * 100)}%</span>`
+        : '';
+      return `
+        <div class="bg-slate-800 border border-slate-700 border-l-4 ${meta.stripe} rounded-lg px-3.5 py-3">
+          <div class="flex justify-between items-center">
+            <span><span class="font-bold text-sm tracking-wide">${r.ticker}</span>${launchReadyChip}${focusChip}${deltaChip(r0)} ${grp}</span>
+            <span class="text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${meta.pill}">${meta.label}</span>
+          </div>
+          ${morningCardBody(r)}
+        </div>`;
+    }
+
+    // Bucket-scoped tiebreak for the Morning sort toggle. Nulls always sort last within a
+    // bucket (never NaN-crashes the comparator on missing data), then ticker A–Z among
+    // themselves — 'az' is exactly this same tiebreak with no primary key, kept as an explicit
+    // option rather than removed (docs/CLAUDE.md § Morning tab).
+    function sortMorningEntries(entries, sortKey) {
+      const byTicker = (a, b) => String(a.r.ticker).localeCompare(String(b.r.ticker));
+      if (sortKey === 'focus') {
+        return [...entries].sort((a, b) => {
+          if (a.focusScore === null && b.focusScore === null) return byTicker(a, b);
+          if (a.focusScore === null) return 1;
+          if (b.focusScore === null) return -1;
+          return b.focusScore - a.focusScore || byTicker(a, b);
+        });
+      }
+      if (sortKey === 'atr_lod') {
+        return [...entries].sort((a, b) => {
+          if (a.atrLod === null && b.atrLod === null) return byTicker(a, b);
+          if (a.atrLod === null) return 1;
+          if (b.atrLod === null) return -1;
+          return a.atrLod - b.atrLod || byTicker(a, b);
+        });
+      }
+      if (sortKey === 'rel_volume') {
+        return [...entries].sort((a, b) => {
+          if (a.relVol === null && b.relVol === null) return byTicker(a, b);
+          if (a.relVol === null) return 1;
+          if (b.relVol === null) return -1;
+          return b.relVol - a.relVol || byTicker(a, b);
+        });
+      }
+      return [...entries].sort(byTicker); // 'az'
+    }
+
+    // Launch-ready filter pill row (independent axis from sort — see docs/CLAUDE.md § Morning
+    // tab). Counts reflect the full enriched pool so a pill always previews what selecting it
+    // would show, not what's currently visible under some OTHER already-active filter.
+    function morningLaunchFilterHtml(enriched) {
+      const counts = { Coiled: 0, Extended: 0, Overhead: 0 };
+      enriched.forEach(e => { if (e.launchReady && counts[e.launchReady.label] !== undefined) counts[e.launchReady.label]++; });
+      const opt = (v, label) => {
+        const on = state.morningLaunchFilter === v;
+        return `<button class="px-3 py-1 text-xs rounded-full font-medium ${on ? 'bg-slate-600 text-white' : 'bg-slate-700 text-slate-400'}" onclick="__setMorningLaunchFilter('${v}')">${label}</button>`;
+      };
+      const withCount = (label, n) => n > 0 ? `${label} (${n})` : label;
+      return `<div class="flex items-center gap-1 mb-2 flex-wrap"><span class="text-xs text-slate-500 mr-1">Setup:</span>${opt('all', 'All')}${opt('Coiled', withCount('Coiled', counts.Coiled))}${opt('Extended', withCount('Extended', counts.Extended))}${opt('Overhead', withCount('Overhead', counts.Overhead))}</div>`;
+    }
+
+    // Sort-mode pill row. The Rel-volume scope switch (In bucket / All) only renders when Rel
+    // volume is the active sort — keeping the primary row at a constant 4 pills on a tab that's
+    // already stacking the Read toggle + subtabs + this filter row above the first card.
+    function morningSortBarHtml() {
+      const opt = (v, label) => {
+        const on = state.morningSort === v;
+        return `<button class="px-3 py-1 text-xs rounded-full font-medium ${on ? 'bg-slate-600 text-white' : 'bg-slate-700 text-slate-400'}" onclick="__setMorningSort('${v}')">${label}</button>`;
+      };
+      const scopeToggle = state.morningSort === 'rel_volume'
+        ? `<span class="inline-flex rounded-full bg-slate-900 p-0.5 ml-1">
+             <button class="px-2 py-0.5 text-[10px] rounded-full font-medium ${state.morningSortScope === 'bucket' ? 'bg-slate-600 text-white' : 'text-slate-400'}" onclick="__setMorningSortScope('bucket')">In bucket</button>
+             <button class="px-2 py-0.5 text-[10px] rounded-full font-medium ${state.morningSortScope === 'global' ? 'bg-slate-600 text-white' : 'text-slate-400'}" onclick="__setMorningSortScope('global')">All</button>
+           </span>`
+        : '';
+      return `<div class="flex items-center gap-1 mb-3 flex-wrap"><span class="text-xs text-slate-500 mr-1">Sort:</span>${opt('az', 'A–Z')}${opt('focus', 'Focus score')}${opt('atr_lod', 'ATR from LoD')}${opt('rel_volume', 'Rel volume')}${scopeToggle}</div>`;
+    }
+
+    // Sticky bucket jump-nav — shows only when there's more than one bucket to jump between.
+    // Counts reflect the current (post-filter) set, same as the launch-filter pills.
+    function morningMiniNavHtml(bucketOrder, buckets) {
+      if (bucketOrder.length <= 1) return '';
+      const items = bucketOrder.map(status => {
+        const meta = MORNING_STATUS_META[status] || MORNING_STATUS_META.no_quote;
+        const n = buckets.get(status).length;
+        return `<button onclick="__jumpToMorningBucket('${status}')" class="text-xs text-slate-400 hover:text-slate-200 whitespace-nowrap">${meta.label} <span class="tabular-nums text-slate-500">(${n})</span></button>`;
+      }).join('<span class="text-slate-700">·</span> ');
+      return `<div class="flex items-center gap-2 overflow-x-auto mb-3 pb-1.5 sticky top-0 bg-slate-900/95 backdrop-blur-sm z-10 -mx-1 px-1 border-b border-slate-800">${items}</div>`;
+    }
+
+    window.__setMorningSort = function (v) {
+      state.morningSort = v;
+      renderMorning();
+    };
+    window.__setMorningSortScope = function (v) {
+      state.morningSortScope = v;
+      renderMorning();
+    };
+    window.__setMorningLaunchFilter = function (v) {
+      state.morningLaunchFilter = v;
+      renderMorning();
+    };
+    window.__toggleMorningBucket = function (status) {
+      if (state.morningCollapsed.has(status)) state.morningCollapsed.delete(status);
+      else state.morningCollapsed.add(status);
+      renderMorning();
+    };
+    // Jumping to a collapsed bucket force-expands it first — landing on a collapsed header
+    // with nothing visible underneath would look broken, not like a successful jump.
+    window.__jumpToMorningBucket = function (status) {
+      state.morningCollapsed.delete(status);
+      renderMorning();
+      requestAnimationFrame(() => {
+        const target = document.getElementById(`morning-bucket-${status}`);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    };
 
     async function loadAndRender(force = false, minMs = 0) {
       setLoading(true);

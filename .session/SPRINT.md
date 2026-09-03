@@ -8,6 +8,13 @@
 
 ### 🔴 Backlog
 
+#### Morning Tab (sort/filter/collapse follow-ups, 2026-09-03)
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| MORN-SORT-1 | **Add missing `pre_close_latest.csv` stub to `test_pwa_positions.py`** | `tests/test_pwa_positions.py` | XS | Found while verifying the Morning sort/filter/collapse feature: unlike every other Morning-adjacent test file (`test_pwa_morning.py`, `test_pwa_trade_ticket.py`, `test_pwa_watchlist.py`), `test_pwa_positions.py`'s `_base_routes()` never stubs `**/sessions/pre_close_latest.csv`. 4 of its tests that visit the Morning tab hang for the full 30s timeout in a network-restricted sandbox (confirmed against the pre-change baseline via `git stash` — not a regression from the sort/filter PR). Presumably invisible in CI/local dev with real network access. Add the same one-line stub the other files already carry. |
+| MORN-SORT-2 | **Reconsider default-collapsed non-actionable buckets** | `docs/index.html` (`state.morningCollapsed` initial value) | XS | The sort/filter/collapse PR ships bucket collapse fully expanded by default (no density change from before) — conservative choice since default-collapsing Setting-up/Invalidated/Failed-breakout/No-quote wasn't explicitly requested beyond "can we do both [mini-nav and collapse]?". If the owner finds the tab still too long to scroll day-to-day, flip `state.morningCollapsed`'s initial value to `new Set(['failed_breakout','setting_up','invalidated','no_quote'])` — one line — and update `tests/test_pwa_morning.py::test_all_statuses_render_in_actionability_order` (currently asserts all 6 statuses render un-collapsed) to force-expand or check per-bucket instead. |
+
 #### Trade Lifecycle (WS4 — trade tickets)
 
 | VOL-FLOOR-2 | **Warning chip for below-floor watchlist tickers** | `docs/index.html` (`watchCardHtml`) | XS | 🔴 Backlog (deferred from VOL-FLOOR-1, 2026-09-02, non-blocking). Lookup shows an amber "Low volatility" chip when a directly-searched ticker fails `passesVolatilityFloor` instead of hiding it (explicit user intent). Watchlist entries are the same kind of explicit intent and are similarly exempt from the hard hide, but currently get no equivalent chip — the existing "Volatility & setup" section on the watch card already shows raw Vol W/ATR values, so the data is visible, just not flagged. Add the same chip there for consistency if the owner wants it. |
