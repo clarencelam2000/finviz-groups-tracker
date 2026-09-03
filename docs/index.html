@@ -5410,6 +5410,18 @@
         Stocks from today's leading and emerging industry groups — sectors showing sustained relative strength vs. the S&P 500. Every name is above its 50-day moving average. Browse the full universe here by group, or switch to <strong class="text-white">Focus ★</strong> for today's highest-conviction setups ranked by quality score.
       </div>`;
 
+      // Reason chips per group header — same CATEGORY_LABEL/CATEGORY_CHIP_CLS chips
+      // renderLookupStage2() shows in the Lookup tab, so a group qualifying under
+      // several buckets today (e.g. Leaders + Accel) isn't only visible in the one
+      // section it happens to be rendered under here.
+      const groupCatMap = new Map();
+      for (const cat of Object.keys(catMap)) {
+        for (const grp of Object.keys(catMap[cat])) {
+          if (!groupCatMap.has(grp)) groupCatMap.set(grp, new Set());
+          groupCatMap.get(grp).add(cat);
+        }
+      }
+
       const catsPresent = CAT_ORDER.filter(c => catMap[c]);
 
       // Flatten in the SAME category → group → ATR-ascending order used to render the list
@@ -5445,10 +5457,18 @@
         for (const grp of Object.keys(groups).sort()) {
           const stocks = groups[grp];
           const grpChartsUrl = buildChartsUrl(stocks.map(r => r.ticker || r.Ticker || ''));
+          const grpCats = groupCatMap.get(grp) || new Set();
+          const grpChips = CAT_ORDER
+            .filter(c => grpCats.has(c))
+            .map(c => `<span class="text-[0.6rem] px-1.5 py-0.5 rounded-full ${CATEGORY_CHIP_CLS[c] || 'bg-slate-700/60 text-slate-300'}">${CATEGORY_LABEL[c] || c}</span>`)
+            .join('');
           html += `<div class="mb-2 bg-slate-800/60 rounded-lg overflow-hidden border border-slate-700/50">
-            <div class="flex items-center justify-between px-3 py-2 bg-slate-800 border-b border-slate-700">
-              <button data-pick-group-lookup="${escapeHtml(grp)}" class="text-xs font-medium text-slate-200 truncate hover:text-indigo-300 transition-colors text-left">${escapeHtml(grp)} ›</button>
-              <span class="text-xs text-slate-500 ml-2 flex-shrink-0 whitespace-nowrap">${stocks.length} name${stocks.length !== 1 ? 's' : ''} · <a href="${escapeHtml(grpChartsUrl)}" target="_blank" rel="noopener noreferrer" class="hover:text-slate-300 transition-colors" onclick="event.stopPropagation()">Charts ↗</a></span>
+            <div class="px-3 py-2 bg-slate-800 border-b border-slate-700">
+              <div class="flex items-center justify-between">
+                <button data-pick-group-lookup="${escapeHtml(grp)}" class="text-xs font-medium text-slate-200 truncate hover:text-indigo-300 transition-colors text-left">${escapeHtml(grp)} ›</button>
+                <span class="text-xs text-slate-500 ml-2 flex-shrink-0 whitespace-nowrap">${stocks.length} name${stocks.length !== 1 ? 's' : ''} · <a href="${escapeHtml(grpChartsUrl)}" target="_blank" rel="noopener noreferrer" class="hover:text-slate-300 transition-colors" onclick="event.stopPropagation()">Charts ↗</a></span>
+              </div>
+              ${grpChips ? `<div class="flex items-center gap-1 flex-wrap mt-1">${grpChips}</div>` : ''}
             </div>`;
           for (const r of stocks) {
             const fsKey = r.ticker + '_' + (r.list_category || '');
@@ -8853,18 +8873,19 @@
       setTimeout(() => overlay.classList.add('hidden'), 300);
     }
 
-    // Group peek sheet: opened by tapping an inline group-name chip (currently
-    // only in the AI tab's daily note, via groupChipHtml()). Reuses groupPerfCard()
-    // — the same renderer Lookup uses — so the peek and the full Lookup view can
-    // never drift apart. Defaults to the compact card; "Show full breakdown"
-    // re-renders in place with expanded=true instead of cramming everything in
-    // by default, matching the "doesn't break reading flow" goal for a peek.
+    // Group peek sheet: opened by tapping an inline group-name chip in the AI tab's
+    // daily note (via groupChipHtml()) or a group tap target in the Picks tab (via
+    // data-pick-group-lookup). Reuses groupPerfCard() — the same renderer Lookup
+    // uses — so the peek and the full Lookup view can never drift apart. Defaults
+    // to the compact card so a chip tap mid-read doesn't cram everything onto the
+    // screen; callers that want the reader to land on the full breakdown right away
+    // (Picks — the user already picked this exact group) pass expanded=true.
     let _peekExpanded = false;
-    function openGroupPeek(name, groupKey) {
+    function openGroupPeek(name, groupKey, expanded = false) {
       const overlay = document.getElementById('peek-overlay');
       const sheet = document.getElementById('peek-sheet');
       if (!overlay || !name || !groupKey) return;
-      _peekExpanded = false;
+      _peekExpanded = !!expanded;
       document.getElementById('peek-title').textContent = groupKey === 'sectors' ? 'Sector' : 'Industry';
       renderGroupPeekBody(name, groupKey);
       overlay.classList.remove('hidden');
@@ -9378,17 +9399,17 @@
       renderToday();
     });
 
-    // Picks group lookup tap → Lookup (Focus subtitles + All view group headers; picks are always industries).
+    // Picks group tap → group peek sheet (Focus subtitles + All view group headers; picks
+    // are always industries), defaulted to the full breakdown view — same sheet the AI tab's
+    // group chips open (openGroupPeek), just landing expanded since the user already picked
+    // this exact group. "Full lookup ↗" inside the sheet still reaches the full Lookup tab.
     document.getElementById('picks-list').addEventListener('click', e => {
       const btn = e.target.closest('[data-pick-group-lookup]');
       if (!btn) return;
       e.stopPropagation();
       const name = btn.dataset.pickGroupLookup;
       if (!name) return;
-      switchTab('lookup');
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0; // iOS Safari
-      doGroupLookup(name, 'industries');
+      openGroupPeek(name, 'industries', true);
     });
 
     document.getElementById('refresh-btn').addEventListener('click', window.__refresh);

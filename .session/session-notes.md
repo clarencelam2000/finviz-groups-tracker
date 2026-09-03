@@ -6,6 +6,39 @@
 
 ---
 
+## 2026-09-03 — Picks tab: group tap opens quick detail sheet + reason chips on group headers
+
+**Status: safe to close** — implemented, verified functionally with a Playwright fixture-intercept
+smoke test (headless Chromium, both changes confirmed rendering correctly, screenshots taken),
+release surface updated in the same PR. Non-Playwright pytest suite green (797 passed — the 75
+"failed" in a raw pytest run are the known sandbox-only Chromium revision mismatch documented in
+`knowledge/investigations/playwright-cloud-session-testing.md` Root cause 1, not a regression).
+
+**Two small UX asks from the owner (screenshots of the live PWA):**
+1. Tapping a group name on the Picks tab (`data-pick-group-lookup` — both the All view's group
+   headers and the Focus view's per-row group subtitle share this one click handler) used to
+   `switchTab('lookup')` + `doGroupLookup()`, navigating away entirely. It now calls
+   `openGroupPeek(name, 'industries', true)` instead — the same slide-up sheet the AI tab's
+   inline group-name chips (`groupChipHtml()`) already open, reusing `groupPerfCard()` so there's
+   only one renderer to keep in sync with the full Lookup tab. `openGroupPeek()` gained a third
+   `expanded` param (default `false`, preserving the AI tab's existing compact-card behavior) so
+   Picks can land the reader straight on the full breakdown (`_peekExpanded = true`) since they
+   already picked this exact group — no second tap needed. "Full lookup ↗" inside the sheet still
+   reaches the full Lookup tab for anyone who wants more than the peek.
+2. Each group header in the Picks tab's All view now shows the same reason chips
+   (Leaders/Emerging/Accel/RS New High/All Green, `CATEGORY_LABEL`/`CATEGORY_CHIP_CLS`) the
+   Lookup tab's `renderLookupStage2()` already shows — built from a `groupCatMap` (group →
+   Set of categories) derived from the same `catMap` the All view already groups by, so a group
+   qualifying under several buckets today isn't only visible in the one category section it
+   happens to render under.
+
+**Release surface (hard rule, same PR):** `docs/releases.json` `2026.09.03` entry prepended,
+`current` bumped; `docs/sw.js` `CACHE` bumped `v94` → `v95`.
+
+**Next steps:** none outstanding — PR opened, ready for review.
+
+---
+
 ## 2026-09-02 — Volatility floor gate: hide near-dead stocks from Picks/Focus/Morning
 
 **Status: safe to close — implemented, tested (740 non-PW + 5/5 new volatility-gate PWA green,
