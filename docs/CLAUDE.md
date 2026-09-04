@@ -105,13 +105,25 @@ window, with an optional private "level of interest" overlay.
   real position should vanish outright, not sit in a removed bin. Both terminal statuses purge
   after `WATCHLIST_PURGE_DAYS` (worker-side `tickWatchlist()`), symmetric.
 - **Merge model, two sources joined client-side by ticker.** (1) The *public system read*:
-  `morning_latest.csv` rows tagged `list_category === 'watchlist'` — the same server-computed
-  status pipeline (`pick_status.py`) that scores picks, so watch tickers get a real
-  triggered/gapped/reclaim/etc. status without any private data leaving the CSV. (2) The
-  *private feed*: owner-bearer `GET /watchlist` on the `finviz-positions` worker, which returns
-  `level_type`/`level_value`, `sessions_remaining`, `status`, and reference values
-  (`prior_high`, `prior_low`, `atr`, `sma20`, `sma50`). The Morning-tab card
-  (`watchCardHtml(entry, pub)`) merges the two by `ticker` at render time.
+  `morning_latest.csv` rows for this ticker — the same server-computed status pipeline
+  (`pick_status.py`) that scores picks, so watch tickers get a real triggered/gapped/reclaim/etc.
+  status without any private data leaving the CSV. (2) The *private feed*: owner-bearer
+  `GET /watchlist` on the `finviz-positions` worker, which returns `level_type`/`level_value`,
+  `sessions_remaining`, `status`, and reference values (`prior_high`, `prior_low`, `atr`, `sma20`,
+  `sma50`). The Morning-tab card (`watchCardHtml(entry, pub)`) merges the two by `ticker` at
+  render time, via the shared `findWatchPub(ticker)` helper (defined just above `watchCardHtml`).
+  **`findWatchPub` deliberately does NOT require `list_category === 'watchlist'`
+  (WATCHLIST-PUB-LOOKUP, 2026-09-04 — fixed a real bug, not a hardening).** It prefers an exact
+  `'watchlist'`-tagged row but falls back to ANY row for the ticker: `collect_morning.py`'s
+  `union_watch_levels()` drops a watch ticker's own row whenever that ticker ALSO qualifies as a
+  Focus pick that day — the Focus pick's row (tagged `accel`/`leaders`/etc.) wins the collision,
+  and no `'watchlist'`-tagged row is written for that date at all, even though the same
+  `pick_status` engine computed a real classification. A strict `list_category` filter then finds
+  nothing and the card falls into the `awaitingFirstRead` "Pending read" state forever — confirmed
+  live on tickers that were both watched and recurring Focus picks (one had never shown a real
+  status since being added, since it already qualified as a pick before the watch entry existed).
+  The lookup is always called for one specific ticker the user is actively watching, so dropping
+  the `list_category` constraint can't accidentally pick up an unrelated ticker's row.
 - **Three card states, not two (WS-POSITIONS-STATUS, 2026-08-25).** `entry.prior_high == null`
   (no `ticker_quotes` bar exists at all yet) → the true "Added — first morning check lands
   tomorrow AM" state. A bar can exist (live via `GET /watchlist`, which updates hours before the

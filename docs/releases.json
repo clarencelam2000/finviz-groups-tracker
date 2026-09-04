@@ -1,6 +1,16 @@
 {
-  "current": "2026.09.04.1",
+  "current": "2026.09.04.2",
   "releases": [
+    {
+      "version": "2026.09.04.2",
+      "date": "2026-09-04",
+      "title": "Fix: watchlist stuck on \"Pending read\"",
+      "tag": "fix",
+      "tab": "morning",
+      "notes": [
+        "A watchlist ticker that also shows up in your daily Picks could get stuck showing \"Pending read\" indefinitely, even though a real status had already been computed for it — the card just wasn't looking in the right place for it. Watch cards now find that status wherever it landed."
+      ]
+    },
     {
       "version": "2026.09.04.1",
       "date": "2026-09-04",
