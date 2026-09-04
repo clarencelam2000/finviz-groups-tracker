@@ -39,6 +39,69 @@ release surface updated in the same PR. Non-Playwright pytest suite green (797 p
 
 ---
 
+## 2026-09-03 — Morning tab: sort, launch-ready filter, bucket collapse + mini-nav
+
+**Status: safe to close** — implemented, verified functionally with a headless-Chromium
+Playwright smoke run (executable_path workaround for this sandbox's Chromium revision mismatch
+— see `knowledge/investigations/playwright-cloud-session-testing.md`), 5 new committed
+Playwright tests added and passing (14/14 in `tests/test_pwa_morning.py`), non-Playwright
+pytest suite green (746 passed), release surface updated in the same PR.
+
+**Owner ask:** the Morning tab's picks-confirmation list only ever sorted by status bucket then
+ticker A–Z — with most cards landing in the same "Setting up" bucket on a typical day, it read
+as "just alphabetical." Worked through several rounds of design discussion (sort options, Focus
+score reuse-vs-recompute, Launch-ready filter interaction, bucket-navigation options) before
+building.
+
+**What shipped** (`renderMorning()` and helpers in `docs/index.html`; full design writeup in
+`docs/CLAUDE.md` § Morning tab):
+1. **Sort pills** (`state.morningSort`): A–Z / **Focus score (default)** / ATR from LoD / Rel
+   volume. Status-bucket grouping (Triggered → ... → No quote) is a constant — every sort mode
+   only reorders *within* a bucket, via one shared null-safe comparator
+   (`sortMorningEntries()`).
+2. **Rel volume's Bucket/Global scope switch** (`state.morningSortScope`) — a conditional
+   control that only appears when Rel volume is the active sort, rather than a permanent 5th
+   pill, given how much chrome already stacks above the first card. Global flattens every
+   status bucket into one cross-sectional "what's most active right now" list.
+3. **Focus score chip + sort share ONE computation.** Pulled the candidate-pool derivation +
+   `computeFocusScores()` call out of `ws4FocusScore()` into `focusScoreMapForPool()`, computed
+   once per render into `_morningFocusMap`. The new card chip, the `'focus'` sort branch, and
+   the existing trade-ticket footnote (`ws4TicketHtml`) all now read that one map — a future
+   Focus-formula change updates all three for free instead of risking silent disagreement.
+4. **Launch-ready filter** (`state.morningLaunchFilter`): All / Coiled / Extended / Overhead,
+   on the same `computeLaunchReady()` label already shown as a card chip — independent axis
+   from sort. Empties-to-zero shows filter-specific copy, not the generic no-picks-today state.
+5. **Bucket collapse + sticky mini-nav** (`state.morningCollapsed`, a `Set`): each bucket header
+   is a collapse toggle with a live count; the mini-nav (only rendered with >1 bucket) jumps to
+   any bucket and **force-expands it first** if collapsed, so a jump never lands on an empty
+   collapsed section. Starts fully expanded (no default-collapsed density change) — kept
+   conservative since that wasn't explicitly asked for beyond "can we do both."
+
+**Test-suite fallout from the new permanent "ATR from LoD" sort-pill label:** two existing
+`test_pwa_morning.py` assertions counted exact occurrences of the literal string "ATR from
+LoD" in the rendered HTML; the new sort pill (deliberately reusing that exact on-card copy
+rather than inventing a different label) adds one more permanent occurrence per render. Updated
+both expected counts (5→6, 2→3) with an inline comment explaining why — a real, expected
+consequence of shipping the feature, not a bug.
+
+**Pre-existing, unrelated finding (not fixed here, flagged as a separate task):**
+`tests/test_pwa_positions.py` never stubs `**/sessions/pre_close_latest.csv` the way every
+other Morning-adjacent test file does — 4 of its tests hang for the full 30s timeout in this
+network-restricted sandbox (confirmed reproducible against the pre-change baseline via `git
+stash`, so unrelated to this PR). Presumably invisible in CI/local dev with real network access
+(an unstubbed request just resolves instead of hanging), per Root cause 2 in
+`knowledge/investigations/playwright-cloud-session-testing.md`.
+
+**Release surface (hard rule, same PR):** `docs/releases.json` `2026.09.03.1` entry prepended,
+`current` bumped; `docs/sw.js` `CACHE` bumped `v95` → `v96`.
+
+**Next steps:** none outstanding — PR opened, ready for review. Optional follow-up (not
+blocking): add the missing pre-close stub to `test_pwa_positions.py`, and/or revisit whether
+non-actionable buckets (Setting up/Invalidated/Failed breakout/No quote) should default-collapse
+now that the toggle exists — deferred since it wasn't explicitly requested.
+
+---
+
 ## 2026-09-02 — Volatility floor gate: hide near-dead stocks from Picks/Focus/Morning
 
 **Status: safe to close — implemented, tested (740 non-PW + 5/5 new volatility-gate PWA green,

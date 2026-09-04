@@ -166,7 +166,56 @@ the empty state — a 404 is expected, never an error.
 - **Actionability sort** (`MORNING_STATUS_META[*].order`): Triggered → Gapped-through / Reclaimed
   (both order 1) → Failed breakout → Setting up → Invalidated → No quote. This is the *display*
   order and is deliberately different from the engine's evaluation precedence
-  (`pick_status.STATUS_PRECEDENCE`).
+  (`pick_status.STATUS_PRECEDENCE`). **This grouping is a constant** — it applies under every
+  sort mode below; the sort toggle only ever changes the tiebreak *within* a bucket (one
+  exception, Rel volume's Global scope — see below).
+- **Sort / launch-ready filter / bucket collapse + mini-nav (owner decision 2026-09-03).**
+  `renderMorning()` enriches each row once (`sessionDisplayRow`, EOD cross-ref via
+  `ws4FindPicksRow`, `computeLaunchReady`, Focus score, `atr_from_lod`, Rel Volume — see the
+  `enriched` map at the top of the function) before filtering/sorting/grouping, so those steps
+  never re-derive the same values per row.
+  - **Sort pills** (`morningSortBarHtml()`, `state.morningSort`): `A–Z` (today's plain ticker
+    order, kept as an explicit option, not removed), **`Focus score` (default)**, `ATR from LoD`
+    (reuses the exact on-card label/metric — deliberately not a separate "entry quality" name),
+    and `Rel volume`. `sortMorningEntries()` is the shared comparator: nulls (e.g. a ticker that
+    isn't a Focus candidate today) always sort last within a bucket, then ticker A–Z — it never
+    NaN-crashes on missing data.
+  - **Rel volume's scope switch** (`state.morningSortScope`, only rendered when
+    `morningSort==='rel_volume'` — a conditional control instead of a permanent 5th pill, given
+    how much chrome already stacks above the first card on this tab): `In bucket` (default,
+    same bucket-preserving behavior as the other three modes) or `Global`, which flattens ALL
+    status buckets into one Rel-volume-ranked list — "what's most active right now" is a
+    different question from "what's most active among my Triggered names," and doesn't make
+    sense gated by status. In Global mode there are no bucket headers, no mini-nav, and no
+    collapse — each card still shows its own status pill.
+  - **Focus score chip + card sort share ONE computation.** `focusScoreMapForPool()` runs the
+    same candidate derivation `ws4FocusScore()` has always used (C6 base filter +
+    `isFocusEligible` over `state.picksData` — matches the Picks tab's own Focus badges) and
+    `computeFocusScores()` pass. `renderMorning()` calls it once per render into module-level
+    `_morningFocusMap`; the per-card chip, the `'focus'` sort branch, AND `ws4FocusScore()`'s
+    trade-ticket footnote lookup (`ws4TicketHtml`, rendered later in the same synchronous render
+    pass) all read that one map — never three separate `computeFocusScores()` passes that could
+    disagree on a ticker's score within one render. A future change to the Focus formula or its
+    candidate pool updates the chip, the sort, and the footnote for free.
+  - **Launch-ready filter** (`morningLaunchFilterHtml()`, `state.morningLaunchFilter`): `All` /
+    `Coiled` / `Extended` / `Overhead`, filtering on the SAME `computeLaunchReady()` label
+    already shown as a card chip. Independent axis from sort — narrows the pool, then sort
+    orders whatever's left. Pill counts are computed off the full (unfiltered) enriched pool so
+    a pill always previews what selecting it would show. A filter that empties every bucket
+    shows filter-specific "No `<X>` setups right now — try All" copy, not the generic
+    no-picks-today empty state.
+  - **Bucket collapse + sticky mini-nav** (`state.morningCollapsed`, a `Set` of status keys;
+    `morningMiniNavHtml()`): each non-empty bucket header is a toggle button
+    (`__toggleMorningBucket`) showing its label + count; `state.morningCollapsed` starts EMPTY
+    (everything expanded, matching pre-2026-09-03 behavior) — the user collapses buckets
+    manually rather than the tab defaulting to a denser/quieter look on its own. The sticky
+    mini-nav (only rendered when there's more than one bucket) lists every non-empty bucket with
+    its count; `__jumpToMorningBucket()` force-expands the target bucket before scrolling to it
+    — landing on a collapsed header with nothing visible underneath would look like a broken
+    jump, not a successful one.
+  - All four pieces of state (`morningSort`, `morningSortScope`, `morningLaunchFilter`,
+    `morningCollapsed`) are session-only, same convention as `morningView`/`morningSubtab` —
+    they reset to their defaults on reload, never persisted.
 - **`atr_from_lod` + Rel volume render on every status (owner decision 2026-09-02); the "I
   took it" button stays actionable-only.** Originally `atr_from_lod` was computed and shown
   only for Triggered / Gapped-through / **Reclaimed** (`MORNING_STATUS_META[*].actionable`,
