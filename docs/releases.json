@@ -1,6 +1,15 @@
 {
-  "current": "2026.09.03.1",
+  "current": "2026.09.04",
   "releases": [
+    {
+      "version": "2026.09.04",
+      "date": "2026-09-04",
+      "title": "Bigger chart-toggle tap target",
+      "tag": "improvement",
+      "notes": [
+        "The Show/Hide chart control on Lookup, Picks, Morning, Positions, and your watchlist is now a full-width bar with tall side rails, instead of a small button in the corner — much easier to hit one-handed. The rails run alongside the chart itself once it's open, so closing it back up is just as easy."
+      ]
+    },
     {
       "version": "2026.09.03.1",
       "date": "2026-09-03",

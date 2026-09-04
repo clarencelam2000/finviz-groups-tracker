@@ -49,6 +49,19 @@
     .pos-card:has(.pos-fx:checked) .pos-formula { display: block; }
     .pos-bar { font-size: 11.5px; color: rgb(203 213 225); margin-top: 9px; padding-top: 9px; border-top: 1px dashed rgb(51 65 85); line-height: 1.7; }
     .pos-act { margin-top: 9px; padding-top: 9px; border-top: 1px dashed rgb(51 65 85); }
+
+    /* Chart-toggle footer (CHART-TAP-1) — drawer bar + edge rails, see chartToggleFooterHtml.
+       Tailwind's Play CDN can't express the absolutely-positioned full-height rails as utility
+       classes, so this lives here alongside the other hand-written component blocks above. */
+    .chart-toggle-wrap { position: relative; padding: 0 26px; }
+    .chart-toggle-rail { position: absolute; top: 0; bottom: 0; width: 26px; display: flex; align-items: center; justify-content: center; color: rgb(100 116 139); font-size: 13px; cursor: pointer; user-select: none; border-radius: 6px; }
+    .chart-toggle-rail:hover, .chart-toggle-rail:active { color: rgb(148 163 184); background: rgb(148 163 184 / 0.08); }
+    .chart-toggle-rail-l { left: 0; }
+    .chart-toggle-rail-r { right: 0; }
+    .chart-toggle-bar { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 44px; padding: 10px 8px; font-size: 0.7rem; font-weight: 500; color: rgb(148 163 184); background: rgb(51 65 85 / 0.6); border-radius: 8px; cursor: pointer; user-select: none; transition: background-color .15s ease; }
+    .chart-toggle-bar:hover, .chart-toggle-bar:active { background: rgb(71 85 105 / 0.7); }
+    .chart-toggle-chev { display: inline-block; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .2s ease; }
+    .chart-toggle-wrap[data-open="true"] .chart-toggle-chev { transform: rotate(-135deg); }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
@@ -3893,6 +3906,52 @@
         </div>`;
     }
 
+    // Chart-toggle footer (CHART-TAP-1): full-width drawer bar + tall edge rails, all three
+    // wired to the same toggle call. Replaces the old corner pill (~34x24pt, under Apple's
+    // 44x44pt tap-target minimum) with one target that's easy to hit one-handed. Shared across
+    // Lookup/Picks/Morning/Positions — each caller passes its own toggle call string since the
+    // four toggle functions address by different keys (symbol vs. key+expandKey vs. ticker vs.
+    // trade_id). The rails run the full height of .chart-toggle-wrap, which grows to include
+    // the chart panel once open, so closing has the same reach as opening.
+    // extraClass carries each surface's pre-existing class name (pick-chart-toggle,
+    // lookup-chart-toggle, etc.) forward onto the drawer bar so existing test selectors and any
+    // future per-surface styling keep working unchanged.
+    function chartToggleFooterHtml(wrapId, panelId, onToggleCall, isOpen, panelInnerHtml, extraClass, dataAttrs) {
+      const label = isOpen ? 'Hide chart' : 'Show chart';
+      const attrs = dataAttrs || '';
+      return `
+        <div id="${wrapId}" class="chart-toggle-wrap" data-open="${isOpen ? 'true' : 'false'}">
+          <div class="chart-toggle-rail chart-toggle-rail-l" onclick="event.stopPropagation();${onToggleCall}" aria-hidden="true">‹</div>
+          <div class="chart-toggle-rail chart-toggle-rail-r" onclick="event.stopPropagation();${onToggleCall}" aria-hidden="true">›</div>
+          <div class="chart-toggle-bar ${extraClass || ''}" onclick="event.stopPropagation();${onToggleCall}" role="button" aria-expanded="${isOpen ? 'true' : 'false'}"${attrs}>
+            <span class="chart-toggle-label">${label}</span><span class="chart-toggle-chev"></span>
+          </div>
+          <div id="${panelId}" class="mt-2">${isOpen ? panelInnerHtml : ''}</div>
+        </div>`;
+    }
+
+    // DOM-patch the label/chevron/aria state after a toggle — companion to
+    // chartToggleFooterHtml, used by every toggle function below instead of each hand-rolling
+    // the same three attribute/text updates.
+    function updateChartToggleFooterState(wrapId, isOpen) {
+      const wrap = document.getElementById(wrapId);
+      if (!wrap) return;
+      wrap.setAttribute('data-open', isOpen ? 'true' : 'false');
+      const bar = wrap.querySelector('.chart-toggle-bar');
+      if (bar) bar.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      const label = wrap.querySelector('.chart-toggle-label');
+      if (label) label.textContent = isOpen ? 'Hide chart' : 'Show chart';
+    }
+
+    // Lazy-load the TradingView chart panel only when the user explicitly opens it. Lookup is a
+    // single-result panel (not a per-row list), so unlike the Picks/Morning/Positions toggles
+    // below it does a full renderLookup() rather than a DOM patch — same behavior as the event
+    // delegation this replaced, just invoked directly by the chart-toggle-wrap's onclick.
+    window.__toggleLookupChart = function () {
+      state.lookup.chartOpen = !state.lookup.chartOpen;
+      renderLookup();
+    };
+
     function renderLookup() {
       const el = document.getElementById('lookup-result');
       if (!el) return;
@@ -3981,10 +4040,12 @@
             class="text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">Finviz ↗</a>
           <a href="https://www.tradingview.com/symbols/${symEnc}/" target="_blank" rel="noopener noreferrer"
             class="text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">TradingView ↗</a>
-          <button class="lookup-chart-toggle text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600"
-            data-symbol="${escapeHtml(data.symbol)}">${state.lookup.chartOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
         </div>`;
-      const chartPanel = state.lookup.chartOpen ? `<div class="mt-2">${tradingViewChartHtml(data.symbol)}</div>` : '';
+      const chartPanel = chartToggleFooterHtml(
+        'lookup-chart-wrap', 'lookup-chart-panel', '__toggleLookupChart()', state.lookup.chartOpen,
+        state.lookup.chartOpen ? tradingViewChartHtml(data.symbol) : '',
+        'lookup-chart-toggle', ` data-symbol="${escapeHtml(data.symbol)}"`
+      );
 
       let html = `
         <div class="flex gap-3 items-start">
@@ -5041,9 +5102,15 @@
               <a href="https://finviz.com/quote.ashx?t=${encodeURIComponent(ticker)}" target="_blank" rel="noopener noreferrer" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation()">Finviz ↗</a>
               <a href="https://www.tradingview.com/symbols/${encodeURIComponent(ticker)}/" target="_blank" rel="noopener noreferrer" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation()">TradingView ↗</a>
               ${r.group ? `<a href="${escapeHtml(buildScreenerUrl('ind', slugifyGroup(r.group)))}" target="_blank" rel="noopener noreferrer" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation()">Peers in group ↗</a>` : ''}
-              <button id="pick-chart-toggle-${key}" class="pick-chart-toggle text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" data-key="${key}" data-expand-key="${escapeHtml(expandKey)}" data-ticker="${escapeHtml(ticker)}" onclick="event.stopPropagation();__togglePickChart('${key}','${expandKey.replace(/'/g, "\\'")}','${ticker.replace(/'/g, "\\'")}')">${state.picksChartOpen.has(expandKey) ? 'Hide chart ▲' : 'Show chart ▼'}</button>
             </div>
-            <div id="pick-chart-panel-${key}" class="mt-2">${state.picksChartOpen.has(expandKey) ? tradingViewChartHtml(ticker, 560) : ''}</div>
+            ${chartToggleFooterHtml(
+              'pick-chart-wrap-' + key, 'pick-chart-panel-' + key,
+              `__togglePickChart('${key}','${expandKey.replace(/'/g, "\\'")}','${ticker.replace(/'/g, "\\'")}')`,
+              state.picksChartOpen.has(expandKey),
+              state.picksChartOpen.has(expandKey) ? tradingViewChartHtml(ticker, 560) : '',
+              'pick-chart-toggle',
+              ` data-key="${key}" data-expand-key="${escapeHtml(expandKey)}" data-ticker="${escapeHtml(ticker)}"`
+            )}
           </div>`;
       }
 
@@ -5200,18 +5267,16 @@
     // same lifecycle as picksExpanded.
     window.__togglePickChart = function(key, expandKey, ticker) {
       const panel = document.getElementById('pick-chart-panel-' + key);
-      const btn = document.getElementById('pick-chart-toggle-' + key);
       if (!panel) return;
       const isOpen = state.picksChartOpen.has(expandKey);
       if (isOpen) {
         state.picksChartOpen.delete(expandKey);
         panel.innerHTML = '';
-        if (btn) btn.textContent = 'Show chart ▼';
       } else {
         state.picksChartOpen.add(expandKey);
         panel.innerHTML = tradingViewChartHtml(ticker, 560);
-        if (btn) btn.textContent = 'Hide chart ▲';
       }
+      updateChartToggleFooterState('pick-chart-wrap-' + key, !isOpen);
     };
 
     window.__setPickBasis = function(key, basis) {
@@ -5720,8 +5785,12 @@
       const tickerJs = ticker.replace(/'/g, "\\'");
       return `
         <div class="mt-2 pt-2 border-t border-slate-700/50">
-          <button id="morning-chart-toggle-${escapeHtml(ticker)}" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation();__toggleMorningChart('${tickerJs}')">${isOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
-          <div id="morning-chart-panel-${escapeHtml(ticker)}" class="mt-2">${isOpen ? tradingViewChartHtml(ticker, 560) : ''}</div>
+          ${chartToggleFooterHtml(
+            'morning-chart-wrap-' + escapeHtml(ticker), 'morning-chart-panel-' + escapeHtml(ticker),
+            `__toggleMorningChart('${tickerJs}')`, isOpen,
+            isOpen ? tradingViewChartHtml(ticker, 560) : '',
+            'morning-chart-toggle', ` data-ticker="${escapeHtml(ticker)}"`
+          )}
         </div>`;
     }
 
@@ -5730,18 +5799,16 @@
     // across renderMorning() re-renders (tab switches, WS4 ticket toggles).
     window.__toggleMorningChart = function(ticker) {
       const panel = document.getElementById('morning-chart-panel-' + ticker);
-      const btn = document.getElementById('morning-chart-toggle-' + ticker);
       if (!panel) return;
       const isOpen = state.morningChartOpen.has(ticker);
       if (isOpen) {
         state.morningChartOpen.delete(ticker);
         panel.innerHTML = '';
-        if (btn) btn.textContent = 'Show chart ▼';
       } else {
         state.morningChartOpen.add(ticker);
         panel.innerHTML = tradingViewChartHtml(ticker, 560);
-        if (btn) btn.textContent = 'Hide chart ▲';
       }
+      updateChartToggleFooterState('morning-chart-wrap-' + ticker, !isOpen);
     };
 
     // ── WS4 Phase B trade ticket (ADR-014) ──────────────────────────────────
@@ -7368,25 +7435,27 @@
       const tickerJs = ticker.replace(/'/g, "\\'");
       return `
         <div class="mt-2.5 pt-2 border-t border-slate-700/50">
-          <button id="pos-chart-toggle-${escapeHtml(tradeId)}" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation();__togglePosChart('${tradeIdJs}','${tickerJs}')">${isOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
-          <div id="pos-chart-panel-${escapeHtml(tradeId)}" class="mt-2">${isOpen ? tradingViewChartHtml(ticker, 560) : ''}</div>
+          ${chartToggleFooterHtml(
+            'pos-chart-wrap-' + escapeHtml(tradeId), 'pos-chart-panel-' + escapeHtml(tradeId),
+            `__togglePosChart('${tradeIdJs}','${tickerJs}')`, isOpen,
+            isOpen ? tradingViewChartHtml(ticker, 560) : '',
+            'pos-chart-toggle', ` data-trade-id="${escapeHtml(tradeId)}" data-ticker="${escapeHtml(ticker)}"`
+          )}
         </div>`;
     }
 
     window.__togglePosChart = function (tradeId, ticker) {
       const panel = document.getElementById('pos-chart-panel-' + tradeId);
-      const btn = document.getElementById('pos-chart-toggle-' + tradeId);
       if (!panel) return;
       const isOpen = state.posChartOpen.has(tradeId);
       if (isOpen) {
         state.posChartOpen.delete(tradeId);
         panel.innerHTML = '';
-        if (btn) btn.textContent = 'Show chart ▼';
       } else {
         state.posChartOpen.add(tradeId);
         panel.innerHTML = tradingViewChartHtml(ticker, 560);
-        if (btn) btn.textContent = 'Hide chart ▲';
       }
+      updateChartToggleFooterState('pos-chart-wrap-' + tradeId, !isOpen);
     };
 
     function renderPositions() {
@@ -8322,25 +8391,27 @@
       const tickerJs = ticker.replace(/'/g, "\\'");
       return `
         <div class="mt-2 pt-2 border-t border-slate-700/50">
-          <button id="watch-chart-toggle-${escapeHtml(ticker)}" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation();__toggleWatchChart('${tickerJs}')">${isOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
-          <div id="watch-chart-panel-${escapeHtml(ticker)}" class="mt-2">${isOpen ? tradingViewChartHtml(ticker, 560) : ''}</div>
+          ${chartToggleFooterHtml(
+            'watch-chart-wrap-' + escapeHtml(ticker), 'watch-chart-panel-' + escapeHtml(ticker),
+            `__toggleWatchChart('${tickerJs}')`, isOpen,
+            isOpen ? tradingViewChartHtml(ticker, 560) : '',
+            'watch-chart-toggle', ` data-ticker="${escapeHtml(ticker)}"`
+          )}
         </div>`;
     }
 
     window.__toggleWatchChart = function (ticker) {
       const panel = document.getElementById('watch-chart-panel-' + ticker);
-      const btn = document.getElementById('watch-chart-toggle-' + ticker);
       if (!panel) return;
       const isOpen = state.watchChartOpen.has(ticker);
       if (isOpen) {
         state.watchChartOpen.delete(ticker);
         panel.innerHTML = '';
-        if (btn) btn.textContent = 'Show chart ▼';
       } else {
         state.watchChartOpen.add(ticker);
         panel.innerHTML = tradingViewChartHtml(ticker, 560);
-        if (btn) btn.textContent = 'Hide chart ▲';
       }
+      updateChartToggleFooterState('watch-chart-wrap-' + ticker, !isOpen);
     };
 
     // "I took it →" graduation: prefill the §8a manual-entry ticket and hand off to Positions.
@@ -9660,13 +9731,6 @@
       const chip = e.target.closest('.group-chip');
       if (!chip) return;
       openGroupPeek(chip.dataset.name, chip.dataset.group);
-    });
-    // Lazy-load the TradingView chart panel only when the user explicitly opens it.
-    document.getElementById('lookup-result').addEventListener('click', e => {
-      const btn = e.target.closest('.lookup-chart-toggle');
-      if (!btn) return;
-      state.lookup.chartOpen = !state.lookup.chartOpen;
-      renderLookup();
     });
 
     document.getElementById('ticker-submit').addEventListener('click', doLookup);
