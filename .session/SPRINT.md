@@ -8,7 +8,11 @@
 
 ### 🔴 Backlog
 
-#### Morning Tab (sort/filter/collapse follow-ups, 2026-09-03)
+#### PWA UX — chart-toggle tap targets (2026-09-04)
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| CHART-TAP-1 | **Pick + implement a bigger chart-toggle tap target** | `docs/index.html` (Lookup, Picks, Morning, Positions "Show/Hide chart" toggles) | S | 🔴 Awaiting owner pick. Owner flagged the live `Show chart ▾` pill (~34×24pt, under Apple's 44×44pt minimum) as hard to hit on mobile. Five mocked options in `planning/mocks/chart-toggle-redlines.html` (published as an Artifact for review): padded button, whole-row tap, full-width drawer handle, live sparkline, edge rails. Recommended pairing in the mock: whole-row tap (02) as the default toggle everywhere charts appear, with a padded chevron (01-style hit-slop) left as the visual cue. Once the owner picks, implement across all 4 surfaces in one PR + add/update the relevant `tests/test_pwa_*` Playwright coverage per surface. |
 
 | # | Task | File(s) | Effort | Notes |
 |---|------|---------|--------|-------|

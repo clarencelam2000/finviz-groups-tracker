@@ -6,6 +6,39 @@
 
 ---
 
+## 2026-09-04 — Chart-toggle tap-target UX proposals + mock
+
+**Status: safe to close** — design-only, no code shipped, nothing blocking.
+
+**What landed:** Owner flagged the `Show chart ▾`/`Hide chart ▲` toggle on Lookup, Picks, Morning,
+and Positions as a hard-to-hit mobile tap target (confirmed: `text-[0.65rem] px-2 py-1` pill,
+roughly 34×24pt — under Apple's 44×44pt HIG minimum, tucked in one card corner). Proposed and
+mocked five alternatives at real card scale (336pt width) using a live Picks row (`GH 86 ·
+Guardant Health`) as content:
+1. **Padded button** — same visible pill, bigger invisible hit-slop.
+2. **Whole-row tap** — entire ticker header toggles the chart (Positions already half-does this
+   on the ticker text alone).
+3. **Drawer handle** — full-width strip replaces the corner pill.
+4. **Live sparkline** — always-on mini chart doubles as the tap target.
+5. **Edge rails** — the owner's original idea: tall tap strips down the card's left/right margins.
+
+Each mock is interactive (tap to expand/collapse for real) with a dashed amber "redline" overlay
+showing the actual tap-zone size, plus pros/cons. Recommended pairing: ship **02 (whole row)** as
+the default everywhere charts appear, keep a padded chevron (01-style) as the visual "there's more
+here" cue riding along for free.
+
+**Where it lives:** Published as an Artifact for the owner to review (interactive, themed) — link
+is in-conversation, not repeated here since Artifact URLs aren't durable across sessions. Source
+committed to `planning/mocks/chart-toggle-redlines.html` per CLAUDE.md § Deliver mocks/visuals as
+Artifacts (durable record). Tracked as `CHART-TAP-1` in `.session/SPRINT.md` Backlog — nothing
+implemented yet, blocked on the owner's pick among the five.
+
+**Next steps:** Owner picks an option (or a different pairing) → implement across all 4 surfaces
+(`docs/index.html`) in one PR, add/update Playwright coverage per surface touched, ship the usual
+release triplet (`releases.json` + `sw.js` cache bump) since this is user-facing.
+
+---
+
 ## 2026-09-03 — Picks tab: group tap opens quick detail sheet + reason chips on group headers
 
 **Status: safe to close** — implemented, verified functionally with a Playwright fixture-intercept
