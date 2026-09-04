@@ -1,13 +1,23 @@
 {
-  "current": "2026.09.04",
+  "current": "2026.09.04.1",
   "releases": [
     {
-      "version": "2026.09.04",
+      "version": "2026.09.04.1",
       "date": "2026-09-04",
       "title": "Bigger chart-toggle tap target",
       "tag": "improvement",
       "notes": [
         "The Show/Hide chart control on Lookup, Picks, Morning, Positions, and your watchlist is now a full-width bar with tall side rails, instead of a small button in the corner — much easier to hit one-handed. The rails run alongside the chart itself once it's open, so closing it back up is just as easy."
+      ]
+    },
+    {
+      "version": "2026.09.04",
+      "date": "2026-09-04",
+      "title": "Add to watchlist without leaving the tab",
+      "tag": "feature",
+      "notes": [
+        "A new \"+ Watch\" button on Picks rows, Morning-tab picks cards, and Lookup ticker results adds a ticker to your watchlist in one tap — no more jumping to the Positions tab. An optional level-of-interest form expands right there afterward if you want to set one.",
+        "Editing a watchlist ticker's level from the Morning tab's Watchlist section now happens inline too, instead of switching to the Positions tab."
       ]
     },
     {
