@@ -8445,9 +8445,7 @@
       const expired = entries.filter(e => e.status === 'expired');
       const removed = entries.filter(e => e.status === 'removed');
 
-      const findPub = ticker => (state.morningData || []).find(m => m.ticker === ticker && (m.list_category || '') === 'watchlist');
-
-      const activeHtml = active.map(entry => watchCardHtml(entry, findPub(entry.ticker))).join('');
+      const activeHtml = active.map(entry => watchCardHtml(entry, findWatchPub(entry.ticker))).join('');
 
       let expiredHtml = '';
       if (expired.length > 0) {
@@ -8456,7 +8454,7 @@
           <div class="mt-2">
             <button onclick="window.__toggleWatchExpired(this)" class="text-[11px] text-slate-500 hover:text-slate-300">${open ? '▾' : '▸'} Expired (${expired.length})</button>
             <div id="watch-expired-bin" class="${open ? '' : 'hidden'} mt-2 space-y-2">
-              ${expired.map(entry => watchCardHtml(entry, findPub(entry.ticker))).join('')}
+              ${expired.map(entry => watchCardHtml(entry, findWatchPub(entry.ticker))).join('')}
             </div>
           </div>`;
       }
@@ -8609,7 +8607,7 @@
     window.__toggleWatchGauge = function (ticker) {
       const entry = (state.watchlistData || []).find(e => e.ticker === ticker);
       if (!entry) return;
-      const pub = (state.morningData || []).find(m => m.ticker === ticker && (m.list_category || '') === 'watchlist');
+      const pub = findWatchPub(ticker);
       const shown = !!state.watchGauge[ticker];
       state.watchGauge[ticker] = !shown;
       const panel = document.getElementById('watch-gauge-panel-' + ticker);
@@ -8739,6 +8737,26 @@
           <button onclick="watchRemove('${entry.id}')" class="text-red-400 hover:text-red-300">Remove</button>
         </div>` : '';
       return `<button onclick="__toggleWatchMenu('${entry.id}')" class="text-slate-500 hover:text-slate-300 text-[17px] leading-none px-1.5">⋯</button>${menu}`;
+    }
+
+    // Find a watch ticker's public status row in morningData (WATCHLIST-PUB-LOOKUP, 2026-09-04).
+    // Prefer an exact `list_category === 'watchlist'` tag, but fall back to ANY row for this
+    // ticker. Why a fallback is needed: collect_morning.py's union_watch_levels() drops a watch
+    // ticker's own row whenever that ticker ALSO qualifies as a Focus pick that day — the picks
+    // row (list_category e.g. 'accel'/'leaders') wins the collision and no 'watchlist'-tagged
+    // row is written at all that date, even though the exact same pick_status engine ran and
+    // produced a real classification. A strict `=== 'watchlist'` lookup then finds nothing and
+    // watchCardHtml falls into its awaitingFirstRead branch forever, showing "Pending read" on a
+    // ticker that has a perfectly good status sitting right there under a different bucket tag —
+    // confirmed live on ELV/HUM/GH (stuck since they started double-qualifying as Focus picks;
+    // GH's watch card had NEVER shown a real read, since it's been a qualifying pick since
+    // before it was even added to the watchlist). This lookup is always called for one specific
+    // ticker the user is actively watching, so relaxing the list_category constraint can't
+    // accidentally pull in some unrelated ticker's row — the match stays ticker-exact throughout.
+    function findWatchPub(ticker) {
+      const rows = state.morningData || [];
+      return rows.find(m => m.ticker === ticker && (m.list_category || '') === 'watchlist')
+          || rows.find(m => m.ticker === ticker);
     }
 
     // THE CARD — the taste core (build spec §4c). Three states, not two (WS-POSITIONS-STATUS,

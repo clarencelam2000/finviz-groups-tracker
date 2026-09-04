@@ -137,6 +137,69 @@ Lookup ticker card renders — Morning needed no change, its batch loader alread
 
 ---
 
+## 2026-09-04 — Fix: watchlist stuck on "Pending read" for tickers that also qualify as Focus picks
+
+**Status: safe to close — investigated, fixed, tested, PR to open.** Owner report with two
+screenshots: several watchlist tickers (ELV, HUM, GH) added ~a week earlier were still showing
+"PENDING READ" / "Reference bar captured — first live read after the next scheduled check.",
+and lacked the full card (Volatility & setup, ATR-from-LoD, etc.) that other watch tickers
+(SPCX, BAX) had. Owner asked for a full investigation first, no fix, "don't bear load on
+unconfirmed assumptions."
+
+**Investigation (evidence-based, not inferred).** Ruled out the two previously-fixed failure
+modes in this area (`WS5-8b-OPS` missing secrets; `WS-POSITIONS-STATUS` no_quote/
+awaiting_first_read copy) since neither matched: the private `/watchlist` feed showed real
+`prior_high`/`prior_low` (a bar exists) and the TTL was decrementing normally (`tickWatchlist()`
+only decrements when a bar exists), so `has_history` was clearly `True` server-side. Read the
+actual committed `data/picks/sessions/morning.csv` directly (ground truth, not assumption) and
+found the real root cause: `collect_morning.py`'s `union_watch_levels()` — when a watch ticker
+ALSO qualifies as a Focus pick that day — keeps the Focus pick's row and never writes a second
+`list_category='watchlist'`-tagged row for that ticker/date (by design, for scrape-count
+purposes: "the watch dup contributes nothing"). ELV/HUM/GH had all started also qualifying as
+Focus picks (`accel`/`leaders` buckets) — GH had been a recurring pick since before it was even
+added to the watchlist, so its watch card had likely NEVER shown a real status.
+`docs/index.html`'s watch-card lookup (`findPub`/`pub`, 2 call sites) filtered strictly on
+`m.list_category === 'watchlist'`, found nothing on those days, and fell into the
+`awaitingFirstRead` fallback — even though the exact same `pick_status` engine had computed a
+real classification, just filed under a different bucket tag. Confirmed with grep evidence
+against the CSV (GH: never once tagged `watchlist`, always `leaders`/`rs_new_high`/`all_green`;
+ELV/HUM: correctly `watchlist`-tagged 8/27–9/1, then flipped to `accel` from 9/2 onward and
+stuck since).
+
+**Options presented, owner chose A.** (A) Client-side: relax the watch-pub lookup to accept any
+row for the ticker (fallback after preferring an exact `'watchlist'` tag) — the lookup is
+always called for one already-known ticker, so this can't cross-match an unrelated ticker's
+row. (B) Backend: a new `is_watchlist` flag column, orthogonal to `list_category`. Rejected B
+because `data/picks/sessions/*.csv` is a ground-truth CSV under
+`.claude/rules/data-pipeline.md`'s schema-change rule (owner sign-off + a written
+can't-be-a-pure-function justification required before building) and the fix genuinely doesn't
+need a new column — same "compute at render time, don't persist a config/attribution-dependent
+fact" precedent as the `power_of_3`/`VOLATILITY_FLOOR_PCT` sessions.
+
+**Shipped:** new shared `findWatchPub(ticker)` helper in `docs/index.html` (replaces 3
+duplicated inline `list_category === 'watchlist'` filters: `renderWatchlistSection`'s active +
+expired card maps, and `__toggleWatchGauge`), with an in-code comment naming why the fallback
+exists so a future cleanup doesn't revert it back to the strict filter. `docs/CLAUDE.md` §
+Watchlist merge-model bullet updated to describe the new lookup and the collision it works
+around. New regression test `tests/test_pwa_watchlist.py::
+test_watch_card_finds_real_status_under_a_picks_bucket_tag` — verified it actually fails
+pre-fix (`git stash` on `docs/index.html` reproduces the exact reported symptom: "PENDING READ"
+pill + "Reference bar captured…" copy) and passes post-fix. Release triplet: `releases.json`
+`2026.09.04.2` (fix, tab morning) + `current` bumped; `sw.js` `finviz-v98` → `v99`.
+
+**Verified:** `test_pwa_watchlist.py` 10/10 (new test included), `test_pwa_morning.py` +
+`test_pwa_quick_watch.py` 20/20 (unaffected — different render paths), full non-Playwright
+suite 746 passed, `test_guide_releases.py` 5/5 (release-surface sync). Playwright run via the
+documented revision-symlink harness (`chromium-1194` → `chromium-1117`, cleaned up after).
+
+**Next steps:** open the PR. Not addressed (out of scope, no separate tracked item needed —
+the fix is complete as scoped): the underlying `union_watch_levels()` collision behavior
+itself is unchanged and intentional (attribution still correctly favors the picks bucket for
+that CSV's own purposes); this fix only restores the PWA's ability to find the real status
+regardless of which bucket won.
+
+---
+
 ## 2026-09-03 — Picks tab: group tap opens quick detail sheet + reason chips on group headers
 
 **Status: safe to close** — implemented, verified functionally with a Playwright fixture-intercept

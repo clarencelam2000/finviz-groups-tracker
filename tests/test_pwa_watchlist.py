@@ -267,6 +267,37 @@ def test_signed_in_watch_card_shows_awaiting_first_read_not_no_quote(server):
         browser.close()
 
 
+def test_watch_card_finds_real_status_under_a_picks_bucket_tag(server):
+    """WATCHLIST-PUB-LOOKUP (2026-09-04): collect_morning.py's union_watch_levels() drops a watch
+    ticker's own 'watchlist'-tagged row whenever that ticker ALSO qualifies as a Focus pick that
+    day — the Focus pick's row (list_category e.g. 'accel') wins the collision, and the exact
+    same pick_status engine's real classification lands under that bucket tag instead. A watch
+    card must still find and render that real status rather than falling into the
+    awaitingFirstRead "Pending read" fallback just because list_category isn't literally
+    'watchlist' — confirmed live on ELV/HUM/GH (root-caused this session)."""
+    from playwright.sync_api import sync_playwright
+    morning_as_pick = (
+        "date,session,collected_at,ticker,group,list_category,trigger,stop,atr,price,open,high,low,change,status,atr_from_lod\n"
+        "2026-08-14,morning,2026-08-14T14:05:00Z,AXON,Aerospace & Defense,accel,140.00,130.00,5.00,145.10,144.00,145.50,143.80,0.9,triggered,0.26\n"
+    )
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        page = browser.new_page()
+        _base_routes(page, morning_csv=morning_as_pick)
+        _mock_worker(page, watchlist_rows=[WATCH_ENTRY])
+        _boot(page, signed_in=True)
+        page.click("[data-tab='morning']")
+        page.wait_for_timeout(500)
+
+        html = page.inner_html("#watchlist-section")
+        assert "AXON" in html
+        assert "TRIGGERED" in html.upper(), "real status must render despite the non-'watchlist' list_category tag"
+        assert "Pending read" not in html
+        assert "Reference bar captured" not in html
+        assert "Aerospace &amp; Defense" in html, "pub.group renders too, confirming the real row (not just a status string) was found"
+        browser.close()
+
+
 def test_add_to_watchlist_flow_posts_correct_payload(server):
     from playwright.sync_api import sync_playwright
     with sync_playwright() as p:
