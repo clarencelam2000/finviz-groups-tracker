@@ -623,8 +623,23 @@
       watchlistData: null,
       // non-401 fetch failure => explicit error state (mirrors positionsError).
       watchlistError: false,
+      // Dedupes concurrent loadWatchlist() calls from ensureWatchlistLoaded() (see there) —
+      // Picks/Lookup can both trigger a proactive fetch on the same render pass.
+      watchlistLoading: false,
       // Positions-tab "Add to watchlist" collapsible form state — see watchAddDefault().
       watchAdd: watchAddDefault(),
+      // ── Inline "+ Watch" quick-add (Picks / Morning-picks / Lookup / Watchlist edit-level)
+      // — see quickWatchButtonHtml()/quickWatchPanelHtml() below. Generalizes watchAdd so a
+      // ticker can be added without switchTab('positions').
+      // tickers added via quick-add this session — optimistic, unioned with watchlistData so
+      // the button flips to "already watching" before the next loadWatchlist() round-trip lands.
+      quickWatchAdded: new Set(),
+      // mountKeys (call-site + ticker, e.g. 'qw_pick_AAPL_focus_0', 'qw_morning_AAPL') whose
+      // optional level-of-interest panel is expanded — namespaced per mount so two open at
+      // once (rare, but possible) don't collide.
+      quickWatchOpenPanels: new Set(),
+      // mountKey -> { levelType, levelValue, submitting, error, justAdded }.
+      quickWatchForm: {},
       // ticker -> bool: gauge SHOWN? absent/false = hidden (default OFF, morning-subtabs-watchlist
       // — the price-levels bar is opt-in detail, not the first thing a card should show). Flipped
       // from the original "collapsed?" polarity (absent/false = shown) on purpose so the default
@@ -3975,6 +3990,7 @@
       }
 
       const symEnc = encodeURIComponent(data.symbol);
+      const qwMountKey = 'qw_lookup_' + data.symbol;
       const links = `
         <div class="flex gap-2 mt-1.5 items-center flex-wrap">
           <a href="https://finviz.com/quote.ashx?t=${symEnc}" target="_blank" rel="noopener noreferrer"
@@ -3983,8 +3999,11 @@
             class="text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">TradingView ↗</a>
           <button class="lookup-chart-toggle text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600"
             data-symbol="${escapeHtml(data.symbol)}">${state.lookup.chartOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
+          ${quickWatchButtonHtml(data.symbol, qwMountKey)}
         </div>`;
       const chartPanel = state.lookup.chartOpen ? `<div class="mt-2">${tradingViewChartHtml(data.symbol)}</div>` : '';
+      const quickWatchPanel = `<div id="quickwatch-panel-${escapeHtml(qwMountKey)}" class="mt-2">${quickWatchPanelHtml(data.symbol, qwMountKey)}</div>`;
+      ensureWatchlistLoaded(() => renderLookup());
 
       let html = `
         <div class="flex gap-3 items-start">
@@ -3999,6 +4018,7 @@
             ${classificationLine}
             ${links}
             ${chartPanel}
+            ${quickWatchPanel}
             <div class="mt-2">
               <button onclick="manualOpenFromLookup('${escapeHtml(data.symbol)}')"
                 class="text-xs px-2 py-1 rounded bg-sky-500/10 text-sky-400 border border-sky-500/30 hover:bg-sky-500/20">Open a position on ${escapeHtml(data.symbol)} →</button>
@@ -5042,8 +5062,10 @@
               <a href="https://www.tradingview.com/symbols/${encodeURIComponent(ticker)}/" target="_blank" rel="noopener noreferrer" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation()">TradingView ↗</a>
               ${r.group ? `<a href="${escapeHtml(buildScreenerUrl('ind', slugifyGroup(r.group)))}" target="_blank" rel="noopener noreferrer" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation()">Peers in group ↗</a>` : ''}
               <button id="pick-chart-toggle-${key}" class="pick-chart-toggle text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" data-key="${key}" data-expand-key="${escapeHtml(expandKey)}" data-ticker="${escapeHtml(ticker)}" onclick="event.stopPropagation();__togglePickChart('${key}','${expandKey.replace(/'/g, "\\'")}','${ticker.replace(/'/g, "\\'")}')">${state.picksChartOpen.has(expandKey) ? 'Hide chart ▲' : 'Show chart ▼'}</button>
+              ${quickWatchButtonHtml(ticker, 'qw_pick_' + key)}
             </div>
             <div id="pick-chart-panel-${key}" class="mt-2">${state.picksChartOpen.has(expandKey) ? tradingViewChartHtml(ticker, 560) : ''}</div>
+            <div id="quickwatch-panel-qw_pick_${key}">${quickWatchPanelHtml(ticker, 'qw_pick_' + key)}</div>
           </div>`;
       }
 
@@ -5272,6 +5294,10 @@
     function renderPicks() {
       const el = document.getElementById('picks-list');
       if (!el) return;
+
+      // Best-effort — so a row's quick-add button (renderPickRow) knows whether a ticker is
+      // already watched instead of always showing "+ Watch". See ensureWatchlistLoaded().
+      ensureWatchlistLoaded(() => renderPicks());
 
       const rows = state.picksData;
       if (!rows || rows.length === 0) {
@@ -5718,10 +5744,13 @@
     function morningChartAffordance(ticker) {
       const isOpen = state.morningChartOpen.has(ticker);
       const tickerJs = ticker.replace(/'/g, "\\'");
+      const qwMountKey = 'qw_morning_' + ticker;
       return `
         <div class="mt-2 pt-2 border-t border-slate-700/50">
           <button id="morning-chart-toggle-${escapeHtml(ticker)}" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation();__toggleMorningChart('${tickerJs}')">${isOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
+          ${quickWatchButtonHtml(ticker, qwMountKey)}
           <div id="morning-chart-panel-${escapeHtml(ticker)}" class="mt-2">${isOpen ? tradingViewChartHtml(ticker, 560) : ''}</div>
+          <div id="quickwatch-panel-${escapeHtml(qwMountKey)}">${quickWatchPanelHtml(ticker, qwMountKey)}</div>
         </div>`;
     }
 
@@ -6293,6 +6322,212 @@
     function watchAddApi(body)       { return posApi(WATCHLIST_API_PATH, { method: 'POST', body }); }
     function watchPatchApi(id, body) { return posApi(WATCHLIST_API_PATH + '/' + id, { method: 'PATCH', body }); }
     function watchDeleteApi(id)      { return posApi(WATCHLIST_API_PATH + '/' + id, { method: 'DELETE' }); }
+
+    // ── Inline "+ Watch" quick-add ───────────────────────────────────────────────────────
+    // A mountable sibling to state.watchAdd's Positions-tab-only collapsible, for spots where
+    // the ticker is already fixed context (a Picks row, a Morning card, a Lookup result) —
+    // unlike watchAdd's free-text ticker field, there is never a resolve/FMP lookup here.
+    // watchAddApi()'s POST is an upsert-by-ticker (see watchEditLevel's original comment), so
+    // "instant add" (ticker only) and "save a level" (ticker + level) are just two calls to the
+    // same endpoint — the second is optional refinement, never required to persist the add.
+
+    function quickWatchEntry(ticker) {
+      return (state.watchlistData || []).find(e => e.ticker === ticker && e.status === 'active') || null;
+    }
+    function isTickerWatched(ticker) {
+      return state.quickWatchAdded.has(ticker) || !!quickWatchEntry(ticker);
+    }
+    function quickWatchFormFor(mountKey) {
+      if (!state.quickWatchForm[mountKey]) {
+        state.quickWatchForm[mountKey] = { levelType: '', levelValue: '', submitting: false, error: '', justAdded: false };
+      }
+      return state.quickWatchForm[mountKey];
+    }
+
+    // Picks/Lookup never otherwise trigger loadWatchlist() (only Morning/Positions tab renders
+    // do — see loadWatchlist call sites), so without this a signed-in user landing straight on
+    // Picks would see "+ Watch" on every row even for tickers already watched. Best-effort,
+    // non-blocking; onLoaded (optional) re-renders the calling view once the fetch lands.
+    function ensureWatchlistLoaded(onLoaded) {
+      if (!posIsSignedIn() || state.watchlistData !== null || state.watchlistLoading) return;
+      state.watchlistLoading = true;
+      loadWatchlist().finally(() => {
+        state.watchlistLoading = false;
+        if (onLoaded) onLoaded();
+      });
+    }
+
+    function renderQuickWatchButton(mountKey, ticker) {
+      const el = document.getElementById('quickwatch-btn-' + mountKey);
+      if (el) el.outerHTML = quickWatchButtonHtml(ticker, mountKey);
+    }
+    function renderQuickWatchPanel(mountKey, ticker) {
+      const el = document.getElementById('quickwatch-panel-' + mountKey);
+      if (el) el.innerHTML = quickWatchPanelHtml(ticker, mountKey);
+    }
+
+    function quickWatchButtonHtml(ticker, mountKey) {
+      const watched = isTickerWatched(ticker);
+      const submitting = !!(state.quickWatchForm[mountKey] && state.quickWatchForm[mountKey].submitting);
+      const panelOpen = state.quickWatchOpenPanels.has(mountKey);
+      const label = submitting ? 'Adding…' : watched ? '✓ Watching' : '＋ Watch';
+      const cls = watched
+        ? 'text-[0.65rem] px-2 py-1 rounded bg-sky-900/50 text-sky-300 font-medium'
+        : 'text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium';
+      const mkJs = mountKey.replace(/'/g, "\\'");
+      const tkJs = ticker.replace(/'/g, "\\'");
+      return `<button id="quickwatch-btn-${escapeHtml(mountKey)}" ${submitting ? 'disabled' : ''} class="${cls}" onclick="event.stopPropagation();__toggleQuickWatch('${mkJs}','${tkJs}')">${label}${panelOpen ? ' ▲' : ''}</button>`;
+    }
+
+    function quickWatchPanelHtml(ticker, mountKey) {
+      if (!state.quickWatchOpenPanels.has(mountKey)) return '';
+      if (!posIsSignedIn()) {
+        return `
+          <div class="mt-2 bg-slate-900/60 border border-sky-900/50 rounded-lg px-3 py-2.5 text-[11.5px] text-slate-400">
+            Session expired — <button onclick="event.stopPropagation();switchTab('positions')" class="text-sky-400 hover:text-sky-300 underline">sign in on the Positions tab</button> to add to your watchlist.
+          </div>`;
+      }
+      const f = quickWatchFormFor(mountKey);
+      const watched = isTickerWatched(ticker);
+      const mkJs = mountKey.replace(/'/g, "\\'");
+      const tkJs = ticker.replace(/'/g, "\\'");
+
+      const segTypes = [['above', 'Above'], ['below', 'Below'], ['reclaim_20ma', '20MA'], ['reclaim_50ma', '50MA']];
+      const seg = segTypes.map(([k, lbl]) => {
+        const on = f.levelType === k;
+        return `<button onclick="event.stopPropagation();__quickWatchSetLevelType('${mkJs}','${tkJs}','${k}')"
+            class="flex-1 text-center px-2 py-1.5 text-[11px] border-r border-slate-700 last:border-r-0
+              ${on ? 'bg-violet-500/20 text-violet-300 font-semibold' : 'text-slate-400 hover:bg-slate-700/50'}">${lbl}</button>`;
+      }).join('');
+      const showPrice = f.levelType === 'above' || f.levelType === 'below';
+      const priceField = showPrice ? `
+        <input id="quickwatch-price-${escapeHtml(mountKey)}" type="number" step="0.01" value="${escapeHtml(f.levelValue)}"
+          onclick="event.stopPropagation()" oninput="__quickWatchLevelValueInput('${mkJs}', this.value)" placeholder="Price"
+          class="bg-slate-900 border border-sky-500 rounded px-1.5 py-0.5 w-20 text-right text-slate-100 font-semibold tabular-nums text-xs" />` : '';
+
+      const errRow = f.error ? `<div class="text-[11px] text-red-400 mt-1.5">${escapeHtml(f.error)}</div>` : '';
+      const receipt = f.justAdded ? `<div class="text-[11.5px] text-slate-400 bg-sky-500/10 rounded px-3 py-2 mb-2">✓ Added to your watchlist — set a level below (optional).</div>` : '';
+
+      return `
+        <div class="mt-2 bg-slate-900/60 border border-sky-900/50 rounded-lg px-3 py-2.5 space-y-2" onclick="event.stopPropagation()">
+          ${receipt}
+          <div class="flex justify-between items-center">
+            <div class="text-[10.5px] uppercase tracking-wider text-slate-500">Level of interest — optional</div>
+            <button onclick="__toggleQuickWatch('${mkJs}','${tkJs}')" class="text-[11px] text-slate-500 hover:text-slate-300">${watched ? 'Close' : 'Skip'}</button>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <div class="flex border border-slate-700 rounded-md overflow-hidden">${seg}</div>
+            ${priceField}
+          </div>
+          ${errRow}
+          <div class="flex justify-end">
+            <button onclick="__quickWatchSaveLevel('${mkJs}','${tkJs}')" ${f.submitting ? 'disabled' : ''}
+              class="py-1 px-3 rounded-lg text-xs font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400 disabled:opacity-50">${f.submitting ? 'Saving…' : 'Save level'}</button>
+          </div>
+        </div>`;
+    }
+
+    window.__toggleQuickWatch = async function (mountKey, ticker) {
+      const isOpen = state.quickWatchOpenPanels.has(mountKey);
+      if (isOpen) {
+        state.quickWatchOpenPanels.delete(mountKey);
+        delete state.quickWatchForm[mountKey];
+        renderQuickWatchButton(mountKey, ticker);
+        renderQuickWatchPanel(mountKey, ticker);
+        return;
+      }
+
+      state.quickWatchOpenPanels.add(mountKey);
+      const watched = isTickerWatched(ticker);
+
+      if (watched) {
+        // Already on the list — open straight into the level editor, seeded from the existing
+        // entry, no re-POST.
+        const entry = quickWatchEntry(ticker);
+        state.quickWatchForm[mountKey] = {
+          levelType: entry ? (entry.level_type || '') : '',
+          levelValue: entry && entry.level_value != null ? String(entry.level_value) : '',
+          submitting: false, error: '', justAdded: false,
+        };
+        renderQuickWatchButton(mountKey, ticker);
+        renderQuickWatchPanel(mountKey, ticker);
+        return;
+      }
+
+      if (!posIsSignedIn()) {
+        // Not on the list and signed out — show the sign-in nudge only, no add attempted.
+        renderQuickWatchButton(mountKey, ticker);
+        renderQuickWatchPanel(mountKey, ticker);
+        return;
+      }
+
+      // Not watched yet, signed in: instant add fires now — no second tap required to persist.
+      const f = quickWatchFormFor(mountKey);
+      f.submitting = true;
+      renderQuickWatchButton(mountKey, ticker);
+      try {
+        await watchAddApi({ ticker });
+        state.quickWatchAdded.add(ticker);
+        f.justAdded = true;
+        state.watchlistData = null;
+        loadWatchlist(true).catch(() => {});
+      } catch (e) {
+        f.error = (e && e.unauth) ? 'Session expired — sign in again.' : "Couldn't add — try again";
+      }
+      f.submitting = false;
+      renderQuickWatchButton(mountKey, ticker);
+      renderQuickWatchPanel(mountKey, ticker);
+    };
+
+    window.__quickWatchSetLevelType = function (mountKey, ticker, lt) {
+      const f = quickWatchFormFor(mountKey);
+      f.levelType = (f.levelType === lt) ? '' : lt;
+      renderQuickWatchPanel(mountKey, ticker);
+    };
+    window.__quickWatchLevelValueInput = function (mountKey, v) {
+      quickWatchFormFor(mountKey).levelValue = v;
+    };
+
+    window.__quickWatchSaveLevel = async function (mountKey, ticker) {
+      const f = quickWatchFormFor(mountKey);
+      if (f.submitting) return;
+      if (!posIsSignedIn()) {
+        f.error = 'Session expired — sign in again.';
+        renderQuickWatchPanel(mountKey, ticker);
+        return;
+      }
+      const body = { ticker };
+      if (f.levelType === 'above' || f.levelType === 'below') {
+        const lv = parseFloat(f.levelValue);
+        if (isNaN(lv) || lv <= 0) {
+          f.error = 'Enter a price for above/below';
+          renderQuickWatchPanel(mountKey, ticker);
+          return;
+        }
+        body.level_type = f.levelType;
+        body.level_value = lv;
+      } else if (f.levelType === 'reclaim_20ma' || f.levelType === 'reclaim_50ma') {
+        body.level_type = f.levelType;
+      }
+      f.error = '';
+      f.submitting = true;
+      renderQuickWatchPanel(mountKey, ticker);
+      try {
+        await watchAddApi(body);
+        state.quickWatchAdded.add(ticker);
+        state.watchlistData = null;
+        loadWatchlist(true).catch(() => {});
+        state.quickWatchOpenPanels.delete(mountKey);
+        delete state.quickWatchForm[mountKey];
+      } catch (e) {
+        f.submitting = false;
+        f.error = (e && e.unauth) ? 'Session expired — sign in again.' : "Couldn't save — try again";
+        renderQuickWatchPanel(mountKey, ticker);
+        return;
+      }
+      renderQuickWatchButton(mountKey, ticker);
+      renderQuickWatchPanel(mountKey, ticker);
+    };
 
     // Ticket stop-basis key -> worker stop_basis enum. These DIFFER (ticket keys are
     // ws4StopLevels' internal keys; the worker enum is its own contract) — see
@@ -8368,14 +8603,19 @@
 
     // Kebab "Edit level" reuses the add form (re-POST upserts renew+edit per worker) rather
     // than a bespoke inline level editor — flagged as a minor simplification in the build spec.
+    // Opens the inline quick-watch level editor (see quickWatchPanelHtml() above) right on
+    // this card — previously routed through state.watchAdd + switchTab('positions'), the same
+    // jump-away-from-context pattern the Picks/Morning/Lookup quick-add spots were built to
+    // avoid, for exactly the same "why do I have to leave what I'm looking at" reason.
     window.watchEditLevel = function (ticker, levelType, levelValue) {
       state.watchMenu = null;
-      state.watchAdd = watchAddDefault();
-      state.watchAdd.open = true;
-      state.watchAdd.ticker = ticker;
-      state.watchAdd.levelType = levelType || '';
-      state.watchAdd.levelValue = (levelValue != null) ? String(levelValue) : '';
-      switchTab('positions');
+      const mountKey = 'qw_watch_' + ticker;
+      state.quickWatchOpenPanels.add(mountKey);
+      state.quickWatchForm[mountKey] = {
+        levelType: levelType || '', levelValue: (levelValue != null) ? String(levelValue) : '',
+        submitting: false, error: '', justAdded: false,
+      };
+      renderWatchlistSection();
     };
 
     // Soft-remove (morning-subtabs-watchlist): PATCH {remove:true}, NOT watchDeleteApi/DELETE.
@@ -8444,6 +8684,14 @@
     //                     just executed before this ticker's first bar could exist.
     //   3. real status  — pub exists with a genuine classification (or a genuine no_quote —
     //                     an established ticker Finviz actually failed to quote today).
+    // Inline mount point for watchEditLevel()'s quick-watch panel (see quickWatchPanelHtml()) —
+    // one per watch card, keyed 'qw_watch_<ticker>' so it can't collide with the same ticker's
+    // panel on the Picks/Morning-picks/Lookup tabs.
+    function watchQuickEditPanelHtml(ticker) {
+      const mountKey = 'qw_watch_' + ticker;
+      return `<div id="quickwatch-panel-${escapeHtml(mountKey)}">${quickWatchPanelHtml(ticker, mountKey)}</div>`;
+    }
+
     function watchCardHtml(entry, pub) {
       const ticker = entry.ticker;
       const hasBar = entry.prior_high != null;
@@ -8483,6 +8731,7 @@
             <div class="text-xs text-slate-400 mt-1.5">Added — first morning check lands tomorrow AM after tonight's data run.</div>
             ${watchChartAffordance(ticker)}
             ${footer}
+            ${watchQuickEditPanelHtml(ticker)}
           </div>`;
       }
 
@@ -8499,6 +8748,7 @@
             ${refLine}
             ${watchChartAffordance(ticker)}
             ${footer}
+            ${watchQuickEditPanelHtml(ticker)}
           </div>`;
       }
 
@@ -8566,6 +8816,7 @@
           ${gaugeToggle}
           ${watchChartAffordance(ticker)}
           ${footer}
+          ${watchQuickEditPanelHtml(ticker)}
         </div>`;
     }
 

@@ -1,6 +1,16 @@
 {
-  "current": "2026.09.03.1",
+  "current": "2026.09.04",
   "releases": [
+    {
+      "version": "2026.09.04",
+      "date": "2026-09-04",
+      "title": "Add to watchlist without leaving the tab",
+      "tag": "feature",
+      "notes": [
+        "A new \"+ Watch\" button on Picks rows, Morning-tab picks cards, and Lookup ticker results adds a ticker to your watchlist in one tap — no more jumping to the Positions tab. An optional level-of-interest form expands right there afterward if you want to set one.",
+        "Editing a watchlist ticker's level from the Morning tab's Watchlist section now happens inline too, instead of switching to the Positions tab."
+      ]
+    },
     {
       "version": "2026.09.03.1",
       "date": "2026-09-03",
