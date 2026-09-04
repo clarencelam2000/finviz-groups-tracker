@@ -6,6 +6,87 @@
 
 ---
 
+## 2026-09-04 — Chart-toggle tap target: 3+5 combo shipped (CHART-TAP-1)
+
+**Status: safe to close** — implemented, verified, pushed, release triplet shipped.
+
+Follow-through on the same-day mock session below: owner picked a **combination of options 3
+(drawer handle) and 5 (edge rails)** rather than a single standalone mock. Before implementing,
+surfaced a real conflict found while reading the code — on Picks, the outer card row already
+owns tap-to-expand (`__togglePickRow`), so edge rails there can't live on the same row as that
+handler. Asked 4 clarifying questions (Picks placement, rail visibility, whether to keep the old
+button, Lookup scope); owner took the recommended answer on all four (rails inside the *expanded*
+panel on Picks only, visible chevron cue on the rails, remove the old pill entirely, same
+treatment on all 4 surfaces for consistency).
+
+**What shipped:** New shared `chartToggleFooterHtml()` / `updateChartToggleFooterState()` helper
+(`docs/index.html`, near `tradingViewChartHtml`) — a full-width "Show/Hide chart" drawer bar plus
+two tall edge rails in one `.chart-toggle-wrap`, all three wired to the same toggle call. The
+wrap's height includes the chart panel once open, so the rails run alongside the open chart too —
+closing has the same reach as opening (confirmed via a real screenshot, not just code review).
+Replaced the old ~34×24pt corner pill across **5** surfaces: Lookup, Picks, Morning, Positions,
+and the Watchlist cards (found mid-implementation — same component, not in the original 4-surface
+scope, included for consistency rather than leaving one surface with the old small button).
+
+**Verification:** `test_pwa_picks_chart.py` and `TestPWALookupChart` (the two existing
+chart-toggle-specific Playwright suites) pass **unmodified** — the old `.pick-chart-toggle`/
+`.lookup-chart-toggle` classes and `data-*` attributes were carried forward onto the new bar
+element on purpose, so no test changes were needed. Manually verified Morning/Positions/Watchlist
+(no dedicated chart-toggle test coverage exists for those yet — pre-existing gap) via a scratch
+Playwright script: rail clicks toggle correctly, bar label flips, and a real screenshot (with the
+actual Tailwind CDN build, not the test suite's inert stub) confirms the visual layout. Ran the
+full 8-file Playwright suite touching every surface this PR changed — 26 failures, all
+`networkidle`/click-timeout flakes in tests this change never touches (lookback windows, intro
+carousel, hub, momentum, deeplink cards, positions take-it flow); the positions failures were
+double-checked via `git stash` and reproduce identically on the unmodified branch, confirming
+they predate this change. Non-Playwright suite: 746 passed.
+
+**Release surface:** `docs/releases.json` `2026.09.04` entry + `current` bump, `docs/sw.js`
+`CACHE` v96→v97 — same PR, per the hard rule.
+
+**Where it lives:** Same branch/PR as the earlier mock (`claude/trading-chart-expand-ux-lo9man`,
+PR #398) — updated its description to describe the real implementation instead of a design-only
+mock.
+
+**Next steps:** None — CHART-TAP-1 is closed. If the owner wants Morning/Positions/Watchlist to
+get the same dedicated Playwright chart-toggle coverage Picks/Lookup already have, that's a
+separate, smaller follow-up (not blocking, not requested here).
+
+---
+
+## 2026-09-04 — Chart-toggle tap-target UX proposals + mock
+
+**Status: safe to close** — design-only, no code shipped, nothing blocking.
+
+**What landed:** Owner flagged the `Show chart ▾`/`Hide chart ▲` toggle on Lookup, Picks, Morning,
+and Positions as a hard-to-hit mobile tap target (confirmed: `text-[0.65rem] px-2 py-1` pill,
+roughly 34×24pt — under Apple's 44×44pt HIG minimum, tucked in one card corner). Proposed and
+mocked five alternatives at real card scale (336pt width) using a live Picks row (`GH 86 ·
+Guardant Health`) as content:
+1. **Padded button** — same visible pill, bigger invisible hit-slop.
+2. **Whole-row tap** — entire ticker header toggles the chart (Positions already half-does this
+   on the ticker text alone).
+3. **Drawer handle** — full-width strip replaces the corner pill.
+4. **Live sparkline** — always-on mini chart doubles as the tap target.
+5. **Edge rails** — the owner's original idea: tall tap strips down the card's left/right margins.
+
+Each mock is interactive (tap to expand/collapse for real) with a dashed amber "redline" overlay
+showing the actual tap-zone size, plus pros/cons. Recommended pairing: ship **02 (whole row)** as
+the default everywhere charts appear, keep a padded chevron (01-style) as the visual "there's more
+here" cue riding along for free.
+
+**Where it lives:** Published as an Artifact for the owner to review (interactive, themed) — link
+is in-conversation, not repeated here since Artifact URLs aren't durable across sessions. Source
+committed to `planning/mocks/chart-toggle-redlines.html` per CLAUDE.md § Deliver mocks/visuals as
+Artifacts (durable record). Tracked as `CHART-TAP-1` in `.session/SPRINT.md` Backlog — nothing
+implemented yet, blocked on the owner's pick among the five.
+
+**Next steps:** Owner picks an option (or a different pairing) → implement across all 4 surfaces
+(`docs/index.html`) in one PR, add/update Playwright coverage per surface touched, ship the usual
+release triplet (`releases.json` + `sw.js` cache bump) since this is user-facing.
+
+---
+
 ## 2026-09-04 — Inline "+ Watch" quick-add (Picks / Morning-picks / Lookup / Watchlist edit-level)
 
 **Status: safe to close** — implemented, functionally verified with 6 new Playwright tests
