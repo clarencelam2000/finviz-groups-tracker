@@ -141,6 +141,49 @@ window, with an optional private "level of interest" overlay.
   of truth for the real countdown) and `WATCHLIST_PURGE_DAYS` are documented in
   `worker-positions/README.md`.
 
+### Inline "+ Watch" quick-add (2026-09-04)
+
+Generalizes `state.watchAdd`'s Positions-tab-only collapsible so a ticker can be watched
+without `switchTab('positions')`, mounted at three spots plus one fix:
+
+- **Picks tab row** (`renderPickRow`'s action bar, mountKey `qw_pick_<key>` — since
+  `renderPickRow` is the shared row renderer, this also covers any other consumer of it, e.g.
+  a picks-pool row surfaced from Lookup Stage-2).
+- **Morning tab Picks-subtab card** (`morningChartAffordance`, mountKey `qw_morning_<ticker>` —
+  one shared helper, so every status branch gets it for free).
+- **Lookup tab ticker result** (`renderLookup`, mountKey `qw_lookup_<symbol>`).
+- **Morning tab Watchlist-subtab "Edit level"** (`watchEditLevel`, mountKey
+  `qw_watch_<ticker>`) — previously set up `state.watchAdd` and called
+  `switchTab('positions')`, the same jump-away pattern the three new spots above were built to
+  avoid. Now opens the same inline editor in place.
+
+Unlike `state.watchAdd`'s free-text ticker field (which debounces a `lookupTicker()`/FMP
+resolve call as the user types), every quick-watch mount is handed an already-known ticker —
+there is no resolve step and no ticker input in this UI at all.
+
+- **Instant add, optional refine — one tap persists it.** Tapping "+ Watch" on an unwatched
+  ticker fires `watchAddApi({ ticker })` immediately; the level-of-interest form (same
+  Above/Below/20MA/50MA chips as `watchAddHtml()`) then opens inline as a *second, optional*
+  call to the same upsert-by-ticker endpoint — never required to persist the original add. An
+  already-watched ticker's button instead reads "✓ Watching" and opens straight into the level
+  editor (seeded from the existing entry), with no re-POST until Save is pressed.
+- **State**: `state.quickWatchAdded` (Set of tickers added this session — optimistic, unioned
+  with `state.watchlistData` via `isTickerWatched()`), `state.quickWatchOpenPanels` (Set of open
+  mountKeys), `state.quickWatchForm` (mountKey → `{levelType, levelValue, submitting, error,
+  justAdded}`). Shared helpers: `quickWatchButtonHtml`/`quickWatchPanelHtml` (render),
+  `renderQuickWatchButton`/`renderQuickWatchPanel` (DOM-patch by id, same discipline as
+  `__togglePickChart`/`__toggleMorningChart` — never a full re-render on open/close/typing).
+- **`ensureWatchlistLoaded()`**: Picks and Lookup never otherwise trigger `loadWatchlist()`
+  (only Morning/Positions tab renders do), so without this a signed-in user landing straight on
+  Picks would see "+ Watch" on every row even for already-watched tickers. Best-effort,
+  deduped via `state.watchlistLoading`; called once per `renderPicks()` pass and once when the
+  Lookup ticker card renders, each with a callback that re-renders that view once the fetch
+  lands. The Morning tab needs no extra call — its existing batch loader already fetches
+  `state.watchlistData`.
+- Signed-out tap opens the panel showing a sign-in nudge only ("Session expired — sign in on
+  the Positions tab…") — no add attempted, same wording convention as `watchAddErrorText`.
+- Tests: `tests/test_pwa_quick_watch.py` (Playwright — in the CI `--ignore=` list).
+
 ## Morning tab (WS3, ADR-013)
 
 **Subtabs (morning-subtabs-watchlist).** The tab has two panes, `#morning-subtab-picks`
