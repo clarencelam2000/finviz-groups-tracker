@@ -8,6 +8,25 @@
 
 ### 🔴 Backlog
 
+#### AI/LLM integration across new tabs (2026-09-05)
+
+Design gate: `planning/ai-llm-integration-proposal.md`. Nothing implemented — blocked on owner
+answers to the 4 open questions in §6 of that doc (private-data-to-Vertex consent; AI posture;
+Picks-first vs Positions-first; on-demand vs batch for positions).
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| AI-NEXT-0 | **Proposal doc (design gate)** | `planning/ai-llm-integration-proposal.md` | S | ✅ **Done 2026-09-05 (this PR).** Recon established: `generate_ai.py` reads ONLY sector/industry snapshots+deltas (`:98-122`) — zero picks/morning/positions/watchlist awareness. 11 calls/run, ~3 runs/day, `gemini-3.5-flash` on Vertex. Verified `evaluate_picks --report` live (48 dates): group-level excess is negative at every horizon vs both controls (paired −0.18/−0.54/−0.79/−1.07 at h=1/3/5/10); `emerging` @ h=10 is the only positive bucket. Scope caveat recorded in the doc: this is GROUP-level, not ticker-level (PICKS-4B still unbuilt). Drives the doc's core posture recommendation — a skeptical critic, not a pick-hyper. |
+| AI-NEXT-P0 | **Evidence-pack builder + versioned schema** | `scripts/generate_ai.py` | M | Generalize the existing `serialize_*()` discipline (`:209-624`) into a typed, versioned evidence pack so Tier A (Python) and Tier B (JS) emit structurally identical packs, every sentence is traceable to a pack line, and `eval_ai.py` has a machine-readable grounding target. Also wire `evaluate_picks` output into prompts. No new UI. |
+| AI-NEXT-P1 | **Picks: thesis + "the catch" + honesty chip** | `scripts/generate_ai.py`, `docs/index.html` | M | Batch, Tier A, top ~25 Focus names. "The catch" is mandatory/never-empty. Ships with the ADR-006 "ⓘ Behind this" drawer. |
+| AI-NEXT-P2 | **Morning: session read + cross-session delta + triage** | `scripts/generate_ai.py`, `docs/index.html` | M | Displaces nothing — every explanatory string on Morning today is a hardcoded per-status `_mNote()` lookup. Pre-close 10:05→15:30 delta narrative is the highest-value part. |
+| AI-NEXT-P3 | **The Brief (top level)** | `docs/index.html` | S | 5-line card: regime / what changed for you / the one action / the one non-action / uncertainty. Public half renders signed-out; personal half needs P4. |
+| AI-NEXT-P4 | **Tier B infra: private LLM route** | `worker-positions/**` | L | `POST /ai/ask` (owner bearer), D1 response cache keyed `(user_id, trade_date, surface, position_hash)`, BLOCKING numeric-grounding gate (change from ADR-006's offline-only posture — justified in proposal §2), plus the **ticker→industry group join** which does not exist in `worker-positions` today. Gates P5–P7. |
+| AI-NEXT-P5 | **Positions: hold/trim second opinion** | `worker-positions/**`, `docs/index.html` | M | Grounds on the full `position_events` ledger (not the UI's 8-event cap), `ticker_quotes` raw block, and the group deltas from P4's join. Hard constraint: `advance()` decides, the LLM only explains — it never writes `current_stop` or fires a transition. |
+| AI-NEXT-P6 | **Weekly review (loop-closer)** | `worker-positions/**` | M | Sunday coaching note joining picks history + morning statuses + position events + closed trades. 1 call/week, so it can afford a stronger model than the daily flash tier. |
+| AI-NEXT-P7 | **LLM-proposed `meta.config` overrides** | `worker-positions/**` | M | Optional/last. Uses the `trade-lifecycle-engine.md` §14 extensibility seam. Owner-approved per suggestion, never autonomous. |
+
+
 #### PWA UX — chart-toggle tap targets (2026-09-04)
 
 | # | Task | File(s) | Effort | Notes |
