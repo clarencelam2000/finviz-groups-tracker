@@ -35,8 +35,10 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `MIN_MARKET_CAP_B` | `5` | Picks tab base display filter (C6); rows below this market cap ($B) are hidden. |
 | `ATR_EXT_ACTIONABLE` | `4.0` | ATR-extension emerald band cap; also the Focus hard-DQ line (Phase 3b). |
 | `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start; flags a held position as a trim-10% candidate. |
-| `ATR_FROM_LOD_CLEAN` / `ATR_FROM_LOD_CHASE` | `0.8` / `1.0` | Morning tab (WS3, ADR-013) entry-quality bands on `atr_from_lod` = (price − session low) / ATR, shown only on actionable cards (Triggered / Gapped-through). `<= 0.8` clean entry (emerald "ok to act"), `> 1.0` chasing (red), between = caution (amber). Owner-set 2026-08-08. |
+| `ATR_FROM_LOD_CLEAN` / `ATR_FROM_LOD_CHASE` | `0.8` / `1.0` | Morning tab (WS3, ADR-013) entry-quality bands on `atr_from_lod` = (price − session low) / ATR, shown on every Morning/Watch card status (owner decision 2026-09-02 dropped the original actionable-only gate — see below). `<= 0.8` clean entry (emerald "ok to act"), `> 1.0` chasing (red), between = caution (amber), same bands regardless of status. Owner-set 2026-08-08. |
 | `LAUNCH_NEAR_HIGH_PCT` | `8` | Launch-ready chip (Picks tab, Phase 1, `computeLaunchReady()`): `ohMag` (% below 52-week high) `<=` this = "near the high" (little overhead supply). Display-only, no scoring effect. |
+| `POWER_OF_3_ATR_MULT` | `2.0` | "Pre-Power of 3" MA-bunching chip (B-5, issue #379) in the Volatility & setup section (`volSetupSectionHtml`): fires when price, the 20MA and the 50MA all fit inside one band this many ATRs wide. Owner-set band (a fact, doc §4.0 — not an invented cutoff); larger = looser. **Computed client-side from the raw Price/ATR/SMA20/SMA50 columns — deliberately NOT a stored CSV column** (a config-dependent pure single-row value belongs at render time — see `.claude/rules/data-pipeline.md` § Schema changes to ground-truth CSVs). Real-time on Morning/Watch because those four are in `_SETUP_FRESH_COLS`. Not tracked by `display_methodology.json` (a display fact, not part of the All/Focus scoring). |
+| `VOLATILITY_FLOOR_PCT` | `1.0` | Hard exclusion gate (2026-09-02, owner call after the APGE false-"coiled" case, `passesVolatilityFloor()`): a row is hidden from Picks (`passesPicksBaseFilter`), Focus (`isFocusEligible`), and the Morning picks-confirmation read (`renderMorning`) when its `Volatility W` % OR ATR/Price % is below this floor — provably near-dead (buyout-frozen, halted, or a perpetual preferred) rather than a genuine tight coil. NaN passes through (unknown ≠ low). The user's own **watchlist** and a direct **Lookup** ticker search are exempt (explicit intent) — Lookup instead shows an amber "Low volatility" chip (`tickerContextHtml`). Validated 2026-09-02 against the live picks pool: both `Volatility W` and `ATR/Price` have a real gap between ~0.5% and ~1.2% (the next names up are legitimate low-vol mega-caps starting at 1.2%+), so `1.0` sits in that gap rather than being an eyeballed cutoff. **Computed client-side from the already-scraped `Volatility W`/`ATR`/`Price` columns — not a stored CSV column** (a row-visibility decision, not a schema change; see `.claude/rules/data-pipeline.md` § Schema changes to ground-truth CSVs). Tracked by `display_methodology.json` under `base_filter`/`focus_dq` (`v6` entry) — the Focus *scoring formula* itself is unchanged, only the candidate pool. |
 | `LAUNCH_CALM_EXT_MAX` | `3` | Launch-ready chip: `atr_ext_50` `<=` this (and `> 0`) alongside near-high = `Coiled`; `>` this = `Extended`. |
 | `LAUNCH_OVERHEAD_PCT` | `20` | Launch-ready chip: `ohMag >` this = `Overhead` (deep below high, heavy overhead supply). |
 | `ATR_EXT_PENALTY_START` | `2.5` | Focus-score extension penalty ramp start; 0 penalty below this, ramps to `PENALTY_MAX` at `ATR_EXT_ACTIONABLE`. |
@@ -108,13 +110,25 @@ window, with an optional private "level of interest" overlay.
   real position should vanish outright, not sit in a removed bin. Both terminal statuses purge
   after `WATCHLIST_PURGE_DAYS` (worker-side `tickWatchlist()`), symmetric.
 - **Merge model, two sources joined client-side by ticker.** (1) The *public system read*:
-  `morning_latest.csv` rows tagged `list_category === 'watchlist'` — the same server-computed
-  status pipeline (`pick_status.py`) that scores picks, so watch tickers get a real
-  triggered/gapped/reclaim/etc. status without any private data leaving the CSV. (2) The
-  *private feed*: owner-bearer `GET /watchlist` on the `finviz-positions` worker, which returns
-  `level_type`/`level_value`, `sessions_remaining`, `status`, and reference values
-  (`prior_high`, `prior_low`, `atr`, `sma20`, `sma50`). The Morning-tab card
-  (`watchCardHtml(entry, pub)`) merges the two by `ticker` at render time.
+  `morning_latest.csv` rows for this ticker — the same server-computed status pipeline
+  (`pick_status.py`) that scores picks, so watch tickers get a real triggered/gapped/reclaim/etc.
+  status without any private data leaving the CSV. (2) The *private feed*: owner-bearer
+  `GET /watchlist` on the `finviz-positions` worker, which returns `level_type`/`level_value`,
+  `sessions_remaining`, `status`, and reference values (`prior_high`, `prior_low`, `atr`, `sma20`,
+  `sma50`). The Morning-tab card (`watchCardHtml(entry, pub)`) merges the two by `ticker` at
+  render time, via the shared `findWatchPub(ticker)` helper (defined just above `watchCardHtml`).
+  **`findWatchPub` deliberately does NOT require `list_category === 'watchlist'`
+  (WATCHLIST-PUB-LOOKUP, 2026-09-04 — fixed a real bug, not a hardening).** It prefers an exact
+  `'watchlist'`-tagged row but falls back to ANY row for the ticker: `collect_morning.py`'s
+  `union_watch_levels()` drops a watch ticker's own row whenever that ticker ALSO qualifies as a
+  Focus pick that day — the Focus pick's row (tagged `accel`/`leaders`/etc.) wins the collision,
+  and no `'watchlist'`-tagged row is written for that date at all, even though the same
+  `pick_status` engine computed a real classification. A strict `list_category` filter then finds
+  nothing and the card falls into the `awaitingFirstRead` "Pending read" state forever — confirmed
+  live on tickers that were both watched and recurring Focus picks (one had never shown a real
+  status since being added, since it already qualified as a pick before the watch entry existed).
+  The lookup is always called for one specific ticker the user is actively watching, so dropping
+  the `list_category` constraint can't accidentally pick up an unrelated ticker's row.
 - **Three card states, not two (WS-POSITIONS-STATUS, 2026-08-25).** `entry.prior_high == null`
   (no `ticker_quotes` bar exists at all yet) → the true "Added — first morning check lands
   tomorrow AM" state. A bar can exist (live via `GET /watchlist`, which updates hours before the
@@ -144,6 +158,49 @@ window, with an optional private "level of interest" overlay.
   of truth for the real countdown) and `WATCHLIST_PURGE_DAYS` are documented in
   `worker-positions/README.md`.
 
+### Inline "+ Watch" quick-add (2026-09-04)
+
+Generalizes `state.watchAdd`'s Positions-tab-only collapsible so a ticker can be watched
+without `switchTab('positions')`, mounted at three spots plus one fix:
+
+- **Picks tab row** (`renderPickRow`'s action bar, mountKey `qw_pick_<key>` — since
+  `renderPickRow` is the shared row renderer, this also covers any other consumer of it, e.g.
+  a picks-pool row surfaced from Lookup Stage-2).
+- **Morning tab Picks-subtab card** (`morningChartAffordance`, mountKey `qw_morning_<ticker>` —
+  one shared helper, so every status branch gets it for free).
+- **Lookup tab ticker result** (`renderLookup`, mountKey `qw_lookup_<symbol>`).
+- **Morning tab Watchlist-subtab "Edit level"** (`watchEditLevel`, mountKey
+  `qw_watch_<ticker>`) — previously set up `state.watchAdd` and called
+  `switchTab('positions')`, the same jump-away pattern the three new spots above were built to
+  avoid. Now opens the same inline editor in place.
+
+Unlike `state.watchAdd`'s free-text ticker field (which debounces a `lookupTicker()`/FMP
+resolve call as the user types), every quick-watch mount is handed an already-known ticker —
+there is no resolve step and no ticker input in this UI at all.
+
+- **Instant add, optional refine — one tap persists it.** Tapping "+ Watch" on an unwatched
+  ticker fires `watchAddApi({ ticker })` immediately; the level-of-interest form (same
+  Above/Below/20MA/50MA chips as `watchAddHtml()`) then opens inline as a *second, optional*
+  call to the same upsert-by-ticker endpoint — never required to persist the original add. An
+  already-watched ticker's button instead reads "✓ Watching" and opens straight into the level
+  editor (seeded from the existing entry), with no re-POST until Save is pressed.
+- **State**: `state.quickWatchAdded` (Set of tickers added this session — optimistic, unioned
+  with `state.watchlistData` via `isTickerWatched()`), `state.quickWatchOpenPanels` (Set of open
+  mountKeys), `state.quickWatchForm` (mountKey → `{levelType, levelValue, submitting, error,
+  justAdded}`). Shared helpers: `quickWatchButtonHtml`/`quickWatchPanelHtml` (render),
+  `renderQuickWatchButton`/`renderQuickWatchPanel` (DOM-patch by id, same discipline as
+  `__togglePickChart`/`__toggleMorningChart` — never a full re-render on open/close/typing).
+- **`ensureWatchlistLoaded()`**: Picks and Lookup never otherwise trigger `loadWatchlist()`
+  (only Morning/Positions tab renders do), so without this a signed-in user landing straight on
+  Picks would see "+ Watch" on every row even for already-watched tickers. Best-effort,
+  deduped via `state.watchlistLoading`; called once per `renderPicks()` pass and once when the
+  Lookup ticker card renders, each with a callback that re-renders that view once the fetch
+  lands. The Morning tab needs no extra call — its existing batch loader already fetches
+  `state.watchlistData`.
+- Signed-out tap opens the panel showing a sign-in nudge only ("Session expired — sign in on
+  the Positions tab…") — no add attempted, same wording convention as `watchAddErrorText`.
+- Tests: `tests/test_pwa_quick_watch.py` (Playwright — in the CI `--ignore=` list).
+
 ## Morning tab (WS3, ADR-013)
 
 **Subtabs (morning-subtabs-watchlist).** The tab has two panes, `#morning-subtab-picks`
@@ -169,12 +226,96 @@ the empty state — a 404 is expected, never an error.
 - **Actionability sort** (`MORNING_STATUS_META[*].order`): Triggered → Gapped-through / Reclaimed
   (both order 1) → Failed breakout → Setting up → Invalidated → No quote. This is the *display*
   order and is deliberately different from the engine's evaluation precedence
-  (`pick_status.STATUS_PRECEDENCE`).
-- **`atr_from_lod` and the "I took it" button render only on actionable states** (Triggered /
-  Gapped-through / **Reclaimed** — 2026-08-27, `reclaim.actionable:true`), gated by
-  `MORNING_STATUS_META[*].actionable`. Picks now emit `reclaim` (against their prior low OR a
-  derived 50MA); the `reclaim` case in `morningCardBody` names the reclaimed level from the
-  `reclaim_ref`/`reclaim_ref_value` CSV columns (50MA prefixed `~` — a stale derived level).
+  (`pick_status.STATUS_PRECEDENCE`). **This grouping is a constant** — it applies under every
+  sort mode below; the sort toggle only ever changes the tiebreak *within* a bucket (one
+  exception, Rel volume's Global scope — see below).
+- **Sort / launch-ready filter / bucket collapse + mini-nav (owner decision 2026-09-03).**
+  `renderMorning()` enriches each row once (`sessionDisplayRow`, EOD cross-ref via
+  `ws4FindPicksRow`, `computeLaunchReady`, Focus score, `atr_from_lod`, Rel Volume — see the
+  `enriched` map at the top of the function) before filtering/sorting/grouping, so those steps
+  never re-derive the same values per row.
+  - **Sort pills** (`morningSortBarHtml()`, `state.morningSort`): `A–Z` (today's plain ticker
+    order, kept as an explicit option, not removed), **`Focus score` (default)**, `ATR from LoD`
+    (reuses the exact on-card label/metric — deliberately not a separate "entry quality" name),
+    and `Rel volume`. `sortMorningEntries()` is the shared comparator: nulls (e.g. a ticker that
+    isn't a Focus candidate today) always sort last within a bucket, then ticker A–Z — it never
+    NaN-crashes on missing data.
+  - **Rel volume's scope switch** (`state.morningSortScope`, only rendered when
+    `morningSort==='rel_volume'` — a conditional control instead of a permanent 5th pill, given
+    how much chrome already stacks above the first card on this tab): `In bucket` (default,
+    same bucket-preserving behavior as the other three modes) or `Global`, which flattens ALL
+    status buckets into one Rel-volume-ranked list — "what's most active right now" is a
+    different question from "what's most active among my Triggered names," and doesn't make
+    sense gated by status. In Global mode there are no bucket headers, no mini-nav, and no
+    collapse — each card still shows its own status pill.
+  - **Focus score chip + card sort share ONE computation.** `focusScoreMapForPool()` runs the
+    same candidate derivation `ws4FocusScore()` has always used (C6 base filter +
+    `isFocusEligible` over `state.picksData` — matches the Picks tab's own Focus badges) and
+    `computeFocusScores()` pass. `renderMorning()` calls it once per render into module-level
+    `_morningFocusMap`; the per-card chip, the `'focus'` sort branch, AND `ws4FocusScore()`'s
+    trade-ticket footnote lookup (`ws4TicketHtml`, rendered later in the same synchronous render
+    pass) all read that one map — never three separate `computeFocusScores()` passes that could
+    disagree on a ticker's score within one render. A future change to the Focus formula or its
+    candidate pool updates the chip, the sort, and the footnote for free.
+  - **Launch-ready filter** (`morningLaunchFilterHtml()`, `state.morningLaunchFilter`): `All` /
+    `Coiled` / `Extended` / `Overhead`, filtering on the SAME `computeLaunchReady()` label
+    already shown as a card chip. Independent axis from sort — narrows the pool, then sort
+    orders whatever's left. Pill counts are computed off the full (unfiltered) enriched pool so
+    a pill always previews what selecting it would show. A filter that empties every bucket
+    shows filter-specific "No `<X>` setups right now — try All" copy, not the generic
+    no-picks-today empty state.
+  - **Bucket collapse + sticky mini-nav** (`state.morningCollapsed`, a `Set` of status keys;
+    `morningMiniNavHtml()`): each non-empty bucket header is a toggle button
+    (`__toggleMorningBucket`) showing its label + count; `state.morningCollapsed` starts EMPTY
+    (everything expanded, matching pre-2026-09-03 behavior) — the user collapses buckets
+    manually rather than the tab defaulting to a denser/quieter look on its own. The sticky
+    mini-nav (only rendered when there's more than one bucket) lists every non-empty bucket with
+    its count; `__jumpToMorningBucket()` force-expands the target bucket before scrolling to it
+    — landing on a collapsed header with nothing visible underneath would look like a broken
+    jump, not a successful one.
+  - All four pieces of state (`morningSort`, `morningSortScope`, `morningLaunchFilter`,
+    `morningCollapsed`) are session-only, same convention as `morningView`/`morningSubtab` —
+    they reset to their defaults on reload, never persisted.
+- **`atr_from_lod` + Rel volume render on every status (owner decision 2026-09-02); the "I
+  took it" button stays actionable-only.** Originally `atr_from_lod` was computed and shown
+  only for Triggered / Gapped-through / **Reclaimed** (`MORNING_STATUS_META[*].actionable`,
+  `reclaim.actionable:true` since 2026-08-27); the owner asked for real-time entry-quality
+  context (ATR-from-LoD + Rel volume, both live scrape-wide values, unlike the B-2/B-3
+  trailing cols below) on every card regardless of tradeability, so `compute_atr_from_lod`
+  is now called unconditionally in `collect_morning.py` and both `morningCardBody` and
+  `watchCardHtml` render the two rows on every status branch, same color bands throughout.
+  `MORNING_STATUS_META[*].actionable` still gates the trade ticket / "I took it" CTA — that
+  part of the actionable/non-actionable split is unchanged. Picks emit `reclaim` (against
+  their prior low OR a derived 50MA); the `reclaim` case in `morningCardBody` names the
+  reclaimed level from the `reclaim_ref`/`reclaim_ref_value` CSV columns (50MA prefixed `~`
+  — a stale derived level). **`watchCardHtml`'s reclaim branch was a known inconsistency**
+  (a separate hand-built body that predated the shared atrRow/rvolRow rows and never
+  rendered them) — fixed here so all watch card states render the same rows; tracked as
+  closed in `.session/SPRINT.md` (was open as a standardization gap).
+- **Compression "Volatility & setup" section (B-6, issue #379).** Every morning picks card
+  (`morningCardBody`, all live statuses) and every watch card (`watchCardHtml`) renders the shared
+  `volSetupSectionHtml(r, {staleTrailing:true})` section (the A-2 seam, defined near `volSpark`)
+  — the same one the Picks card uses (`renderPickRow` omits `staleTrailing`): B-1 Vol W/M (+
+  contracting/expanding fact tint) · Rel volume · 52W-high dist, B-2 range tightening, B-3 volume
+  dry-up, B-5 Pre-Power of 3 (MA-bunching COIL-PRECONDITION chip — price/20MA/50MA within a
+  `POWER_OF_3_ATR_MULT`×ATR band, computed **client-side** in `volSetupSectionHtml` from raw
+  Price/ATR/SMA20/SMA50 — NOT a stored CSV column, since it's a config-dependent pure single-row
+  value; plus the two shown SMA % distances and the classic MA-to-MA cluster spread %; the full
+  undercut→reclaim trigger is a later slice, B-5b). Because it's computed at render time and
+  Price/SMA20/SMA50/ATR are in `_SETUP_FRESH_COLS`, the B-5 chip is **real-time** on Morning/Watch
+  (fresh MA levels), unlike the B-2/B-3 trailing sparklines which stay last-close (see below). `staleTrailing:true` labels the B-2/B-3 sub-headers "Range/Volume over last
+  10 sessions (as of last close M/D)" — those two sub-blocks alone come from the picks_latest
+  cross-ref (last night's close), unlike the fresh B-1 row above them or the Picks tab (where the
+  whole card is same-EOD-run, so no lag to caveat). It's inserted after the card's metric rows
+  and before the trade ticket / CTA (context before action). The row it renders from is built by
+  `setupRowForCard(ticker, freshRow)`: base = the `ws4FindPicksRow` cross-ref to `picks_latest`
+  (carries the B-2/B-3 trailing sparkline cols, multi-day, plus its own `date` — the as-of date
+  shown in the caveat), with the B-1 raw cols overridden by
+  this-morning's fresh scrape-wide values from the morning store row (`r`) / watch public read
+  (`pub`) — those columns are on the morning store since A-1-IMPL (scrape-wide). Self-hides (returns
+  `''`) for an orphan with no picks history and no fresh scrape. The **trade ticket** deliberately
+  does NOT render it separately — it lives inside the morning card, which already shows it above the
+  ticket, so a second copy would duplicate.
 - **"I took it" creates a real position (WS5 phase 1, #309).** It is login-gated: signed out, the
   tap shows a "Sign in on the Positions tab" note (no write); signed in, it opens an inline confirm
   (entry/stop/qty captured from the trade ticket's current state via `ws5BuildPayload`) → `POST

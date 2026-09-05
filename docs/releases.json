@@ -1,6 +1,117 @@
 {
-  "current": "2026.08.31.1",
+  "current": "2026.09.04.2",
   "releases": [
+    {
+      "version": "2026.09.04.2",
+      "date": "2026-09-04",
+      "title": "Fix: watchlist stuck on \"Pending read\"",
+      "tag": "fix",
+      "tab": "morning",
+      "notes": [
+        "A watchlist ticker that also shows up in your daily Picks could get stuck showing \"Pending read\" indefinitely, even though a real status had already been computed for it — the card just wasn't looking in the right place for it. Watch cards now find that status wherever it landed."
+      ]
+    },
+    {
+      "version": "2026.09.04.1",
+      "date": "2026-09-04",
+      "title": "Bigger chart-toggle tap target",
+      "tag": "improvement",
+      "notes": [
+        "The Show/Hide chart control on Lookup, Picks, Morning, Positions, and your watchlist is now a full-width bar with tall side rails, instead of a small button in the corner — much easier to hit one-handed. The rails run alongside the chart itself once it's open, so closing it back up is just as easy."
+      ]
+    },
+    {
+      "version": "2026.09.04",
+      "date": "2026-09-04",
+      "title": "Add to watchlist without leaving the tab",
+      "tag": "feature",
+      "notes": [
+        "A new \"+ Watch\" button on Picks rows, Morning-tab picks cards, and Lookup ticker results adds a ticker to your watchlist in one tap — no more jumping to the Positions tab. An optional level-of-interest form expands right there afterward if you want to set one.",
+        "Editing a watchlist ticker's level from the Morning tab's Watchlist section now happens inline too, instead of switching to the Positions tab."
+      ]
+    },
+    {
+      "version": "2026.09.03.1",
+      "date": "2026-09-03",
+      "title": "Morning tab: sort, setup filter, and bucket navigation",
+      "tag": "improvement",
+      "tab": "morning",
+      "notes": [
+        "The Morning tab's picks list now sorts by Focus score within each status group by default, instead of just alphabetically — the best-quality setups surface first. Switch to A–Z, ATR from LoD, or Rel volume (with an \"All\" option that ignores status entirely) from the new Sort row.",
+        "A new Setup filter narrows the list to just Coiled, Extended, or Overhead launch-ready setups.",
+        "Each status group (Triggered, Setting up, etc.) can now be collapsed, and a sticky mini-nav at the top jumps straight to any group and shows its count.",
+        "Cards now show a Focus score chip when the ticker is a Focus candidate today."
+      ]
+    },
+    {
+      "version": "2026.09.03",
+      "date": "2026-09-03",
+      "title": "Picks group tap opens a quick detail sheet",
+      "tag": "improvement",
+      "tab": "picks",
+      "notes": [
+        "Tapping a group name on the Picks tab now opens the same quick detail sheet the AI tab's group mentions use, landed straight on the full breakdown — rank, performance, and momentum deep dive — instead of jumping away to the Lookup tab. \"Full lookup ↗\" inside the sheet still gets you there if you want more.",
+        "Each group header on the Picks tab now shows the same reason chips (Leaders, Emerging, Accel, RS New High, All Green) the Lookup tab shows, so you can see at a glance every bucket a group qualified for today, not just the section it's listed under."
+      ]
+    },
+    {
+      "version": "2026.09.02.3",
+      "date": "2026-09-02",
+      "title": "Low-volatility names hidden from Picks/Focus/Morning",
+      "tag": "improvement",
+      "tab": "picks",
+      "notes": [
+        "Stocks with essentially no movement — weekly volatility or ATR/price under 1% — are now hidden from the Picks tab, Focus, and the Morning picks-confirmation cards. These are usually buyout-frozen, halted, or non-common names (a perpetual preferred showed up in the pool) whose tight range could otherwise look like a real coiled setup.",
+        "Your watchlist and a direct ticker search on the Lookup tab are unaffected — searching a low-volatility ticker still shows it, now with a \"Low volatility\" warning chip so you know why it's this quiet."
+      ]
+    },
+    {
+      "version": "2026.09.02.2",
+      "date": "2026-09-02",
+      "title": "Pre-Power of 3 — MA bunching on setup cards",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "The \"Volatility & setup\" section now shows an MA-bunching read: distance from price to the 20-day and 50-day MAs, the MA-to-MA cluster spread %, and a green \"Pre-Power of 3\" chip when price, the 20MA and the 50MA are all bunched inside a 2× ATR band.",
+        "This is the coil precondition — the tight-cluster half of a Power of 3 setup. The full trigger (an undercut of the cluster then a reclaim of the highest MA) is coming as a follow-up; this chip flags the names to watch for it.",
+        "The 2× ATR band is a fixed fact, not a score — the chip either fires or it doesn't. Appears everywhere the setup section does (Picks, Morning, Watchlist, trade ticket), and it's real-time on Morning and Watchlist cards — the moving averages come from this morning's scrape, not last night's close."
+      ]
+    },
+    {
+      "version": "2026.09.02.1",
+      "date": "2026-09-02",
+      "title": "Entry-quality rows on every Morning/Watch card",
+      "tag": "feature",
+      "tab": "morning",
+      "notes": [
+        "ATR-from-LoD and relative volume now show on every Morning and Watchlist card — not just Triggered/Gapped-through/Reclaimed. Same color bands throughout, so you get real-time entry-quality context even on Setting-up, Failed-breakout and Invalidated names.",
+        "The Range/Volume sparklines inside \"Volatility & setup\" are now labeled \"Range over last 10 sessions\" / \"Volume over last 10 sessions\", with an \"as of last close M/D\" note on Morning and Watchlist cards — that data comes from last night's close, one session behind the fresh numbers above it. The Picks tab doesn't need the note since its whole card is from the same run."
+      ]
+    },
+    {
+      "version": "2026.09.02",
+      "date": "2026-09-02",
+      "title": "Volatility & setup section on Morning cards",
+      "tag": "feature",
+      "tab": "morning",
+      "notes": [
+        "The \"Volatility & setup\" compression section — Vol W/M, relative volume, distance from the 52-week high, plus the range-tightening and volume-dry-up sparklines — now appears on your Morning picks and Watchlist cards, not just the Picks tab. The coil read is right there when you're deciding pre-open.",
+        "The raw Vol W/M, relative volume and 52-week-high values are fresh from this morning's scrape; the range/volume sparklines come from the last few days of history for that name.",
+        "Same facts-only rule as before: shown values and a plain contracting/expanding tint (whichever of Vol W or Vol M is larger), never an invented threshold. A name with no history simply shows no section instead of a row of dashes."
+      ]
+    },
+    {
+      "version": "2026.09.01",
+      "date": "2026-09-01",
+      "title": "Volume dry-up on Picks cards",
+      "tag": "feature",
+      "tab": "picks",
+      "notes": [
+        "The \"Volatility & setup\" section now shows a \"Volume dry-up\" read: a mini sparkline of relative volume over the last few bars we have for that name, so you can see whether volume is quietly drying up as the range tightens — the classic coiling tell.",
+        "It's a shown trend, not a threshold — the line and its latest value are there for you to read; nothing is gated behind an invented cutoff.",
+        "Self-hides for names without enough history — no fabricated readings."
+      ]
+    },
     {
       "version": "2026.08.31.1",
       "date": "2026-08-31",

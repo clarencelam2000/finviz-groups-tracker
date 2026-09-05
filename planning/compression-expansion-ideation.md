@@ -121,6 +121,54 @@ plus **filter/sort**, plus flags only where §4.0 permits.
 - **Confirmer, not a trigger** (owner agree). Weakest signal of the set; small confirming tick
   inside a setup section, never a headline metric, never scored alone.
 
+**Owner spec locked (2026-09-02) — it's "Power of 3", not "Rule of Three".** Power of 3 is
+normally price / 10 / 20 / 50 MAs bunched; **we don't scrape the 10MA, so drop it** (and drop the
+200 — it's not the third line of this pattern). The build uses **price / 20MA / 50MA** only.
+
+**The full setup is a SEQUENCE, not a static state (owner notes, 2026-09-02):** (1) the three MAs
++ price bunch tightly (ideally the MAs within ~1–1.5% of each other); (2) the 50MA is flat or
+rising; (3) price **undercuts** the whole cluster (dips below the lowest MA) — a liquidity/stop
+grab; (4) price **reclaims** back above the highest MA — *the reclaim is the trigger*. Entry on the
+reclaim, stop under the undercut/reclaim-day low, prefer strong-RS names. The edge is the
+bunched→undercut→reclaim sequence, distinct from a simple single-MA pullback.
+
+**Split into two slices (owner-approved 2026-09-02):**
+- **B-5 = the COIL PRECONDITION only, honestly labeled "Pre-Power of 3".** Ships now. It flags
+  step (1) — the tight cluster — and nothing more. It fires on a fact the OWNER specified (dissolves
+  the §4.0 threshold tension): price, 20MA and 50MA all inside a single **2×ATR** band,
+  `max(price, 20MA$, 50MA$) − min(price, 20MA$, 50MA$) ≤ 2 × ATR`. The 2×ATR band is the owner's own
+  number (domain authority per §4.0), not an invented cutoff → a binary chip is legitimate.
+  Constant `POWER_OF_3_ATR_MULT = 2.0`, triple-documented.
+  - **Shown alongside the chip:** price's distance to 20MA and to 50MA (Finviz `SMA20`/`SMA50` %)
+    AND the classic MA-to-MA cluster spread % (`|20MA$ − 50MA$| / price`, derived client-side from
+    `Price`/`SMA20`/`SMA50` — no new column), so the trader sees *why* it is/isn't bunched.
+  - **Compute site — CLIENT-SIDE, not the pipeline (corrected 2026-09-02 after PR #392 review).**
+    The chip is computed in `volSetupSectionHtml` (`docs/index.html`) from the raw Price/ATR/SMA20/
+    SMA50 columns already present on every row; `POWER_OF_3_ATR_MULT = 2.0` is a **PWA display
+    constant**. The first cut wrongly persisted `power_of_3` as a 6th `METRICS_COLS` column in
+    picks.csv — but it's a pure single-row function of already-stored values AND config-dependent,
+    so baking it into the append-only ground truth would silently go stale if the constant changed,
+    and cost a 13k-row migration + a merge conflict for nothing. The owner's review + the new
+    `.claude/rules/data-pipeline.md` § Schema changes rule make this explicit: a config-dependent
+    pure single-row value belongs at render/analysis time, never in the CSV. (Contrast `tight_range_7`,
+    which genuinely needs a multi-day pass and rightly stays a pipeline column.)
+  - **Render:** a "MA bunching" sub-block (green "Pre-Power of 3" chip) in the shared
+    `volSetupSectionHtml` (A-2 seam) → shows on Picks + Morning + Watchlist + inherited Ticket at
+    once. **Real-time on the Morning family:** `Price`/`SMA20`/`SMA50`/`ATR` were added to
+    `collect_morning.SETUP_COLUMNS` (morning store) and to `_SETUP_FRESH_COLS` (PWA), so
+    `setupRowForCard` overrides them with this-morning's scrape and the chip re-fires off fresh MA
+    levels — NOT last night's close. (This corrects an earlier wrong assumption that MAs "barely
+    move intraday": Finviz's SMA%-distance columns track the live price, so they go stale intraday
+    exactly like price. The B-2/B-3 trailing sparklines stay last-close — they're genuinely
+    multi-day.) B-5b's trigger needs this same fresh-MA data.
+- **B-5b = the full undercut→reclaim TRIGGER (next slice).** Composes on `pick_status.py`'s existing
+  reclaim engine (`compute_reclaim`/`reclaim_refs`, already an `ACTIONABLE_STATUS`): gate on
+  Pre-Power-of-3 bunched, detect undercut below the cluster low (min of the two MAs), and fire on a
+  reclaim of the cluster high (max of the two MAs). Actionable morning read (entry on reclaim, stop
+  under the undercut low) — matching how the owner described using it. The reclaim is a fact (price
+  crossed a level), not a judgment, so it stays §4.0-clean. Verify the exact engine wiring before
+  building.
+
 ### 5.4 ATR trend — sparkline for eyes, slope for score
 - **Mini sparkline** is the trustworthy human-facing surface (owner: yes). A human reads
   "tightening then popping" off a sparkline and rightly distrusts a lone slope number.
@@ -251,6 +299,42 @@ cols, but **18 of 123 morning tickers are NOT in `picks_latest`** (~15%: AMD, AL
 OSCR, TSEM, …) — watchlist adds / setting-up names not in last night's EOD picks run. So cross-ref
 covers ~85% for free; ~15% render blank.
 
+### 7.3a A-1 verification (2026-09-01) — findings + recommendation
+Verification the doc §7.3 asked for, done. **Recommendation: scrape-wide (path a).**
+
+**Cost of scrape-wide is near-zero (the doc's feared downside does not hold).**
+`collect_morning.py::fetch_ticker_quotes` (`build_ticker_url`, lines ~138-211) scrapes a
+`t=`-filtered ticker list, batched ≤50/URL (`MORNING_BATCH_SIZE=50`), paginated 20 rows/page.
+The number of `page.goto()` calls — i.e. the Cloudflare surface — is driven **entirely by ticker
+count, not column count**. Morning universe = Focus top-100 + watchlist union (min22/median95/
+max100 names/day) → ≤2 batches. Switching the morning block from 9 cols to a wide 84-col block
+changes only the `c=` URL param: **identical goto count, identical Cloudflare exposure**, only a
+larger HTML payload per page. The 84-col `t=`-filtered scrape is already proven in prod —
+`build_ticker_url(..., block="held")` does exactly this for the WS5 held feed.
+
+**Cross-ref coverage is worse than the doc's ~15% estimate.** Measured on 2026-08-31 data:
+morning **33.6% orphans** (42/125), pre-close **21%** (21/100). Orphans = watchlist adds +
+setting-up names not in last night's EOD picks run. Cross-ref would leave ~⅓ of morning cards
+blank on the volatility/setup section — disproportionately the pre-open action surface.
+
+**What each B section needs (verified present in `picks_latest.csv`):**
+- B-1 (raw scraped): `RSI`, `Volatility W`, `Volatility M`, `Rel Volume`, `52W High`. Scrape-wide
+  provides these **fresh this-morning**; cross-ref provides last night's (fine for multi-day, staler
+  for RSI/RelVol).
+- B-2 (derived in the *picks* pipeline, NOT scraped): `tight_range_7`, `range_atr_spark`,
+  `atr_spark`. These come via **cross-ref regardless** — they're trailing/multi-day, so last night's
+  values are current enough; orphans have no picks history so they'd be blank under *any* path.
+
+**Existing join is already built + loaded:** `ws4FindPicksRow(ticker)` (exact-string match on
+`Ticker||ticker`), and `state.picksData` (picks_latest) is already resident on every render via
+`loadPicks()` — no new fetch needed for the cross-ref half.
+
+**Net recommendation:** scrape-wide the morning run for the B-1-family raw columns (100% coverage,
+fresh, ~zero extra Cloudflare cost, reuses proven `held` machinery); keep cross-ref to picks_latest
+for the B-2 derived sparkline columns (multi-day, no benefit from re-scraping). This matches the
+owner's stated §7.3 preference ("wants full 84 cols … prefers (a) if no blocking downside") now that
+"no blocking downside" is verified.
+
 ### 7.3 Owner decision on morning data
 **Owner wants the full 84 columns available on morning cards.** Two ways, to be decided:
 - **(a) Scrape the wide 84 in the morning run** — if no blocking downside, owner wants this.
@@ -364,10 +448,11 @@ justify its own small, time-sensitive list — phase 2.
 |----|-------|---------|--------|------------|
 | B-1 | "Volatility & setup" section on Picks card — Vol W/M, RelVol, 52W-high dist (shown values) | §5.1, §10.6 | ✅ | **PR #380** (merged). Picks card only. Contracting/expanding tint = sign of (VolW−VolM), a fact. |
 | B-2 | Tightest-range flag + range_atr/ATR sparkline (range tightening) — derived pipeline columns, per-name history w/ graceful degrade | §5.4, §5.7, §3 | ✅ | **PR #383**. 3 new `TRAILING_COLS` in the picks pipeline (`tight_range_7`, `range_atr_spark`, `atr_spark`), computed over trailing available bars, populated only on the picks_latest slice. Picks card "Range tightening" block: honest "Tightest range · last 7 bars" flag (owner 2026-08-31: NOT "NR7" — gappy history) + two mini sparklines. Graceful per-name degrade. |
-| B-3 | Volume dry-up sub-signal for VCP proxy (RelVol trend while price holds) | §5.2, §10.3 | ⬜ | Volume dry-up is the strongest/cheapest VCP piece (owner-named). Needs RelVol trend window def (a window, not a threshold). |
+| B-3 | Volume dry-up sub-signal for VCP proxy (RelVol trend while price holds) | §5.2, §10.3 | ✅ | **PR (this session).** New 4th `TRAILING_COLS` col `relvol_spark` (pipe-joined trailing Rel Volume series, same trailing-window/graceful-degrade machinery as B-2's sparks — window is `SPARK_WINDOW`, not a new constant). Picks card "Volume dry-up" sub-block under the B-1 "Volatility & setup" section renders it via the existing `volSpark()` helper (a SHOWN trend, doc §4.0 — no threshold, no flag). Migration backfilled 487/535 latest rows. Composes into B-4. |
 | B-4 | VCP-style contraction proxy — shrinking pullback depth + tightening range + vol dry-up + 52W-high proximity. Label "Contraction (VCP-style)", never "VCP detected" | §5.2 | ⬜ | Composes B-2 + B-3. NOT "lower highs". |
-| B-5 | Rule-of-Three MA-bunching confirmer — MAs bunched, up-sloping, price above both, converging | §5.3 | ⬜ | Weakest signal; confirmer only, never a standalone trigger/score. |
-| B-6 | Propagate the "Volatility & setup" section to Lookup + Morning + Ticket cards | §4.1, §8 | 🅿️ | **Blocked on Effort A seam (A-2) and the §7.3 data decision (A-1).** This is the slice ordering rule #2 gates. |
+| B-5 | **Pre-Power of 3** MA-bunching chip + shown MA distances/spread — price/20MA/50MA within a 2×ATR band | §5.3 | ✅ | **PR #392 (this session).** The COIL PRECONDITION only, honestly labeled "Pre-Power of 3" (owner call — step 1 of the bunched→undercut→reclaim setup, not the trigger). price/20/50 only (no 10MA scraped, 200 dropped). Chip = single fact `span(price,20MA$,50MA$) ≤ POWER_OF_3_ATR_MULT(2.0)×ATR` — owner-set band, §4.0-clean. **Computed CLIENT-SIDE in `volSetupSectionHtml` from raw Price/ATR/SMA20/SMA50 — NOT a stored CSV column** (PR #392 review + `.claude/rules/data-pipeline.md`: config-dependent pure single-row value belongs at render time). Renders on all card families with the two SMA % distances + MA-to-MA cluster spread %. **Real-time on Morning/Watch** (Price/SMA20/SMA50/ATR added to `SETUP_COLUMNS` + `_SETUP_FRESH_COLS`). |
+| B-5b | **Power of 3 full trigger** — bunched → undercut the cluster → reclaim the highest MA (actionable) | §5.3 | ⏳ | **Next up.** Composes on `pick_status.py`'s reclaim engine (`compute_reclaim`/`reclaim_refs`, already actionable): gate on B-5's bunched flag, undercut below cluster low (min MA), reclaim above cluster high (max MA). Morning actionable read (entry on reclaim, stop under undercut low). Reclaim = a fact, §4.0-clean. Verify engine wiring first. |
+| B-6 | Propagate the "Volatility & setup" section (B-1 + B-2 + B-3) to Lookup + Morning + Ticket cards | §4.1, §8 | ✅ | **PR (this session).** Renders the shared `volSetupSectionHtml` (A-2 seam) on morning picks cards (`morningCardBody`, all live statuses) + watch cards (`watchCardHtml`), via `setupRowForCard(ticker, freshRow)` = picks_latest cross-ref (B-2/B-3 sparklines) + morning-store fresh B-1 override. Trade ticket inherits it from the morning card (no duplicate render). Lookup Stage-2 already had it (reuses `renderPickRow`). Owner-approved mock: `planning/mocks/b6-morning-volatility-setup.html`. 2 morning + 1 watch PWA tests. Release `2026.09.02` / sw.js v91. |
 | B-7 | Optional composite score (decomposable, shown next to components) | §4.1 L3, §10.7 | 🅿️ | LOW priority / maybe never. Owner wary of blended scores. Do not lead with this. |
 | B-8 | Forward-return eval of the signals (does compression predict?) | §10.10 | ⬜ | Reuse `evaluate_picks.py` scaffolding. Do after ≥1 signal has history. |
 | B-X | Expansion side (projected vol/RVol §5.5b; break+coil context §5.5a) | §5.5, §5.5a, §5.5b | 🅿️ | Secondary/subjective per owner. Facts+shown-values only, no "trigger." Revisit later. |
@@ -375,9 +460,16 @@ justify its own small, time-sensitive list — phase 2.
 ### Effort A — card standardization (issue #378)
 | ID | Slice | Doc ref | Status | PR / notes |
 |----|-------|---------|--------|------------|
-| A-1 | **Decide morning-card data path**: scrape-wide-84 vs cross-ref `picks_latest` (~85%) + D1 orphan backfill (~15%) | §7.3 | 🅿️ | **Owner decision, needs verification first** (scrape-time / Cloudflare exposure / exact coverage). The one gate for A. Do the verification, bring a recommendation. |
-| A-2 | Extract ONE shared card component/schema (superset fields + a "Setup/Volatility" section) reused across Picks-family and Morning-family | §7, §8 | ⬜ | The seam B-6 rides on. B-1's section is its reference layout. Depends on A-1 for the Morning-family data. |
-| A-3 | Apply the shared component to Morning card, Watchlist card, Trade ticket (the Morning family) | §7 | ⬜ | After A-2. |
+| A-1 | **Decide morning-card data path**: scrape-wide-84 vs cross-ref `picks_latest` (~85%) + D1 orphan backfill (~15%) | §7.3 | ✅ | **DECIDED 2026-09-01: scrape-wide (owner greenlit).** Verification in §7.3a. Cross-ref orphan rate worse than doc's ~15% (measured 2026-08-31: morning **33.6%**, pre-close **21%**). Scrape-wide cost is near-zero (`fetch_ticker_quotes` goto-count = ticker count, not column count; 84-col `t=` scrape already runs in prod as `block="held"`). Implementation = widen the morning/pre_close scrape to the wide column set + superset-additive session-store schema (next slice A-1-IMPL). B-2 derived sparkline cols still come via cross-ref (multi-day). |
+| A-1-IMPL | **Widen the morning/pre_close scrape to the 84-col block + carry setup columns into the session store** (the pipeline realization of A-1) | §7.3a | ✅ | **PR (this session).** `collect_morning.py`: `WIDE_SCRAPE_BLOCK="held"` (84-col, reuses the proven held config), `SETUP_COLUMNS` (`RSI`, `Volatility W`, `Volatility M`, `Rel Volume`, `52W High`) carried through verbatim into `STORE_COLUMNS` (superset-additive). No PWA render yet (that's B-6). Live values land on the next Actions morning run; committed store CSVs stay old-schema until then (write_store backfills "" — no manual migration). |
+| A-2 | Extract ONE shared card component/schema (superset fields + a "Setup/Volatility" section) reused across Picks-family and Morning-family | §7, §8 | ✅ | **PR (this session).** Extracted the "Volatility & setup" section (B-1 + B-2 + B-3) out of `renderPickRow` into one shared `volSetupSectionHtml(r)` in `docs/index.html`. **Pure refactor — Picks card renders byte-identically** (its 9 PWA tests green). Returns '' when a row has nothing to show (graceful degrade for morning orphans). This is the seam B-6 rides on. |
+| A-3 | Apply the shared component to Morning card, Watchlist card, Trade ticket (the Morning family) | §7 | ✅ | **Realized by B-6** (same PR): `volSetupSectionHtml` now renders on the morning picks card, the watch card, and (inherited) the trade ticket. This is the "Setup/Volatility" section slice of A-3; the fuller card-schema superset (RSI/Perf/Avg$Vol/Earnings) is future Effort-A work, not required to unblock the compression spine. |
+
+### Cross-cutting follow-ups (not scoped to a single effort)
+
+| ID | Slice | Status | PR / notes |
+|----|-------|--------|------------|
+| WIDE-SCRAPE-FASTFOLLOW | **Scope which of the remaining 84 wide-scrape columns are worth storing** (SMA20/50/200, 52W Low, Beta, Gap, Change from Open, Earnings date, EPS/Revenue Surprise, Recom, Target Price, News) | ⬜ | Issue #385, PR #384 review finding, 2026-09-01. PR #384 made the morning/pre_close scrape wide (84 cols, `held` block) at ~zero extra `page.goto` cost, but only 5 columns (`SETUP_COLUMNS`) are carried into the store. **Deliberately NOT filed under Effort A** — card rendering (A-2/B-6) is one consumer, but Earnings/EPS/Revenue-Surprise and the SMA columns are equally relevant to WS4's trade-ticket earnings guardrail and WS5's `advance()` engine (earnings-approach overlay, reclaim-ref 50MA derivation), which have nothing to do with card display. Not a mandate to store all 84 — a scoping pass, low priority, no urgency. |
 
 ### Dropped / not in scope
 | Item | Doc ref | Status |
@@ -388,6 +480,52 @@ justify its own small, time-sensitive list — phase 2.
 | "lower highs" as a VCP prerequisite | §5.2 | ❌ Wrong; removed from the design. |
 
 ### Progress log (newest first)
+- **2026-09-02 — B-6 done (compression section on the Morning family) + A-3 realized.** Owner
+  approved the mock and said "wire it into the morning family." Added `setupRowForCard(ticker,
+  freshRow)` (picks_latest cross-ref for B-2/B-3 sparklines + fresh morning-store B-1 override) and
+  rendered `volSetupSectionHtml` on `morningCardBody` (all live statuses, after the metric rows,
+  before ticket/CTA) and `watchCardHtml` (after the body). The trade ticket inherits it from the
+  morning card (no duplicate). Lookup Stage-2 already had it via `renderPickRow`. Graceful degrade:
+  orphans with no picks history + no fresh scrape show no section. Tests: 2 new morning PWA
+  (`test_volatility_setup_section_on_morning_card`, `..._hidden_for_orphan`) + 1 watch PWA
+  (`test_watch_card_shows_volatility_setup_section`); also added a `pre_close_latest.csv` stub to
+  `test_pwa_morning.py::_open_morning_tab` so that file runs in the cloud sandbox (was hanging on
+  the unreachable domain). Release `2026.09.02` (feature, tab morning) / sw.js v90→v91. This closes
+  A-2/A-3/B-6 — the compression spine now reaches the pre-open workflow. **Next: B-5 (MA bunching /
+  Rule-of-Three, the last named spine item) or B-4 (compose the VCP-style proxy).**
+- **2026-09-02 — A-2 done (shared card seam) + B-6 mock for owner review.** Owner chose the
+  strategic A-2→B-6 lever over the contained Picks-only spine slices (B-4/B-5) for this fresh
+  session. **A-2:** extracted the "Volatility & setup" section (B-1 Vol W/M·RelVol·52W + B-2 range
+  tightening + B-3 volume dry-up) from `renderPickRow` into one shared `volSetupSectionHtml(r)` in
+  `docs/index.html` — a pure refactor, Picks card byte-identical (9/9 PWA green). The function
+  returns '' when a row has nothing to show, so a morning orphan self-hides (graceful degrade §3).
+  **B-6 (pending owner green light):** built a real-data before/after mock of a Morning CAH card
+  with the section (`planning/mocks/b6-morning-volatility-setup.html`, published as an Artifact).
+  B-6 will render the identical section on Morning picks / Watchlist / Trade-ticket cards — B-1 raw
+  cols fresh from the A-1 scrape-wide morning store, B-2/B-3 sparkline cols via `ws4FindPicksRow`
+  cross-ref to picks_latest. **Next: on approval, wire B-6 into the Morning family + release triplet.**
+- **2026-09-01 — B-3 done (volume dry-up).** Chose B-3 over A-2→B-6 this session: it moves the
+  compression spine with an owner-named fact, is a contained single-card slice (ephemeral-session
+  safe, no A dependency, doesn't trip ordering rule #2), and B-6 propagates the whole "Volatility &
+  setup" section at once regardless of how many signals live in it — so landing B-3 first is free.
+  Implementation mirrored B-2 exactly: 4th `TRAILING_COLS` col `relvol_spark` (trailing Rel Volume
+  series via the same `compute_trailing_setup` machinery, reusing `SPARK_WINDOW`/`SPARK_MIN_BARS` —
+  no new constant, nothing to threshold per §4.0), a "Volume dry-up" sub-block in `renderPickRow`
+  via the existing `volSpark()` helper. Migration backfilled 487/535 picks_latest rows. 1 new unit
+  test + extended the B-2 PWA test (3 polylines, "Volume dry-up" present); 737 non-PW green, PWA test
+  green (chromium-1234). Release `2026.09.01` / sw.js v89→v90. **Next: A-2** (extract the shared card
+  component from B-1's layout) → **B-6** (propagate B-1/B-2/B-3 to the Morning family). A-2 is the
+  strategic next lever (cashes in A-1) but is a cross-card refactor better suited to a fresh session.
+- **2026-09-01 — A-1 decided + A-1-IMPL done.** Verification (§7.3a) showed cross-ref orphan rate
+  worse than the doc's ~15% (morning 33.6%, pre-close 21% on 2026-08-31) and that scrape-wide's
+  feared cost is near-zero (goto count = ticker count, not column count; 84-col `t=` scrape already
+  in prod as `block="held"`). **Owner greenlit scrape-wide.** Implemented: `collect_morning.py`
+  scrapes the 84-col `held` block (`WIDE_SCRAPE_BLOCK`) for morning/pre_close and carries
+  `SETUP_COLUMNS` (RSI, Vol W/M, Rel Volume, 52W High) into the session store (superset-additive).
+  1 new unit test; 736 non-PW suite green. 3-places doc'd. **Next: A-2** (extract the shared card
+  component from B-1's layout) → then **B-6** (render B-1/B-2 on the Morning family, B-1 from the
+  fresh morning store, B-2 via cross-ref). B-3 (volume dry-up) remains the alternative Picks-only
+  spine slice if the owner prefers to keep single-card momentum first.
 - **2026-08-31 — B-2 done (PR #383).** Range tightening on the Picks card. Pipeline: 3 new
   `TRAILING_COLS` in `picks_config.py` (`tight_range_7`, `range_atr_spark`, `atr_spark`) +
   `picks_metrics.compute_trailing_setup()` (pure, trailing-window over a ticker's *available*

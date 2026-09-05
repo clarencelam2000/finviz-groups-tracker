@@ -20,9 +20,9 @@ screener and logs them to an append-only event log. **Phase 2 of
 | File | Role |
 |------|------|
 | `scripts/collect_picks.py` | `select_groups()` (pure selector) + paginated scrape + append. Inherits `slugify_industry`/`_build_url`/`_parse_table` from `probe_picks.py`. |
-| `scripts/picks_config.py` | Single source of truth: schema (`picks_columns()`, 117 cols = 6 lead + 84 Finviz + 19 `grp_*` + 5 metrics + 3 trailing) + all tunable constants. |
-| `scripts/picks_metrics.py` | Pure helper module: parsers + `compute_metrics_row()` → 5 `METRICS_COLS` (`atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`, `range_atr`, `stage2`) + `compute_trailing_setup()` → 3 `TRAILING_COLS` (`tight_range_7`, `range_atr_spark`, `atr_spark`; B-2, compression spine). Fully unit-tested. |
-| `data/picks/picks.csv` | Append-only log; 117 cols per row. Lead (incl. `collected_at`, the per-run UTC scrape timestamp) + 84 Finviz + 19 `grp_*` + 5 metrics + 3 trailing. **Offline attribution only — never fetched by the PWA.** |
+| `scripts/picks_config.py` | Single source of truth: schema (`picks_columns()`, 118 cols = 6 lead + 84 Finviz + 19 `grp_*` + 5 metrics + 4 trailing) + all tunable constants. |
+| `scripts/picks_metrics.py` | Pure helper module: parsers + `compute_metrics_row()` → 5 `METRICS_COLS` (`atr_ext_50`, `risk_20ma_pct`, `risk_50ma_pct`, `range_atr`, `stage2`) + `compute_trailing_setup()` → 4 `TRAILING_COLS` (`tight_range_7`, `range_atr_spark`, `atr_spark` from B-2; `relvol_spark` — volume dry-up trend — from B-3; compression spine). Fully unit-tested. (B-5 Pre-Power of 3 is deliberately NOT a metric here — it's a pure single-row, config-dependent flag computed client-side in the PWA; see `.claude/rules/data-pipeline.md` § Schema changes to ground-truth CSVs.) |
+| `data/picks/picks.csv` | Append-only log; 118 cols per row. Lead (incl. `collected_at`, the per-run UTC scrape timestamp) + 84 Finviz + 19 `grp_*` + 5 metrics + 4 trailing. **Offline attribution only — never fetched by the PWA.** |
 | `data/picks/picks_latest.csv` | Max-date slice of `picks.csv` — **this is what the PWA fetches.** |
 | `data/picks/screener_config.json` | Modular URL config (`wide` net + `button`); 84-col `c=` list. Labels stay verbatim-synced to `tests/fixtures/probe_header_84col.txt`. |
 | `data/picks/finviz_industry_slugs.csv` | 144 industry→slug rows. `validated` flips to `true` the first time a group scrapes >0 rows (G4). |
@@ -174,12 +174,29 @@ Failed-breakout / Invalidated / No-quote) at ~10:05 ET.
   came back empty." Picks callers never pass `has_history`, so `has_history=None` (default)
   keeps `no_quote` behavior byte-identical for them. Root cause + full writeup:
   `planning/watchlist-status-honesty-and-seeding.md`.
-- **`scripts/collect_morning.py`** — the writer. `fetch_ticker_quotes(page, tickers, config)` is
-  the **shared component** WS3b and WS5's held-tickers feed reuse: batches tickers into
-  `MORNING_BATCH_SIZE`-sized (50) chunks against the `morning` block in `screener_config.json`
-  (a narrow 9-column `t=`-filtered screener URL, distinct from `wide`'s 84-column filter-based
-  URL — see `build_ticker_url` vs `probe_picks._build_url`), and paginates each batch with `&r=`
-  exactly like `probe_picks._scrape_group`. `load_pick_levels` / `build_status_rows` are pure and
+- **`scripts/collect_morning.py`** — the writer. `fetch_ticker_quotes(page, tickers, config, block=...)`
+  is the **shared component** WS3b and WS5's held-tickers feed reuse: batches tickers into
+  `MORNING_BATCH_SIZE`-sized (50) chunks against a named block in `screener_config.json` and
+  paginates each batch with `&r=` exactly like `probe_picks._scrape_group`.
+  - **A-1 wide morning scrape (2026-09-01, `planning/compression-expansion-ideation.md` §7.3a).**
+    The live morning/pre_close run now scrapes the **84-column `held` block** (`WIDE_SCRAPE_BLOCK`),
+    not the legacy 9-column `morning` block, so Morning-family cards get the wide volatility/setup
+    columns at 100% coverage (owner decision — cross-ref to `picks_latest` left ~⅓ of morning
+    tickers blank). This does **not** increase Cloudflare exposure: `fetch_ticker_quotes`' `page.goto`
+    count is driven by ticker count (batched ≤50, 20 rows/page), not column count — only the `c=`
+    param and per-page payload size change. `build_status_rows` carries the `SETUP_COLUMNS`
+    (`RSI`, `Volatility W`, `Volatility M`, `Rel Volume`, `52W High`, plus — B-5, issue #379 —
+    `Price`, `SMA20`, `SMA50`, `ATR`) through verbatim from the scraped quote, keyed by Finviz label
+    (render symmetry with `picks_latest`), superset-additive to `STORE_COLUMNS`. The B-5 four make
+    the PWA's client-side Pre-Power of 3 chip + MA-distance/cluster-spread read **real-time** on
+    Morning/Watch cards: Finviz's SMA20/SMA50 are %-distance-from-live-price (they move intraday like
+    price), and the reconstructed MA $ level pairs today's price with today's %, so price/SMA/ATR must
+    be fresh together — a stale price with a fresh % mis-locates the MA level. (The status engine also
+    stores lowercase `price`/`atr`; the Finviz-labelled `Price`/`ATR` here are the keys the setup
+    section reads.) The narrow `morning` block stays in `screener_config.json` as documentation of
+    the minimal status set (no longer used by the live run). B-2's derived sparkline columns are NOT
+    scraped — they still come to the morning card via a client-side cross-ref to `picks_latest`
+    (multi-day; last night's values are current enough). `load_pick_levels` / `build_status_rows` are pure and
   fully unit-tested in cloud; `fetch_ticker_quotes` itself is only exercised via fixtures (Phase
   A) since Cloudflare blocks it from a cloud dev session — live wiring is Phase B.
   - **Scrape-universe narrowing (issue #293):** `main()` does NOT scrape all of

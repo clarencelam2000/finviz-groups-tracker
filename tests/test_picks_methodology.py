@@ -55,9 +55,13 @@ class TestDisplayMethodologyStructure:
         dates = [v["effective_date"] for v in self.meth["versions"]]
         assert dates == sorted(dates, reverse=True)
 
-    def test_current_is_v5_effective_2026_08_25(self):
-        assert self.meth["versions"][0]["version"] == "v5"
-        assert self.meth["versions"][0]["effective_date"] == "2026-08-25"
+    def test_current_is_v6_effective_2026_09_02(self):
+        assert self.meth["versions"][0]["version"] == "v6"
+        assert self.meth["versions"][0]["effective_date"] == "2026-09-02"
+
+    def test_v5_still_present_with_original_effective_date(self):
+        v5 = next(v for v in self.meth["versions"] if v["version"] == "v5")
+        assert v5["effective_date"] == "2026-08-25"
 
     def test_v4_still_present_with_original_effective_date(self):
         v4 = next(v for v in self.meth["versions"] if v["version"] == "v4")
@@ -87,6 +91,14 @@ class TestDisplayMethodologySyncWithHtml:
     def test_base_filter_min_market_cap(self):
         raw = _extract_constant("MIN_MARKET_CAP_B", self.html)
         assert _parse_js_float(raw) == self.p["base_filter"]["min_market_cap_b"]
+
+    def test_base_filter_volatility_floor(self):
+        raw = _extract_constant("VOLATILITY_FLOOR_PCT", self.html)
+        assert _parse_js_float(raw) == self.p["base_filter"]["volatility_floor"]["min_exclusive_pct"]
+
+    def test_focus_dq_volatility_floor(self):
+        raw = _extract_constant("VOLATILITY_FLOOR_PCT", self.html)
+        assert _parse_js_float(raw) == self.p["focus_dq"]["volatility_floor"]["min_exclusive_pct"]
 
     def test_focus_dq_atr_max_matches_atr_ext_actionable(self):
         raw = _extract_constant("ATR_EXT_ACTIONABLE", self.html)

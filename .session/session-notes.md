@@ -17,6 +17,623 @@ was reverted after review — see PR #381). Root cause of the original load fail
 Deferred: LOOK-B9 (`switchGroup()` retry-storm / `setLoading()` harness crash, unconfirmed as a
 real production issue).
 
+## 2026-09-04 — Chart-toggle tap target: 3+5 combo shipped (CHART-TAP-1)
+
+**Status: safe to close** — implemented, verified, pushed, release triplet shipped.
+
+Follow-through on the same-day mock session below: owner picked a **combination of options 3
+(drawer handle) and 5 (edge rails)** rather than a single standalone mock. Before implementing,
+surfaced a real conflict found while reading the code — on Picks, the outer card row already
+owns tap-to-expand (`__togglePickRow`), so edge rails there can't live on the same row as that
+handler. Asked 4 clarifying questions (Picks placement, rail visibility, whether to keep the old
+button, Lookup scope); owner took the recommended answer on all four (rails inside the *expanded*
+panel on Picks only, visible chevron cue on the rails, remove the old pill entirely, same
+treatment on all 4 surfaces for consistency).
+
+**What shipped:** New shared `chartToggleFooterHtml()` / `updateChartToggleFooterState()` helper
+(`docs/index.html`, near `tradingViewChartHtml`) — a full-width "Show/Hide chart" drawer bar plus
+two tall edge rails in one `.chart-toggle-wrap`, all three wired to the same toggle call. The
+wrap's height includes the chart panel once open, so the rails run alongside the open chart too —
+closing has the same reach as opening (confirmed via a real screenshot, not just code review).
+Replaced the old ~34×24pt corner pill across **5** surfaces: Lookup, Picks, Morning, Positions,
+and the Watchlist cards (found mid-implementation — same component, not in the original 4-surface
+scope, included for consistency rather than leaving one surface with the old small button).
+
+**Verification:** `test_pwa_picks_chart.py` and `TestPWALookupChart` (the two existing
+chart-toggle-specific Playwright suites) pass **unmodified** — the old `.pick-chart-toggle`/
+`.lookup-chart-toggle` classes and `data-*` attributes were carried forward onto the new bar
+element on purpose, so no test changes were needed. Manually verified Morning/Positions/Watchlist
+(no dedicated chart-toggle test coverage exists for those yet — pre-existing gap) via a scratch
+Playwright script: rail clicks toggle correctly, bar label flips, and a real screenshot (with the
+actual Tailwind CDN build, not the test suite's inert stub) confirms the visual layout. Ran the
+full 8-file Playwright suite touching every surface this PR changed — 26 failures, all
+`networkidle`/click-timeout flakes in tests this change never touches (lookback windows, intro
+carousel, hub, momentum, deeplink cards, positions take-it flow); the positions failures were
+double-checked via `git stash` and reproduce identically on the unmodified branch, confirming
+they predate this change. Non-Playwright suite: 746 passed.
+
+**Release surface:** `docs/releases.json` `2026.09.04` entry + `current` bump, `docs/sw.js`
+`CACHE` v96→v97 — same PR, per the hard rule.
+
+**Where it lives:** Same branch/PR as the earlier mock (`claude/trading-chart-expand-ux-lo9man`,
+PR #398) — updated its description to describe the real implementation instead of a design-only
+mock.
+
+**Next steps:** None — CHART-TAP-1 is closed. If the owner wants Morning/Positions/Watchlist to
+get the same dedicated Playwright chart-toggle coverage Picks/Lookup already have, that's a
+separate, smaller follow-up (not blocking, not requested here).
+
+---
+
+## 2026-09-04 — Chart-toggle tap-target UX proposals + mock
+
+**Status: safe to close** — design-only, no code shipped, nothing blocking.
+
+**What landed:** Owner flagged the `Show chart ▾`/`Hide chart ▲` toggle on Lookup, Picks, Morning,
+and Positions as a hard-to-hit mobile tap target (confirmed: `text-[0.65rem] px-2 py-1` pill,
+roughly 34×24pt — under Apple's 44×44pt HIG minimum, tucked in one card corner). Proposed and
+mocked five alternatives at real card scale (336pt width) using a live Picks row (`GH 86 ·
+Guardant Health`) as content:
+1. **Padded button** — same visible pill, bigger invisible hit-slop.
+2. **Whole-row tap** — entire ticker header toggles the chart (Positions already half-does this
+   on the ticker text alone).
+3. **Drawer handle** — full-width strip replaces the corner pill.
+4. **Live sparkline** — always-on mini chart doubles as the tap target.
+5. **Edge rails** — the owner's original idea: tall tap strips down the card's left/right margins.
+
+Each mock is interactive (tap to expand/collapse for real) with a dashed amber "redline" overlay
+showing the actual tap-zone size, plus pros/cons. Recommended pairing: ship **02 (whole row)** as
+the default everywhere charts appear, keep a padded chevron (01-style) as the visual "there's more
+here" cue riding along for free.
+
+**Where it lives:** Published as an Artifact for the owner to review (interactive, themed) — link
+is in-conversation, not repeated here since Artifact URLs aren't durable across sessions. Source
+committed to `planning/mocks/chart-toggle-redlines.html` per CLAUDE.md § Deliver mocks/visuals as
+Artifacts (durable record). Tracked as `CHART-TAP-1` in `.session/SPRINT.md` Backlog — nothing
+implemented yet, blocked on the owner's pick among the five.
+
+**Next steps:** Owner picks an option (or a different pairing) → implement across all 4 surfaces
+(`docs/index.html`) in one PR, add/update Playwright coverage per surface touched, ship the usual
+release triplet (`releases.json` + `sw.js` cache bump) since this is user-facing.
+
+---
+
+## 2026-09-04 — Inline "+ Watch" quick-add (Picks / Morning-picks / Lookup / Watchlist edit-level)
+
+**Status: safe to close** — implemented, functionally verified with 6 new Playwright tests
+(headless Chromium via the revision-symlink harness) plus the full non-Playwright suite (746)
+and the existing watchlist/manual-entry/picks-hod/morning Playwright suites (42), all green,
+no regressions. Release surface updated in the same PR.
+
+**What the owner asked for:** easier ways to add a ticker to the watchlist — one-click entry
+points across the app that expand inline instead of jumping to the Positions tab. Talked
+through candidate spots first (no impl) before building: confirmed scope was Picks tab rows,
+Morning tab's Picks-subtab cards, and the Lookup tab's ticker result (every spot that already
+shows a TradingView chart), plus fixing the Watchlist-subtab's "Edit level" kebab, which had
+the exact same jump-away problem. Positions-tab position cards were explicitly scoped out
+(ticker's already a live trade there — low value).
+
+**Design, confirmed with the owner before building:** the existing `state.watchAdd` /
+`watchAddHtml()` / `watchAddApi()` (Positions-tab-only collapsible) already did ticker+optional
+level submission — the gap was only that it was mounted in one place and other call sites
+(`watchEditLevel`) navigated away via `switchTab('positions')` instead of expanding in place.
+Generalized it into `quickWatchButtonHtml()`/`quickWatchPanelHtml()`, mountable anywhere via a
+`mountKey` (namespaced per call site: `qw_pick_<key>`, `qw_morning_<ticker>`,
+`qw_lookup_<symbol>`, `qw_watch_<ticker>`), DOM-patched by id on open/close/save (same
+discipline as `__togglePickChart`/`__toggleMorningChart` — no full re-render, no lost focus).
+
+**Owner-specified interaction (asked directly, confirmed before building):** tapping "+ Watch"
+on an unwatched ticker fires the add immediately (`watchAddApi({ticker})`) — the tap alone
+persists it, no second tap required. The panel then opens showing a receipt plus the optional
+level-of-interest form (Above/Below/20MA/50MA, same as the existing form); setting a level is a
+second, independent POST to the same upsert-by-ticker endpoint. An already-watched ticker's
+button instead reads "✓ Watching" and opens straight into the level editor (seeded from the
+existing entry), with zero re-POST until Save. Signed-out tap shows an inline sign-in nudge, no
+add attempted. Unlike the Positions-tab form's free-text ticker field (which debounces an FMP
+resolve lookup), every quick-watch mount is handed an already-known ticker — no resolve call
+and no ticker input in this UI, per the owner's own observation that it's "clear which company
+it is" at all three new spots.
+
+**Technical note:** Picks and Lookup never previously triggered `loadWatchlist()` (only
+Morning/Positions tab renders did), so a signed-in user landing on Picks would have seen
+"+ Watch" on every row even for already-watched tickers. Added `ensureWatchlistLoaded()`
+(deduped via `state.watchlistLoading`), called once per `renderPicks()` pass and once when the
+Lookup ticker card renders — Morning needed no change, its batch loader already fetches
+`watchlistData`.
+
+**Release surface (hard rule, same PR):** `docs/releases.json` `2026.09.04` entry prepended,
+`current` bumped; `docs/sw.js` `CACHE` bumped `v96` → `v97`.
+
+**Next steps:** none outstanding — PR opened, ready for review.
+
+---
+
+## 2026-09-04 — Fix: watchlist stuck on "Pending read" for tickers that also qualify as Focus picks
+
+**Status: safe to close — investigated, fixed, tested, PR to open.** Owner report with two
+screenshots: several watchlist tickers (ELV, HUM, GH) added ~a week earlier were still showing
+"PENDING READ" / "Reference bar captured — first live read after the next scheduled check.",
+and lacked the full card (Volatility & setup, ATR-from-LoD, etc.) that other watch tickers
+(SPCX, BAX) had. Owner asked for a full investigation first, no fix, "don't bear load on
+unconfirmed assumptions."
+
+**Investigation (evidence-based, not inferred).** Ruled out the two previously-fixed failure
+modes in this area (`WS5-8b-OPS` missing secrets; `WS-POSITIONS-STATUS` no_quote/
+awaiting_first_read copy) since neither matched: the private `/watchlist` feed showed real
+`prior_high`/`prior_low` (a bar exists) and the TTL was decrementing normally (`tickWatchlist()`
+only decrements when a bar exists), so `has_history` was clearly `True` server-side. Read the
+actual committed `data/picks/sessions/morning.csv` directly (ground truth, not assumption) and
+found the real root cause: `collect_morning.py`'s `union_watch_levels()` — when a watch ticker
+ALSO qualifies as a Focus pick that day — keeps the Focus pick's row and never writes a second
+`list_category='watchlist'`-tagged row for that ticker/date (by design, for scrape-count
+purposes: "the watch dup contributes nothing"). ELV/HUM/GH had all started also qualifying as
+Focus picks (`accel`/`leaders` buckets) — GH had been a recurring pick since before it was even
+added to the watchlist, so its watch card had likely NEVER shown a real status.
+`docs/index.html`'s watch-card lookup (`findPub`/`pub`, 2 call sites) filtered strictly on
+`m.list_category === 'watchlist'`, found nothing on those days, and fell into the
+`awaitingFirstRead` fallback — even though the exact same `pick_status` engine had computed a
+real classification, just filed under a different bucket tag. Confirmed with grep evidence
+against the CSV (GH: never once tagged `watchlist`, always `leaders`/`rs_new_high`/`all_green`;
+ELV/HUM: correctly `watchlist`-tagged 8/27–9/1, then flipped to `accel` from 9/2 onward and
+stuck since).
+
+**Options presented, owner chose A.** (A) Client-side: relax the watch-pub lookup to accept any
+row for the ticker (fallback after preferring an exact `'watchlist'` tag) — the lookup is
+always called for one already-known ticker, so this can't cross-match an unrelated ticker's
+row. (B) Backend: a new `is_watchlist` flag column, orthogonal to `list_category`. Rejected B
+because `data/picks/sessions/*.csv` is a ground-truth CSV under
+`.claude/rules/data-pipeline.md`'s schema-change rule (owner sign-off + a written
+can't-be-a-pure-function justification required before building) and the fix genuinely doesn't
+need a new column — same "compute at render time, don't persist a config/attribution-dependent
+fact" precedent as the `power_of_3`/`VOLATILITY_FLOOR_PCT` sessions.
+
+**Shipped:** new shared `findWatchPub(ticker)` helper in `docs/index.html` (replaces 3
+duplicated inline `list_category === 'watchlist'` filters: `renderWatchlistSection`'s active +
+expired card maps, and `__toggleWatchGauge`), with an in-code comment naming why the fallback
+exists so a future cleanup doesn't revert it back to the strict filter. `docs/CLAUDE.md` §
+Watchlist merge-model bullet updated to describe the new lookup and the collision it works
+around. New regression test `tests/test_pwa_watchlist.py::
+test_watch_card_finds_real_status_under_a_picks_bucket_tag` — verified it actually fails
+pre-fix (`git stash` on `docs/index.html` reproduces the exact reported symptom: "PENDING READ"
+pill + "Reference bar captured…" copy) and passes post-fix. Release triplet: `releases.json`
+`2026.09.04.2` (fix, tab morning) + `current` bumped; `sw.js` `finviz-v98` → `v99`.
+
+**Verified:** `test_pwa_watchlist.py` 10/10 (new test included), `test_pwa_morning.py` +
+`test_pwa_quick_watch.py` 20/20 (unaffected — different render paths), full non-Playwright
+suite 746 passed, `test_guide_releases.py` 5/5 (release-surface sync). Playwright run via the
+documented revision-symlink harness (`chromium-1194` → `chromium-1117`, cleaned up after).
+
+**Next steps:** open the PR. Not addressed (out of scope, no separate tracked item needed —
+the fix is complete as scoped): the underlying `union_watch_levels()` collision behavior
+itself is unchanged and intentional (attribution still correctly favors the picks bucket for
+that CSV's own purposes); this fix only restores the PWA's ability to find the real status
+regardless of which bucket won.
+
+---
+
+## 2026-09-03 — Picks tab: group tap opens quick detail sheet + reason chips on group headers
+
+**Status: safe to close** — implemented, verified functionally with a Playwright fixture-intercept
+smoke test (headless Chromium, both changes confirmed rendering correctly, screenshots taken),
+release surface updated in the same PR. Non-Playwright pytest suite green (797 passed — the 75
+"failed" in a raw pytest run are the known sandbox-only Chromium revision mismatch documented in
+`knowledge/investigations/playwright-cloud-session-testing.md` Root cause 1, not a regression).
+
+**Two small UX asks from the owner (screenshots of the live PWA):**
+1. Tapping a group name on the Picks tab (`data-pick-group-lookup` — both the All view's group
+   headers and the Focus view's per-row group subtitle share this one click handler) used to
+   `switchTab('lookup')` + `doGroupLookup()`, navigating away entirely. It now calls
+   `openGroupPeek(name, 'industries', true)` instead — the same slide-up sheet the AI tab's
+   inline group-name chips (`groupChipHtml()`) already open, reusing `groupPerfCard()` so there's
+   only one renderer to keep in sync with the full Lookup tab. `openGroupPeek()` gained a third
+   `expanded` param (default `false`, preserving the AI tab's existing compact-card behavior) so
+   Picks can land the reader straight on the full breakdown (`_peekExpanded = true`) since they
+   already picked this exact group — no second tap needed. "Full lookup ↗" inside the sheet still
+   reaches the full Lookup tab for anyone who wants more than the peek.
+2. Each group header in the Picks tab's All view now shows the same reason chips
+   (Leaders/Emerging/Accel/RS New High/All Green, `CATEGORY_LABEL`/`CATEGORY_CHIP_CLS`) the
+   Lookup tab's `renderLookupStage2()` already shows — built from a `groupCatMap` (group →
+   Set of categories) derived from the same `catMap` the All view already groups by, so a group
+   qualifying under several buckets today isn't only visible in the one category section it
+   happens to render under.
+
+**Release surface (hard rule, same PR):** `docs/releases.json` `2026.09.03` entry prepended,
+`current` bumped; `docs/sw.js` `CACHE` bumped `v94` → `v95`.
+
+**Next steps:** none outstanding — PR opened, ready for review.
+
+---
+
+## 2026-09-03 — Morning tab: sort, launch-ready filter, bucket collapse + mini-nav
+
+**Status: safe to close** — implemented, verified functionally with a headless-Chromium
+Playwright smoke run (executable_path workaround for this sandbox's Chromium revision mismatch
+— see `knowledge/investigations/playwright-cloud-session-testing.md`), 5 new committed
+Playwright tests added and passing (14/14 in `tests/test_pwa_morning.py`), non-Playwright
+pytest suite green (746 passed), release surface updated in the same PR.
+
+**Owner ask:** the Morning tab's picks-confirmation list only ever sorted by status bucket then
+ticker A–Z — with most cards landing in the same "Setting up" bucket on a typical day, it read
+as "just alphabetical." Worked through several rounds of design discussion (sort options, Focus
+score reuse-vs-recompute, Launch-ready filter interaction, bucket-navigation options) before
+building.
+
+**What shipped** (`renderMorning()` and helpers in `docs/index.html`; full design writeup in
+`docs/CLAUDE.md` § Morning tab):
+1. **Sort pills** (`state.morningSort`): A–Z / **Focus score (default)** / ATR from LoD / Rel
+   volume. Status-bucket grouping (Triggered → ... → No quote) is a constant — every sort mode
+   only reorders *within* a bucket, via one shared null-safe comparator
+   (`sortMorningEntries()`).
+2. **Rel volume's Bucket/Global scope switch** (`state.morningSortScope`) — a conditional
+   control that only appears when Rel volume is the active sort, rather than a permanent 5th
+   pill, given how much chrome already stacks above the first card. Global flattens every
+   status bucket into one cross-sectional "what's most active right now" list.
+3. **Focus score chip + sort share ONE computation.** Pulled the candidate-pool derivation +
+   `computeFocusScores()` call out of `ws4FocusScore()` into `focusScoreMapForPool()`, computed
+   once per render into `_morningFocusMap`. The new card chip, the `'focus'` sort branch, and
+   the existing trade-ticket footnote (`ws4TicketHtml`) all now read that one map — a future
+   Focus-formula change updates all three for free instead of risking silent disagreement.
+4. **Launch-ready filter** (`state.morningLaunchFilter`): All / Coiled / Extended / Overhead,
+   on the same `computeLaunchReady()` label already shown as a card chip — independent axis
+   from sort. Empties-to-zero shows filter-specific copy, not the generic no-picks-today state.
+5. **Bucket collapse + sticky mini-nav** (`state.morningCollapsed`, a `Set`): each bucket header
+   is a collapse toggle with a live count; the mini-nav (only rendered with >1 bucket) jumps to
+   any bucket and **force-expands it first** if collapsed, so a jump never lands on an empty
+   collapsed section. Starts fully expanded (no default-collapsed density change) — kept
+   conservative since that wasn't explicitly asked for beyond "can we do both."
+
+**Test-suite fallout from the new permanent "ATR from LoD" sort-pill label:** two existing
+`test_pwa_morning.py` assertions counted exact occurrences of the literal string "ATR from
+LoD" in the rendered HTML; the new sort pill (deliberately reusing that exact on-card copy
+rather than inventing a different label) adds one more permanent occurrence per render. Updated
+both expected counts (5→6, 2→3) with an inline comment explaining why — a real, expected
+consequence of shipping the feature, not a bug.
+
+**Pre-existing, unrelated finding (not fixed here, flagged as a separate task):**
+`tests/test_pwa_positions.py` never stubs `**/sessions/pre_close_latest.csv` the way every
+other Morning-adjacent test file does — 4 of its tests hang for the full 30s timeout in this
+network-restricted sandbox (confirmed reproducible against the pre-change baseline via `git
+stash`, so unrelated to this PR). Presumably invisible in CI/local dev with real network access
+(an unstubbed request just resolves instead of hanging), per Root cause 2 in
+`knowledge/investigations/playwright-cloud-session-testing.md`.
+
+**Release surface (hard rule, same PR):** `docs/releases.json` `2026.09.03.1` entry prepended,
+`current` bumped; `docs/sw.js` `CACHE` bumped `v95` → `v96`.
+
+**Next steps:** none outstanding — PR opened, ready for review. Optional follow-up (not
+blocking): add the missing pre-close stub to `test_pwa_positions.py`, and/or revisit whether
+non-actionable buckets (Setting up/Invalidated/Failed breakout/No quote) should default-collapse
+now that the toggle exists — deferred since it wasn't explicitly requested.
+
+---
+
+## 2026-09-02 — Volatility floor gate: hide near-dead stocks from Picks/Focus/Morning
+
+**Status: safe to close — implemented, tested (740 non-PW + 5/5 new volatility-gate PWA green,
+verified no regression in Focus/Morning/Lookup/methodology suites), PR to open.** Follow-up to
+the B-5 "Pre-Power of 3" session above: owner spotted APGE (a buyout-frozen biotech) showing a
+false "Coiled 2.8x" chip in the Volatility & setup section — its MAs and price were only
+bunched because the stock barely moves at all (Vol W 0.07%, ATR/Price 0.26%), not because it's
+a genuine coil.
+
+**Investigation before building:** owner asked for a histogram of the live picks pool's
+Volatility W % and ATR/Price % (published as an Artifact) before locking a threshold. Result:
+both distributions are bimodal with a real gap between ~0.5% and ~1.2% — a 1.0% floor sits
+exactly in that gap, catching only 5 tickers today (APGE, CRNX, OGN, TECH — all read as
+halted/frozen biotech/spin-off names — plus STRC, which turned out to not even be a common
+stock: "Strategy Inc - VR PRF PERPETUAL Series A", a perpetual preferred). Going to 1.5% would
+have started cutting legitimate low-vol mega-caps (Novartis, JNJ, ADP, Shell, Enterprise
+Products) that are just boring, not dead. Validated the choice wasn't an eyeball guess.
+
+**Decision (owner, locked in-session):** `VOLATILITY_FLOOR_PCT = 1.0`. Gate fires on
+`Volatility W % < 1.0 OR ATR/Price % < 1.0` (either trips it — both already-scraped columns,
+no new CSV data). Hides the row from Picks (`passesPicksBaseFilter`), Focus (`isFocusEligible`
+— duplicated at the predicate level since 2 of 3 call sites don't also call
+`passesPicksBaseFilter`), and the Morning tab's picks-confirmation read (`renderMorning`'s
+non-watchlist filter). Missing data (NaN) passes through — this only excludes what's
+positively measured as too quiet, never an unknown. **Exempt: the user's own watchlist**
+(explicit intent — those tickers ride the same morning scrape but the exclusion filter is
+only applied to `list_category !== 'watchlist'` rows) **and a direct Lookup ticker search**
+(explicit intent — shown with a new amber "Low volatility" warning chip in
+`tickerContextHtml` instead of being hidden).
+
+**Why client-side, not scrape-time (owner asked, both options presented):** `Volatility W`,
+`Volatility M`, `ATR`, `Price` are already scraped/stored in picks.csv/picks_latest.csv and
+morning.csv/morning_latest.csv — nothing new to collect. `.claude/rules/data-pipeline.md`
+treats those CSVs as append-only, irreplaceable ground truth; a scrape-time drop would make a
+wrongly-excluded (or later-retuned-threshold) row unrecoverable. Every existing per-stock
+exclusion in this codebase (`passesPicksBaseFilter`'s market-cap/MA filter, `isFocusEligible`'s
+liquidity gate, the Ariel match filter's own ATR%-band precedent) is already a client-side view
+filter, not a scrape-time drop — followed that precedent.
+
+**Shipped:** `VOLATILITY_FLOOR_PCT` constant + `atrPctOfPrice()`/`passesVolatilityFloor()`
+helpers in `docs/index.html`, wired into `passesPicksBaseFilter`/`isFocusEligible`/
+`renderMorning`, Lookup warning chip in `tickerContextHtml`/`findTickerPickInfo`.
+`display_methodology.json` v6 (base_filter + focus_dq `volatility_floor` block).
+`tests/test_picks_methodology.py` updated (v6 current, v5 preserved, 2 new sync tests).
+New `tests/test_pwa_volatility_gate.py` (5 tests: Picks-All exclusion, Focus exclusion,
+OR-logic via ATR-alone, Morning-card exclusion, Lookup warning-chip-not-hidden) — added to the
+CI Playwright `--ignore=` list. README § Configurable parameters + `docs/CLAUDE.md` § PWA
+display thresholds updated. Release surface: `releases.json` 2026.09.02.3 + `sw.js`
+finviz-v93→v94, same PR per the hard rule.
+
+**Not done / explicitly deferred:** no warning chip added to the Watchlist card itself (its
+existing "Volatility & setup" section already shows raw Vol W/ATR values, so the data is
+visible without a new badge) — flagged as an assumption in the PR description in case the
+owner wants the same amber chip there too.
+
+**Next steps:** open the PR, watch CI, then resume B-5b (the full undercut→reclaim Power-of-3
+trigger) from the prior session's notes above, unless the owner redirects.
+
+---
+
+## 2026-09-02 — Effort B B-5: "Power of 3" MA-bunching chip + shown MA distances
+
+**Status: safe to close — implemented, tested (742 non-PW + 11/11 picks PWA + 18/18 morning/watch
+PWA green), PR to open.** Continues the compression/expansion workstream (planning doc + #378/#379);
+A-2/B-6/A-3 (#390) merged last session. Owner picked B-5 next and gave a decisive spec correction.
+
+**Owner spec (2026-09-02, locked in-session):** it's **"Power of 3"**, not "Rule of Three". Power
+of 3 normally uses price/10/20/50 MAs — we don't scrape the 10MA so drop it, and the 200 isn't this
+pattern's third line, so **price/20MA/50MA only**. The chip fires when all three sit inside a single
+**2×ATR band** — a band the OWNER specified (domain authority per §4.0), which dissolves the
+threshold tension: a binary chip is legit because the trader set the number, not me. "Values AND the
+chip"; render on the shared seam (all card families).
+
+**What landed:**
+- **Pipeline (Sonnet subagent):** new 6th `METRICS_COLS` col `power_of_3` in
+  `picks_metrics.compute_metrics_row` = `1 if spread(price,20MA$,50MA$) ≤ POWER_OF_3_ATR_MULT×ATR
+  else 0`, NaN if any input missing — computed next to `stage2`, reusing its reconstructed MA
+  prices. New constant `POWER_OF_3_ATR_MULT = 2.0` in `picks_config.py`, imported into
+  picks_metrics (no cycle). `picks_columns()` 118→119. `ensure_picks_csv` migration backfilled
+  picks.csv (13,395 rows) + picks_latest.csv (119 cols; power_of_3 138×'1' / 297×'0', no NaN in the
+  latest slice). 5 new unit tests. 3-places doc'd (in-code + README § Configurable parameters +
+  scripts/CLAUDE.md).
+- **PWA (`docs/index.html`):** "MA bunching" sub-block added to the shared `volSetupSectionHtml`
+  (A-2 seam) — a green "Power of 3" chip when `power_of_3==='1'` + the two SHOWN SMA % distances
+  (Price vs 20MA / 50MA). **No PWA constant** — the flag is precomputed in the pipeline (single
+  source of truth), the PWA just reads it (same pattern as `tight_range_7`). Reaches Picks +
+  Morning + Watchlist + Ticket for free via B-6's existing `setupRowForCard` cross-ref (SMA/
+  power_of_3 come from picks_latest, not the morning store — MAs barely move intraday); orphans
+  self-hide. Placed last in the section (weakest confirmer, §5.3).
+- **Release triplet:** `docs/releases.json` `2026.09.02.1` (feature, tab picks) + `current` bumped;
+  `docs/sw.js` v91→v92.
+- **Tests:** 2 new picks PWA tests (`test_power_of_3_chip_and_ma_distances`,
+  `..._no_chip_when_not_bunched`); added `power_of_3` to `tests/fixtures/picks_latest.csv` (computed
+  via the real `compute_metrics_row` — ANET bunched→'1', TESTBLK no-ATR→''). Verified live headless
+  via the executable_path override (`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`; pip
+  playwright expected -1234, sandbox has -1194 — Root Cause 1 in the playwright-cloud investigation,
+  NOT committed). picks file 11/11, morning+watch 18/18 (seam inheritance, no regression).
+
+**Delegation:** pipeline half done by a Sonnet subagent (self-contained metric+migration+unit
+tests+pipeline docs, ~125k tokens); PWA render/test/release/planning kept in the main loop.
+
+**Amendment (2026-09-02, same PR #392, still unmerged) — relabel to "Pre-Power of 3" + show the
+cluster spread %.** Owner shared the full Power-of-3 definition: it's a *sequence*
+(bunched → undercut the cluster → **reclaim** the highest MA = the trigger), not a static state.
+What B-5 ships is only step 1 (the tight cluster). Owner decision: **relabel the chip "Pre-Power of
+3"** (honest — it's the coil precondition, not the trigger), keep the 2×ATR gate, and **also show
+the classic MA-to-MA cluster spread %** (`|20MA$−50MA$|/price`, derived client-side from
+Price/SMA20/SMA50 — no new column). The full undercut→reclaim trigger is a new next slice **B-5b**,
+which composes on `pick_status.py`'s existing reclaim engine (`compute_reclaim`/`reclaim_refs`,
+already an `ACTIONABLE_STATUS`). Changed: chip text + a `maSpreadStr` header value in
+`volSetupSectionHtml`; the 2 picks PWA tests (assert "Pre-Power of 3" + "spread 2.25%" for ANET);
+`releases.json` `2026.09.02.1` title/notes; planning §5.3/§12 (+ B-5b ⏳ row); docs/CLAUDE.md; SPRINT.
+Re-verified: picks+morning+watch PWA **29/29** green (relabel is in the shared seam); JS parses;
+ANET spread = 2.25% exact; `test_guide_releases` 5/5. The `power_of_3` **data column name is
+unchanged** (it's the bunched fact) — only the user-facing label moved.
+
+**Amendment 2 (2026-09-02, same PR #392) — moved power_of_3 OUT of the CSV to client-side + made
+Morning/Watch real-time (owner review changes-requested).** Two correct owner findings: (1) SMA20/
+SMA50 render off *last night's close* on Morning/Watch (setupRowForCard only overrode 4 B-1 cols),
+and Finviz's SMA%-distance columns track the **live** price so they DO go stale intraday — my "MAs
+barely move intraday" assumption was wrong, corrected on the record. (2) `power_of_3` never needed a
+CSV column: it's a pure single-row function of already-stored Price/ATR/SMA20/SMA50 and is
+**config-dependent** (POWER_OF_3_ATR_MULT), so persisting it as ground truth would silently drift if
+the constant changed — exactly what the new `.claude/rules/data-pipeline.md` § Schema-changes rule
+(#393, merged to default) forbids. **What I did:** reverted the pipeline change entirely
+(`picks_metrics.py`/`picks_config.py` back to 5 METRICS_COLS / 118 cols; restored picks.csv,
+picks_latest.csv, and the test fixture from default — no more 13k-row backfill, no more merge-
+conflict surface); moved the chip to a **client-side** computation in `volSetupSectionHtml` (reads
+Price/ATR/SMA20/SMA50, reconstructs the MA $ levels, fires the chip on the 2×ATR span);
+`POWER_OF_3_ATR_MULT` is now a **PWA display constant** (docs/index.html), triple-documented in the
+PWA tables. **Real-time fix:** added `Price`,`SMA20`,`SMA50`,`ATR` to `collect_morning.SETUP_COLUMNS`
+(morning store) and to `_SETUP_FRESH_COLS` (PWA), so setupRowForCard overrides them with this-
+morning's scrape → the chip + MA distances re-fire off fresh MA levels on Morning/Watch. B-5b (the
+trigger) needs this same fresh-MA plumbing. Tests: reverted the 5 pipeline unit tests; the 2 PWA
+tests now drive the chip via raw cols (bunched via ANET; not-bunched via `SMA50:30%`); extended
+`test_build_status_rows_carries_setup_columns` for the 4 new cols. Re-verified: picks_metrics +
+collect_picks + collect_morning 152 green; the 2 PWA power_of_3 tests green (client-computed); JS
+parses. Also **synced first**: another Claude rebased the B-5 stack onto post-#391 default; I reset
+local to origin/2ljelo before working.
+
+**Next steps:** **B-5b** (the full undercut→reclaim Power-of-3 trigger — gate on B-5's bunched read,
+detect undercut below the cluster low = min MA, fire on reclaim above the cluster high = max MA;
+actionable *real-time* morning read, entry on reclaim / stop under undercut low; computed per-run in
+`collect_morning`/`pick_status` and stored in the **session** store — a live status, NOT a persisted
+historical fact, so it honors #393 by construction; reclaim is a fact so §4.0-clean; **verify the
+reclaim-engine wiring before building**). Alternatively **B-4** (VCP-style contraction proxy from
+B-2+B-3+52W; label "Contraction (VCP-style)", never "VCP detected", NOT "lower highs"). Remaining
+tracked follow-ups (planning §12): orphan sparkline backfill from D1 `ticker_quotes` (§7.3 option-b),
+projected vol/RVol (§5.5b, parked), filter-sort + "Triggers today" (§9), fuller card superset
+(RSI/Perf/Avg$Vol/Earnings — #378). B-7/B-8 stay parked.
+
+---
+
+## 2026-09-02 — Effort A A-2 + B-6/A-3: compression "Volatility & setup" section on the Morning family
+
+**Status: safe to close — implemented, tested, PR #390 open (ready).** Owner chose the strategic
+A-2→B-6 lever this session (over the contained Picks-only B-4/B-5 slices). Two slices landed in one
+PR because A-2 has no standalone value (it's the seam B-6 rides on).
+
+**A-2 (shared card seam).** Extracted the "Volatility & setup" section (B-1 Vol W/M·RelVol·52W +
+B-2 range tightening + B-3 volume dry-up) out of `renderPickRow` into one shared
+`volSetupSectionHtml(r)` in `docs/index.html`. **Pure refactor — Picks card byte-identical** (its
+9 PWA tests green). Returns `''` when a row has nothing → graceful degrade for morning orphans.
+Fulfills §8's "shared-component seam before B metrics spread" + ordering rule #2.
+
+**B-6 / A-3 (render on the Morning family).** New `setupRowForCard(ticker, freshRow)` assembles the
+render row: base = `ws4FindPicksRow` cross-ref to `picks_latest` (B-2/B-3 trailing sparkline cols,
+multi-day), with the B-1 raw cols (Vol W/M, Rel Volume, 52W High) overridden by this-morning's fresh
+scrape-wide values from the morning store `r` / watch public read `pub` (those cols landed on the
+morning store in A-1-IMPL / #384). Rendered in `morningCardBody` (all live statuses, after the metric
+rows, before the ticket/CTA — context before action, matching the owner-approved mock) and
+`watchCardHtml` (after `body`). **Trade ticket deliberately NOT rendered separately** — it lives
+inside the morning card which already shows the section above it (a second render would duplicate).
+Lookup Stage-2 already had it (reuses `renderPickRow`). Orphans with no picks history + no fresh
+scrape show no section (graceful degrade §3).
+
+**Owner interaction:** built a real-data before/after mock (`planning/mocks/b6-morning-volatility-setup.html`,
+published as an Artifact) using the actual `volSetupSectionHtml` output on a real CAH morning card.
+Owner approved ("wire it into the morning family"), then I implemented.
+
+**Tests:** `test_pwa_morning.py` +2 (`test_volatility_setup_section_on_morning_card`, `..._hidden_for_orphan`)
+and a `pre_close_latest.csv` stub added to that file's shared `_open_morning_tab` harness so the file
+runs in the cloud sandbox (it was hanging on the unreachable domain — the documented Root Cause 2, not
+a regression; now all 9 pass in-sandbox). `test_pwa_watchlist.py` +1 (`test_watch_card_shows_volatility_setup_section`,
+9/9). `test_pwa_picks_atr_earnings.py` 9/9 (A-2 unchanged Picks card). Also rendered the real morning
+card headlessly to confirm placement/values match the mock. Release triplet `2026.09.02` (feature, tab
+morning) / `sw.js` v90→v91; `test_guide_releases.py` 5/5.
+
+**Docs (3-places-style):** `docs/CLAUDE.md` § Morning tab new B-6 subsection; planning doc §12
+(A-2/A-3/B-6 ✅ + progress log). No new configurable constant (reuses B-1/B-2/B-3 metrics).
+
+**Next steps:** **B-5** (MA bunching / Rule-of-Three — the last *named* spine item still unbuilt) or
+**B-4** (compose the VCP-style contraction proxy from B-2+B-3+52W). Both Picks-only, contained,
+ephemeral-safe. Deferred/tracked (planning §12): orphan sparkline backfill from D1 `ticker_quotes`
+(§7.3 option-b), projected vol/RVol (§5.5b), filter/sort + "Triggers today" list (§9). **Don't merge
+#390 until the owner has eyeballed the live Morning tab** (or is comfortable from the mock) — CI's
+Playwright jobs validate the morning/positions files that only hang in this sandbox.
+
+---
+
+## 2026-09-02 — PR #387 merge-conflict fix (picks.csv/picks_latest.csv)
+
+**Status: safe to close.** PR #387 (B-3 relvol_spark) went `mergeable_state: dirty` because two
+new picks runs (2026-08-31, 2026-09-01) landed on default while the PR was open, appending newer
+rows to `data/picks/picks.csv`/`picks_latest.csv` without the PR's new `relvol_spark` column —
+diverging whole-file content, not a line-level conflict.
+
+**Fix:** merged default into the PR branch (`claude/volatility-compression-expansion-pcvzda`);
+took default's `data/picks/picks.csv` + `picks_latest.csv` (theirs — the newer, larger append-only
+dataset) over the PR's stale version, then re-ran `collect_picks.ensure_picks_csv()` against the
+merged data to backfill `relvol_spark` (+ the other `TRAILING_COLS`) onto the new max-date
+(2026-09-01) slice — same migration path the PR's `write_picks()` already exercises on every
+scrape, so this is not a new mechanism. All other files (scripts, docs, other data CSVs) merged
+clean with no conflicts. Verified: no `(date, list_category, ticker)` dupes, 118 cols matching in
+both files, single max-date slice in `picks_latest.csv`, `pytest tests/ -q` with the CI ignore
+list — 737 passed. Pushed to the PR's own branch (`d261c27`).
+
+**Next steps:** none — just confirm PR #387 shows green/mergeable after GitHub recomputes
+`mergeable_state` (was `unknown` immediately post-push).
+
+---
+
+## 2026-09-01 — Effort B B-3: "Volume dry-up" (RelVol trend sparkline) on Picks cards
+
+**Status: safe to close — implemented, tested (737 non-PW green + PWA green), PR to open.**
+Continues the compression/expansion workstream (planning doc + #378/#379). B-1 (#380), B-2 (#383),
+A-1/A-1-IMPL (#384) merged.
+
+**Decision — chose B-3 over the PR384 author's recommended A-2→B-6.** Reasoning surfaced to owner:
+(1) B-3 matches the owner's re-stated first principle — the spine is *content* (Vol W/M, ATR, range
+tightening, **volume behavior**, MA bunching); volume dry-up is the one signal the doc records the
+owner naming as the strongest/cheapest VCP piece. A-2 adds zero new signal (pure plumbing).
+(2) Ephemeral-safe: B-3 is a contained pipeline + single-card slice mirroring B-1/B-2 exactly,
+shippable in one focused session; A-2 is a cross-card refactor whose worst failure is being left
+half-extracted — better for a fresh session. (3) Ordering rule #2: Picks-only B slices are safe.
+(4) Deferring B-6 costs ~nothing — B-6 propagates the whole "Volatility & setup" section at once
+regardless of how many signals live in it, so landing B-3 first just makes the section more complete.
+
+**What landed:**
+- **Pipeline:** new 4th `TRAILING_COLS` col `relvol_spark` in `picks_config.py`;
+  `picks_metrics.compute_trailing_setup` now also emits `row["relvol_spark"] = _series("Rel Volume")`
+  — same trailing-window/dedup/graceful-degrade machinery as B-2's sparks, reusing `SPARK_WINDOW`
+  (10) / `SPARK_MIN_BARS` (3). **No new constant, nothing thresholded** (doc §4.0 — a SHOWN trend).
+  `picks_columns()` count 117→118 (4 trailing). No selector_version bump (deterministic transform).
+  Ran `ensure_picks_csv` migration on real data: backfilled `relvol_spark` onto 487/535 picks_latest
+  rows (blank where <3 bars); picks.csv header widened to 118 cols (older rows "").
+- **PWA (`docs/index.html`):** `relvol_spark` read + a "Volume dry-up" sub-block under the B-1
+  "Volatility & setup" section in `renderPickRow`, rendered via the existing `volSpark()`/
+  `volSparkLast()` helpers (Rel volume · last bars, latest value labeled `×`). `hasVolDryup` gate
+  hides it for names without a series. No new PWA threshold constant → no `display_methodology.json`
+  bump needed.
+- **Docs (3-places):** README § Configurable parameters (`SPARK_WINDOW` row now lists `relvol_spark`),
+  scripts/CLAUDE.md (117→118 / 3→4 trailing, picks_metrics row), in-code comments in both scripts.
+- **Release triplet:** `docs/releases.json` `2026.09.01` (feature, tab picks) + `current` bumped;
+  `docs/sw.js` v89→v90.
+
+**Tests (light per owner):** 1 new unit test `test_trailing_relvol_spark_series_and_degrade` in
+`tests/test_picks_metrics.py` (series built oldest→newest + graceful-degrade blank under spark_min);
+extended the existing B-2 PWA test `test_range_tightening_shows_flag_and_sparklines` to also assert
+the "Volume dry-up" block + a 3rd sparkline polyline (ANET fixture now carries `relvol_spark`).
+Verified: `test_picks_metrics.py` + `test_collect_picks.py` 102 passed; full non-Playwright suite
+737 passed (was 736 + 1 new); PWA test green in-sandbox (chromium-1234 matched playwright 1.62 — no
+symlink trick needed this session). The column-count asserts in `test_collect_picks.py` derive from
+`TRAILING_COLS`, so they auto-adapted.
+
+**Data note:** committed `picks.csv`/`picks_latest.csv` now carry `relvol_spark` (migration ran in
+cloud — this is a pure derived-column backfill, no Finviz scrape). Live values refresh on the next
+Actions picks run like any other trailing column.
+
+**Next steps:** **A-2** — extract ONE shared card component from B-1's "Volatility & setup" layout
+(now B-1+B-2+B-3) so B-6 rides one seam. Then **B-6** — render the section on the Morning/Lookup/
+Ticket cards (B-1 raw cols fresh from the A-1 morning store; B-2/B-3 sparkline cols via cross-ref to
+`picks_latest`). A-2 is the strategic lever that cashes in A-1 — recommend a fresh session for it
+(cross-card refactor, wants uninterrupted context). Remaining Picks-only spine slices if preferred:
+B-4 (compose VCP proxy from B-2+B-3+52W), B-5 (Rule-of-Three MA bunching).
+
+---
+
+## 2026-09-01 — Effort A A-1: decide morning data path (scrape-wide) + A-1-IMPL pipeline slice
+
+**Status: safe to close — decision made + implemented, tested (736 non-PW green), PR to open.**
+Continues the compression/expansion workstream (planning doc + #378/#379). B-1 (#380) and B-2
+(#383) are merged. This session took **A-1** — the one gate that unblocks propagating B-1/B-2 to
+the Morning/Lookup/Ticket family (B-6).
+
+**A-1 verification (planning doc §7.3a, subagent-assisted):**
+- Cross-ref orphan rate is **worse than the doc's ~15%**: measured on 2026-08-31 data, morning
+  **33.6%** (42/125) and pre-close **21%** (21/100) of tickers are NOT in `picks_latest` (watchlist
+  adds + setting-up names) → pure cross-ref leaves ~⅓ of morning cards blank on the volatility
+  section, disproportionately the pre-open action surface.
+- Scrape-wide's feared cost **does not materialize**: `collect_morning.fetch_ticker_quotes` `page.goto`
+  count is driven by ticker count (batched ≤50, 20 rows/page), NOT column count — switching 9→84
+  cols changes only the `c=` param. The 84-col `t=`-filtered scrape already runs in prod as
+  `block="held"` (collect_held.py). So scrape-wide = 100% coverage + fresh values at ~zero extra
+  Cloudflare exposure.
+- **Owner greenlit scrape-wide.**
+
+**A-1-IMPL (this session's shipped slice, `collect_morning.py`):**
+- New `WIDE_SCRAPE_BLOCK = "held"`; the single `fetch_ticker_quotes` call site now passes it, so the
+  live morning/pre_close run scrapes the 84-col block.
+- New `SETUP_COLUMNS = ["RSI","Volatility W","Volatility M","Rel Volume","52W High"]`, appended to
+  `STORE_COLUMNS` (superset-additive, write_store backfills "" on old rows). `build_status_rows`
+  carries these through **verbatim from the scraped quote, keyed by Finviz label** (raw strings like
+  "3.92%") for render symmetry with `picks_latest` — so B-6 can reuse B-1's render by the same keys.
+- B-2's derived sparkline cols (`tight_range_7`, `range_atr_spark`, `atr_spark`) are NOT scraped —
+  they'll reach the morning card via a client-side cross-ref to `picks_latest` (multi-day; last
+  night's values are current enough; orphans have no picks history under any path).
+- The narrow `morning` block stays in `screener_config.json` as documentation of the minimal status
+  set (no longer used live).
+- 3-places doc'd (in-code + README § Configurable parameters + scripts/CLAUDE.md § WS3). No release
+  triplet — backend/pipeline change, no PWA copy yet.
+
+**Tests (light, per owner):** 1 new unit test `test_build_status_rows_carries_setup_columns`
+(full wide row passes through; a 9-col thin quote and an absent quote both yield blank setup cols,
+never KeyError). Existing `set(r.keys()) == set(STORE_COLUMNS)` assertion auto-covers the schema
+widening. `test_collect_morning.py` 50/50; full non-Playwright suite 736 green.
+
+**Data note:** committed `morning_latest.csv`/`morning.csv` stay old-schema until the next Actions
+morning run rewrites them (can't scrape Finviz from cloud — Cloudflare). No manual migration:
+write_store rewrites with the full schema and backfills "". Setup columns will populate live on the
+next real run.
+
+**Next steps:** **A-2** — extract the shared card component (B-1's "Volatility & setup" layout as
+the reference) so B-6 rides one seam instead of hand-adding to 3+ diverging paths. Then **B-6**
+(render B-1 from the fresh morning store + B-2 via cross-ref on the Morning family). Alternative if
+the owner prefers to keep the single-card spine moving: **B-3** (volume dry-up, Picks-only).
+
 ---
 
 ## 2026-08-31 — Effort B B-2: "Range tightening" (tightest-range flag + sparklines) on Picks cards

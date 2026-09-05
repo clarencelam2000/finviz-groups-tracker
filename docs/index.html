@@ -49,6 +49,19 @@
     .pos-card:has(.pos-fx:checked) .pos-formula { display: block; }
     .pos-bar { font-size: 11.5px; color: rgb(203 213 225); margin-top: 9px; padding-top: 9px; border-top: 1px dashed rgb(51 65 85); line-height: 1.7; }
     .pos-act { margin-top: 9px; padding-top: 9px; border-top: 1px dashed rgb(51 65 85); }
+
+    /* Chart-toggle footer (CHART-TAP-1) — drawer bar + edge rails, see chartToggleFooterHtml.
+       Tailwind's Play CDN can't express the absolutely-positioned full-height rails as utility
+       classes, so this lives here alongside the other hand-written component blocks above. */
+    .chart-toggle-wrap { position: relative; padding: 0 26px; }
+    .chart-toggle-rail { position: absolute; top: 0; bottom: 0; width: 26px; display: flex; align-items: center; justify-content: center; color: rgb(100 116 139); font-size: 13px; cursor: pointer; user-select: none; border-radius: 6px; }
+    .chart-toggle-rail:hover, .chart-toggle-rail:active { color: rgb(148 163 184); background: rgb(148 163 184 / 0.08); }
+    .chart-toggle-rail-l { left: 0; }
+    .chart-toggle-rail-r { right: 0; }
+    .chart-toggle-bar { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 44px; padding: 10px 8px; font-size: 0.7rem; font-weight: 500; color: rgb(148 163 184); background: rgb(51 65 85 / 0.6); border-radius: 8px; cursor: pointer; user-select: none; transition: background-color .15s ease; }
+    .chart-toggle-bar:hover, .chart-toggle-bar:active { background: rgb(71 85 105 / 0.7); }
+    .chart-toggle-chev { display: inline-block; width: 6px; height: 6px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .2s ease; }
+    .chart-toggle-wrap[data-open="true"] .chart-toggle-chev { transform: rotate(-135deg); }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
@@ -512,6 +525,30 @@
       // primary job, watchlist is the user's opt-in radar.
       morningSubtab: 'picks',
       morningViewUserSet: false,
+      // Morning tab sort/filter (owner decision 2026-09-03). Status-bucket grouping (Triggered
+      // -> Gapped/Reclaimed -> Failed breakout -> Setting up -> Invalidated -> No quote) ALWAYS
+      // applies regardless of sort mode — these four options only choose the tiebreak used
+      // WITHIN each bucket. 'focus' (default) ranks by ws4FocusScore's shared pool-relative
+      // score; 'az' is today's plain ticker order kept as an explicit choice; 'atr_lod' reuses
+      // the same "ATR from LoD" entry-quality metric already on every card; 'rel_volume' can
+      // additionally go cross-bucket via morningSortScope. Session-only, resets on reload —
+      // same convention as morningView/morningSubtab.
+      morningSort: 'focus',       // 'az' | 'focus' | 'atr_lod' | 'rel_volume'
+      // Only read when morningSort === 'rel_volume'. 'bucket' (default) keeps the status
+      // grouping and just reorders within each bucket like the other three sort modes;
+      // 'global' flattens ALL buckets into one Rel-volume-ranked list (no section headers,
+      // no mini-nav/collapse — "what's most active right now, regardless of status").
+      morningSortScope: 'bucket', // 'bucket' | 'global'
+      // Launch-ready filter (computeLaunchReady): 'all' or one of its labels ('Coiled' |
+      // 'Extended' | 'Overhead'). Independent axis from sort — narrows which rows render,
+      // then sort orders whatever's left. Session-only.
+      morningLaunchFilter: 'all',
+      // Set of status keys whose bucket section is collapsed. Starts empty (everything
+      // expanded, matching pre-existing behavior) — the user collapses buckets manually via
+      // the bucket header or the mini-nav jump (which force-expands the target). Module-level
+      // state would also work here, but this lives on `state` since __toggleMorningBucket
+      // mutates it the same way morningView/morningLaunchFilter do.
+      morningCollapsed: new Set(),
       // WS4 Phase B (ADR-014) trade-ticket UI state, keyed by ticker. Survives renderMorning()
       // re-renders (module-level, not rebuilt each render). { expanded, stopBasis, priceOverride,
       // lowOverride }. priceOverride/lowOverride are strings (raw input value) so an in-progress
@@ -599,8 +636,23 @@
       watchlistData: null,
       // non-401 fetch failure => explicit error state (mirrors positionsError).
       watchlistError: false,
+      // Dedupes concurrent loadWatchlist() calls from ensureWatchlistLoaded() (see there) —
+      // Picks/Lookup can both trigger a proactive fetch on the same render pass.
+      watchlistLoading: false,
       // Positions-tab "Add to watchlist" collapsible form state — see watchAddDefault().
       watchAdd: watchAddDefault(),
+      // ── Inline "+ Watch" quick-add (Picks / Morning-picks / Lookup / Watchlist edit-level)
+      // — see quickWatchButtonHtml()/quickWatchPanelHtml() below. Generalizes watchAdd so a
+      // ticker can be added without switchTab('positions').
+      // tickers added via quick-add this session — optimistic, unioned with watchlistData so
+      // the button flips to "already watching" before the next loadWatchlist() round-trip lands.
+      quickWatchAdded: new Set(),
+      // mountKeys (call-site + ticker, e.g. 'qw_pick_AAPL_focus_0', 'qw_morning_AAPL') whose
+      // optional level-of-interest panel is expanded — namespaced per mount so two open at
+      // once (rare, but possible) don't collide.
+      quickWatchOpenPanels: new Set(),
+      // mountKey -> { levelType, levelValue, submitting, error, justAdded }.
+      quickWatchForm: {},
       // ticker -> bool: gauge SHOWN? absent/false = hidden (default OFF, morning-subtabs-watchlist
       // — the price-levels bar is opt-in detail, not the first thing a card should show). Flipped
       // from the original "collapsed?" polarity (absent/false = shown) on purpose so the default
@@ -697,6 +749,27 @@
     // Triple-documented: here, README § Configurable parameters, docs/CLAUDE.md threshold table.
     const ATR_FROM_LOD_CLEAN = 0.8;  // <= this = clean entry (emerald, "ok to act")
     const ATR_FROM_LOD_CHASE = 1.0;  // > this = chasing (red); between CLEAN and CHASE = caution (amber)
+    // POWER_OF_3_ATR_MULT (B-5, issue #379): the "Pre-Power of 3" MA-bunching chip in the
+    // Volatility & setup section fires when price, the 20MA and the 50MA all fit inside one band
+    // this many ATRs wide. Owner-set band (domain authority per doc §4.0 — a fact, not an invented
+    // cutoff); larger = looser. Computed client-side in volSetupSectionHtml from the raw
+    // Price/ATR/SMA20/SMA50 columns — deliberately NOT a stored CSV column (a config-dependent pure
+    // single-row value belongs at render time; see .claude/rules/data-pipeline.md § Schema changes).
+    // Triple-documented: here, README § Configurable parameters, docs/CLAUDE.md § PWA display thresholds.
+    const POWER_OF_3_ATR_MULT = 2.0;
+    // VOLATILITY_FLOOR_PCT (2026-09-02, owner call after the APGE false-"coiled" case): a hard
+    // exclusion gate on Picks/Focus/Morning (system-selected surfaces) — a row is hidden when
+    // its Volatility W % OR ATR/Price % is below this floor, i.e. it's provably near-dead
+    // (buyout-frozen, halted, a perpetual preferred) rather than a genuine tight coil. Watchlist
+    // and a direct Lookup ticker search are exempt (explicit user intent) and get a "low
+    // volatility" warning chip instead of being hidden — see passesVolatilityFloor(). Volatility
+    // W and ATR/Price are already-scraped columns; this is a row-visibility decision, not a new
+    // CSV column (see .claude/rules/data-pipeline.md § Schema changes to ground-truth CSVs).
+    // Validated against the live picks pool (2026-09-02): both distributions have a real gap
+    // between ~0.5% and ~1.2%, so 1.0% catches only the isolated dead cluster, not legitimate
+    // low-vol mega-caps (which start at 1.2%+). Triple-documented: here, README § Configurable
+    // parameters, docs/CLAUDE.md § PWA display thresholds.
+    const VOLATILITY_FLOOR_PCT = 1.0;
     // Focus List constants (Phase 3b). score = base × (1 − penalty_fraction). Triple-documented:
     // here, README § Configurable parameters, CLAUDE.md § PWA display thresholds.
     // Extension penalty ramps from 0 at PENALTY_START to PENALTY_MAX at ATR_EXT_ACTIONABLE (=4.0).
@@ -3708,6 +3781,9 @@
         earnings: parseEarningsInfo(row['Earnings']),
         focusScore: focus ? focus.score : null,
         launchReady: computeLaunchReady(row),
+        // 2026-09-02: unlike Picks/Focus/Morning, a direct Lookup search is explicit user
+        // intent, so a below-floor stock isn't hidden here — just flagged (see VOLATILITY_FLOOR_PCT).
+        lowVolatility: !passesVolatilityFloor(row),
       };
     }
 
@@ -3719,9 +3795,12 @@
       const launchReadyChip = info.launchReady
         ? `<span class="text-[0.6rem] px-1.5 py-0.5 rounded-full font-bold ${info.launchReady.cls}" title="Launch-ready: overhead supply vs. 52-week high + short-term extension">${info.launchReady.label}</span>`
         : '';
+      const lowVolChip = info.lowVolatility
+        ? `<span class="text-[0.6rem] px-1.5 py-0.5 rounded-full font-bold bg-amber-500/15 text-amber-400" title="Volatility W % or ATR/Price % is below ${VOLATILITY_FLOOR_PCT}% — hidden from Picks/Focus/Morning as likely near-dead (buyout-frozen, halted, or a preferred share), shown here because you searched it directly">Low volatility</span>`
+        : '';
       const chips = info.categories
         .map(c => `<span class="text-[0.6rem] px-1.5 py-0.5 rounded-full ${CATEGORY_CHIP_CLS[c] || 'bg-slate-700/60 text-slate-300'}">${CATEGORY_LABEL[c] || c}</span>`)
-        .join('') + launchReadyChip;
+        .join('') + launchReadyChip + lowVolChip;
       const extHtml = !isNaN(info.ext)
         ? `<span class="${atrTextColor(info.ext)}">${info.ext.toFixed(1)}× ATR ext</span>` : '';
       const earnHtml = info.earnings && info.earnings.daysUntil !== null && info.earnings.daysUntil <= EARNINGS_CAUTION_DAYS
@@ -3848,6 +3927,52 @@
         </div>`;
     }
 
+    // Chart-toggle footer (CHART-TAP-1): full-width drawer bar + tall edge rails, all three
+    // wired to the same toggle call. Replaces the old corner pill (~34x24pt, under Apple's
+    // 44x44pt tap-target minimum) with one target that's easy to hit one-handed. Shared across
+    // Lookup/Picks/Morning/Positions — each caller passes its own toggle call string since the
+    // four toggle functions address by different keys (symbol vs. key+expandKey vs. ticker vs.
+    // trade_id). The rails run the full height of .chart-toggle-wrap, which grows to include
+    // the chart panel once open, so closing has the same reach as opening.
+    // extraClass carries each surface's pre-existing class name (pick-chart-toggle,
+    // lookup-chart-toggle, etc.) forward onto the drawer bar so existing test selectors and any
+    // future per-surface styling keep working unchanged.
+    function chartToggleFooterHtml(wrapId, panelId, onToggleCall, isOpen, panelInnerHtml, extraClass, dataAttrs) {
+      const label = isOpen ? 'Hide chart' : 'Show chart';
+      const attrs = dataAttrs || '';
+      return `
+        <div id="${wrapId}" class="chart-toggle-wrap" data-open="${isOpen ? 'true' : 'false'}">
+          <div class="chart-toggle-rail chart-toggle-rail-l" onclick="event.stopPropagation();${onToggleCall}" aria-hidden="true">‹</div>
+          <div class="chart-toggle-rail chart-toggle-rail-r" onclick="event.stopPropagation();${onToggleCall}" aria-hidden="true">›</div>
+          <div class="chart-toggle-bar ${extraClass || ''}" onclick="event.stopPropagation();${onToggleCall}" role="button" aria-expanded="${isOpen ? 'true' : 'false'}"${attrs}>
+            <span class="chart-toggle-label">${label}</span><span class="chart-toggle-chev"></span>
+          </div>
+          <div id="${panelId}" class="mt-2">${isOpen ? panelInnerHtml : ''}</div>
+        </div>`;
+    }
+
+    // DOM-patch the label/chevron/aria state after a toggle — companion to
+    // chartToggleFooterHtml, used by every toggle function below instead of each hand-rolling
+    // the same three attribute/text updates.
+    function updateChartToggleFooterState(wrapId, isOpen) {
+      const wrap = document.getElementById(wrapId);
+      if (!wrap) return;
+      wrap.setAttribute('data-open', isOpen ? 'true' : 'false');
+      const bar = wrap.querySelector('.chart-toggle-bar');
+      if (bar) bar.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+      const label = wrap.querySelector('.chart-toggle-label');
+      if (label) label.textContent = isOpen ? 'Hide chart' : 'Show chart';
+    }
+
+    // Lazy-load the TradingView chart panel only when the user explicitly opens it. Lookup is a
+    // single-result panel (not a per-row list), so unlike the Picks/Morning/Positions toggles
+    // below it does a full renderLookup() rather than a DOM patch — same behavior as the event
+    // delegation this replaced, just invoked directly by the chart-toggle-wrap's onclick.
+    window.__toggleLookupChart = function () {
+      state.lookup.chartOpen = !state.lookup.chartOpen;
+      renderLookup();
+    };
+
     function renderLookup() {
       const el = document.getElementById('lookup-result');
       if (!el) return;
@@ -3930,16 +4055,22 @@
       }
 
       const symEnc = encodeURIComponent(data.symbol);
+      const qwMountKey = 'qw_lookup_' + data.symbol;
       const links = `
         <div class="flex gap-2 mt-1.5 items-center flex-wrap">
           <a href="https://finviz.com/quote.ashx?t=${symEnc}" target="_blank" rel="noopener noreferrer"
             class="text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">Finviz ↗</a>
           <a href="https://www.tradingview.com/symbols/${symEnc}/" target="_blank" rel="noopener noreferrer"
             class="text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">TradingView ↗</a>
-          <button class="lookup-chart-toggle text-[0.65rem] px-1.5 py-0.5 rounded bg-slate-700 text-slate-300 hover:bg-slate-600"
-            data-symbol="${escapeHtml(data.symbol)}">${state.lookup.chartOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
+          ${quickWatchButtonHtml(data.symbol, qwMountKey)}
         </div>`;
-      const chartPanel = state.lookup.chartOpen ? `<div class="mt-2">${tradingViewChartHtml(data.symbol)}</div>` : '';
+      const chartPanel = chartToggleFooterHtml(
+        'lookup-chart-wrap', 'lookup-chart-panel', '__toggleLookupChart()', state.lookup.chartOpen,
+        state.lookup.chartOpen ? tradingViewChartHtml(data.symbol) : '',
+        'lookup-chart-toggle', ` data-symbol="${escapeHtml(data.symbol)}"`
+      );
+      const quickWatchPanel = `<div id="quickwatch-panel-${escapeHtml(qwMountKey)}" class="mt-2">${quickWatchPanelHtml(data.symbol, qwMountKey)}</div>`;
+      ensureWatchlistLoaded(() => renderLookup());
 
       let html = `
         <div class="flex gap-3 items-start">
@@ -3954,6 +4085,7 @@
             ${classificationLine}
             ${links}
             ${chartPanel}
+            ${quickWatchPanel}
             <div class="mt-2">
               <button onclick="manualOpenFromLookup('${escapeHtml(data.symbol)}')"
                 class="text-xs px-2 py-1 rounded bg-sky-500/10 text-sky-400 border border-sky-500/30 hover:bg-sky-500/20">Open a position on ${escapeHtml(data.symbol)} →</button>
@@ -4182,6 +4314,13 @@
       if (!v || v === '-') return NaN;
       return parseFloat(String(v).replace(/,/g, ''));
     }
+    // 'YYYY-MM-DD' -> 'M/D' (e.g. '2026-08-31' -> '8/31'). '' on anything unparseable —
+    // caller omits the whole caveat clause rather than printing a garbled date.
+    function _mdDate(dateStr) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateStr || '');
+      if (!m) return '';
+      return `${parseInt(m[2], 10)}/${parseInt(m[3], 10)}`;
+    }
 
     // Launch-ready chip (display-only, thresholds defined near CATEGORY_CHIP_CLS ~line 613).
     // Classifies a pick by overhead supply (distance below 52-week high) and short-term
@@ -4284,10 +4423,35 @@
       return (!isNaN(vol) && !isNaN(price)) ? vol * price : NaN;
     }
 
+    // ATR as % of price — shared by the volatility floor gate below (ATR and Price are already
+    // plain-number scraped columns, no new data needed).
+    function atrPctOfPrice(r) {
+      const atr = _pF(r['ATR']);
+      const price = _pF(r['Price']);
+      return (!isNaN(atr) && !isNaN(price) && price > 0) ? (atr / price) * 100 : NaN;
+    }
+
+    // Volatility floor gate (2026-09-02): hides a row from Picks/Focus/Morning when it's
+    // provably too quiet to be a real setup — Volatility W % OR ATR/Price % below
+    // VOLATILITY_FLOOR_PCT. Missing data passes through (NaN means "unknown", not "low") — this
+    // only excludes what we can positively measure as near-dead. Shared by passesPicksBaseFilter
+    // (Picks tab / ws4FocusScore's base gate) and isFocusEligible (every Focus-candidate pool,
+    // including the two sites below that don't also call passesPicksBaseFilter) so the floor
+    // can't drift between call sites, same discipline as the liquidity/ATR-extension gates.
+    function passesVolatilityFloor(r) {
+      const vw = _pPct(r['Volatility W']);
+      if (!isNaN(vw) && vw < VOLATILITY_FLOOR_PCT) return false;
+      const atrPct = atrPctOfPrice(r);
+      if (!isNaN(atrPct) && atrPct < VOLATILITY_FLOOR_PCT) return false;
+      return true;
+    }
+
     // Focus membership gate (Phase 3b/3d): must be actionable (price above 50MA, not
-    // over-extended) AND liquid enough to actually build/exit a position in. Shared by all
-    // three Focus-candidate filter sites so the two gates can't drift out of sync.
+    // over-extended), liquid enough to actually build/exit a position in, and not below the
+    // volatility floor. Shared by all three Focus-candidate filter sites so the gates can't
+    // drift out of sync.
     function isFocusEligible(r) {
+      if (!passesVolatilityFloor(r)) return false;
       const ext = _pF(r.atr_ext_50);
       if (isNaN(ext) || ext <= 0 || ext > ATR_EXT_ACTIONABLE) return false;
       const dolVol = focusDollarVol(r);
@@ -4577,6 +4741,200 @@
       return vals[vals.length - 1].toFixed(digits == null ? 2 : digits);
     }
 
+    // volSetupSectionHtml(r) — shared "Volatility & setup" card section (Effort A A-2 seam,
+    // issue #378). Renders the compression spine from a picks-shaped row `r`:
+    //   • B-1 (§5.1) raw facts — Vol W / Vol M (+ a contracting/expanding tint = pure sign of
+    //     VolW−VolM, a FACT not a magnitude cutoff), Rel volume, distance from 52W high — all
+    //     SHOWN values, never gated behind an invented threshold (governing principle §4.0).
+    //   • B-2 (§5.4/§5.7) range tightening — honest "Tightest range · last 7 bars" flag
+    //     (tight_range_7; gappy picks history so it's "last 7 bars", NOT "NR7") + Range/ATR and
+    //     ATR $ sparklines.
+    //   • B-3 (§5.2) volume dry-up — Rel Volume trend sparkline (owner's strongest/cheapest
+    //     VCP sub-signal).
+    //   • B-5 (§5.3) Pre-Power of 3 — MA-bunching COIL PRECONDITION chip (price/20MA/50MA within a
+    //     2×ATR band, computed client-side here from raw Price/ATR/SMA20/SMA50 — not a stored CSV
+    //     column) + the two SHOWN SMA % distances and the classic MA-to-MA cluster spread %. NOT the
+    //     full undercut→reclaim trigger (that's B-5b).
+    // Extracted verbatim from renderPickRow so the Morning family (B-6) can render the IDENTICAL
+    // section from a row assembled out of the morning store (B-1 raw cols, fresh from the A-1
+    // scrape-wide run) plus a cross-ref to picks_latest (B-2/B-3 trailing sparkline cols) — one
+    // seam instead of chips hand-added to diverging code paths (§8). Every sub-block self-hides
+    // via per-name graceful degrade (§3), so a row missing the derived columns still shows the
+    // raw B-1 values it does have. Returns '' when the row has NOTHING to show (e.g. a morning
+    // orphan with no scrape and no picks cross-ref), so the caller can omit the section entirely.
+    function volSetupSectionHtml(r, opts) {
+      r = r || {};
+      opts = opts || {};
+      // staleTrailing (B-6 follow-up, owner 2026-09-02): the Range/Volume sub-blocks below
+      // read the B-2/B-3 trailing-window columns, which come from the picks_latest cross-ref
+      // (last night's close), NOT this-morning's fresh scrape — unlike the B-1 row above them.
+      // Morning/Watchlist callers pass this so the two sub-headers name the actual as-of date;
+      // the Picks tab (renderPickRow) never does, since there the whole card — B-1 AND the
+      // trailing cols — is from the same EOD run, so there's no lag to caveat.
+      const asOf = opts.staleTrailing ? _mdDate(r['date']) : '';
+      const asOfHtml = asOf
+        ? `<span class="text-slate-600 text-[0.55rem] ml-1">as of last close ${asOf}</span>`
+        : '';
+      const volW = _pPct(r['Volatility W']);   // Finviz weekly volatility %, e.g. '3.92%'
+      const volM = _pPct(r['Volatility M']);   // Finviz monthly volatility %
+      const relVol = _pF(r['Rel Volume']);     // today's volume vs its own average (×)
+      const oh52 = _pF(r['52W High']);         // signed % from 52-week high (negative = below)
+      // Contraction read: W < M = this week is calmer than the month = coiling. Pure sign of
+      // (volW − volM); no magnitude threshold. Neutral when either is missing or they're equal.
+      let volTrendStr = '', volTrendCls = 'text-slate-500';
+      if (!isNaN(volW) && !isNaN(volM)) {
+        if (volW < volM)      { volTrendStr = 'contracting'; volTrendCls = 'text-emerald-400'; }
+        else if (volW > volM) { volTrendStr = 'expanding';   volTrendCls = 'text-amber-400'; }
+        else                  { volTrendStr = 'flat';        volTrendCls = 'text-slate-400'; }
+      }
+      const volWMStr = (isNaN(volW) ? '—' : volW.toFixed(1) + '%') + ' / ' + (isNaN(volM) ? '—' : volM.toFixed(1) + '%');
+      const relVolStr = isNaN(relVol) ? '—' : relVol.toFixed(2) + '×';
+      const oh52Str = isNaN(oh52) ? '—' : (oh52 >= 0 ? '+' : '') + oh52.toFixed(1) + '%';
+
+      // Range tightening (B-2) — trailing-window columns from picks_latest.csv. tight_range_7 is
+      // a FACT ('1' = today's raw H−L is the narrowest of the last 7 AVAILABLE bars). The two
+      // *_spark series are SHOWN values. All degrade to '' when a name lacks enough history.
+      const tightRange7 = r['tight_range_7'];   // '1' | '0' | '' (blank = <7 bars of history)
+      const rangeAtrSpark = r['range_atr_spark'] || '';
+      const atrSpark = r['atr_spark'] || '';
+      const hasTightening = !!(rangeAtrSpark || atrSpark || tightRange7 === '1' || tightRange7 === '0');
+
+      // Volume dry-up (B-3) — Rel Volume trend over trailing bars; self-hides on thin history.
+      const relVolSpark = r['relvol_spark'] || '';
+      const hasVolDryup = !!relVolSpark;
+
+      // Pre-Power of 3 (B-5, §5.3) — MA bunching: price, 20MA and 50MA all inside one 2×ATR band.
+      // This is the COIL PRECONDITION only, honestly labeled "Pre-Power of 3" — NOT the full
+      // Power-of-3 setup, which is bunched → undercut the cluster → reclaim the highest MA (the
+      // reclaim is the trigger). That undercut→reclaim trigger is a later slice (B-5b) built on the
+      // pick_status reclaim engine. The bunched flag is computed HERE, client-side, from the raw
+      // Price/ATR/SMA20/SMA50 columns — it is NOT a stored CSV column. It's a pure single-row
+      // function of already-scraped values and depends on the tunable POWER_OF_3_ATR_MULT, so
+      // persisting it as ground truth would silently go stale if that constant changed (see
+      // `.claude/rules/data-pipeline.md` § Schema changes to ground-truth CSVs). Computing it at
+      // render time also makes it real-time on Morning/Watch cards: SMA20/SMA50/Price/ATR are in
+      // _SETUP_FRESH_COLS, so setupRowForCard overrides them with this-morning's scrape, and the
+      // chip re-fires off fresh MA levels rather than last night's close. price/20/50 only — we
+      // don't scrape the 10MA and the 200 isn't this pattern's third line. Owner set the 2×ATR band
+      // (domain authority per doc §4.0), so a binary chip is legitimate. The two SMA % distances AND
+      // the classic MA-to-MA cluster spread % are SHOWN values so the trader sees WHY it is/isn't
+      // bunched. Missing price/SMA/ATR (a morning orphan, thin scrape) → the block self-hides.
+      const sma20 = _pF(r['SMA20']);   // Finviz signed % of price above the 20MA
+      const sma50 = _pF(r['SMA50']);   // Finviz signed % of price above the 50MA
+      const _price = _pF(r['Price']);
+      const _atr = _pF(r['ATR']);
+      // Reconstruct each MA's $ level from its Finviz %-above-price (sma$ = price / (1 + pct/100)).
+      let _sma20p = NaN, _sma50p = NaN, maSpreadStr = '', pow3 = '';
+      if (!isNaN(_price) && _price > 0 && !isNaN(sma20) && !isNaN(sma50)) {
+        _sma20p = _price / (1 + sma20 / 100);
+        _sma50p = _price / (1 + sma50 / 100);
+        // Cluster spread (classic Power-of-3 tightness): |20MA − 50MA| as % of price, SHOWN.
+        maSpreadStr = (Math.abs(_sma20p - _sma50p) / _price * 100).toFixed(2) + '%';
+        // Pre-Power of 3 chip fires when price/20MA/50MA all fit inside one POWER_OF_3_ATR_MULT×ATR
+        // band. '1' bunched / '0' not; stays '' (no chip) when ATR is missing.
+        if (!isNaN(_atr) && _atr > 0) {
+          const _span = Math.max(_price, _sma20p, _sma50p) - Math.min(_price, _sma20p, _sma50p);
+          pow3 = (_span <= POWER_OF_3_ATR_MULT * _atr) ? '1' : '0';
+        }
+      }
+      const hasPow3 = !!(pow3 === '1' || pow3 === '0' || !isNaN(sma20) || !isNaN(sma50));
+      const sma20Str = isNaN(sma20) ? '—' : (sma20 >= 0 ? '+' : '') + sma20.toFixed(1) + '%';
+      const sma50Str = isNaN(sma50) ? '—' : (sma50 >= 0 ? '+' : '') + sma50.toFixed(1) + '%';
+
+      // Graceful degrade (§3): nothing at all to show → omit the section (e.g. a morning orphan
+      // with neither a fresh scrape nor a picks cross-ref). On a Picks card the raw B-1 cols are
+      // always present, so this renders exactly as before.
+      const hasB1 = !isNaN(volW) || !isNaN(volM) || !isNaN(relVol) || !isNaN(oh52);
+      if (!hasB1 && !hasTightening && !hasVolDryup && !hasPow3) return '';
+
+      return `
+            <div class="mt-2 pt-2 border-t border-slate-700/50">
+              <div class="text-slate-400 font-semibold mb-1.5">Volatility &amp; setup</div>
+              <div class="grid grid-cols-3 gap-x-3 gap-y-2">
+                <div>
+                  <div class="text-slate-500 mb-0.5">Vol W / M</div>
+                  <div class="text-slate-300">${volWMStr}</div>
+                  ${volTrendStr ? `<div class="${volTrendCls} text-[0.65rem]">${volTrendStr}</div>` : ''}
+                </div>
+                <div>
+                  <div class="text-slate-500 mb-0.5">Rel volume</div>
+                  <div class="text-slate-300">${relVolStr}</div>
+                </div>
+                <div>
+                  <div class="text-slate-500 mb-0.5">From 52W high</div>
+                  <div class="text-slate-300">${oh52Str}</div>
+                </div>
+              </div>
+              ${hasTightening ? `
+              <div class="mt-2 pt-2 border-t border-slate-700/40">
+                <div class="flex items-center gap-2 mb-1 flex-wrap">
+                  <span class="text-slate-500">Range over last 10 sessions</span>${asOfHtml}
+                  ${tightRange7 === '1' ? '<span class="text-emerald-400 text-[0.6rem] px-1.5 py-0.5 rounded bg-emerald-500/10 font-medium">Tightest range · last 7 bars</span>' : ''}
+                </div>
+                <div class="grid grid-cols-2 gap-x-3">
+                  <div>
+                    <div class="text-slate-500 text-[0.65rem] mb-0.5">Range/ATR <span class="text-slate-400">${volSparkLast(rangeAtrSpark)}</span></div>
+                    <div class="text-sky-400/80">${volSpark(rangeAtrSpark) || '<span class="text-slate-600">—</span>'}</div>
+                  </div>
+                  <div>
+                    <div class="text-slate-500 text-[0.65rem] mb-0.5">ATR $ <span class="text-slate-400">${volSparkLast(atrSpark)}</span></div>
+                    <div class="text-sky-400/80">${volSpark(atrSpark) || '<span class="text-slate-600">—</span>'}</div>
+                  </div>
+                </div>
+              </div>` : ''}
+              ${hasVolDryup ? `
+              <div class="mt-2 pt-2 border-t border-slate-700/40">
+                <div class="mb-1"><span class="text-slate-500">Volume over last 10 sessions</span>${asOfHtml}</div>
+                <div class="text-slate-500 text-[0.65rem] mb-0.5">Rel volume · last bars <span class="text-slate-400">${volSparkLast(relVolSpark)}×</span></div>
+                <div class="text-sky-400/80">${volSpark(relVolSpark) || '<span class="text-slate-600">—</span>'}</div>
+              </div>` : ''}
+              ${hasPow3 ? `
+              <div class="mt-2 pt-2 border-t border-slate-700/40">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-slate-500">MA bunching</span>
+                  ${maSpreadStr ? `<span class="text-slate-400 text-[0.65rem]">spread ${maSpreadStr}</span>` : ''}
+                  ${pow3 === '1' ? '<span class="text-emerald-400 text-[0.6rem] px-1.5 py-0.5 rounded bg-emerald-500/10 font-medium">Pre-Power of 3</span>' : ''}
+                </div>
+                <div class="grid grid-cols-2 gap-x-3">
+                  <div>
+                    <div class="text-slate-500 text-[0.65rem] mb-0.5">Price vs 20MA</div>
+                    <div class="text-slate-300">${sma20Str}</div>
+                  </div>
+                  <div>
+                    <div class="text-slate-500 text-[0.65rem] mb-0.5">Price vs 50MA</div>
+                    <div class="text-slate-300">${sma50Str}</div>
+                  </div>
+                </div>
+              </div>` : ''}
+            </div>`;
+    }
+
+    // setupRowForCard(ticker, freshRow) — assemble a picks-shaped row for volSetupSectionHtml on a
+    // Morning-family card (Effort B B-6). Base = the picks_latest cross-ref (ws4FindPicksRow), which
+    // carries the B-2/B-3 trailing sparkline cols (range_atr_spark/atr_spark/relvol_spark/
+    // tight_range_7 — multi-day, so last night's are current enough) AND a B-1 fallback. Then the
+    // B-1 raw cols (Vol W/M, Rel Volume, 52W High) PLUS the B-5 MA-bunching inputs (Price, SMA20,
+    // SMA50, ATR) are overridden with THIS-MORNING's fresh scrape-wide values from `freshRow` (the
+    // morning store row, or a watch card's public read) when present — collect_morning's
+    // SETUP_COLUMNS put those on the morning store keyed by the same Finviz labels
+    // volSetupSectionHtml reads. Overriding Price/SMA20/SMA50/ATR is what makes the client-side
+    // Pre-Power of 3 chip + MA distances real-time on Morning/Watch instead of last night's close
+    // (SMA %-distances track live price, so a stale pair mis-locates the MA level). Returns {} when
+    // neither source has anything → the section self-hides (graceful degrade §3: a morning orphan
+    // not in picks and not freshly scraped shows no section rather than a wall of dashes).
+    const _SETUP_FRESH_COLS = ['Volatility W', 'Volatility M', 'Rel Volume', '52W High',
+                               'Price', 'SMA20', 'SMA50', 'ATR'];
+    function setupRowForCard(ticker, freshRow) {
+      const picksRow = (typeof ws4FindPicksRow === 'function') ? ws4FindPicksRow(ticker) : null;
+      const merged = Object.assign({}, picksRow || {});
+      const fr = freshRow || {};
+      _SETUP_FRESH_COLS.forEach(k => {
+        const v = fr[k];
+        if (v !== undefined && v !== null && String(v).trim() !== '') merged[k] = v;
+      });
+      return merged;
+    }
+
     // renderPickRow(r, opts) — shared row renderer (3b.0).
     // Called from renderPicks (All + Focus views) and will be reused by 3c Lookup section.
     // opts: { rowIndex, expandable, showScore, showGroupSubtitle, score, base, penaltyFrac, group_n, tight_n, quiet_n }
@@ -4602,36 +4960,10 @@
       const perfWCls = isNaN(perfW) ? 'text-slate-400' : (perfW >= 0 ? 'text-emerald-400' : 'text-red-400');
       const perfMCls = isNaN(perfM) ? 'text-slate-400' : (perfM >= 0 ? 'text-emerald-400' : 'text-red-400');
 
-      // Compression spine (Effort B, issue #379) — raw single-day volatility/setup facts from
-      // picks_latest.csv, SHOWN as values, never gated behind an invented threshold (governing
-      // principle §4.0: facts→flags, judgments→shown values). The only derived read here is the
-      // contracting/expanding tint, which states a FACT (Vol W vs Vol M — which is larger), not a
-      // cutoff. Rendered in the expanded card's "Volatility & setup" section (see riskHtml below).
-      const volW = _pPct(r['Volatility W']);   // Finviz weekly volatility %, e.g. '3.92%'
-      const volM = _pPct(r['Volatility M']);   // Finviz monthly volatility %
-      const relVol = _pF(r['Rel Volume']);     // today's volume vs its own average (×)
-      const oh52 = _pF(r['52W High']);         // signed % from 52-week high (negative = below)
-      // Contraction read: W < M = this week is calmer than the month = coiling. Pure sign of
-      // (volW − volM); no magnitude threshold. Neutral when either is missing or they're equal.
-      let volTrendStr = '', volTrendCls = 'text-slate-500';
-      if (!isNaN(volW) && !isNaN(volM)) {
-        if (volW < volM)      { volTrendStr = 'contracting'; volTrendCls = 'text-emerald-400'; }
-        else if (volW > volM) { volTrendStr = 'expanding';   volTrendCls = 'text-amber-400'; }
-        else                  { volTrendStr = 'flat';        volTrendCls = 'text-slate-400'; }
-      }
-      const volWMStr = (isNaN(volW) ? '—' : volW.toFixed(1) + '%') + ' / ' + (isNaN(volM) ? '—' : volM.toFixed(1) + '%');
-      const relVolStr = isNaN(relVol) ? '—' : relVol.toFixed(2) + '×';
-      const oh52Str = isNaN(oh52) ? '—' : (oh52 >= 0 ? '+' : '') + oh52.toFixed(1) + '%';
-
-      // Range tightening (B-2, issue #379) — trailing-window columns from picks_latest.csv.
-      // tight_range_7 is a FACT ('1' = today's raw H−L is the narrowest of the last 7 AVAILABLE
-      // bars; picks history is gappy per-name so it's "last 7 bars", NOT NR7 — labeled honestly).
-      // The two *_spark series are SHOWN values (doc §4.0). All degrade to '' when a name lacks
-      // enough history, so each piece self-hides rather than fabricating a read.
-      const tightRange7 = r['tight_range_7'];   // '1' | '0' | '' (blank = <7 bars of history)
-      const rangeAtrSpark = r['range_atr_spark'] || '';
-      const atrSpark = r['atr_spark'] || '';
-      const hasTightening = !!(rangeAtrSpark || atrSpark || tightRange7 === '1' || tightRange7 === '0');
+      // Compression spine "Volatility & setup" section (Effort B, issue #379: B-1/B-2/B-3) is now
+      // rendered by the shared volSetupSectionHtml(r) helper (Effort A A-2 seam) so the Morning
+      // family (B-6) reuses the identical section. See that function above; interpolated into
+      // riskHtml below.
 
       // Avg $ volume + earnings proximity — computed unconditionally (not just when
       // expandable) since the earnings badge below needs it in the always-visible
@@ -4789,50 +5121,24 @@
             <div id="risk-basis-content-${key}">
               ${window.__buildRiskBasisContent(rowData, cardBasis)}
             </div>
-            <div class="mt-2 pt-2 border-t border-slate-700/50">
-              <div class="text-slate-400 font-semibold mb-1.5">Volatility &amp; setup</div>
-              <div class="grid grid-cols-3 gap-x-3 gap-y-2">
-                <div>
-                  <div class="text-slate-500 mb-0.5">Vol W / M</div>
-                  <div class="text-slate-300">${volWMStr}</div>
-                  ${volTrendStr ? `<div class="${volTrendCls} text-[0.65rem]">${volTrendStr}</div>` : ''}
-                </div>
-                <div>
-                  <div class="text-slate-500 mb-0.5">Rel volume</div>
-                  <div class="text-slate-300">${relVolStr}</div>
-                </div>
-                <div>
-                  <div class="text-slate-500 mb-0.5">From 52W high</div>
-                  <div class="text-slate-300">${oh52Str}</div>
-                </div>
-              </div>
-              ${hasTightening ? `
-              <div class="mt-2 pt-2 border-t border-slate-700/40">
-                <div class="flex items-center gap-2 mb-1">
-                  <span class="text-slate-500">Range tightening</span>
-                  ${tightRange7 === '1' ? '<span class="text-emerald-400 text-[0.6rem] px-1.5 py-0.5 rounded bg-emerald-500/10 font-medium">Tightest range · last 7 bars</span>' : ''}
-                </div>
-                <div class="grid grid-cols-2 gap-x-3">
-                  <div>
-                    <div class="text-slate-500 text-[0.65rem] mb-0.5">Range/ATR <span class="text-slate-400">${volSparkLast(rangeAtrSpark)}</span></div>
-                    <div class="text-sky-400/80">${volSpark(rangeAtrSpark) || '<span class="text-slate-600">—</span>'}</div>
-                  </div>
-                  <div>
-                    <div class="text-slate-500 text-[0.65rem] mb-0.5">ATR $ <span class="text-slate-400">${volSparkLast(atrSpark)}</span></div>
-                    <div class="text-sky-400/80">${volSpark(atrSpark) || '<span class="text-slate-600">—</span>'}</div>
-                  </div>
-                </div>
-              </div>` : ''}
-            </div>
+            ${volSetupSectionHtml(r)}
             ${scoreDebug}
             ${arielBreakdown}
             <div class="flex flex-wrap gap-2 mt-2 pt-2 border-t border-slate-700/50">
               <a href="https://finviz.com/quote.ashx?t=${encodeURIComponent(ticker)}" target="_blank" rel="noopener noreferrer" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation()">Finviz ↗</a>
               <a href="https://www.tradingview.com/symbols/${encodeURIComponent(ticker)}/" target="_blank" rel="noopener noreferrer" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation()">TradingView ↗</a>
               ${r.group ? `<a href="${escapeHtml(buildScreenerUrl('ind', slugifyGroup(r.group)))}" target="_blank" rel="noopener noreferrer" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation()">Peers in group ↗</a>` : ''}
-              <button id="pick-chart-toggle-${key}" class="pick-chart-toggle text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" data-key="${key}" data-expand-key="${escapeHtml(expandKey)}" data-ticker="${escapeHtml(ticker)}" onclick="event.stopPropagation();__togglePickChart('${key}','${expandKey.replace(/'/g, "\\'")}','${ticker.replace(/'/g, "\\'")}')">${state.picksChartOpen.has(expandKey) ? 'Hide chart ▲' : 'Show chart ▼'}</button>
+              ${quickWatchButtonHtml(ticker, 'qw_pick_' + key)}
             </div>
-            <div id="pick-chart-panel-${key}" class="mt-2">${state.picksChartOpen.has(expandKey) ? tradingViewChartHtml(ticker, 560) : ''}</div>
+            ${chartToggleFooterHtml(
+              'pick-chart-wrap-' + key, 'pick-chart-panel-' + key,
+              `__togglePickChart('${key}','${expandKey.replace(/'/g, "\\'")}','${ticker.replace(/'/g, "\\'")}')`,
+              state.picksChartOpen.has(expandKey),
+              state.picksChartOpen.has(expandKey) ? tradingViewChartHtml(ticker, 560) : '',
+              'pick-chart-toggle',
+              ` data-key="${key}" data-expand-key="${escapeHtml(expandKey)}" data-ticker="${escapeHtml(ticker)}"`
+            )}
+            <div id="quickwatch-panel-qw_pick_${key}">${quickWatchPanelHtml(ticker, 'qw_pick_' + key)}</div>
           </div>`;
       }
 
@@ -4989,18 +5295,16 @@
     // same lifecycle as picksExpanded.
     window.__togglePickChart = function(key, expandKey, ticker) {
       const panel = document.getElementById('pick-chart-panel-' + key);
-      const btn = document.getElementById('pick-chart-toggle-' + key);
       if (!panel) return;
       const isOpen = state.picksChartOpen.has(expandKey);
       if (isOpen) {
         state.picksChartOpen.delete(expandKey);
         panel.innerHTML = '';
-        if (btn) btn.textContent = 'Show chart ▼';
       } else {
         state.picksChartOpen.add(expandKey);
         panel.innerHTML = tradingViewChartHtml(ticker, 560);
-        if (btn) btn.textContent = 'Hide chart ▲';
       }
+      updateChartToggleFooterState('pick-chart-wrap-' + key, !isOpen);
     };
 
     window.__setPickBasis = function(key, basis) {
@@ -5040,12 +5344,13 @@
       renderPicks();
     };
 
-    // C6 base display filter: Market Cap > MIN_MARKET_CAP_B AND
+    // C6 base display filter: not below the volatility floor, Market Cap > MIN_MARKET_CAP_B, AND
     // (price>50MA OR price>200MA OR 20MA>50MA). Shared by renderPicks() (the Picks tab
     // itself) and ws4FocusScore() (WS4 trade ticket) so the "which rows are even
     // candidates" gate can't drift between the two call sites — a row that wouldn't show
     // up in the Picks tab at all must not silently get a Focus score on the ticket.
     function passesPicksBaseFilter(r) {
+      if (!passesVolatilityFloor(r)) return false;
       const capB = _pCapB(r['Market Cap']);
       if (isNaN(capB) || capB <= MIN_MARKET_CAP_B) return false;
       const sma50  = _pPct(r['SMA50']);
@@ -5060,6 +5365,10 @@
     function renderPicks() {
       const el = document.getElementById('picks-list');
       if (!el) return;
+
+      // Best-effort — so a row's quick-add button (renderPickRow) knows whether a ticker is
+      // already watched instead of always showing "+ Watch". See ensureWatchlistLoaded().
+      ensureWatchlistLoaded(() => renderPicks());
 
       const rows = state.picksData;
       if (!rows || rows.length === 0) {
@@ -5222,6 +5531,18 @@
         Stocks from today's leading and emerging industry groups — sectors showing sustained relative strength vs. the S&P 500. Every name is above its 50-day moving average. Browse the full universe here by group, or switch to <strong class="text-white">Focus ★</strong> for today's highest-conviction setups ranked by quality score.
       </div>`;
 
+      // Reason chips per group header — same CATEGORY_LABEL/CATEGORY_CHIP_CLS chips
+      // renderLookupStage2() shows in the Lookup tab, so a group qualifying under
+      // several buckets today (e.g. Leaders + Accel) isn't only visible in the one
+      // section it happens to be rendered under here.
+      const groupCatMap = new Map();
+      for (const cat of Object.keys(catMap)) {
+        for (const grp of Object.keys(catMap[cat])) {
+          if (!groupCatMap.has(grp)) groupCatMap.set(grp, new Set());
+          groupCatMap.get(grp).add(cat);
+        }
+      }
+
       const catsPresent = CAT_ORDER.filter(c => catMap[c]);
 
       // Flatten in the SAME category → group → ATR-ascending order used to render the list
@@ -5257,10 +5578,18 @@
         for (const grp of Object.keys(groups).sort()) {
           const stocks = groups[grp];
           const grpChartsUrl = buildChartsUrl(stocks.map(r => r.ticker || r.Ticker || ''));
+          const grpCats = groupCatMap.get(grp) || new Set();
+          const grpChips = CAT_ORDER
+            .filter(c => grpCats.has(c))
+            .map(c => `<span class="text-[0.6rem] px-1.5 py-0.5 rounded-full ${CATEGORY_CHIP_CLS[c] || 'bg-slate-700/60 text-slate-300'}">${CATEGORY_LABEL[c] || c}</span>`)
+            .join('');
           html += `<div class="mb-2 bg-slate-800/60 rounded-lg overflow-hidden border border-slate-700/50">
-            <div class="flex items-center justify-between px-3 py-2 bg-slate-800 border-b border-slate-700">
-              <button data-pick-group-lookup="${escapeHtml(grp)}" class="text-xs font-medium text-slate-200 truncate hover:text-indigo-300 transition-colors text-left">${escapeHtml(grp)} ›</button>
-              <span class="text-xs text-slate-500 ml-2 flex-shrink-0 whitespace-nowrap">${stocks.length} name${stocks.length !== 1 ? 's' : ''} · <a href="${escapeHtml(grpChartsUrl)}" target="_blank" rel="noopener noreferrer" class="hover:text-slate-300 transition-colors" onclick="event.stopPropagation()">Charts ↗</a></span>
+            <div class="px-3 py-2 bg-slate-800 border-b border-slate-700">
+              <div class="flex items-center justify-between">
+                <button data-pick-group-lookup="${escapeHtml(grp)}" class="text-xs font-medium text-slate-200 truncate hover:text-indigo-300 transition-colors text-left">${escapeHtml(grp)} ›</button>
+                <span class="text-xs text-slate-500 ml-2 flex-shrink-0 whitespace-nowrap">${stocks.length} name${stocks.length !== 1 ? 's' : ''} · <a href="${escapeHtml(grpChartsUrl)}" target="_blank" rel="noopener noreferrer" class="hover:text-slate-300 transition-colors" onclick="event.stopPropagation()">Charts ↗</a></span>
+              </div>
+              ${grpChips ? `<div class="flex items-center gap-1 flex-wrap mt-1">${grpChips}</div>` : ''}
             </div>`;
           for (const r of stocks) {
             const fsKey = r.ticker + '_' + (r.list_category || '');
@@ -5391,10 +5720,25 @@
     function morningCardBody(r) {
       const meta = MORNING_STATUS_META[r.status] || MORNING_STATUS_META.no_quote;
       const now = `${_mNum(r.price)} · ${_mChange(r.change)}`;
+      // ATR from LoD (owner decision 2026-09-02: shown on every status now, not just
+      // actionable ones — same emerald/amber/red entry-quality bands throughout) + Rel
+      // volume, both live scrape-wide values (fresh every morning, unlike the B-2/B-3
+      // trailing cols in setupSection below) so a trader can gauge real-time participation
+      // before deciding to act, on any card type.
       const atr = morningAtrLabel(r.atr_from_lod);
       const atrRow = atr
         ? `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">ATR from LoD</span><span class="${atr.cls} font-medium tabular-nums">${atr.text}</span></div>`
         : '';
+      const rvol = _pF(r['Rel Volume']);
+      const rvolRow = !isNaN(rvol)
+        ? `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">Rel volume</span><span class="text-slate-200 font-medium tabular-nums">${rvol.toFixed(2)}×</span></div>`
+        : '';
+
+      // B-6: the shared compression "Volatility & setup" section (A-2 seam). B-1 raw cols come
+      // fresh from this morning's scrape-wide store (the row `r` itself); B-2/B-3 sparkline cols
+      // come via a picks_latest cross-ref inside setupRowForCard. Rendered once here, inserted
+      // after each status's metric rows (context before action). Self-hides on a data-less row.
+      const setupSection = volSetupSectionHtml(setupRowForCard(r.ticker, r), { staleTrailing: true });
 
       // WS5 phase 1 (#309): the CTA now has four states — taken (real position logged),
       // confirm (payload built, awaiting Confirm/Cancel), note (sign-in prompt or a
@@ -5415,11 +5759,11 @@
       let body;
       switch (r.status) {
         case 'triggered':
-          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + atrRow
+          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + atrRow + rvolRow + setupSection
                + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
           break;
         case 'gapped_through':
-          body = _mKv('Trigger', _mNum(r.trigger)) + _mKv('Opened', `${_mNum(r.open)} · ${_mChange(r.change)} gap`) + atrRow
+          body = _mKv('Trigger', _mNum(r.trigger)) + _mKv('Opened', `${_mNum(r.open)} · ${_mChange(r.change)} gap`) + atrRow + rvolRow + setupSection
                + _mNote('Entry here has poor R vs the planned stop.')
                + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
           break;
@@ -5436,21 +5780,25 @@
           const refRow = isFinite(refValRaw)
             ? _mKv(`Reclaimed ${refLabel}`, `${isMa ? '~' : ''}${refValRaw.toFixed(2)}`)
             : '';
-          body = refRow + _mKv('Now', now) + atrRow
+          body = refRow + _mKv('Now', now) + atrRow + rvolRow + setupSection
                + _mNote('Undercut and reclaimed — failed breakdown. Confirm the recovery before entering.')
                + ws4ToggleAffordance(r) + (ws4GetTicket(r.ticker).expanded ? ws4TicketHtml(r) : '') + cta;
           break;
         }
+        // failed_breakout/setting_up/invalidated (below) are not actionable — no trade
+        // ticket or "I took it" CTA — but owner decision 2026-09-02 standardized the
+        // entry-quality rows (ATR-from-LoD + Rel volume) onto every card regardless, so
+        // they render here identically to the actionable branches above.
         case 'failed_breakout':
-          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', `${_mNum(r.price)} · below trigger`)
+          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', `${_mNum(r.price)} · below trigger`) + atrRow + rvolRow + setupSection
                + _mNote('Broke out and failed. Don\'t chase a re-break blindly.');
           break;
         case 'setting_up':
-          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now)
+          body = _mKv('Trigger (prior high)', _mNum(r.trigger)) + _mKv('Now', now) + atrRow + rvolRow + setupSection
                + _mNote('Below trigger. Nothing to do yet.');
           break;
         case 'invalidated':
-          body = _mKv('Planned stop (prior low)', _mNum(r.stop)) + _mKv('Now', `${_mNum(r.price)} — below stop`)
+          body = _mKv('Planned stop (prior low)', _mNum(r.stop)) + _mKv('Now', `${_mNum(r.price)} — below stop`) + atrRow + rvolRow + setupSection
                + _mNote('Setup dead. Drop from watch.');
           break;
         default: // no_quote
@@ -5467,10 +5815,17 @@
     function morningChartAffordance(ticker) {
       const isOpen = state.morningChartOpen.has(ticker);
       const tickerJs = ticker.replace(/'/g, "\\'");
+      const qwMountKey = 'qw_morning_' + ticker;
       return `
         <div class="mt-2 pt-2 border-t border-slate-700/50">
-          <button id="morning-chart-toggle-${escapeHtml(ticker)}" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation();__toggleMorningChart('${tickerJs}')">${isOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
-          <div id="morning-chart-panel-${escapeHtml(ticker)}" class="mt-2">${isOpen ? tradingViewChartHtml(ticker, 560) : ''}</div>
+          ${chartToggleFooterHtml(
+            'morning-chart-wrap-' + escapeHtml(ticker), 'morning-chart-panel-' + escapeHtml(ticker),
+            `__toggleMorningChart('${tickerJs}')`, isOpen,
+            isOpen ? tradingViewChartHtml(ticker, 560) : '',
+            'morning-chart-toggle', ` data-ticker="${escapeHtml(ticker)}"`
+          )}
+          ${quickWatchButtonHtml(ticker, qwMountKey)}
+          <div id="quickwatch-panel-${escapeHtml(qwMountKey)}">${quickWatchPanelHtml(ticker, qwMountKey)}</div>
         </div>`;
     }
 
@@ -5479,18 +5834,16 @@
     // across renderMorning() re-renders (tab switches, WS4 ticket toggles).
     window.__toggleMorningChart = function(ticker) {
       const panel = document.getElementById('morning-chart-panel-' + ticker);
-      const btn = document.getElementById('morning-chart-toggle-' + ticker);
       if (!panel) return;
       const isOpen = state.morningChartOpen.has(ticker);
       if (isOpen) {
         state.morningChartOpen.delete(ticker);
         panel.innerHTML = '';
-        if (btn) btn.textContent = 'Show chart ▼';
       } else {
         state.morningChartOpen.add(ticker);
         panel.innerHTML = tradingViewChartHtml(ticker, 560);
-        if (btn) btn.textContent = 'Hide chart ▲';
       }
+      updateChartToggleFooterState('morning-chart-wrap-' + ticker, !isOpen);
     };
 
     // ── WS4 Phase B trade ticket (ADR-014) ──────────────────────────────────
@@ -5609,25 +5962,39 @@
       return known.concat(unknown);
     }
 
-    // Focus score for a single ticket row, computed against the SAME candidate pool the
-    // Picks tab's own Focus badges use (`allFocusCandidates` in renderPicks(): the C6 base
-    // filter — passesPicksBaseFilter — THEN isFocusEligible, not deduped by ticker), so
-    // the number shown here matches what the Picks tab shows for this ticker today. An
-    // earlier version deduped by ticker and skipped the C6 filter (mirroring the Lookup
-    // tab's globalFocusCandidates instead) — verified against live picks_latest.csv, that
-    // pool wrongly included ~16% of Focus-eligible tickers that fail the C6 gate (mostly
-    // sub-$5B market cap) and would never actually appear in the Picks tab's Focus view.
-    // Caveat: this always uses the DEFAULT Picks-tab settings (Ariel filter off, 'last'
-    // price basis) — if the user has an Ariel filter active in the Picks tab right now,
-    // this number can legitimately differ from what they currently see there, since the
-    // Ariel filter further narrows that view's candidate pool. Returns null when the row
-    // fails either gate — the footnote renders its own "not a Focus candidate" message.
+    // Shared Focus-score pool + scoring pass — the SAME candidate derivation ws4FocusScore has
+    // always used (C6 base filter — passesPicksBaseFilter — THEN isFocusEligible over
+    // state.picksData, not deduped by ticker), so this matches what the Picks tab's own Focus
+    // badges show for this ticker today. Pulled out into its own function (2026-09-03) so the
+    // Morning tab's card chip + sort + this ticket footnote all read ONE computed map instead
+    // of three separate call sites that happen to agree today — a future change to the Focus
+    // formula or its candidate pool then updates all three for free, per this repo's rule that
+    // a config-driven value lives in one place (see .claude/rules/data-pipeline.md).
+    function focusScoreMapForPool() {
+      const candidates = (state.picksData || []).filter(row => passesPicksBaseFilter(row) && isFocusEligible(row));
+      const scored = computeFocusScores(candidates);
+      const map = new Map();
+      scored.forEach(s => map.set(s.r.Ticker || s.r.ticker || '', s.score));
+      return map;
+    }
+    // Set once per renderMorning() call (before any card is built) so every card's chip, the
+    // sort comparator, and ws4FocusScore's ticket-footnote lookup below all read the exact same
+    // map in that render — never three fresh computeFocusScores() passes that could disagree on
+    // ties. null outside a Morning render (or before the first one); ws4FocusScore falls back to
+    // computing fresh in that case so it still works for any future non-Morning caller.
+    let _morningFocusMap = null;
+
+    // Focus score for a single ticket row. Caveat: this always uses the DEFAULT Picks-tab
+    // settings (Ariel filter off, 'last' price basis) — if the user has an Ariel filter active
+    // in the Picks tab right now, this number can legitimately differ from what they currently
+    // see there, since the Ariel filter further narrows that view's candidate pool. Returns
+    // null when the row fails either gate — the footnote renders its own "not a Focus
+    // candidate" message.
     function ws4FocusScore(picksRow) {
       if (!picksRow || !passesPicksBaseFilter(picksRow) || !isFocusEligible(picksRow)) return null;
-      const candidates = (state.picksData || []).filter(row => passesPicksBaseFilter(row) && isFocusEligible(row));
       const ticker = picksRow.Ticker || picksRow.ticker || '';
-      const hit = computeFocusScores(candidates).find(s => (s.r.Ticker || s.r.ticker || '') === ticker);
-      return hit ? hit.score : null;
+      const map = _morningFocusMap || focusScoreMapForPool();
+      return map.has(ticker) ? map.get(ticker) : null;
     }
 
     // ATR-ext-from-50MA -> colored band label. Reuses the EXISTING Focus/positional bands
@@ -6028,6 +6395,212 @@
     function watchAddApi(body)       { return posApi(WATCHLIST_API_PATH, { method: 'POST', body }); }
     function watchPatchApi(id, body) { return posApi(WATCHLIST_API_PATH + '/' + id, { method: 'PATCH', body }); }
     function watchDeleteApi(id)      { return posApi(WATCHLIST_API_PATH + '/' + id, { method: 'DELETE' }); }
+
+    // ── Inline "+ Watch" quick-add ───────────────────────────────────────────────────────
+    // A mountable sibling to state.watchAdd's Positions-tab-only collapsible, for spots where
+    // the ticker is already fixed context (a Picks row, a Morning card, a Lookup result) —
+    // unlike watchAdd's free-text ticker field, there is never a resolve/FMP lookup here.
+    // watchAddApi()'s POST is an upsert-by-ticker (see watchEditLevel's original comment), so
+    // "instant add" (ticker only) and "save a level" (ticker + level) are just two calls to the
+    // same endpoint — the second is optional refinement, never required to persist the add.
+
+    function quickWatchEntry(ticker) {
+      return (state.watchlistData || []).find(e => e.ticker === ticker && e.status === 'active') || null;
+    }
+    function isTickerWatched(ticker) {
+      return state.quickWatchAdded.has(ticker) || !!quickWatchEntry(ticker);
+    }
+    function quickWatchFormFor(mountKey) {
+      if (!state.quickWatchForm[mountKey]) {
+        state.quickWatchForm[mountKey] = { levelType: '', levelValue: '', submitting: false, error: '', justAdded: false };
+      }
+      return state.quickWatchForm[mountKey];
+    }
+
+    // Picks/Lookup never otherwise trigger loadWatchlist() (only Morning/Positions tab renders
+    // do — see loadWatchlist call sites), so without this a signed-in user landing straight on
+    // Picks would see "+ Watch" on every row even for tickers already watched. Best-effort,
+    // non-blocking; onLoaded (optional) re-renders the calling view once the fetch lands.
+    function ensureWatchlistLoaded(onLoaded) {
+      if (!posIsSignedIn() || state.watchlistData !== null || state.watchlistLoading) return;
+      state.watchlistLoading = true;
+      loadWatchlist().finally(() => {
+        state.watchlistLoading = false;
+        if (onLoaded) onLoaded();
+      });
+    }
+
+    function renderQuickWatchButton(mountKey, ticker) {
+      const el = document.getElementById('quickwatch-btn-' + mountKey);
+      if (el) el.outerHTML = quickWatchButtonHtml(ticker, mountKey);
+    }
+    function renderQuickWatchPanel(mountKey, ticker) {
+      const el = document.getElementById('quickwatch-panel-' + mountKey);
+      if (el) el.innerHTML = quickWatchPanelHtml(ticker, mountKey);
+    }
+
+    function quickWatchButtonHtml(ticker, mountKey) {
+      const watched = isTickerWatched(ticker);
+      const submitting = !!(state.quickWatchForm[mountKey] && state.quickWatchForm[mountKey].submitting);
+      const panelOpen = state.quickWatchOpenPanels.has(mountKey);
+      const label = submitting ? 'Adding…' : watched ? '✓ Watching' : '＋ Watch';
+      const cls = watched
+        ? 'text-[0.65rem] px-2 py-1 rounded bg-sky-900/50 text-sky-300 font-medium'
+        : 'text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium';
+      const mkJs = mountKey.replace(/'/g, "\\'");
+      const tkJs = ticker.replace(/'/g, "\\'");
+      return `<button id="quickwatch-btn-${escapeHtml(mountKey)}" ${submitting ? 'disabled' : ''} class="${cls}" onclick="event.stopPropagation();__toggleQuickWatch('${mkJs}','${tkJs}')">${label}${panelOpen ? ' ▲' : ''}</button>`;
+    }
+
+    function quickWatchPanelHtml(ticker, mountKey) {
+      if (!state.quickWatchOpenPanels.has(mountKey)) return '';
+      if (!posIsSignedIn()) {
+        return `
+          <div class="mt-2 bg-slate-900/60 border border-sky-900/50 rounded-lg px-3 py-2.5 text-[11.5px] text-slate-400">
+            Session expired — <button onclick="event.stopPropagation();switchTab('positions')" class="text-sky-400 hover:text-sky-300 underline">sign in on the Positions tab</button> to add to your watchlist.
+          </div>`;
+      }
+      const f = quickWatchFormFor(mountKey);
+      const watched = isTickerWatched(ticker);
+      const mkJs = mountKey.replace(/'/g, "\\'");
+      const tkJs = ticker.replace(/'/g, "\\'");
+
+      const segTypes = [['above', 'Above'], ['below', 'Below'], ['reclaim_20ma', '20MA'], ['reclaim_50ma', '50MA']];
+      const seg = segTypes.map(([k, lbl]) => {
+        const on = f.levelType === k;
+        return `<button onclick="event.stopPropagation();__quickWatchSetLevelType('${mkJs}','${tkJs}','${k}')"
+            class="flex-1 text-center px-2 py-1.5 text-[11px] border-r border-slate-700 last:border-r-0
+              ${on ? 'bg-violet-500/20 text-violet-300 font-semibold' : 'text-slate-400 hover:bg-slate-700/50'}">${lbl}</button>`;
+      }).join('');
+      const showPrice = f.levelType === 'above' || f.levelType === 'below';
+      const priceField = showPrice ? `
+        <input id="quickwatch-price-${escapeHtml(mountKey)}" type="number" step="0.01" value="${escapeHtml(f.levelValue)}"
+          onclick="event.stopPropagation()" oninput="__quickWatchLevelValueInput('${mkJs}', this.value)" placeholder="Price"
+          class="bg-slate-900 border border-sky-500 rounded px-1.5 py-0.5 w-20 text-right text-slate-100 font-semibold tabular-nums text-xs" />` : '';
+
+      const errRow = f.error ? `<div class="text-[11px] text-red-400 mt-1.5">${escapeHtml(f.error)}</div>` : '';
+      const receipt = f.justAdded ? `<div class="text-[11.5px] text-slate-400 bg-sky-500/10 rounded px-3 py-2 mb-2">✓ Added to your watchlist — set a level below (optional).</div>` : '';
+
+      return `
+        <div class="mt-2 bg-slate-900/60 border border-sky-900/50 rounded-lg px-3 py-2.5 space-y-2" onclick="event.stopPropagation()">
+          ${receipt}
+          <div class="flex justify-between items-center">
+            <div class="text-[10.5px] uppercase tracking-wider text-slate-500">Level of interest — optional</div>
+            <button onclick="__toggleQuickWatch('${mkJs}','${tkJs}')" class="text-[11px] text-slate-500 hover:text-slate-300">${watched ? 'Close' : 'Skip'}</button>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <div class="flex border border-slate-700 rounded-md overflow-hidden">${seg}</div>
+            ${priceField}
+          </div>
+          ${errRow}
+          <div class="flex justify-end">
+            <button onclick="__quickWatchSaveLevel('${mkJs}','${tkJs}')" ${f.submitting ? 'disabled' : ''}
+              class="py-1 px-3 rounded-lg text-xs font-semibold bg-sky-500 text-sky-950 hover:bg-sky-400 disabled:opacity-50">${f.submitting ? 'Saving…' : 'Save level'}</button>
+          </div>
+        </div>`;
+    }
+
+    window.__toggleQuickWatch = async function (mountKey, ticker) {
+      const isOpen = state.quickWatchOpenPanels.has(mountKey);
+      if (isOpen) {
+        state.quickWatchOpenPanels.delete(mountKey);
+        delete state.quickWatchForm[mountKey];
+        renderQuickWatchButton(mountKey, ticker);
+        renderQuickWatchPanel(mountKey, ticker);
+        return;
+      }
+
+      state.quickWatchOpenPanels.add(mountKey);
+      const watched = isTickerWatched(ticker);
+
+      if (watched) {
+        // Already on the list — open straight into the level editor, seeded from the existing
+        // entry, no re-POST.
+        const entry = quickWatchEntry(ticker);
+        state.quickWatchForm[mountKey] = {
+          levelType: entry ? (entry.level_type || '') : '',
+          levelValue: entry && entry.level_value != null ? String(entry.level_value) : '',
+          submitting: false, error: '', justAdded: false,
+        };
+        renderQuickWatchButton(mountKey, ticker);
+        renderQuickWatchPanel(mountKey, ticker);
+        return;
+      }
+
+      if (!posIsSignedIn()) {
+        // Not on the list and signed out — show the sign-in nudge only, no add attempted.
+        renderQuickWatchButton(mountKey, ticker);
+        renderQuickWatchPanel(mountKey, ticker);
+        return;
+      }
+
+      // Not watched yet, signed in: instant add fires now — no second tap required to persist.
+      const f = quickWatchFormFor(mountKey);
+      f.submitting = true;
+      renderQuickWatchButton(mountKey, ticker);
+      try {
+        await watchAddApi({ ticker });
+        state.quickWatchAdded.add(ticker);
+        f.justAdded = true;
+        state.watchlistData = null;
+        loadWatchlist(true).catch(() => {});
+      } catch (e) {
+        f.error = (e && e.unauth) ? 'Session expired — sign in again.' : "Couldn't add — try again";
+      }
+      f.submitting = false;
+      renderQuickWatchButton(mountKey, ticker);
+      renderQuickWatchPanel(mountKey, ticker);
+    };
+
+    window.__quickWatchSetLevelType = function (mountKey, ticker, lt) {
+      const f = quickWatchFormFor(mountKey);
+      f.levelType = (f.levelType === lt) ? '' : lt;
+      renderQuickWatchPanel(mountKey, ticker);
+    };
+    window.__quickWatchLevelValueInput = function (mountKey, v) {
+      quickWatchFormFor(mountKey).levelValue = v;
+    };
+
+    window.__quickWatchSaveLevel = async function (mountKey, ticker) {
+      const f = quickWatchFormFor(mountKey);
+      if (f.submitting) return;
+      if (!posIsSignedIn()) {
+        f.error = 'Session expired — sign in again.';
+        renderQuickWatchPanel(mountKey, ticker);
+        return;
+      }
+      const body = { ticker };
+      if (f.levelType === 'above' || f.levelType === 'below') {
+        const lv = parseFloat(f.levelValue);
+        if (isNaN(lv) || lv <= 0) {
+          f.error = 'Enter a price for above/below';
+          renderQuickWatchPanel(mountKey, ticker);
+          return;
+        }
+        body.level_type = f.levelType;
+        body.level_value = lv;
+      } else if (f.levelType === 'reclaim_20ma' || f.levelType === 'reclaim_50ma') {
+        body.level_type = f.levelType;
+      }
+      f.error = '';
+      f.submitting = true;
+      renderQuickWatchPanel(mountKey, ticker);
+      try {
+        await watchAddApi(body);
+        state.quickWatchAdded.add(ticker);
+        state.watchlistData = null;
+        loadWatchlist(true).catch(() => {});
+        state.quickWatchOpenPanels.delete(mountKey);
+        delete state.quickWatchForm[mountKey];
+      } catch (e) {
+        f.submitting = false;
+        f.error = (e && e.unauth) ? 'Session expired — sign in again.' : "Couldn't save — try again";
+        renderQuickWatchPanel(mountKey, ticker);
+        return;
+      }
+      renderQuickWatchButton(mountKey, ticker);
+      renderQuickWatchPanel(mountKey, ticker);
+    };
 
     // Ticket stop-basis key -> worker stop_basis enum. These DIFFER (ticket keys are
     // ws4StopLevels' internal keys; the worker enum is its own contract) — see
@@ -7103,25 +7676,27 @@
       const tickerJs = ticker.replace(/'/g, "\\'");
       return `
         <div class="mt-2.5 pt-2 border-t border-slate-700/50">
-          <button id="pos-chart-toggle-${escapeHtml(tradeId)}" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation();__togglePosChart('${tradeIdJs}','${tickerJs}')">${isOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
-          <div id="pos-chart-panel-${escapeHtml(tradeId)}" class="mt-2">${isOpen ? tradingViewChartHtml(ticker, 560) : ''}</div>
+          ${chartToggleFooterHtml(
+            'pos-chart-wrap-' + escapeHtml(tradeId), 'pos-chart-panel-' + escapeHtml(tradeId),
+            `__togglePosChart('${tradeIdJs}','${tickerJs}')`, isOpen,
+            isOpen ? tradingViewChartHtml(ticker, 560) : '',
+            'pos-chart-toggle', ` data-trade-id="${escapeHtml(tradeId)}" data-ticker="${escapeHtml(ticker)}"`
+          )}
         </div>`;
     }
 
     window.__togglePosChart = function (tradeId, ticker) {
       const panel = document.getElementById('pos-chart-panel-' + tradeId);
-      const btn = document.getElementById('pos-chart-toggle-' + tradeId);
       if (!panel) return;
       const isOpen = state.posChartOpen.has(tradeId);
       if (isOpen) {
         state.posChartOpen.delete(tradeId);
         panel.innerHTML = '';
-        if (btn) btn.textContent = 'Show chart ▼';
       } else {
         state.posChartOpen.add(tradeId);
         panel.innerHTML = tradingViewChartHtml(ticker, 560);
-        if (btn) btn.textContent = 'Hide chart ▲';
       }
+      updateChartToggleFooterState('pos-chart-wrap-' + tradeId, !isOpen);
     };
 
     function renderPositions() {
@@ -7876,9 +8451,7 @@
       const expired = entries.filter(e => e.status === 'expired');
       const removed = entries.filter(e => e.status === 'removed');
 
-      const findPub = ticker => (state.morningData || []).find(m => m.ticker === ticker && (m.list_category || '') === 'watchlist');
-
-      const activeHtml = active.map(entry => watchCardHtml(entry, findPub(entry.ticker))).join('');
+      const activeHtml = active.map(entry => watchCardHtml(entry, findWatchPub(entry.ticker))).join('');
 
       let expiredHtml = '';
       if (expired.length > 0) {
@@ -7887,7 +8460,7 @@
           <div class="mt-2">
             <button onclick="window.__toggleWatchExpired(this)" class="text-[11px] text-slate-500 hover:text-slate-300">${open ? '▾' : '▸'} Expired (${expired.length})</button>
             <div id="watch-expired-bin" class="${open ? '' : 'hidden'} mt-2 space-y-2">
-              ${expired.map(entry => watchCardHtml(entry, findPub(entry.ticker))).join('')}
+              ${expired.map(entry => watchCardHtml(entry, findWatchPub(entry.ticker))).join('')}
             </div>
           </div>`;
       }
@@ -8040,7 +8613,7 @@
     window.__toggleWatchGauge = function (ticker) {
       const entry = (state.watchlistData || []).find(e => e.ticker === ticker);
       if (!entry) return;
-      const pub = (state.morningData || []).find(m => m.ticker === ticker && (m.list_category || '') === 'watchlist');
+      const pub = findWatchPub(ticker);
       const shown = !!state.watchGauge[ticker];
       state.watchGauge[ticker] = !shown;
       const panel = document.getElementById('watch-gauge-panel-' + ticker);
@@ -8057,25 +8630,27 @@
       const tickerJs = ticker.replace(/'/g, "\\'");
       return `
         <div class="mt-2 pt-2 border-t border-slate-700/50">
-          <button id="watch-chart-toggle-${escapeHtml(ticker)}" class="text-[0.65rem] px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors font-medium" onclick="event.stopPropagation();__toggleWatchChart('${tickerJs}')">${isOpen ? 'Hide chart ▲' : 'Show chart ▼'}</button>
-          <div id="watch-chart-panel-${escapeHtml(ticker)}" class="mt-2">${isOpen ? tradingViewChartHtml(ticker, 560) : ''}</div>
+          ${chartToggleFooterHtml(
+            'watch-chart-wrap-' + escapeHtml(ticker), 'watch-chart-panel-' + escapeHtml(ticker),
+            `__toggleWatchChart('${tickerJs}')`, isOpen,
+            isOpen ? tradingViewChartHtml(ticker, 560) : '',
+            'watch-chart-toggle', ` data-ticker="${escapeHtml(ticker)}"`
+          )}
         </div>`;
     }
 
     window.__toggleWatchChart = function (ticker) {
       const panel = document.getElementById('watch-chart-panel-' + ticker);
-      const btn = document.getElementById('watch-chart-toggle-' + ticker);
       if (!panel) return;
       const isOpen = state.watchChartOpen.has(ticker);
       if (isOpen) {
         state.watchChartOpen.delete(ticker);
         panel.innerHTML = '';
-        if (btn) btn.textContent = 'Show chart ▼';
       } else {
         state.watchChartOpen.add(ticker);
         panel.innerHTML = tradingViewChartHtml(ticker, 560);
-        if (btn) btn.textContent = 'Hide chart ▲';
       }
+      updateChartToggleFooterState('watch-chart-wrap-' + ticker, !isOpen);
     };
 
     // "I took it →" graduation: prefill the §8a manual-entry ticket and hand off to Positions.
@@ -8103,14 +8678,19 @@
 
     // Kebab "Edit level" reuses the add form (re-POST upserts renew+edit per worker) rather
     // than a bespoke inline level editor — flagged as a minor simplification in the build spec.
+    // Opens the inline quick-watch level editor (see quickWatchPanelHtml() above) right on
+    // this card — previously routed through state.watchAdd + switchTab('positions'), the same
+    // jump-away-from-context pattern the Picks/Morning/Lookup quick-add spots were built to
+    // avoid, for exactly the same "why do I have to leave what I'm looking at" reason.
     window.watchEditLevel = function (ticker, levelType, levelValue) {
       state.watchMenu = null;
-      state.watchAdd = watchAddDefault();
-      state.watchAdd.open = true;
-      state.watchAdd.ticker = ticker;
-      state.watchAdd.levelType = levelType || '';
-      state.watchAdd.levelValue = (levelValue != null) ? String(levelValue) : '';
-      switchTab('positions');
+      const mountKey = 'qw_watch_' + ticker;
+      state.quickWatchOpenPanels.add(mountKey);
+      state.quickWatchForm[mountKey] = {
+        levelType: levelType || '', levelValue: (levelValue != null) ? String(levelValue) : '',
+        submitting: false, error: '', justAdded: false,
+      };
+      renderWatchlistSection();
     };
 
     // Soft-remove (morning-subtabs-watchlist): PATCH {remove:true}, NOT watchDeleteApi/DELETE.
@@ -8165,6 +8745,26 @@
       return `<button onclick="__toggleWatchMenu('${entry.id}')" class="text-slate-500 hover:text-slate-300 text-[17px] leading-none px-1.5">⋯</button>${menu}`;
     }
 
+    // Find a watch ticker's public status row in morningData (WATCHLIST-PUB-LOOKUP, 2026-09-04).
+    // Prefer an exact `list_category === 'watchlist'` tag, but fall back to ANY row for this
+    // ticker. Why a fallback is needed: collect_morning.py's union_watch_levels() drops a watch
+    // ticker's own row whenever that ticker ALSO qualifies as a Focus pick that day — the picks
+    // row (list_category e.g. 'accel'/'leaders') wins the collision and no 'watchlist'-tagged
+    // row is written at all that date, even though the exact same pick_status engine ran and
+    // produced a real classification. A strict `=== 'watchlist'` lookup then finds nothing and
+    // watchCardHtml falls into its awaitingFirstRead branch forever, showing "Pending read" on a
+    // ticker that has a perfectly good status sitting right there under a different bucket tag —
+    // confirmed live on ELV/HUM/GH (stuck since they started double-qualifying as Focus picks;
+    // GH's watch card had NEVER shown a real read, since it's been a qualifying pick since
+    // before it was even added to the watchlist). This lookup is always called for one specific
+    // ticker the user is actively watching, so relaxing the list_category constraint can't
+    // accidentally pull in some unrelated ticker's row — the match stays ticker-exact throughout.
+    function findWatchPub(ticker) {
+      const rows = state.morningData || [];
+      return rows.find(m => m.ticker === ticker && (m.list_category || '') === 'watchlist')
+          || rows.find(m => m.ticker === ticker);
+    }
+
     // THE CARD — the taste core (build spec §4c). Three states, not two (WS-POSITIONS-STATUS,
     // 2026-08-25 — see planning/watchlist-status-honesty-and-seeding.md):
     //   1. noBarYet     — entry.prior_high == null: NO ticker_quotes bar exists at all yet.
@@ -8179,6 +8779,14 @@
     //                     just executed before this ticker's first bar could exist.
     //   3. real status  — pub exists with a genuine classification (or a genuine no_quote —
     //                     an established ticker Finviz actually failed to quote today).
+    // Inline mount point for watchEditLevel()'s quick-watch panel (see quickWatchPanelHtml()) —
+    // one per watch card, keyed 'qw_watch_<ticker>' so it can't collide with the same ticker's
+    // panel on the Picks/Morning-picks/Lookup tabs.
+    function watchQuickEditPanelHtml(ticker) {
+      const mountKey = 'qw_watch_' + ticker;
+      return `<div id="quickwatch-panel-${escapeHtml(mountKey)}">${quickWatchPanelHtml(ticker, mountKey)}</div>`;
+    }
+
     function watchCardHtml(entry, pub) {
       const ticker = entry.ticker;
       const hasBar = entry.prior_high != null;
@@ -8218,6 +8826,7 @@
             <div class="text-xs text-slate-400 mt-1.5">Added — first morning check lands tomorrow AM after tonight's data run.</div>
             ${watchChartAffordance(ticker)}
             ${footer}
+            ${watchQuickEditPanelHtml(ticker)}
           </div>`;
       }
 
@@ -8234,8 +8843,22 @@
             ${refLine}
             ${watchChartAffordance(ticker)}
             ${footer}
+            ${watchQuickEditPanelHtml(ticker)}
           </div>`;
       }
+
+      // ATR from LoD + Rel volume (owner decision 2026-09-02): standardized onto every watch
+      // card state, including reclaim — previously reclaim's body was a separate hand-built
+      // branch that never rendered these two rows at all, an inconsistency with the
+      // non-reclaim branch below, not a deliberate design choice.
+      const atr = morningAtrLabel(pub.atr_from_lod);
+      const atrRow = atr
+        ? `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">ATR from day low</span><span class="${atr.cls} font-medium tabular-nums">${atr.text}</span></div>`
+        : '';
+      const rvol = _pF(pub['Rel Volume']);
+      const rvolRow = !isNaN(rvol)
+        ? `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">Rel volume</span><span class="text-slate-200 font-medium tabular-nums">${rvol.toFixed(2)}×</span></div>`
+        : '';
 
       const useReclaim = pub.status === 'reclaim' && entry.sma50 != null;
       let body;
@@ -8250,15 +8873,17 @@
           : _mNum(pub.low);
         body = _mKv('Ref (50MA)', _mNum(entry.sma50))
              + _mKv('Day low', lowLabel)
-             + _mKv('Now', `<span class="text-emerald-400">${_mNum(pub.price)} — back above</span>`);
+             + _mKv('Now', `<span class="text-emerald-400">${_mNum(pub.price)} — back above</span>`)
+             + atrRow + rvolRow;
       } else {
         const now = `${_mNum(pub.price)} · ${_mChange(pub.change)}`;
-        const atr = morningAtrLabel(pub.atr_from_lod);
-        const atrRow = atr
-          ? `<div class="flex justify-between text-xs mt-1"><span class="text-slate-400">ATR from day low</span><span class="${atr.cls} font-medium tabular-nums">${atr.text}</span></div>`
-          : '';
-        body = _mKv('Trigger (prior high)', _mNum(pub.trigger)) + _mKv('Now', now) + atrRow;
+        body = _mKv('Trigger (prior high)', _mNum(pub.trigger)) + _mKv('Now', now) + atrRow + rvolRow;
       }
+
+      // B-6: shared compression "Volatility & setup" section (A-2 seam). Watch tickers ride the
+      // morning scrape-wide run too, so `pub` carries the fresh B-1 raw cols; B-2/B-3 sparkline
+      // cols come via the picks_latest cross-ref in setupRowForCard. Self-hides on a data-less row.
+      const setupSection = volSetupSectionHtml(setupRowForCard(ticker, pub), { staleTrailing: true });
 
       const yourLevel = watchYourLevelHtml(entry, pub);
 
@@ -8281,10 +8906,12 @@
         <div class="bg-slate-800 border border-slate-700 border-l-4 ${stripe} rounded-lg px-3.5 py-3">
           ${header}
           ${body}
+          ${setupSection}
           ${yourLevel}
           ${gaugeToggle}
           ${watchChartAffordance(ticker)}
           ${footer}
+          ${watchQuickEditPanelHtml(ticker)}
         </div>`;
     }
 
@@ -8386,8 +9013,11 @@
       };
       const toggle = `<div class="flex items-center gap-1 mb-3"><span class="text-xs text-slate-500 mr-1">Read:</span>${seg('morning', 'Morning')}${seg('preclose', 'Pre-close')}</div>`;
 
-      // WS5 §8b P3: exclude watchlist rows (they feed renderWatchlistSection()).
-      const rows = activeSessionRows().filter(r => (r.list_category || '') !== 'watchlist');
+      // WS5 §8b P3: exclude watchlist rows (they feed renderWatchlistSection()). Also exclude
+      // rows below the volatility floor (2026-09-02) — this is the system-selected picks
+      // confirmation read, same treatment as Picks/Focus; the watchlist itself is explicit user
+      // intent and is exempt (see VOLATILITY_FLOOR_PCT).
+      const rows = activeSessionRows().filter(r => (r.list_category || '') !== 'watchlist' && passesVolatilityFloor(r));
       if (!rows || rows.length === 0) {
         el.innerHTML = toggle + `<p class="text-slate-400 text-sm text-center py-8">${copy.empty}</p>`;
         return;
@@ -8421,39 +9051,232 @@
         return '';
       };
 
-      // Actionability sort (ADR/mock), stable ticker tiebreak within a status bucket. Sort on the
-      // display status so a pre-close gapped→triggered remap buckets with the other triggers.
-      const sorted = [...rows].sort((a, b) => {
-        const oa = (MORNING_STATUS_META[sessionDisplayRow(a).status] || MORNING_STATUS_META.no_quote).order;
-        const ob = (MORNING_STATUS_META[sessionDisplayRow(b).status] || MORNING_STATUS_META.no_quote).order;
-        return oa - ob || String(a.ticker).localeCompare(String(b.ticker));
-      });
+      // Shared Focus-score map, built ONCE for this render (see focusScoreMapForPool's comment)
+      // — read by the per-card chip below, sortMorningEntries's 'focus' branch, AND
+      // ws4FocusScore's ticket-footnote lookup later in this same synchronous render pass, so
+      // all three can never disagree on a ticker's score within one render.
+      _morningFocusMap = focusScoreMapForPool();
 
-      const cards = sorted.map(r0 => {
+      // Enrich each row once (display row, status meta, EOD cross-ref, launch-ready label,
+      // Focus score, ATR-from-LoD, Rel volume) — everything the filter/sort/grouping/render
+      // steps below need, computed a single time per row instead of scattered across separate
+      // map() passes. Sort on the display status so a pre-close gapped→triggered remap buckets
+      // with the other triggers (unchanged from the prior single-pass implementation).
+      const enriched = rows.map(r0 => {
         const r = sessionDisplayRow(r0);
         const meta = MORNING_STATUS_META[r.status] || MORNING_STATUS_META.no_quote;
-        const grp = r.group ? `<span class="text-xs text-slate-500">· ${r.group}</span>` : '';
         // GH #305: overhead-supply chip, joined off the prior-EOD picks_latest row via the
         // same ws4FindPicksRow() the trade ticket already uses (session store itself carries
         // neither 52W High nor atr_ext_50) — reuses computeLaunchReady() as-is, so a name with
         // no EOD match just renders no chip (silence = no signal).
         const picksRow = ws4FindPicksRow(r.ticker);
         const launchReady = picksRow ? computeLaunchReady(picksRow) : null;
-        const launchReadyChip = launchReady
-          ? `<span class="text-[0.55rem] px-1 rounded font-bold ml-1 ${launchReady.cls}" title="Launch-ready: overhead supply vs. 52-week high + short-term extension">${launchReady.label}</span>`
-          : '';
-        return `
-          <div class="bg-slate-800 border border-slate-700 border-l-4 ${meta.stripe} rounded-lg px-3.5 py-3">
-            <div class="flex justify-between items-center">
-              <span><span class="font-bold text-sm tracking-wide">${r.ticker}</span>${launchReadyChip}${deltaChip(r0)} ${grp}</span>
-              <span class="text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${meta.pill}">${meta.label}</span>
-            </div>
-            ${morningCardBody(r)}
-          </div>`;
-      }).join('');
+        const focusScore = _morningFocusMap.has(r.ticker) ? _morningFocusMap.get(r.ticker) : null;
+        const atrLodRaw = parseFloat(r.atr_from_lod);
+        const relVolRaw = _pF(r['Rel Volume']);
+        return {
+          r0, r, meta, launchReady, focusScore,
+          atrLod: isNaN(atrLodRaw) ? null : atrLodRaw,
+          relVol: isNaN(relVolRaw) ? null : relVolRaw,
+        };
+      });
 
-      el.innerHTML = toggle + header + cards;
+      // Launch-ready filter — independent axis from sort (docs/CLAUDE.md § Morning tab).
+      // Counts on the filter pills themselves are computed off `enriched` (the unfiltered
+      // pool), not `filtered`, so a pill always shows how many rows selecting it would show.
+      const filterVal = state.morningLaunchFilter;
+      const filtered = filterVal === 'all'
+        ? enriched
+        : enriched.filter(e => e.launchReady && e.launchReady.label === filterVal);
+
+      const launchFilterBar = morningLaunchFilterHtml(enriched);
+      const sortBar = morningSortBarHtml();
+
+      if (filtered.length === 0) {
+        el.innerHTML = toggle + header + launchFilterBar + sortBar +
+          `<p class="text-slate-400 text-sm text-center py-8">No ${escapeHtml(filterVal)} setups right now — try All.</p>`;
+        return;
+      }
+
+      let bodyHtml;
+      if (state.morningSort === 'rel_volume' && state.morningSortScope === 'global') {
+        // Flattened (the one case bucket grouping doesn't apply): a single list ordered purely
+        // by Rel volume, ignoring status entirely — "what's most active right now" is a
+        // different question from "what's most active among my Triggered names," so it earns
+        // its own cross-bucket mode. Each card still carries its own status pill. No mini-nav
+        // or collapsible sections here — there are no bucket boundaries to jump to or collapse.
+        const globalSorted = [...filtered].sort((a, b) => {
+          if (a.relVol === null && b.relVol === null) return String(a.r.ticker).localeCompare(String(b.r.ticker));
+          if (a.relVol === null) return 1;
+          if (b.relVol === null) return -1;
+          return b.relVol - a.relVol;
+        });
+        bodyHtml = globalSorted.map(e => morningCardHtml(e, deltaChip)).join('');
+      } else {
+        // Bucket-preserving (default for every sort mode): group by exact status, order
+        // buckets by MORNING_STATUS_META.order (status key A–Z as a stable tiebreak for the
+        // gapped_through/reclaim tie at order 1), then sort each bucket's own cards by the
+        // chosen key. Only non-empty buckets render — an empty bucket after filtering
+        // contributes zero pixels rather than a dead "Coiled (0)" header.
+        const buckets = new Map();
+        filtered.forEach(e => {
+          const key = e.r.status;
+          if (!buckets.has(key)) buckets.set(key, []);
+          buckets.get(key).push(e);
+        });
+        const bucketOrder = [...buckets.keys()].sort((a, b) => {
+          const oa = (MORNING_STATUS_META[a] || MORNING_STATUS_META.no_quote).order;
+          const ob = (MORNING_STATUS_META[b] || MORNING_STATUS_META.no_quote).order;
+          return oa - ob || a.localeCompare(b);
+        });
+
+        const miniNav = morningMiniNavHtml(bucketOrder, buckets);
+        bodyHtml = miniNav + bucketOrder.map(status => {
+          const entries = sortMorningEntries(buckets.get(status), state.morningSort);
+          const meta = MORNING_STATUS_META[status] || MORNING_STATUS_META.no_quote;
+          const collapsed = state.morningCollapsed.has(status);
+          return `
+            <div id="morning-bucket-${status}" class="mb-2">
+              <button onclick="__toggleMorningBucket('${status}')" class="w-full flex items-center justify-between px-1 py-1.5 text-xs font-semibold text-slate-300">
+                <span>${meta.label} <span class="text-slate-500 font-normal tabular-nums">(${entries.length})</span></span>
+                <span class="text-slate-500">${collapsed ? '▸' : '▾'}</span>
+              </button>
+              ${collapsed ? '' : `<div class="space-y-2">${entries.map(e => morningCardHtml(e, deltaChip)).join('')}</div>`}
+            </div>`;
+        }).join('');
+      }
+
+      el.innerHTML = toggle + header + launchFilterBar + sortBar + bodyHtml;
     }
+
+    // One morning card's outer chrome (ticker line + status pill + body) — extracted from
+    // renderMorning() so the bucket-grouped and flattened (global Rel-volume) render paths
+    // share one card renderer.
+    function morningCardHtml(e, deltaChip) {
+      const { r0, r, meta, launchReady, focusScore } = e;
+      const grp = r.group ? `<span class="text-xs text-slate-500">· ${r.group}</span>` : '';
+      const launchReadyChip = launchReady
+        ? `<span class="text-[0.55rem] px-1 rounded font-bold ml-1 ${launchReady.cls}" title="Launch-ready: overhead supply vs. 52-week high + short-term extension">${launchReady.label}</span>`
+        : '';
+      // Reuses the exact score focusScoreMapForPool()/ws4FocusScore compute — see that
+      // function's comment. null (not a Focus candidate today) renders nothing, same
+      // silence = no signal convention as launchReadyChip above.
+      const focusChip = focusScore !== null
+        ? `<span class="text-[0.55rem] px-1 rounded font-bold ml-1 bg-sky-500/15 text-sky-400" title="Focus score: pool-relative vs today's other Focus candidates">Focus ${Math.round(focusScore * 100)}%</span>`
+        : '';
+      return `
+        <div class="bg-slate-800 border border-slate-700 border-l-4 ${meta.stripe} rounded-lg px-3.5 py-3">
+          <div class="flex justify-between items-center">
+            <span><span class="font-bold text-sm tracking-wide">${r.ticker}</span>${launchReadyChip}${focusChip}${deltaChip(r0)} ${grp}</span>
+            <span class="text-[10.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${meta.pill}">${meta.label}</span>
+          </div>
+          ${morningCardBody(r)}
+        </div>`;
+    }
+
+    // Bucket-scoped tiebreak for the Morning sort toggle. Nulls always sort last within a
+    // bucket (never NaN-crashes the comparator on missing data), then ticker A–Z among
+    // themselves — 'az' is exactly this same tiebreak with no primary key, kept as an explicit
+    // option rather than removed (docs/CLAUDE.md § Morning tab).
+    function sortMorningEntries(entries, sortKey) {
+      const byTicker = (a, b) => String(a.r.ticker).localeCompare(String(b.r.ticker));
+      if (sortKey === 'focus') {
+        return [...entries].sort((a, b) => {
+          if (a.focusScore === null && b.focusScore === null) return byTicker(a, b);
+          if (a.focusScore === null) return 1;
+          if (b.focusScore === null) return -1;
+          return b.focusScore - a.focusScore || byTicker(a, b);
+        });
+      }
+      if (sortKey === 'atr_lod') {
+        return [...entries].sort((a, b) => {
+          if (a.atrLod === null && b.atrLod === null) return byTicker(a, b);
+          if (a.atrLod === null) return 1;
+          if (b.atrLod === null) return -1;
+          return a.atrLod - b.atrLod || byTicker(a, b);
+        });
+      }
+      if (sortKey === 'rel_volume') {
+        return [...entries].sort((a, b) => {
+          if (a.relVol === null && b.relVol === null) return byTicker(a, b);
+          if (a.relVol === null) return 1;
+          if (b.relVol === null) return -1;
+          return b.relVol - a.relVol || byTicker(a, b);
+        });
+      }
+      return [...entries].sort(byTicker); // 'az'
+    }
+
+    // Launch-ready filter pill row (independent axis from sort — see docs/CLAUDE.md § Morning
+    // tab). Counts reflect the full enriched pool so a pill always previews what selecting it
+    // would show, not what's currently visible under some OTHER already-active filter.
+    function morningLaunchFilterHtml(enriched) {
+      const counts = { Coiled: 0, Extended: 0, Overhead: 0 };
+      enriched.forEach(e => { if (e.launchReady && counts[e.launchReady.label] !== undefined) counts[e.launchReady.label]++; });
+      const opt = (v, label) => {
+        const on = state.morningLaunchFilter === v;
+        return `<button class="px-3 py-1 text-xs rounded-full font-medium ${on ? 'bg-slate-600 text-white' : 'bg-slate-700 text-slate-400'}" onclick="__setMorningLaunchFilter('${v}')">${label}</button>`;
+      };
+      const withCount = (label, n) => n > 0 ? `${label} (${n})` : label;
+      return `<div class="flex items-center gap-1 mb-2 flex-wrap"><span class="text-xs text-slate-500 mr-1">Setup:</span>${opt('all', 'All')}${opt('Coiled', withCount('Coiled', counts.Coiled))}${opt('Extended', withCount('Extended', counts.Extended))}${opt('Overhead', withCount('Overhead', counts.Overhead))}</div>`;
+    }
+
+    // Sort-mode pill row. The Rel-volume scope switch (In bucket / All) only renders when Rel
+    // volume is the active sort — keeping the primary row at a constant 4 pills on a tab that's
+    // already stacking the Read toggle + subtabs + this filter row above the first card.
+    function morningSortBarHtml() {
+      const opt = (v, label) => {
+        const on = state.morningSort === v;
+        return `<button class="px-3 py-1 text-xs rounded-full font-medium ${on ? 'bg-slate-600 text-white' : 'bg-slate-700 text-slate-400'}" onclick="__setMorningSort('${v}')">${label}</button>`;
+      };
+      const scopeToggle = state.morningSort === 'rel_volume'
+        ? `<span class="inline-flex rounded-full bg-slate-900 p-0.5 ml-1">
+             <button class="px-2 py-0.5 text-[10px] rounded-full font-medium ${state.morningSortScope === 'bucket' ? 'bg-slate-600 text-white' : 'text-slate-400'}" onclick="__setMorningSortScope('bucket')">In bucket</button>
+             <button class="px-2 py-0.5 text-[10px] rounded-full font-medium ${state.morningSortScope === 'global' ? 'bg-slate-600 text-white' : 'text-slate-400'}" onclick="__setMorningSortScope('global')">All</button>
+           </span>`
+        : '';
+      return `<div class="flex items-center gap-1 mb-3 flex-wrap"><span class="text-xs text-slate-500 mr-1">Sort:</span>${opt('az', 'A–Z')}${opt('focus', 'Focus score')}${opt('atr_lod', 'ATR from LoD')}${opt('rel_volume', 'Rel volume')}${scopeToggle}</div>`;
+    }
+
+    // Sticky bucket jump-nav — shows only when there's more than one bucket to jump between.
+    // Counts reflect the current (post-filter) set, same as the launch-filter pills.
+    function morningMiniNavHtml(bucketOrder, buckets) {
+      if (bucketOrder.length <= 1) return '';
+      const items = bucketOrder.map(status => {
+        const meta = MORNING_STATUS_META[status] || MORNING_STATUS_META.no_quote;
+        const n = buckets.get(status).length;
+        return `<button onclick="__jumpToMorningBucket('${status}')" class="text-xs text-slate-400 hover:text-slate-200 whitespace-nowrap">${meta.label} <span class="tabular-nums text-slate-500">(${n})</span></button>`;
+      }).join('<span class="text-slate-700">·</span> ');
+      return `<div class="flex items-center gap-2 overflow-x-auto mb-3 pb-1.5 sticky top-0 bg-slate-900/95 backdrop-blur-sm z-10 -mx-1 px-1 border-b border-slate-800">${items}</div>`;
+    }
+
+    window.__setMorningSort = function (v) {
+      state.morningSort = v;
+      renderMorning();
+    };
+    window.__setMorningSortScope = function (v) {
+      state.morningSortScope = v;
+      renderMorning();
+    };
+    window.__setMorningLaunchFilter = function (v) {
+      state.morningLaunchFilter = v;
+      renderMorning();
+    };
+    window.__toggleMorningBucket = function (status) {
+      if (state.morningCollapsed.has(status)) state.morningCollapsed.delete(status);
+      else state.morningCollapsed.add(status);
+      renderMorning();
+    };
+    // Jumping to a collapsed bucket force-expands it first — landing on a collapsed header
+    // with nothing visible underneath would look broken, not like a successful jump.
+    window.__jumpToMorningBucket = function (status) {
+      state.morningCollapsed.delete(status);
+      renderMorning();
+      requestAnimationFrame(() => {
+        const target = document.getElementById(`morning-bucket-${status}`);
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    };
 
     async function loadAndRender(force = false, minMs = 0) {
       setLoading(true);
@@ -8627,18 +9450,19 @@
       setTimeout(() => overlay.classList.add('hidden'), 300);
     }
 
-    // Group peek sheet: opened by tapping an inline group-name chip (currently
-    // only in the AI tab's daily note, via groupChipHtml()). Reuses groupPerfCard()
-    // — the same renderer Lookup uses — so the peek and the full Lookup view can
-    // never drift apart. Defaults to the compact card; "Show full breakdown"
-    // re-renders in place with expanded=true instead of cramming everything in
-    // by default, matching the "doesn't break reading flow" goal for a peek.
+    // Group peek sheet: opened by tapping an inline group-name chip in the AI tab's
+    // daily note (via groupChipHtml()) or a group tap target in the Picks tab (via
+    // data-pick-group-lookup). Reuses groupPerfCard() — the same renderer Lookup
+    // uses — so the peek and the full Lookup view can never drift apart. Defaults
+    // to the compact card so a chip tap mid-read doesn't cram everything onto the
+    // screen; callers that want the reader to land on the full breakdown right away
+    // (Picks — the user already picked this exact group) pass expanded=true.
     let _peekExpanded = false;
-    function openGroupPeek(name, groupKey) {
+    function openGroupPeek(name, groupKey, expanded = false) {
       const overlay = document.getElementById('peek-overlay');
       const sheet = document.getElementById('peek-sheet');
       if (!overlay || !name || !groupKey) return;
-      _peekExpanded = false;
+      _peekExpanded = !!expanded;
       document.getElementById('peek-title').textContent = groupKey === 'sectors' ? 'Sector' : 'Industry';
       renderGroupPeekBody(name, groupKey);
       overlay.classList.remove('hidden');
@@ -9152,17 +9976,17 @@
       renderToday();
     });
 
-    // Picks group lookup tap → Lookup (Focus subtitles + All view group headers; picks are always industries).
+    // Picks group tap → group peek sheet (Focus subtitles + All view group headers; picks
+    // are always industries), defaulted to the full breakdown view — same sheet the AI tab's
+    // group chips open (openGroupPeek), just landing expanded since the user already picked
+    // this exact group. "Full lookup ↗" inside the sheet still reaches the full Lookup tab.
     document.getElementById('picks-list').addEventListener('click', e => {
       const btn = e.target.closest('[data-pick-group-lookup]');
       if (!btn) return;
       e.stopPropagation();
       const name = btn.dataset.pickGroupLookup;
       if (!name) return;
-      switchTab('lookup');
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0; // iOS Safari
-      doGroupLookup(name, 'industries');
+      openGroupPeek(name, 'industries', true);
     });
 
     document.getElementById('refresh-btn').addEventListener('click', window.__refresh);
@@ -9182,13 +10006,6 @@
       const chip = e.target.closest('.group-chip');
       if (!chip) return;
       openGroupPeek(chip.dataset.name, chip.dataset.group);
-    });
-    // Lazy-load the TradingView chart panel only when the user explicitly opens it.
-    document.getElementById('lookup-result').addEventListener('click', e => {
-      const btn = e.target.closest('.lookup-chart-toggle');
-      if (!btn) return;
-      state.lookup.chartOpen = !state.lookup.chartOpen;
-      renderLookup();
     });
 
     document.getElementById('ticker-submit').addEventListener('click', doLookup);

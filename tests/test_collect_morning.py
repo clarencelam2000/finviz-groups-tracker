@@ -357,12 +357,14 @@ def test_build_status_rows_each_status_and_no_quote():
     assert by_ticker["FAILED"]["status"] == "failed_breakout"
     assert by_ticker["ABSENT"]["status"] == "no_quote"
 
-    # atr_from_lod only populated for actionable states
+    # atr_from_lod (owner decision 2026-09-02) is populated for every status with a
+    # usable price/low/atr, regardless of actionability -- only a missing quote
+    # (ABSENT, no_quote) leaves it blank.
     assert by_ticker["TRIG"]["atr_from_lod"] != ""
     assert by_ticker["GAP"]["atr_from_lod"] != ""
-    assert by_ticker["SETUP"]["atr_from_lod"] == ""
-    assert by_ticker["INVALID"]["atr_from_lod"] == ""
-    assert by_ticker["FAILED"]["atr_from_lod"] == ""
+    assert by_ticker["SETUP"]["atr_from_lod"] != ""
+    assert by_ticker["INVALID"]["atr_from_lod"] != ""
+    assert by_ticker["FAILED"]["atr_from_lod"] != ""
     assert by_ticker["ABSENT"]["atr_from_lod"] == ""
 
     for r in rows:
@@ -370,6 +372,44 @@ def test_build_status_rows_each_status_and_no_quote():
         assert r["session"] == "morning"
         assert r["collected_at"] == "2026-08-07T13:45:00Z"
         assert set(r.keys()) == set(cm.STORE_COLUMNS)
+
+
+def test_build_status_rows_carries_setup_columns(monkeypatch):
+    """A-1: wide volatility/setup columns pass through verbatim from the scraped quote,
+    keyed by Finviz label; blank (not missing) when the quote lacks them or has no match."""
+    pick_levels = [
+        {"ticker": "WIDE", "group": "G", "list_category": "leaders", "trigger": 10.0, "stop": 8.0, "atr": 2.0},
+        {"ticker": "THIN", "group": "G", "list_category": "leaders", "trigger": 10.0, "stop": 8.0, "atr": 2.0},
+        {"ticker": "ABSENT", "group": "G", "list_category": "leaders", "trigger": 10.0, "stop": 8.0, "atr": 2.0},
+    ]
+    quotes = [
+        # full wide row — incl. the B-5 MA-bunching inputs (Price/SMA20/SMA50/ATR)
+        {"Ticker": "WIDE", "Price": "9.0", "Open": "8.5", "High": "9.2", "Low": "8.4", "Change": "0%",
+         "RSI": "77.26", "Volatility W": "3.92%", "Volatility M": "3.57%",
+         "Rel Volume": "1.24", "52W High": "-7.99%",
+         "SMA20": "1.16%", "SMA50": "3.52%", "ATR": "8.39"},
+        # a 9-column-only (legacy/thin) quote → setup cols the quote lacks are blank, never KeyError.
+        # Note: "Price" is BOTH a status field and (since B-5) a SETUP_COLUMN, so a thin quote that
+        # carries Price passes it through — only the genuinely-absent setup cols go blank.
+        {"Ticker": "THIN", "Price": "9.0", "Open": "8.5", "High": "9.2", "Low": "8.4", "Change": "0%"},
+        # ABSENT: no quote at all
+    ]
+    rows = cm.build_status_rows(pick_levels, quotes, "2026-08-07T13:45:00Z", "2026-08-07")
+    by = {r["ticker"]: r for r in rows}
+    assert by["WIDE"]["RSI"] == "77.26"
+    assert by["WIDE"]["Volatility W"] == "3.92%"
+    assert by["WIDE"]["52W High"] == "-7.99%"
+    # B-5 real-time inputs carried through verbatim from the wide quote:
+    assert by["WIDE"]["Price"] == "9.0"
+    assert by["WIDE"]["SMA20"] == "1.16%"
+    assert by["WIDE"]["SMA50"] == "3.52%"
+    assert by["WIDE"]["ATR"] == "8.39"
+    # THIN carries only Price among the setup cols; the rest are blank.
+    assert by["THIN"]["Price"] == "9.0"
+    for col in cm.SETUP_COLUMNS:
+        if col != "Price":
+            assert by["THIN"][col] == "", f"THIN {col} should be blank"
+        assert by["ABSENT"][col] == "", f"ABSENT {col} should be blank"
 
 
 # ---------------------------------------------------------------------------
