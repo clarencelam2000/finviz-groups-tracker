@@ -6,6 +6,17 @@
 
 ---
 
+## 2026-08-31 — Fix: misleading "not tracked" message on Lookup
+
+**Status: safe to close — implemented, tested (739 non-Playwright + `test_pwa_lookup_signal.py`
+8/8 green).** `groupPerfCard()`/`contextSignalCard()` empty-state copy no longer asserts a group
+is "not tracked" as settled fact (traced to an owner report on "Asset Management" that turned out
+to be a one-off data-load hiccup, not a real coverage gap) — now says data didn't load and adds a
+"↻ Refresh data" button. Copy-only, no behavior change (an earlier `loadGroup()` parse-error guard
+was reverted after review — see PR #381). Root cause of the original load failure still unknown.
+Deferred: LOOK-B9 (`switchGroup()` retry-storm / `setLoading()` harness crash, unconfirmed as a
+real production issue).
+
 ## 2026-09-04 — Chart-toggle tap target: 3+5 combo shipped (CHART-TAP-1)
 
 **Status: safe to close** — implemented, verified, pushed, release triplet shipped.

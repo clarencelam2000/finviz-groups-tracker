@@ -3571,11 +3571,17 @@
     function groupPerfCard(name, groupKey, label, expanded = false) {
       const { delta, snap, allSnaps, n } = findGroupData(name, groupKey);
       if (!delta && !snap) {
+        // Genuinely-untracked groups (e.g. an ETF-override name Finviz doesn't carry) and a
+        // one-off failed/incomplete data load look identical here — findGroupData can't tell
+        // them apart, so don't assert "not tracked" as settled fact (misleading when it's
+        // really just a dropped connection; closing and reopening the app has fixed this for
+        // users before). Offer a refresh instead of a dead end.
         return `
           <div class="rounded-xl p-3 bg-slate-800 border border-slate-700">
             <div class="text-[0.65rem] uppercase tracking-wider text-slate-500 mb-1">${label}</div>
             <div class="text-sm font-medium text-white">${escapeHtml(name)}</div>
-            <p class="text-xs text-slate-500 mt-2">Not separately tracked in the Finviz data yet.</p>
+            <p class="text-xs text-slate-500 mt-2">No data loaded for this group right now — it may not be tracked, or the last data load may have been interrupted.</p>
+            <button onclick="window.__refresh()" class="mt-2 text-xs px-2 py-1 rounded bg-slate-700 text-slate-300 hover:bg-slate-600">↻ Refresh data</button>
           </div>`;
       }
       // Prefer live rank from today's snapshot over pre-computed delta rank,
@@ -3825,10 +3831,10 @@
         score = (iSig.score + sSig.score) / 2;
       } else if (iSig.score !== null) {
         score = iSig.score;
-        caveat = secName ? `Based on ${escapeHtml(indName)} only — no tracked data for ${escapeHtml(secName)} yet.` : '';
+        caveat = secName ? `Based on ${escapeHtml(indName)} only — no data loaded for ${escapeHtml(secName)} right now.` : '';
       } else if (sSig.score !== null) {
         score = sSig.score;
-        caveat = indName ? `Based on ${escapeHtml(secName)} only — no tracked data for ${escapeHtml(indName)} yet.` : '';
+        caveat = indName ? `Based on ${escapeHtml(secName)} only — no data loaded for ${escapeHtml(indName)} right now.` : '';
       } else {
         score = null;
       }
@@ -3836,7 +3842,7 @@
       let label, cls, desc;
       if (score === null) {
         label = 'NO SIGNAL'; cls = 'bg-slate-800/60 border-slate-600 text-slate-400';
-        desc = `Not enough tracked history for ${escapeHtml(indName || 'this industry')}/${escapeHtml(secName || 'this sector')} yet.`;
+        desc = `No data loaded for ${escapeHtml(indName || 'this industry')}/${escapeHtml(secName || 'this sector')} right now — pull to refresh and try again.`;
       } else if (score >= SIGNAL_FAVORABLE) {
         label = 'FAVORABLE'; cls = 'bg-emerald-900/40 border-emerald-500 text-emerald-300';
         desc = `${escapeHtml(indName || 'Industry')} and ${escapeHtml(secName || 'sector')} are both showing confirmed strength — a supportive backdrop for this stock.`;

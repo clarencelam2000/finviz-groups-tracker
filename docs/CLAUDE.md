@@ -13,6 +13,11 @@ are not derived from the CSV pipeline. Any change must also update `README.md` �
 parameters and, if it's a scoring/display constant tracked by the anti-drift guard, bump
 `data/picks/display_methodology.json` (see `scripts/CLAUDE.md` § Picks pipeline).
 
+> **Note (2026-08-31):** `groupPerfCard()`/`contextSignalCard()` empty-state copy doesn't assert
+> "not tracked" as fact anymore — `findGroupData()` can't distinguish a genuine taxonomy gap from
+> a failed/incomplete data load, so both now say data didn't load and offer a `window.__refresh()`
+> button instead. See PR #381.
+
 | Constant | Default | Controls |
 |----------|---------|---------|
 | `REGIME_THRESHOLD` | `0.15` | Boundary between Emerging / Established / Fading buckets in Rotation view. Also the card color cutoff — must stay consistent (uses `REGIME_THRESHOLD` in both places). |
