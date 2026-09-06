@@ -1225,3 +1225,42 @@ confirmed, next session starts at `AI-NEXT-P0` (evidence-pack builder — genera
 `serialize_*()` discipline into a typed versioned pack, no new UI) then `AI-NEXT-P2`. P0 is a
 prerequisite for every other phase; P4 (Tier B worker route) gates P5–P7. Nothing in P0–P7 needs a
 ground-truth CSV schema change.
+
+**Later in the same session — tracking hardened at the owner's request.**
+
+Owner's standing instruction going forward: *persist everything a cold session needs at every
+boundary, and keep a running task list / tracking section in the main planning doc so documentation
+doesn't scatter.* Acted on as follows.
+
+- **Evidence-pack schema is now its own design pass** (owner's call, not folded into P0):
+  `planning/ai-evidence-pack-schema.md`. It exists because three review decisions turned the pack
+  into a contract: slot-filling needs a stable addressable namespace, Tier A (Python) and Tier B
+  (JS) must emit identical structures, and citation-driven provenance must resolve a field id back
+  to a human label at render time. **3 open questions in §6 are unanswered** — registry drift a hard
+  error vs warning (recommend hard), `context` budget ceiling for the on-demand Positions tap
+  (recommend soft cap + `notes` entry on truncation), and whether `confidence` renders (recommend
+  not in v1).
+- **Epic #408** groups the methodology work with an explicit priority order and dependency graph:
+  #401 → #403 → #402 are one PR (same file, `scripts/evaluate_picks.py` reporting layer); #404
+  (ticker-level truth) is independent and the long pole; #405 (leaders/emerging) is blocked on both
+  plus an out-of-sample period that does not exist. #406 deliberately excluded — it's AI doc drift,
+  not methodology. Each child issue carries a comment stating its rank and blockers, so a cold
+  reader landing on any one of them sees the shape.
+- **#409** filed for the `serialize_*()` pre-chewing retrofit on the *existing* AI tab — feeding it
+  broadly is an improvement to what already ships, separable from the new-surface work.
+- **`planning/README.md` rebuilt as the real navigation index** (it had rotted: 7 of ~35 files
+  listed, all with dead branch names). Now maps content-type → directory, groups live docs by
+  workstream, and keeps shipped/superseded in separate tables. **This is the file a cold session
+  should open first after `CLAUDE.md` and these notes.**
+
+**Cold-start pointer for the next session.** Read in this order: `CLAUDE.md` → these notes →
+`planning/README.md` → `planning/ai-llm-integration-proposal.md` → `planning/ai-evidence-pack-schema.md`.
+Owner decisions already locked: private data to Vertex **yes**; mandatory never-empty "catch"
+**yes**; Positions read **on-demand tap**; start with **Morning** (P0 → P2); posture framing
+replaced by *evidence-complete* (counter-evidence required, confidence derived from evidence
+strength); numbers handled by **slot filling**, never written by the model; **feed context broadly**
+but require field citation so the "Behind this" drawer renders only the cited subset. The
+methodology epic is explicitly **not scheduled** — a later focused sprint.
+
+**Immediate next action:** owner answers the 3 open questions in `ai-evidence-pack-schema.md` §6,
+then `AI-NEXT-P0` (the builder + registry) is implementable with no further design work.
