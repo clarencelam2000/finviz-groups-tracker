@@ -221,6 +221,30 @@ Things this example settles for the implementer:
   ATR-extension value). The Python builder recomputes them with the **same formulas** —
   add a parity test against a fixture the PWA test also asserts, or the AI will say "4.0 ATR" next
   to a chip that says "3.9".
+
+  > **Corrected 2026-09-06 during P0a implementation** — the bullet above was half wrong, and
+  > getting it wrong silently produces numbers that disagree with the chip beside them:
+  >
+  > 1. **`sma20_dist` and `pct_of_52w_high` are not derived at all.** Finviz's `SMA20`, `SMA50`
+  >    and `52W High` screener columns are already *percent-distance-from-live-price*, stored
+  >    verbatim as strings (`"3.05%"`, `"-6.31%"` — see `collect_morning.py` `SETUP_COLUMNS`).
+  >    The builder parses the `%` and that is the field. Only **`sma50_ext_atr` / `sma20_ext_atr`**
+  >    are genuinely derived, via the PWA's reconstruction `ma$ = price / (1 + pct/100)` then
+  >    `(price − ma$) / ATR` (`docs/index.html` `deriveRiskMetrics()`, ~line 4603).
+  > 2. **There are two different ATRs in every Morning row and they disagree.** Lowercase `atr`
+  >    is the status engine's quote-block scrape; capital `ATR` is the Finviz screener block.
+  >    They differ on **224 of 234** rows carrying both. Each derivation must use the ATR from
+  >    its own source: MA-extension uses capital `ATR` (parity with the PWA chip), while
+  >    stop/trigger geometry (`stop_gap_atr`, `range_atr`) uses lowercase `atr` — the ATR the
+  >    engine actually planned the stop with. Mixing them yields a plausible-looking wrong number.
+  > 3. **Coverage cliff.** `RSI`/`Volatility`/`Rel Volume`/`52W High` exist only from
+  >    **2026-09-01**, and `Price`/`SMA20`/`SMA50`/`ATR` only from **2026-09-03**. The builder
+  >    *omits* these fields (rather than emitting them as null) when the block is absent, and
+  >    adds a `notes` caveat: an omitted field means "never collected for this date", a `null`
+  >    field means "collected and empty" — a distinction the model is prompted on.
+  > 4. **`group` is null on exactly the watchlist rows** (225 of 2,408). Watch tickers are not
+  >    screened picks and carry no industry group, so every `group.*` field is null for them and
+  >    §3.3 forces those statements to `low` confidence. Expected, not a data bug.
 - `derived.status_changed` is what selects the row into scope for the `pre_close` session (owner
   decision: actionable + changed only).
 
@@ -296,10 +320,28 @@ our prompt, not a judgement call about a model's arithmetic, so failing closed i
   `eval_ai.py` can trend it and a rising rate is visible without reading logs.
 - **Rendering a dropped card:** the surface falls back to what it shows today (`_mNote()` on
   Morning; nothing on Picks). The user never sees an "AI failed" state — silence convention.
-- **Spike go/no-go (`AI-NEXT-P0c`):** over ≥50 real `morning_card` packs against `gemini-3.5-flash`
-  with `response_schema` set, **≤5% cards dropped after retry** is go; 5–15% is go with per-row
-  calls only (no batching); >15% falls back to the renderer-owned-templates design in the proposal
-  §2 (model returns `kind` + `cites` only). Record the measured rate in the spike's knowledge note.
+- **Spike outcome (`AI-NEXT-P0c`) — which of three designs, never whether to ship.** Over ≥50 real
+  `morning_card` packs against `gemini-3.5-flash` with `response_schema` set, the measured
+  drop-rate-after-retry selects the renderer design: **≤5%** → slot filling, batched calls;
+  **5–15%** → slot filling, per-row calls only (slower, same product); **>15%** → the
+  renderer-owned-templates design in the proposal §2, where the model returns `kind` + `cites`
+  only and the renderer owns the sentence wording. All three ship an AI-selected, fully-cited
+  read on the card; the third merely moves phrasing from the model to the app, which is strictly
+  the *safer* product. Record the measured rate in the spike's knowledge note.
+
+  > **Wording fixed 2026-09-06.** This bullet previously read "go/no-go", which wrongly implied
+  > the spike could cancel the workstream. It cannot — there is no no-go branch. Renamed here and
+  > in the SPRINT row so the next reader does not misread the risk.
+
+  > **Corpus decision (owner, 2026-09-06).** Because the Finviz setup block only starts
+  > 2026-09-03 (see §2.4), the spike runs on the **full history back to 2026-08-10** and reports
+  > the drop rate **split into two cohorts**: full-field rows (2026-09-03 onward, the
+  > production-shaped pack — this is the cohort the thresholds above are read against) and
+  > thin-field rows (before, where the setup block is absent). The thin cohort separately
+  > measures whether the model misbehaves around omitted fields, which is real information the
+  > full-field cohort alone cannot give. Rejected: waiting ~2 weeks for depth (no reason to
+  > block), and running on the 234 full-field rows alone (2 trading days is too narrow a sample
+  > for a threshold decision, and it tests nothing about null handling).
 
 ### 3.3 Confidence — rubric and rendering
 
@@ -311,11 +353,21 @@ stated in the prompt, and the validator downgrades it when the rubric is provabl
 - `medium` if it rests on 2–3 fields with none flagged.
 - `high` otherwise.
 
-The validator can check the first bullet mechanically and forces `low` when it applies, whatever
-the model said. Rendering (owner leaning to render; staff recommendation, to confirm): **only
-`low` renders**, as a small "thin evidence" marker whose tooltip lists the flagged fields. `high`
-and `medium` render nothing — the app's "no badge = no signal" convention. All three are logged
-in Tier-2 so calibration can be checked once ticker-level outcomes exist (#404).
+The validator can check the first two bullets mechanically and forces `low` when either applies,
+whatever the model said. It also attaches a `thin` list naming *why* it downgraded, so the marker's
+tooltip is built from fact rather than from the model's self-report.
+
+**Rendering — decided 2026-09-06 (owner): all three states render.** Staff had recommended the
+`low`-only variant on the app's "no badge = no signal" convention; the owner chose full visibility
+instead. `high` / `medium` / `low` each get a marker on the statement, and `low`'s tooltip lists
+the flagged fields from `thin`. P0b builds it this way — the decision is baked in, not retrofitted.
+All three remain logged in Tier-2 so calibration can be checked once ticker-level outcomes exist
+(#404).
+
+> Staff note, recorded rather than argued: three visible markers add chrome to an already-dense
+> card, and a `medium` badge on most statements risks reading as noise the eye learns to skip. If
+> that happens in real use, dropping to `low`-only is a pure render change — the contract carries
+> all three states either way, so nothing downstream needs to move.
 
 ---
 
@@ -377,9 +429,12 @@ No ground-truth CSV changes. Per `.claude/rules/data-pipeline.md`, nothing here 
 2. **`context` budget → no cap for Tier A batch; soft cap on Tier B** with oldest-first truncation
    and a `notes` entry saying what was dropped. Cap value is a documented constant in
    `evidencePack.js` (three-places rule), initial value to be set in P4 from measured latency.
-3. **`confidence` → render.** Owner leans to rendering; staff recommends the `low`-only variant in
-   §3.3. **Open on the variant only** — the contract carries all three states either way, so this
-   does not block P0.
+3. **`confidence` → render all three states.** ✅ **Closed 2026-09-06.** Owner chose full
+   visibility over the staff-recommended `low`-only variant; `high`/`medium`/`low` each render a
+   marker, `low`'s tooltip lists the validator's `thin` reasons. See §3.3.
+4. **P0c corpus → mixed, cohort-split.** ✅ **Decided 2026-09-06**, forced by the setup-column
+   coverage cliff found during P0a implementation. Full history, drop rate reported separately
+   for full-field and thin-field rows. See §3.2.
 
 ## 7. Not in scope here
 
