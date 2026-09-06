@@ -53,33 +53,44 @@ the combination:
 Joined on one trader's actual behaviour, (1)+(2)+(3) is the substrate. That is where the LLM
 belongs — not in a fourth paragraph about sector rotation.
 
-### The uncomfortable input to strategy
+### The measurement question (corrected 2026-09-05 after owner review)
 
-`scripts/evaluate_picks.py --report`, run live on 48 settled dates:
+An earlier draft of this section asserted the picks selector is "negative at every horizon" and
+hung the product posture on it. **That was overstated.** Full audit:
+`knowledge/investigations/picks-alpha-2026-09-05-significance-audit.md`. The corrected version:
 
-| horizon | exSPY mean | hit | exMEDIAN mean | hit | paired per-date |
-|---|---|---|---|---|---|
-| 1 | −0.25% | 44% | −0.17% | 46% | −0.18 (22/48 dates +) |
-| 3 | −0.77% | 39% | −0.44% | 46% | −0.54 (20/46 +) |
-| 5 | −1.15% | 41% | −0.64% | 44% | −0.79 (16/44 +) |
-| 10 | −1.39% | 42% | −0.80% | 44% | −1.07 (17/39 +) |
+**What `evaluate_picks.py` measures** (`compute_scores`, `:112-175`): buy the whole *industry
+group index* at the pick-day close, hold 1/3/5/10 sessions, **no entry condition and no stop**.
+It is a test of the group selector as a standalone index strategy. It does not measure the stock
+picks, the Morning trigger/stop logic, or the position engine.
 
-Per bucket, `leaders` (the largest, 492 rows at h=1) is the worst at every horizon
-(−0.34 → −2.13% exSPY). `emerging` is the only bucket with a positive read, and only at h=10
-(+0.86 exSPY / +1.42 exMEDIAN, 53–59% hit, N=158).
+Three corrections to the raw `--report` table:
 
-**Scope this correctly — it is easy to overstate.** This measures forward returns of the *industry
-groups* the selector chose. It does **not** measure the stock picks, and it does not measure the
-Morning trigger/stop discipline or the position engine at all. Ticker-level scoring is deliberately
-unbuilt (`evaluate_picks.py` docstring: the internal price chain is survivorship-biased, deferred as
-PICKS-4B). With `ticker_quotes` now accumulating real OHLC for held and watched names, that
-instrument is becoming buildable for the first time.
+1. **`excess_spy` is contaminated.** Over the sample, SPY returned +3.93% and the median tracked
+   industry +1.48% — cap-weighted mega-cap leadership. Much of `excess_spy` is that weighting
+   difference, not selector skill. `excess_median` / `excess_nonsel` are the fair controls and are
+   about half as negative.
+2. **There is no significance test, and forward windows overlap.** 39 h=10 dates over 62 sessions
+   is ~6 *independent* windows. Under a moving-block bootstrap (block = horizon) vs the median
+   control, three of four horizons **straddle zero**: h=1 −0.15% [−0.38,+0.08], h=3 −0.40%
+   [−0.90,+0.04], h=5 −0.59% [−1.21,+0.20], h=10 −0.71% [−1.90,+0.22].
+3. **It flips sign within the sample.** First half −1.25% at h=10, second half +0.16%.
 
-But the strategic implication holds regardless: **do not build an AI that hypes picks.** Build one
-that filters, disqualifies, and grades. A skeptical second opinion is the honest posture, the
-defensible product, and the safer one for a live trader.
+**What survives:** the opposite gradient between buckets — `leaders` monotonically worse with
+horizon (−0.28 → −1.00 → −1.58 vs median at h=1/5/10, CI excluding zero at h=10) and `emerging`
+monotonically better (−0.03 → +0.50 → +1.48). `leaders` holds 13 of ≤27 daily slots. That is a
+**selector-tuning question for ADR-007, not an AI question**, and it is not yet actionable — one
+regime, ~6 independent windows, no out-of-sample period.
 
----
+**What this explicitly does not say:** it is not a short signal, and it does not say the system
+doesn't work. The part that does the work — trigger, stop, trailing management — is unmeasured.
+The honest statement is **"we do not yet know whether the traded system has an edge,"** not "it
+doesn't."
+
+**The consequence for this proposal** is therefore weaker than the earlier draft claimed, and
+narrower: an AI layer should not assert conviction the underlying measurement cannot support, and
+several proposed features (the honesty chip, the weekly review) *depend on* a ticker-level
+instrument that does not exist yet. See §5 — PICKS-4B is now a sequencing input, not a side note.
 
 ## 1. Three jobs, ranked by defensibility
 
