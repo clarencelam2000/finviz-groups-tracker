@@ -97,12 +97,14 @@ actionable yet: one regime, ~6 independent windows, no out-of-sample period.
 - **It does not justify a product posture on its own.** That was the overstatement being corrected
   here.
 
-## Follow-ups worth tracking
+## Follow-ups (all tracked — do not re-derive these)
 
-- **PICKS-4B (ticker-level scoring)** is now more buildable than when it was deferred: D1
+- **#404 — PICKS-4B (ticker-level scoring)** is now more buildable than when it was deferred: D1
   `ticker_quotes` holds real daily OHLC for held + watchlist names, and
   `data/picks/sessions/morning.csv` holds 20+ sessions of trigger/stop/status. Until it exists,
   nobody can say whether the *traded* system has an edge.
-- Add a significance estimator (moving-block bootstrap) to `--report` so the table is never again
-  read as settled fact.
-- Revisit `MIN_POWERED_DATES` — counting dates overstates power at h=5/10.
+- **#401** — add a significance estimator (moving-block bootstrap) to `--report` so the table is
+  never again read as settled fact. Reference implementation is in the issue.
+- **#403** — demote `excess_spy` in the report; it carries a cap-weighting component, not just skill.
+- **#402** — revisit `MIN_POWERED_DATES`; counting dates overstates power at h=5/10.
+- **#405** — research spike on the `leaders`/`emerging` gradient. Explicitly NOT actionable yet.

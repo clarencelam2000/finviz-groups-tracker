@@ -139,19 +139,91 @@ schema, so:
 **Ship "Behind this" with every new AI surface from day one.** It is what separates this from a
 chatbot guessing at your portfolio.
 
-### One grounding rule I want to change
+### Numbers: correctness by construction, not by checking
 
-`eval_ai.py` today checks that every group name in the output appears in the input, and it runs
-**offline only** — ADR-006 deliberately quarantines token-spending paths off the nightly run. That
-was right for commentary. It is not right for a card that talks about money the owner has at risk.
+An earlier draft proposed a blocking gate that rejected a card if any number in its prose failed to
+appear in the evidence pack. **Owner review flagged this as brittle, and that is right** — a model
+legitimately produces derived values (a difference, a ratio, a rounding), so a literal
+every-number-must-match check either false-positives constantly or gets loosened until it means
+nothing. A gate that suppresses good cards is worse than no gate.
 
-Proposal: extend the check to **numeric** grounding (every number in the output must appear in the
-pack) and run it as a **blocking gate on the personal tiers** — if a card fails, suppress the card
-rather than ship a wrong number. Broadcast commentary can stay non-blocking.
+**Better design: the model never writes a number at all.**
 
----
+The model returns a sentence *template with named slots* plus the pack fields that fill them:
+
+```json
+{
+  "text": "Earnings in {days} sessions, and your {basis} stop is {gap} away.",
+  "slots": { "days": "pack.earnings.days_to", "basis": "pack.position.stop_basis",
+             "gap": "pack.derived.stop_gap_pct" }
+}
+```
+
+The renderer fills the slots from the pack. Every number the user sees is then **the same value the
+rest of the UI computed**, guaranteed — not a value that happened to survive a checker. The
+validation reduces to "does every referenced field exist in the pack", which is a precise,
+non-negotiable, non-brittle check, and a failure is a bug in our prompt rather than a judgement call
+about a model's arithmetic.
+
+This is the same principle as the 2026-08-24 `rsChip()` lesson in `CLAUDE.md`: when a fix's
+correctness depends on a coincidence holding, add a parameter instead of an assumption. Here the
+coincidence would be "the model did the arithmetic right this time."
+
+The model still *reasons over* numbers — it decides which fact matters and what to say about it. It
+just doesn't get to transcribe them. Prose that genuinely needs a computed value we don't already
+have becomes a new deterministic pack field, which is a good forcing function.
+
+### How much context to feed it
+
+Owner's steer, and I agree: **don't over-curate.** The existing `serialize_*()` functions pre-chew
+hard — they hand the model a short narrated summary because that was the right call for a 2023-era
+context window. That constraint is gone, and heavy pre-chewing now actively costs us: it decides in
+advance which patterns are findable, so the model can only re-describe our own analytics back to us.
+
+Proposed split — **breadth for the model, traceability for the reader**:
+
+- **Feed broadly.** All 144 industries, not just the leaders. The full pick row, not 6 selected
+  columns. The whole `position_events` ledger. Prior sessions, so cross-day patterns are visible.
+- **Require citation.** The model must name which pack fields it actually used for each statement.
+  The "ⓘ Behind this" drawer then renders **the cited subset**, not the whole payload — otherwise
+  provenance degrades into a data dump nobody reads, which would quietly destroy the app's best
+  trust feature.
+
+Two practical constraints worth stating up front: input tokens scale with breadth across ~3 runs a
+day, so structure the payload as a **stable prefix + a small volatile tail** to make prompt caching
+effective; and breadth raises latency, which matters for the on-demand Positions read but not for
+anything batch.
 
 ## 3. The features
+
+### 3.0 A framing correction: "posture" was the wrong axis
+
+An earlier draft asked the owner to choose an AI *persona* — "skeptical critic" vs "balanced
+analyst" vs "confident assistant" — and justified the critic partly with the (since corrected)
+claim that "every existing surface in the app tells you what's good."
+
+**Both were wrong, per owner review.** The app already surfaces plenty of negative facts: a low
+Focus score, an `invalidated` status, a failed-breakout, an ATR-extension warning band, an
+earnings-imminent badge, a below-floor volatility chip. It is not a one-sided cheerleader.
+
+And the deeper objection is the right one: **the LLM's job is to surface what our facts say, not to
+adopt a stance toward them.** A persona dial is a way of pre-deciding the conclusion, which is
+exactly what a grounded system should not do.
+
+So the choice collapses. What that fuzzy "posture" question was actually asking about is two
+concrete, separable properties:
+
+1. **Evidence completeness** — is the strongest counter-evidence a *required* field, or an optional
+   one? **Decision: required** (owner-confirmed). An optional criticism field silently empties out
+   on precisely the names you are most excited about, which is when you need it most.
+2. **Confidence calibration** — how strongly may it phrase a conclusion? **This should be derived
+   from the strength of the underlying evidence, not set by a persona.** Where a claim rests on a
+   thin or noisy basis, the model says so; where the data is unambiguous, it says that plainly. §0
+   is the cautionary case: a weak result stated with confidence.
+
+Net effect on the build: identical to what "skeptical critic" would have produced, but for a reason
+that survives scrutiny. The correct label is **evidence-complete**, not skeptical. Nothing in the
+prompt tells it to be negative.
 
 ### 3.1 Top level — **The Brief**
 
