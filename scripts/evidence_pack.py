@@ -515,32 +515,46 @@ def build_morning_card(row: Mapping[str, Any],
     f.add("row.reclaim_ref", reclaim_ref, RECLAIM_REF_LABELS.get(reclaim_ref or ""))
     f.add("row.reclaim_ref_value", _num(row.get("reclaim_ref_value")))
 
-    # --- Finviz screener block. Absent (not null) before 2026-09-01/03 — see the note below.
-    setup_present = any(_text(row.get(c)) is not None
-                        for c in ("RSI", "SMA20", "SMA50", "52W High", "Rel Volume"))
-    f.add("row.rsi", _num(row.get("RSI")), omit_if_none=not setup_present)
-    f.add("row.volatility_w", _pct(row.get("Volatility W")), omit_if_none=not setup_present)
-    f.add("row.volatility_m", _pct(row.get("Volatility M")), omit_if_none=not setup_present)
-    f.add("row.rel_volume", _num(row.get("Rel Volume")), omit_if_none=not setup_present)
-    f.add("row.pct_of_52w_high", _pct(row.get("52W High")), omit_if_none=not setup_present)
+    # --- Finviz screener block. Two independent sub-groups with DIFFERENT coverage-cliff
+    # start dates (RSI/Volatility/RelVol/52W from 2026-09-01; SMA20/SMA50/ATR from 2026-09-03
+    # — see scripts/CLAUDE.md). During that 2-day gap the RSI group is present while the SMA
+    # group is still absent, so each group must gate its own fields independently — a single
+    # combined flag would wrongly emit the still-absent SMA fields as null instead of omitting
+    # them (and skip the caveat note) merely because the RSI group had already landed.
+    rsi_block_present = any(_text(row.get(c)) is not None
+                            for c in ("RSI", "Volatility W", "Volatility M", "Rel Volume",
+                                      "52W High"))
+    sma_block_present = any(_text(row.get(c)) is not None for c in ("SMA20", "SMA50"))
+
+    f.add("row.rsi", _num(row.get("RSI")), omit_if_none=not rsi_block_present)
+    f.add("row.volatility_w", _pct(row.get("Volatility W")), omit_if_none=not rsi_block_present)
+    f.add("row.volatility_m", _pct(row.get("Volatility M")), omit_if_none=not rsi_block_present)
+    f.add("row.rel_volume", _num(row.get("Rel Volume")), omit_if_none=not rsi_block_present)
+    f.add("row.pct_of_52w_high", _pct(row.get("52W High")), omit_if_none=not rsi_block_present)
 
     sma20_dist = _pct(row.get("SMA20"))
     sma50_dist = _pct(row.get("SMA50"))
-    f.add("row.sma20_dist", sma20_dist, omit_if_none=not setup_present)
-    f.add("row.sma50_dist", sma50_dist, omit_if_none=not setup_present)
+    f.add("row.sma20_dist", sma20_dist, omit_if_none=not sma_block_present)
+    f.add("row.sma50_dist", sma50_dist, omit_if_none=not sma_block_present)
 
-    if not setup_present:
+    if not rsi_block_present:
         notes.append(
-            "The Finviz setup block (RSI, relative volume, 52-week high, 20MA/50MA distance) "
-            "was not collected for this date, so those fields and the MA-extension "
-            "derivations are absent from this pack. Do not infer them."
+            "The Finviz setup block (RSI, volatility, relative volume, 52-week high) was "
+            "not collected for this date, so those fields are absent from this pack. Do "
+            "not infer them."
+        )
+    if not sma_block_present:
+        notes.append(
+            "The Finviz setup block (20MA/50MA distance) was not collected for this date, "
+            "so those fields and the MA-extension derivations are absent from this pack. "
+            "Do not infer them."
         )
 
     # --- derived (the deterministic-computation boundary, §2.1) ---
     sma20_ext = _ext_atr(price, _ma_price(price, sma20_dist), atr_finviz)
     sma50_ext = _ext_atr(price, _ma_price(price, sma50_dist), atr_finviz)
-    f.add("derived.sma20_ext_atr", sma20_ext, omit_if_none=not setup_present)
-    f.add("derived.sma50_ext_atr", sma50_ext, omit_if_none=not setup_present)
+    f.add("derived.sma20_ext_atr", sma20_ext, omit_if_none=not sma_block_present)
+    f.add("derived.sma50_ext_atr", sma50_ext, omit_if_none=not sma_block_present)
 
     stop_gap = (price - stop) if (price is not None and stop is not None) else None
     f.add("derived.stop_gap_pct", (stop_gap / price * 100.0)
@@ -910,8 +924,14 @@ def validate(response: Mapping[str, Any], pack: Mapping[str, Any]) -> dict[str, 
                 thin_reasons.append(c)
         if len(set(field_cites)) < 2:
             thin_reasons.append("fewer than two distinct fields")
-        if notes_blob and any(c.rsplit(".", 1)[-1] in notes_blob for c in field_cites):
-            # A field named in a caveat is thin even when it has a value.
+        if notes_blob and any(
+            re.search(r"\b" + re.escape(c.rsplit(".", 1)[-1]) + r"\b", notes_blob)
+            for c in field_cites
+        ):
+            # A field named in a caveat is thin even when it has a value. Word-boundary match,
+            # not a raw substring test: a naive `in` check lets unrelated words collide (e.g.
+            # the field id "change" is a substring of the routine no-prior-read note's
+            # "...what changed.", which forced every row.change citation to `low` confidence).
             thin_reasons.append("cites a field flagged in notes")
         if thin_reasons:
             confidence = "low"

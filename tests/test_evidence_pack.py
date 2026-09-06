@@ -198,6 +198,26 @@ def test_blank_setup_columns_omit_fields_and_add_note():
     assert any("Finviz setup block" in n for n in card["notes"])
 
 
+def test_partial_coverage_cliff_gates_sma_block_independently_of_rsi_block():
+    # Real 2026-09-01/02 gap: RSI/Volatility/RelVol/52W High were already being collected,
+    # SMA20/SMA50/ATR were not (see scripts/CLAUDE.md § coverage cliff). A single combined
+    # presence flag would wrongly treat the still-missing SMA block as present because RSI
+    # already landed, emitting sma20_dist/sma50_dist as null instead of omitting them.
+    row = _full_row(SMA20="", SMA50="", ATR="")
+    card = build_morning_card(row)
+    fields = card["fields"]
+
+    for fid in ("row.rsi", "row.volatility_w", "row.volatility_m", "row.rel_volume",
+                "row.pct_of_52w_high"):
+        assert fid in fields, f"{fid} should stay present when only the SMA block is absent"
+
+    for fid in ("row.sma20_dist", "row.sma50_dist", "derived.sma20_ext_atr",
+                "derived.sma50_ext_atr"):
+        assert fid not in fields, f"{fid} should be omitted, not null, when the SMA block is absent"
+
+    assert any("Finviz setup block" in n for n in card["notes"])
+
+
 def test_prior_row_none_status_changed_is_none_with_note():
     card = build_morning_card(_full_row(), prior_row=None)
     fields = card["fields"]
@@ -608,6 +628,33 @@ def test_fewer_than_two_distinct_field_cites_forces_low():
     result = validate({"statements": [stmt, _catch_stmt()]}, pack)
     kept = [s for s in result["statements"] if s["kind"] == "read"][0]
     assert kept["confidence"] == "low"
+
+
+def test_notes_flag_check_is_word_boundary_not_substring():
+    # Regression: the routine no-prior-read note ends "...so nothing can be said about what
+    # changed." The field id suffix "change" (row.change) is a substring of "changed" — a
+    # naive `in` check on notes_blob wrongly forced every row.change citation to `low`
+    # confidence even though the field is clean and has nothing to do with the note.
+    pack = _pack_with_fields(extra_fields={"row.change": {"v": 1.62, "u": "pct", "l": "Change"}})
+    pack["notes"] = ["No prior read exists for this ticker (first appearance, or the prior "
+                     "session's scrape is missing), so nothing can be said about what changed."]
+    stmt = _stmt(text="No slots.", slots={},
+                cites=["group.rank_month", "row.change"], confidence="high")
+    result = validate({"statements": [stmt, _catch_stmt()]}, pack)
+    kept = [s for s in result["statements"] if s["kind"] == "read"][0]
+    assert kept["confidence"] == "high"
+    assert "thin" not in kept
+
+
+def test_notes_flag_check_still_catches_exact_field_mention():
+    pack = _pack_with_fields()
+    pack["notes"] = ["The rel_volume field is stale for this date; treat it with caution."]
+    stmt = _stmt(text="No slots.", slots={},
+                cites=["group.rank_month", "row.rel_volume"], confidence="high")
+    result = validate({"statements": [stmt, _catch_stmt()]}, pack)
+    kept = [s for s in result["statements"] if s["kind"] == "read"][0]
+    assert kept["confidence"] == "low"
+    assert "cites a field flagged in notes" in kept["thin"]
 
 
 # ===========================================================================
