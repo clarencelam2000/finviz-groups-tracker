@@ -733,7 +733,16 @@ def build_morning_triage(session_rows: Sequence[Mapping[str, Any]],
 # Validator (schema §3.1)
 # ---------------------------------------------------------------------------
 
-_SLOT_RE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+# Matches a bare short name ({chg}) AND a dotted field id used directly as a placeholder
+# ({row.change}). The AI-NEXT-P0c spike (2026-09-06) found gemini-3.5-flash sometimes writes
+# the field id straight into `text` instead of a short name mapped via `slots` — with the old
+# letters-only pattern, `{row.status}` didn't match at all (the dot isn't in the character
+# class), so it was invisible to both Rule 1 (no placeholder found -> nothing to check against
+# `slots`) and Rule 3 (never stripped, but only caught if the field id itself contains a digit)
+# — a `{row.status}`-style statement with `slots: {}` sailed through validate() unrejected and
+# would have rendered the literal, unsubstituted "{row.status}" text to a real user. Requiring
+# a `slots` entry regardless of which spelling was used closes that hole.
+_SLOT_RE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_.]*)\}")
 _DIGIT_RE = re.compile(r"\d")
 
 

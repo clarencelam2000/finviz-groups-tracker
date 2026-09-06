@@ -6,6 +6,54 @@
 ---
 
 
+## 2026-09-06 — AI-NEXT-P0c structured-output spike run (real API, owner-authorized)
+
+**Status: safe to close** — spike run complete, decision recorded, a validator bug it surfaced
+is fixed and tested, follow-ups tracked as issue #416.
+
+**What happened:** owner explicitly authorized the spend (stated they hold ~$260 in Google API
+credit expiring within days; not independently verified which billing account the in-session
+`GOOGLE_API_KEY` draws from, taken on the owner's word) to run the real `AI-NEXT-P0c` spike — 60
+real `gemini-3.5-flash` calls through
+`scripts/spike_structured_output.py --limit 60`, using the `GOOGLE_API_KEY`/`VERTEX_API_KEY`
+found present in this cloud session (see prior session-notes entry). Ran to completion (~55 min
+wall clock, unusually slow per-call latency — see below).
+
+**Headline result:** raw harness output said 90% dropped / 3.3% first-try, selecting
+**renderer-owned templates** (the >15%-drop-rate design: AI picks the situation, app writes the
+sentence). **Before accepting that number, re-inspected the two "first-try" successes against
+their raw output and found both were actually malformed** — the model had written the field id
+directly into the response text (e.g. `{row.status}`) instead of a short name mapped through
+`slots`, and a gap in our own validator's regex (`_SLOT_RE` didn't match dots) let it slip
+through undetected. Fixed `_SLOT_RE` in `scripts/evidence_pack.py` to also recognize dotted
+field ids as placeholders, added a regression test, verified against the two real raw responses
+that they now correctly get rejected. Corrected true result: **0/60 clean first-try passes**, not
+2/60. The renderer-design decision doesn't change (still far past the >15% cutoff either way),
+but the corrected number matters for anyone reading this later. Full writeup:
+`knowledge/investigations/ai-next-structured-output-spike.md` §4/§4.0/§6.
+
+**Also found, independent of the drop rate:** median 141s/call, p90 289s — a naive serial
+per-row loop over a 40-row morning session would take ~94 minutes, blowing the documented
+≤10-minute budget regardless of which renderer design ships. Not root-caused (possibly SDK-level
+retry-on-rate-limit rather than genuine model latency).
+
+**Why the number might not be the model's ceiling:** the model got `cites` (a flat array) right
+100% of the time and only failed the semantically-redundant `slots` object every time —
+`RESPONSE_SCHEMA` doesn't structurally require `slots` to be non-empty, so nothing but prose
+instructions asked for it. A schema restructure (e.g. `slots` as `{name, field}` pairs, same
+shape as `cites`) followed by a small ~10-20 call confirmatory run might tell a different story.
+Not run — flagged in issue #416, needs owner sign-off given API spend already used.
+
+**Tracking:** `.session/SPRINT.md` `AI-NEXT-P0c` row marked Done with the corrected result;
+issue #416 opened for the two follow-ups (schema-fix retest, latency budget). `AI-NEXT-P0b`/`P2a`
+are now unblocked per the SPRINT ordering.
+
+**Next steps:** owner decides whether the ~10-20 call confirmatory retest (issue #416, item 1) is
+worth the remaining API credit before the expiry window closes; otherwise `AI-NEXT-P0b` (shared
+renderer) is next in the SPRINT order.
+---
+
+
 ## 2026-09-06 — PR #412 review, fix, and merge (AI-NEXT-P0a evidence pack)
 
 **Status: safe to close** — PR #412 merged to default; fixes verified with tests; one unrelated
