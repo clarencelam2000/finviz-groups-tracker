@@ -464,3 +464,51 @@ methodology epic is explicitly **not scheduled** — a later focused sprint.
 
 **Immediate next action:** owner answers the 3 open questions in `ai-evidence-pack-schema.md` §6,
 then `AI-NEXT-P0` (the builder + registry) is implementable with no further design work.
+---
+
+## 2026-09-06 — AI-NEXT staff review: docs locked, tasks decomposed, user stories
+
+**Status: safe to close** — docs-only PR, no code. Design gate is now *passed*, not "awaiting".
+
+**What the owner asked for:** staff-eng / product / team-lead review of the SDE2's
+`planning/ai-llm-integration-proposal.md` and `planning/ai-evidence-pack-schema.md`, plus the
+`AI-NEXT-*` SPRINT rows, so the rest of the team can pick the epic up cold. Recon was one Sonnet
+Explore agent (file:line-cited) plus direct checks of the session stores, workflow triggers, SW
+caching, and the Gemini call config.
+
+**Findings that changed the docs** (full logs: proposal §8, schema §9):
+- Both docs still carried *open questions the owner had already answered* (proposal §6 asked about
+  "posture", which §3.0 had retired; SPRINT header said "blocked on 4 open questions"). Replaced
+  with a 12-row locked-decisions table; a cold reader would have re-asked all of them.
+- Proposal §4 still said "blocking numeric-grounding gate" one section after §2 replaced it with
+  slot filling; the P4 SPRINT row repeated it. Fixed everywhere.
+- **Biggest missed risk:** slot filling needs strict JSON output, and `planning/ai-tab-daily-note.md`
+  records the repo *already tried* forced JSON schema mode on the AI tab and backed it out
+  (JSON-inside-JSON, truncation). Today `_call_api` sets only `temperature`
+  (`generate_ai.py:1093-1094`). Added a mandatory spike `AI-NEXT-P0c` with go/no-go thresholds
+  (schema §3.2) and a fallback design (renderer-owned templates).
+- Schema gaps an implementer hits on day one: pack granularity (draft example was one row; Morning
+  is ~115 rows + a cross-row triage), how a pattern found in broad `context` gets cited (rule 2 as
+  written made it un-provenanced), the "no bare digits" rule rejecting `20MA`/`52W`/`10:05`, no
+  failure behaviour, `confidence` undefined. All added, with a concrete Morning pack built from the
+  real 27-column store — which showed `earnings.days_to` does **not** exist on Morning.
+- Tier boundary nuance verified: watchlist *tickers* are already public in `morning.csv`
+  (`list_category=watchlist`, 14/114 rows on 09-04); only the level is private.
+- Verified facts corrected: 11 calls × **2** runs/day (not ~33/day); `generate_ai.yml` cascades
+  only off "Daily Snapshot", so Morning prose needs a **new** cascade; AI JSON is fetched via
+  `BASE` (raw.githubusercontent) which `sw.js` bypasses — new files must go the same way.
+
+**Owner decisions taken this session (AskUserQuestion):** Morning prose ≤10 min after each read
+(new Tier A cascade); per-card prose only for actionable + status-changed rows; schema Q1 hard
+error, Q2 soft cap on Tier B; **confidence renders** — owner leaning all states, staff recommended
+`low`-only marker (silence convention), **variant still open, does not block P0**; **honesty chip
+dropped** from the AI roadmap (deterministic chip later, noted on #404).
+
+**What landed:** proposal + schema edits; `planning/ai-next-user-stories.md` (stories + AC per
+task + definition of ready); SPRINT block rewritten — P0 split into P0a builder / P0c spike / P0b
+renderer, P2 into P2a pipeline / P2b cards / P2c triage, P1 after P2, `AI-NEXT-RETRO` for #409;
+`planning/README.md` index rows; comment on #404.
+
+**Next steps:** (1) owner confirms the confidence-render variant (one line, non-blocking);
+(2) team picks up `AI-NEXT-P0a` — everything it needs is in schema §2.4/§8 and US-P0a; (3) P0c
+spike must run in GitHub Actions or locally (Vertex creds), not from Claude cloud.
