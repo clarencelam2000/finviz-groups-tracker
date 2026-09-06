@@ -6,6 +6,54 @@
 ---
 
 
+## 2026-09-06 — PR #412 review, fix, and merge (AI-NEXT-P0a evidence pack)
+
+**Status: safe to close** — PR #412 merged to default; fixes verified with tests; one unrelated
+pre-existing failure filed as its own issue rather than scope-creeped into the PR.
+
+**What landed:** Code review of PR #412 (`scripts/evidence_pack.py` — the AI-NEXT-P0a evidence
+pack builder/registry/validator) surfaced two confirmed bugs, both fixed and pushed to the PR
+branch before merge:
+1. `setup_present` ORed together two Finviz field groups with different coverage-cliff start
+   dates (RSI/Volatility/RelVol/52W High from 2026-09-01 vs SMA20/SMA50/ATR from 2026-09-03).
+   During that 2-day gap this wrongly emitted the still-missing SMA fields as `null` instead of
+   omitting them, and skipped the required caveat note — contradicting the omitted-vs-null
+   contract the PR itself documents. Fixed by splitting into independent `rsi_block_present` /
+   `sma_block_present` flags, each gating only its own fields.
+2. The confidence-downgrade "field flagged in notes" check used a raw substring test, so the
+   field id `change` matched inside the routine no-prior-read note's "...what changed.",
+   forcing every `row.change` citation to `low` confidence on the common case of a ticker with
+   no prior read. Fixed with a word-boundary regex match.
+
+Both fixes have regression tests (`tests/test_evidence_pack.py`, +3 tests, 49 total). Full
+non-Playwright suite green (795/795) both before and after merge. `--check-schema` and
+`--dry-run` (the PR's own "owner should verify after merge" commands) both confirmed passing
+against the merged default branch.
+
+**CI:** the `test` job's pytest suite was green throughout. Its later `eval_ai.py --all` step
+failed on `data/ai/debug/2026-09-04.json` (`'Leisure' in output but not in input_blocks`,
+`industries.note`/`industries.rotation_map`) — confirmed pre-existing and unrelated to PR #412
+by reproducing it identically on the base branch with none of the PR's changes applied. Filed
+as **#414** rather than pulled into this PR's scope; needs someone to inspect that capture file
+and decide if it's a genuine hallucination or an `eval_ai.py` false positive.
+
+**Notable finding for the owner:** while checking whether PR #412's `AI-NEXT-P0c` spike
+(`scripts/spike_structured_output.py --limit 60`, real Gemini calls) could run from this cloud
+session, found `GOOGLE_API_KEY` and `VERTEX_API_KEY` already present as env vars here —
+contradicting the PR's (and `CLAUDE.md`'s Playwright-derived) assumption that Vertex creds are
+never available in a Claude Code cloud session. Deliberately did **not** spend against them:
+P0c's result is a recorded, hard-to-reverse decision (it selects the AI renderer design and the
+owner explicitly wanted to paste its output into a knowledge doc). Flagged to the owner directly
+and noted in the `AI-NEXT-P0c` SPRINT row; needs the owner to confirm the key is meant for this
+before anyone runs it.
+
+**Next steps:** (1) owner decides whether to authorize running `AI-NEXT-P0c` from this
+environment or run it themselves per the PR's original instructions; (2) someone looks at issue
+#414's hallucination flag; (3) once P0c's drop-rate table lands, `AI-NEXT-P0b`/`P2a` unblock per
+the SPRINT ordering.
+---
+
+
 ## 2026-09-04 — Chart-toggle tap-target UX proposals + mock
 
 **Status: safe to close** — design-only, no code shipped, nothing blocking.
