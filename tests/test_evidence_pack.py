@@ -455,6 +455,18 @@ def test_rule1_slot_declared_but_unused_in_text():
     assert result["rejections"][0]["rule"] == "rule1_slot_unused"
 
 
+def test_rule1_catches_dotted_field_id_used_directly_as_placeholder():
+    # Regression: the AI-NEXT-P0c spike (2026-09-06) found gemini-3.5-flash writing the field
+    # id straight into text (e.g. "{row.status}") instead of a short slots-mapped name, with
+    # slots left empty. The old letters-only _SLOT_RE didn't match the dot, so this pattern was
+    # invisible to Rule 1 and slipped through validate() as if it had no placeholders at all —
+    # the literal, unsubstituted "{row.status}" text would have rendered to a real user.
+    pack = _pack_with_fields()
+    stmt = _stmt(text="Status is now {row.status}.", slots={}, cites=["row.rel_volume"])
+    result = validate({"statements": [stmt]}, pack)
+    assert result["rejections"][0]["rule"] == "rule1_slot_undeclared"
+
+
 def test_rule2_slot_references_missing_field():
     pack = _pack_with_fields()
     stmt = _stmt(slots={"rank": "row.does_not_exist"})

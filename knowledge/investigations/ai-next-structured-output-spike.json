@@ -1,0 +1,2326 @@
+{
+  "model": "gemini-3.5-flash",
+  "backend": "vertex_express",
+  "seed": 20260906,
+  "summary": {
+    "all": {
+      "n": 60,
+      "first_try": 2,
+      "after_retry": 0,
+      "dropped": 54,
+      "api_error": 4,
+      "drop_rate_pct": 90.0,
+      "first_try_pct": 3.3,
+      "latency_median_s": 141.44,
+      "latency_p90_s": 288.79
+    },
+    "full": {
+      "n": 30,
+      "first_try": 1,
+      "after_retry": 0,
+      "dropped": 27,
+      "api_error": 2,
+      "drop_rate_pct": 90.0,
+      "first_try_pct": 3.3,
+      "latency_median_s": 130.26,
+      "latency_p90_s": 274.52
+    },
+    "thin": {
+      "n": 30,
+      "first_try": 1,
+      "after_retry": 0,
+      "dropped": 27,
+      "api_error": 2,
+      "drop_rate_pct": 90.0,
+      "first_try_pct": 3.3,
+      "latency_median_s": 153.59,
+      "latency_p90_s": 317.34
+    },
+    "by_rule": {
+      "rule1_slot_undeclared": 53,
+      "rule2_cite_unresolved": 1
+    },
+    "selected_design": "renderer-owned templates (model returns kind + cites only)",
+    "threshold_cohort": "full",
+    "statuses": [
+      "failed_breakout",
+      "gapped_through",
+      "invalidated",
+      "reclaim",
+      "setting_up",
+      "triggered"
+    ],
+    "n_status_changed": 37
+  },
+  "results": [
+    {
+      "subject": "NTRA",
+      "as_of": "2026-09-03",
+      "session": "morning",
+      "cohort": "full",
+      "status": "failed_breakout",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 188.76415548699995,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The stock's status has shifted from {prior_status} to {status}, indicating that the recent breakout attempt has failed to hold.",
+            "slots": {},
+            "cites": [
+              "prior.status",
+              "row.status",
+              "derived.status_changed"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, shorting this breakdown is risky as the price remains just {sma20_dist} above its 20MA on a very light {rel_vol} relative volume.",
+            "slots": {},
+            "cites": [
+              "row.sma20_dist",
+              "row.rel_volume",
+              "derived.sma20_ext_atr"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "TS",
+      "as_of": "2026-09-03",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "gapped_through",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 131.26362715700003,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "Since the {prior_session} read, {ticker} has moved just {price_change_since_prior} to remain in its gapped through status, showing that the gap lacks intraday follow-through.",
+            "slots": {},
+            "cites": [
+              "  "
+            ],
+            "confidence": "low"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "KRYS",
+      "as_of": "2026-09-04",
+      "session": "morning",
+      "cohort": "full",
+      "status": "invalidated",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 41.673046199,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The setup has been {status} from its previous {prior_status} stance after a {price_change} decline, meaning the immediate breakout thesis has broken down.",
+            "slots": {},
+            "cites": [
+              "row.status",
+              "prior.status",
+              "derived.price_change_since_prior"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "Any entry here ignores that the stock's performance is already at {r_at_price} of planned risk after breaching its stop of {stop}.",
+            "slots": {},
+            "cites": [
+              "derived.r_at_price",
+              "row.stop"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "QGEN",
+      "as_of": "2026-09-04",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "reclaim",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 288.787208338,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "After being invalidated in the morning, {ticker} reclaimed its prior low of {ref_val}, triggering a potential failed breakdown setup.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "row.reclaim_ref_value",
+              "prior.status",
+              "prior.session",
+              "row.status",
+              "context:session_rows#QGEN"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, this move lacks institutional sponsorship, as relative volume is exceptionally dry at {rel_vol}.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "row.reclaim_ref_value"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, this move lacks institutional sponsorship, as relative volume is exceptionally dry at {rel_vol}.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "JEF",
+      "as_of": "2026-09-04",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "triggered",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 171.7894218130001,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "{ticker} has transitioned from {prior_status} to {status} above its {trigger} level after a {price_change}% rise since the {prior_session} read.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "prior.status",
+              "row.status",
+              "row.trigger",
+              "derived.price_change_since_prior",
+              "prior.session"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, relative volume is low at {rel_vol}, and buying now means {r_used} of your planned R has already been spent.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume",
+              "derived.r_at_price"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "DT",
+      "as_of": "2026-09-04",
+      "session": "morning",
+      "cohort": "full",
+      "status": "setting_up",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 254.98874188799994,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "DT has declined {price_change} since the prior read, reverting from triggered to setting up to offer a cheaper entry closer to its planned stop.",
+            "slots": {},
+            "cites": [
+              "                                  All                  $\frac{            1                                        C            *          To              1    1        2        2    _            \\    1      22                          <b>A                                1  #                                                        */                                                              _                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        2                                                                          "
+            ],
+            "confidence": "medium"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "HNGE",
+      "as_of": "2026-09-04",
+      "session": "morning",
+      "cohort": "full",
+      "status": "setting_up",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 129.26525253599993,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "HNGE transitioned from {prior_status} to {current_status} as it gained {price_change_since_prior} since the prior read, tightening its consolidation to within {pct_of_52w_high} of its 52W High.",
+            "slots": {},
+            "cites": [
+              "              W.                                                                    </  {        0              ================                      But                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  $                                                          28.05.2014        0              0                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                An updated layout configuration can be achieved using options dynamic_ui & custom_fields in the layout_style field of unified_campaign_option.  * **type** (`String`) \u2014 Required: True - This value must be specified as `custom`.  * **widget_type** (`String`) \u2014 Type of widget to build. For some chart types, many widgets could, for example, "
+            ],
+            "confidence": "medium"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "YPF",
+      "as_of": "2026-09-03",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "failed_breakout",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 46.504018390000056,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "After being {prior_status} earlier, the stock has collapsed into a {current_status} after a {price_change_since_prior} move that leaves it just {stop_gap_pct} above the planned stop.",
+            "slots": {},
+            "cites": [],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "Buying this pullback is highly risky because almost all other industry peers have invalidated today, and a further decline of just {stop_gap_pct} will trigger the planned stop.",
+            "slots": {},
+            "cites": [],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "KNTK",
+      "as_of": "2026-09-03",
+      "session": "morning",
+      "cohort": "full",
+      "status": "reclaim",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 25.936428256000227,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The stock has reclaimed its {reclaim_ref} at {reclaim_ref_val} after being previously invalidated, establishing a highly defined risk profile with a stop gap of only {stop_gap}.",
+            "slots": {},
+            "cites": [
+              "row.reclaim_ref",
+              "row.reclaim_ref_value",
+              "derived.stop_gap_pct",
+              "prior.status",
+              "row.status"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, trading this setup carries risk because relative volume is exceptionally quiet at {rel_volume}, showing a lack of institutional interest to support the reclaim.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "SAN",
+      "as_of": "2026-09-03",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "gapped_through",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 35.76472643199986,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The gap-up has extended by {price_change} since the morning session, confirming the stock's upward momentum within an industry group that carries a high relative strength score of {rs_score}.",
+            "slots": {},
+            "cites": [
+              "derived.price_change_since_prior",
+              "group.rs_score",
+              "prior.session",
+              "row.status",
+              "context:industries#Banks - Diversified"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, chasing the move is risky because relative volume is low at {rel_volume} and you have already missed {r_used} R of the plan.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume",
+              "derived.r_at_price"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "KEX",
+      "as_of": "2026-09-03",
+      "session": "morning",
+      "cohort": "full",
+      "status": "triggered",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 173.3932651849998,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The setup has officially {status} from its previous {prior_status} state, signaling an active entry in the highly-ranked {group} sector.",
+            "slots": {},
+            "cites": [
+              "row.status",
+              "prior.status",
+              "row.group",
+              "group.rank_month"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, extremely thin relative volume at {rel_vol} suggests the move lacks the institutional conviction typically required for a sustainable breakout.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "CAH",
+      "as_of": "2026-09-03",
+      "session": "morning",
+      "cohort": "full",
+      "status": "gapped_through",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 117.7205736259998,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "CAH has gained {derived.price_change_since_prior} since the prior read, solidifying its bullish stance as a {row.status} play within the highly-ranked {row.group} sector.",
+            "slots": {},
+            "cites": [
+              "We, text}}   "
+            ],
+            "confidence": "low"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "BMRN",
+      "as_of": "2026-09-03",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "gapped_through",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 153.6865191620002,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The stock faded {price_decay} from its morning level to trade just {atr_from_lod} ATR above its low of the day, showing that early interest has dried up.",
+            "slots": {},
+            "cites": [
+              "derived.price_change_since_prior",
+              "row.atr_from_lod"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "Entering now is risky because relative volume is a sluggish {rel_volume} and the price has slipped {trigger_gap} below its trigger.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume",
+              "derived.trigger_gap_pct"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "EXEL",
+      "as_of": "2026-09-03",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "triggered",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 39.10138156999983,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "Having transitioned from {prior_status} to {status} upon clearing {trigger}, {ticker} now offers an active breakout entry in the strong {group} group.",
+            "slots": {},
+            "cites": [
+              "prior.status",
+              "row.status",
+              "row.trigger",
+              "row.ticker",
+              "row.group",
+              "group.rs_score"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, this breakout occurs on weak relative volume of {rel_vol} while already being {sma20_ext} ATRs extended from its 20MA.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume",
+              "derived.sma20_ext_atr"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "SMMT",
+      "as_of": "2026-09-03",
+      "session": "morning",
+      "cohort": "full",
+      "status": "gapped_through",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 294.1897473369995,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "SMMT has gapped through its trigger and now trades {trigger_gap} above it, meaning a buyer must chase the entry by {r_used} R vs the original setup.",
+            "slots": {},
+            "cites": [
+              "          -                                                                                                        1                            1                            $                                                                                                                                                $                                  *                $                            $                                                  $                                                                                                    -                                              1. The      A                                                '7            1        2                                                                                                                                                      "
+            ],
+            "confidence": "medium"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "PCVX",
+      "as_of": "2026-09-04",
+      "session": "morning",
+      "cohort": "full",
+      "status": "reclaim",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 65.76839514699986,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The ticker has extended its gain to {price} while maintaining its reclaim of the {reclaim_ref}, showing strength within the leading {group} group.",
+            "slots": {},
+            "cites": [
+              "row.price",
+              "row.reclaim_ref",
+              "row.group",
+              "prior.price",
+              "derived.price_change_since_prior",
+              "group.rank_month"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, relative volume is extremely light at {rel_volume}, suggesting the move lacks the institutional backing needed to sustain it.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "VOYA",
+      "as_of": "2026-09-03",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "triggered",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 180.03488098900016,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "Although {ticker} remains triggered near its 52W High, the afternoon price change of {price_change} on thin relative volume of {rel_vol} shows a lack of immediate buying pressure.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "derived.price_change_since_prior",
+              "row.rel_volume",
+              "row.status",
+              "row.pct_of_52w_high"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "An entry here is highly vulnerable to failure because the stock is already extended {sma20_ext} ATRs from its 20MA on extremely weak relative volume of {rel_vol}.",
+            "slots": {},
+            "cites": [
+              "derived.sma20_ext_atr",
+              "row.rel_volume"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "SMFG",
+      "as_of": "2026-09-03",
+      "session": "morning",
+      "cohort": "full",
+      "status": "gapped_through",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 72.73674397400009,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "This leader has gapped through its trigger and already moved {r_used} R past the entry, fueled by a diversified banking group that climbed {rank_delta} spots in rank over five sessions.",
+            "slots": {},
+            "cites": [
+              "Doi-2007",
+              "Patterson-2006",
+              "Ghebregziabher-2015",
+              "Chaurasiya-2019",
+              "Xiong-2004",
+              "Obeid-2011",
+              "Perez-Rovira-2015",
+              "Honeine-2016",
+              "Lechheb-2017"
+            ],
+            "confidence": "low"
+          },
+          {
+            "kind": "read",
+            "text": "The patient with functional microcytic anemia due to an iron-refractory anemia was treated with iron sucrose infusion.",
+            "slots": {},
+            "cites": [
+              "Patel-2015"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "read",
+            "text": "The other was treated with non-specific, multiple blood transfusions with the response of only a transient rise in hemoglobin followed by recurrent drop in values.",
+            "slots": {},
+            "cites": [
+              "Patel-2015"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "read",
+            "text": "Overall, iron, vitamin B12, or even blood transfusions have yielded limited to negligible effects, resulting in short-term temporary improvement.",
+            "slots": {},
+            "cites": [
+              "Ghebregziabher-2015",
+              "Nishimura-2014"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "RBRK",
+      "as_of": "2026-09-04",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "triggered",
+      "status_changed": false,
+      "outcome": "api_error",
+      "latency": 283.1813913809997,
+      "error": "the JSON object must be str, bytes or bytearray, not NoneType"
+    },
+    {
+      "subject": "TGTX",
+      "as_of": "2026-09-04",
+      "session": "morning",
+      "cohort": "full",
+      "status": "invalidated",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 190.0859772470003,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "A slide below the {stop} planned stop has transitioned the stock from {prior_status} to {status}.",
+            "slots": {},
+            "cites": [
+              "row.stop",
+              "prior.status",
+              "row.status"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "Acting is highly discouraged because relative volume is exceptionally low at {rel_vol}, indicating a lack of buying pressure to force a reclaim of {stop}.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume",
+              "row.stop"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "MUFG",
+      "as_of": "2026-09-03",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "gapped_through",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 120.60676518700029,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "Although the price has eased slightly since the morning session, {ticker} maintains its strong gapped-through posture as its industry group climbed {group_rank_delta} spots in the monthly rankings.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "group.rank_month_delta_5d",
+              "prior.session",
+              "derived.status_changed",
+              "derived.price_change_since_prior",
+              "row.status"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, the entry is highly extended at {sma20_ext} ATRs above its 20MA, meaning you would be buying with {r_used} R of the setup's potential already gone.",
+            "slots": {},
+            "cites": [
+              "derived.sma20_ext_atr",
+              "derived.r_at_price"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "ZM",
+      "as_of": "2026-09-04",
+      "session": "morning",
+      "cohort": "full",
+      "status": "setting_up",
+      "status_changed": true,
+      "outcome": "api_error",
+      "latency": 252.5006917810001,
+      "error": "Expecting ':' delimiter: line 5966 column 13 (char 111811)"
+    },
+    {
+      "subject": "YPF",
+      "as_of": "2026-09-03",
+      "session": "morning",
+      "cohort": "full",
+      "status": "triggered",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 274.5158931570004,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The stock has pushed {price_change} higher since the prior read, maintaining its triggered status while its industry group has climbed to rank {group_rank} after a major rank jump of {group_rank_delta} spots over the last week.",
+            "slots": {},
+            "cites": [
+              ";                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          $                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                <b>  /* Define target path of output data relative to output directory.  */  </em>  const unsigned char data_name_out[] = "
+            ],
+            "confidence": "medium"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "OSCR",
+      "as_of": "2026-09-03",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "triggered",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 31.518934129999707,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The stock's industry group, {group}, has surged {rank_chg} spots in rank over recent sessions, confirming that the stock's {price_chg} price extension since the prior read builds on a valid, industry-wide tailwind.",
+            "slots": {},
+            "cites": [
+              "row.group",
+              "group.rank_month_delta_5d",
+              "derived.price_change_since_prior"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "Relative volume of just {rel_vol} suggests that this move lacks institutional participation and could easily fail.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "DHR",
+      "as_of": "2026-09-03",
+      "session": "morning",
+      "cohort": "full",
+      "status": "failed_breakout",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 178.3188907460003,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "DHR deteriorated to a {status} status at {price}, leaving a narrow buffer of only {gap} to your planned stop.",
+            "slots": {},
+            "cites": [
+              "                      &              </tr>                                </                                                </section>                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            <td>    </td>    <td>                                                                                                                                                                                                                                                                                                                                                                                                                                                          * [Dolphin - H80 (G3/P3)](http://wikitandao.atlassian.net/wiki/display/DEV/Dolphin+-+H80+%28G3-P3%29) (from kernel 3.10.x to 4.9.y).  What do you recommend as the best practice path upstream/downstream for the LTS-kernel transition for AP AP9222/AP9220? Wait for 5.15/6.1 to be LTS in an upcoming release, or what? Thank you.  - **msc** / May 16, 2022 / 21:03:00 / #2799797: Hello, I have an AP9222 network card currently running with AP9619. Its latest firmware is apc_hw02_aos373_sumx372.bin right? I checked  https://www.apc.com/shop/id/en/products/Network-Management-Card-with-Environmental-Monitoring/P-AP9619 and only "
+            ],
+            "confidence": "medium"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "KNTK",
+      "as_of": "2026-09-04",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "reclaim",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 33.757908570999916,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "KNTK has extended its reclaim of the {reclaim_ref_value} support level with a {price_change_since_prior} price increase since the morning session, signaling constructive intraday continuation with a tight {stop_gap_pct} risk window.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "row.reclaim_ref_value",
+              "derived.price_change_since_prior",
+              "derived.stop_gap_pct",
+              "row.status",
+              "prior.session"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, this upward drift is trading on low relative volume of {rel_volume}, suggesting a lack of institutional conviction that could lead to a quick reversal.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "row.rel_volume"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "MEDP",
+      "as_of": "2026-09-03",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "gapped_through",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 35.493464344999666,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "While {row.ticker} slipped {derived.price_change_since_prior} since the prior session, its gap-through setup remains intact as the stock trades just {derived.trigger_gap_pct} from the trigger.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "derived.price_change_since_prior",
+              "derived.trigger_gap_pct",
+              "row.status"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, taking the trade is highly suspect given the lackluster relative volume of {row.rel_volume} and the fact that the price is still below its 20MA by {row.sma20_dist}.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume",
+              "row.sma20_dist"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "RDNT",
+      "as_of": "2026-09-03",
+      "session": "morning",
+      "cohort": "full",
+      "status": "invalidated",
+      "status_changed": true,
+      "outcome": "first_try",
+      "attempts": 1,
+      "latency": 16.114064078999945,
+      "rules": [],
+      "statements": [
+        {
+          "kind": "read",
+          "text": "The shift to an {row.status} status after a {derived.price_change_since_prior} drop means the previous breakout attempt has officially failed.",
+          "slots": {},
+          "cites": [
+            "row.status",
+            "derived.price_change_since_prior",
+            "prior.status"
+          ],
+          "confidence": "high"
+        },
+        {
+          "kind": "catch",
+          "text": "Buying the dip is discouraged since the price has closed just {row.atr_from_lod} ATR from its low of the day and has already fallen {derived.stop_gap_pct} below the planned stop.",
+          "slots": {},
+          "cites": [
+            "row.atr_from_lod",
+            "derived.stop_gap_pct",
+            "row.stop"
+          ],
+          "confidence": "high"
+        }
+      ],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The shift to an {row.status} status after a {derived.price_change_since_prior} drop means the previous breakout attempt has officially failed.",
+            "slots": {},
+            "cites": [
+              "row.status",
+              "derived.price_change_since_prior",
+              "prior.status"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "Buying the dip is discouraged since the price has closed just {row.atr_from_lod} ATR from its low of the day and has already fallen {derived.stop_gap_pct} below the planned stop.",
+            "slots": {},
+            "cites": [
+              "row.atr_from_lod",
+              "derived.stop_gap_pct",
+              "row.stop"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "ILMN",
+      "as_of": "2026-09-03",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "triggered",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 132.3498382130001,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "Reversing its morning {prior_status}, {ticker} has climbed {chg_since} to become {current_status}.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "prior.status",
+              "prior.session",
+              "derived.price_change_since_prior",
+              "row.status"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, relative volume is soft at {rel_vol}, and the price is already extended {ext_50} ATRs from its 50MA.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume",
+              "derived.sma50_ext_atr"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "RNR",
+      "as_of": "2026-09-03",
+      "session": "pre_close",
+      "cohort": "full",
+      "status": "triggered",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 33.51901163899993,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "With {ticker} remaining {status} after rising to {price}, the setup is validated by its industry group climbing {rank_delta} spots to rank {rank}.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "row.status",
+              "row.price",
+              "prior.price",
+              "prior.status",
+              "group.rank_month_delta_5d",
+              "group.rank_month"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, relative volume is low at {rel_vol}, and entering now means chasing a stock that is already {sma20_ext} ATRs above its 20MA.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume",
+              "derived.sma20_ext_atr"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "ESTC",
+      "as_of": "2026-08-10",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "triggered",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 160.8398195639993,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The setup has triggered as a {chg} daily gain carries the price above {trig}, signaling active buying pressure at the breakout point.",
+            "slots": {},
+            "cites": [
+              "                                                                                                                          "
+            ],
+            "confidence": "medium"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "RRC",
+      "as_of": "2026-08-20",
+      "session": "pre_close",
+      "cohort": "thin",
+      "status": "failed_breakout",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 163.40173957500065,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "Since the {prior_session} read, {ticker} has degraded from {prior_status} to a {current_status}, indicating that the morning's bullish momentum has dissipated.",
+            "slots": {},
+            "cites": [
+              "prior.session",
+              "row.ticker",
+              "prior.status",
+              "row.status",
+              "derived.status_changed"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "Taking a long position is contraindicated by the {current_status} status, yet shorting is risky because the underlying {group} group ranks near the top at {group_rank}.",
+            "slots": {},
+            "cites": [
+              "row.status",
+              "row.group",
+              "group.rank_month",
+              "group.rs_score",
+              "group.momentum_score"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "SYRE",
+      "as_of": "2026-08-19",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "gapped_through",
+      "status_changed": true,
+      "outcome": "api_error",
+      "latency": 300.37596452100024,
+      "error": "Server disconnected without sending a response."
+    },
+    {
+      "subject": "CNX",
+      "as_of": "2026-08-24",
+      "session": "pre_close",
+      "cohort": "thin",
+      "status": "failed_breakout",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 137.2251858289992,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "{ticker} transitioned from {prior_status} to {status} after its price dropped {price_chg} since the {prior_session} read.",
+            "slots": {},
+            "cites": [],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "Entering this trade now is highly suspect because the setup has already triggered a {status_current}, and the long thesis will be completely invalidated if price breaches the planned stop at {stop}.",
+            "slots": {},
+            "cites": [],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "AM",
+      "as_of": "2026-08-31",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "reclaim",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 317.3442782729999,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "Reclaiming the 50MA on a {change} daily gain suggests that {ticker} is attempting to stabilize and turn the corner.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "row.change",
+              "row.status",
+              "row.reclaim_ref"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, the narrow {stop_gap} margin to the planned stop leaves very little cushion to withstand normal intraday noise.",
+            "slots": {},
+            "cites": [
+              "derived.stop_gap_pct",
+              "derived.stop_gap_atr"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "BSY",
+      "as_of": "2026-08-21",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "setting_up",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 39.31429858499996,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "After a prior {prior.status}, {row.ticker} has transitioned back to a {row.status} posture, indicating the breakdown has paused.",
+            "slots": {},
+            "cites": [
+              "prior.status",
+              "row.ticker",
+              "row.status",
+              "derived.status_changed"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, the setup faces industry headwinds, with the {row.group} group experiencing a {group.rank_month_delta_5d} shift in its monthly rank.",
+            "slots": {},
+            "cites": [
+              "row.group",
+              "group.rank_month_delta_5d",
+              "context:industries#Software - Application"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "DHR",
+      "as_of": "2026-09-02",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "reclaim",
+      "status_changed": true,
+      "outcome": "first_try",
+      "attempts": 1,
+      "latency": 14.430398860999958,
+      "rules": [],
+      "statements": [
+        {
+          "kind": "read",
+          "text": "DHR has shifted from {prior.status} to a {row.status} setup after recovering above its {row.reclaim_ref_value} {row.reclaim_ref}, suggesting the previous breakdown has failed.",
+          "slots": {},
+          "cites": [
+            "prior.status",
+            "row.status",
+            "row.reclaim_ref_value",
+            "row.reclaim_ref"
+          ],
+          "confidence": "high"
+        },
+        {
+          "kind": "catch",
+          "text": "However, the move lacks institutional conviction as relative volume is currently running at only {row.rel_volume}.",
+          "slots": {},
+          "cites": [
+            "row.rel_volume"
+          ],
+          "confidence": "low",
+          "thin": [
+            "fewer than two distinct fields"
+          ]
+        }
+      ],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "DHR has shifted from {prior.status} to a {row.status} setup after recovering above its {row.reclaim_ref_value} {row.reclaim_ref}, suggesting the previous breakdown has failed.",
+            "slots": {},
+            "cites": [
+              "prior.status",
+              "row.status",
+              "row.reclaim_ref_value",
+              "row.reclaim_ref"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, the move lacks institutional conviction as relative volume is currently running at only {row.rel_volume}.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "VRSN",
+      "as_of": "2026-08-26",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "failed_breakout",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 168.176211901,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The setup for {ticker} transitioned from {prior_status} to {current_status}, indicating that the breakout has failed and the immediate upward momentum is gone.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "prior.status",
+              "row.status"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "Arguing against acting is the deteriorating industry strength, with the group rank shifting by {rank_delta} recently.",
+            "slots": {},
+            "cites": [
+              "group.rank_month_delta_5d"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "VOYA",
+      "as_of": "2026-08-28",
+      "session": "pre_close",
+      "cohort": "thin",
+      "status": "triggered",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 118.32856703599919,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "Since the {prior_session} read, {ticker} has transitioned from {prior_status} to {status} as the price rose to {price}.",
+            "slots": {},
+            "cites": [
+              "  </th>     1  0  "
+            ],
+            "confidence": "medium"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "NET",
+      "as_of": "2026-09-01",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "reclaim",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 146.34044100999927,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "A pullback of {price_chg}% from its trigger has NET reclaiming its prior swing low at {reclaim_level}, positioning the stock for a low-risk entry just {stop_gap}% above its planned stop.",
+            "slots": {},
+            "cites": [
+              "      1      A                  \n  1              Let  By            1  "
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "BNS",
+      "as_of": "2026-09-01",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "reclaim",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 277.7187062109997,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The stock's reclaim of its {ref_type} remains intact just {pct_to_52w} from its 52W High, supported by its industry group's relative strength reaching a new high after rising {rank_delta} spots.",
+            "slots": {},
+            "cites": [
+              "row.reclaim_ref",
+              "row.pct_of_52w_high",
+              "group.rank_month_delta_5d",
+              "group.rs_new_high",
+              "context:industries"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, a very low relative volume of {rel_vol} suggests a complete lack of buying enthusiasm that could easily lead to a failed setup.",
+            "slots": {},
+            "cites": [
+              "row.rel_volume"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "CCEP",
+      "as_of": "2026-08-25",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "setting_up",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 35.12604913500036,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "With {ticker} shifting from {prior_status} to {current_status}, the stock has digested its gap-up and is now consolidating with a tight {stop_gap} distance to its planned stop.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "prior.status",
+              "row.status",
+              "derived.stop_gap_pct",
+              "derived.status_changed"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "Against this setup is its membership in the {group} group, which sits at a middling {group_rank} rank and lacks relative strength with a score of {group_rs_score}.",
+            "slots": {},
+            "cites": [
+              "row.group",
+              "group.rank_month",
+              "group.rs_score",
+              "group.rs_month"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "EQH",
+      "as_of": "2026-09-01",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "reclaim",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 116.35789304900027,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "EQH continues to hold its reclaim of the prior swing low at {ref_val} despite drifting {price_drift} lower since the prior read, leaving a tight risk profile of just {stop_gap} to its planned stop.",
+            "slots": {},
+            "cites": [
+              "row.reclaim_ref_value",
+              "derived.price_change_since_prior",
+              "derived.stop_gap_pct",
+              "prior.session",
+              "row.reclaim_ref"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, the {group} group has deteriorated with a rank change of {group_drop} spots recently, and the setup lacks participation with relative volume at just {rel_vol}.",
+            "slots": {},
+            "cites": [
+              "row.group",
+              "group.rank_month_delta_5d",
+              "row.rel_volume",
+              "context:industries#Asset Management"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "NVT",
+      "as_of": "2026-08-27",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "gapped_through",
+      "status_changed": false,
+      "outcome": "api_error",
+      "latency": 276.357970258,
+      "error": "Expecting property name enclosed in double quotes: line 2 column 614779 (char 614999)"
+    },
+    {
+      "subject": "SYRE",
+      "as_of": "2026-08-24",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "setting_up",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 269.0886174799998,
+      "rules": [
+        "rule2_cite_unresolved"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "Since the {prior.session}, {row.ticker} has transitioned from {prior.status} to a {row.status} posture as its price changed by {derived.price_change_since_prior}.",
+            "slots": {},
+            "cites": [
+              "14        }                18                                        6                                          2    6              1                              No                1  3    0                          1    1                        2                                    _          6    0              }  |    224                                      6                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      $                                                                            $                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        }  */  /*  */  /*  */          }    }  /                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  $                                                                                                                                                                                                                                                                                                "
+            ],
+            "confidence": "medium"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "HSBC",
+      "as_of": "2026-08-31",
+      "session": "pre_close",
+      "cohort": "thin",
+      "status": "invalidated",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 34.7431617430002,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The shift from {prior_status} to {status} indicates that the bullish reclaim thesis has broken down as the price fell below the planned stop.",
+            "slots": {},
+            "cites": [
+              "prior.status",
+              "row.status",
+              "row.price",
+              "row.stop"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "ILMN",
+      "as_of": "2026-08-21",
+      "session": "pre_close",
+      "cohort": "thin",
+      "status": "failed_breakout",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 47.21224250299929,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "Since the {prior_session} read, {ticker} has shifted from {prior_status} to {status}, signaling that the intraday breakout attempt has failed to sustain itself above {trigger}.",
+            "slots": {},
+            "cites": [
+              "prior.session",
+              "row.ticker",
+              "prior.status",
+              "row.status",
+              "row.trigger"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "Entering now is dangerous because the stock's range has already stretched to {range_atr} ATR today, leaving buyers vulnerable to a pullback toward the {stop} stop which is {stop_gap} away.",
+            "slots": {},
+            "cites": [
+              "derived.range_atr",
+              "row.stop",
+              "derived.stop_gap_pct"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "RVMD",
+      "as_of": "2026-08-26",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "invalidated",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 410.6075487400003,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "With the setup for {ticker} shifting from {prior_status} to {status}, the immediate long thesis is broken as the price has broken below the planned stop of {stop}.",
+            "slots": {},
+            "cites": [
+              "                                        +                                        *                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      $                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    *                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    "
+            ],
+            "confidence": "medium"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "MDGL",
+      "as_of": "2026-08-31",
+      "session": "pre_close",
+      "cohort": "thin",
+      "status": "reclaim",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 397.8868811800003,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "Having transitioned from {prior_status} to {status}, {ticker} has reclaimed its {reclaim_ref} of {reclaim_ref_value} to offer a long setup in the highly-ranked {group} industry.",
+            "slots": {},
+            "cites": [
+              "        A                _    -    \n</td>    "
+            ],
+            "confidence": "medium"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "CP",
+      "as_of": "2026-08-27",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "reclaim",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 44.49608084099964,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "CP has transitioned from {prior_status} to reclaim its {reclaim_ref_val} swing low, presenting a tight risk setup with the planned stop only {stop_gap_pct} away.",
+            "slots": {},
+            "cites": [
+              "prior.status",
+              "row.reclaim_ref_value",
+              "derived.stop_gap_pct",
+              "row.status"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, you are trading against a deteriorating industry backdrop, as the {group} group has suffered a {group_rank_delta} rank change and sits at a weak monthly rank of {group_rank}.",
+            "slots": {},
+            "cites": [
+              "row.group",
+              "group.rank_month_delta_5d",
+              "group.rank_month"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "CLS",
+      "as_of": "2026-08-10",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "gapped_through",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 29.435839321999993,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The stock has {status} its planned {trigger} trigger to trade higher, but chasing it here means you have already given up {r_used} of the trade's planned risk-reward ratio.",
+            "slots": {},
+            "cites": [
+              "row.status",
+              "row.trigger",
+              "derived.r_at_price"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "The major warning is the weak and deteriorating {group} industry group, which currently ranks near the bottom of all groups at {group_rank} and has a negative relative strength of {group_rs}.",
+            "slots": {},
+            "cites": [
+              "row.group",
+              "group.rank_month",
+              "group.rs_month",
+              "context:industries"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "IMVT",
+      "as_of": "2026-08-26",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "invalidated",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 183.35929285600014,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The setup for {row.ticker} has transitioned from {prior.status} to {row.status} because the price has broken below the planned stop at {row.stop}.",
+            "slots": {},
+            "cites": [
+              "              'I                                                                  _                        124                                                </code>            10                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                *                                                                                                *                                                                                                                                                                                                                                        $                                          * non_standard_field_4 (  bytes): String variable. This variable contains data supplied directly  by the user through physical input  or is otherwise  assigned to the resource.  The  value  of  this  property  is  ignored  when  the  resource  is  written  or  modified.  Any  input  values  written  to this  property  will  be  ignored.  The  property  is  only  present  in  responses  when  the  user  has  explicitly  asked  for  it  by  using  the  `$select`  query  option.  See  [Common  Parameters](https://learn.microsoft.com/en-us/graph/query-parameters#select-parameter)  for  details.  |  `boolean`  | Read-only. True if and only if the item user role is not null. |  `null`  | [ ] | [ ] | [] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] | [ ] |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  Total. 2  168  62  105  105  120  121  123  126  122  102  102  104  103  103  110  110  106  109  106  106  109  109  109  110  110  110  108  108  108  109  110  111  112  111  112  111  111  111  111  111  112  112  112  113  113  113  113  113  113  113  114  114  114  115  115  115  115  115  115  116  116  117  118  118  119  118  118  118  118  118  118  118  118  118  118  118  118  118  119  119  119  119  119  119  119  119  119  119  119  119  119  119  119  119  119  119  119  119  119  119  119  119  119  119  120  120  120  121  121  121  122  122  122  123  123  123  124  124  124  125  125  125  126  126  126  127  127  127  127  128  128  128  129  129  129  129  130  130  130  131  131  131  132  132  132  132  133  133  133  134  134  134  134  135  135  135  136  136  136  137  137  137  137  138  138  138  139  139  139  139  140  140  140  141  141  141  141  142  142  142  143  143  143  143  144  144  144  145  145  145  145  146  146  146  147  147  147  147  148  148  148  149  149  149  149  150  150  150  151  151  151  151  152  152  152  153  153  153  153  154  154  154  155  155  155  155  156  156  156  157  157  157  157  158  158  158  159  159  159  159  160  160  160  161  161  161  161  162  162  162  163  163  163  163  164  164  164  165  165  165  165  166  166  166  167  167  167  167  168  168  168  169  169  169  169  170  170  170  171  171  171  171  172  172  172  173  173  173  173  174  174  174  175  175  175  175  176  176  176  177  177  177  177  178  178  178  179  179  179  179  180  180  180  181  181  181  181  182  182  182  183  183  183  183  184  184  184  185  185  185  185  186  186  186  187  187  187  187  188  188  188  189  189  189  189  190  190  190  191  191  191  191  192  192  192  193  193  193  193  194  194  194  195  195  195  195  196  196  196  197  197  197  197  198  198  198  199  199  199  199  200  200  200  201  201  201  201  202  202  202  203  203  203  203  204  204  204  205  205  205  205  206  206  206  207  207  207  207  208  208  208  209  209  209  209  210  210  210  211  211  211  211  212  212  212  213  213  213  213  214  214  214  215  215  215  215  216  216  216  217  217  217  217  218  218  218  219  219  219  219  220  220  220  221  221  221  221  222  222  222  223  223  223  223  224  224  224  225  225  225  225  226  226  226  227  227  227  227  228  228  228  229  229  229  229  230  230  230  231  231  231  231  232  232  232  233  233  233  233  234  234  234  235  235  235  235  236  236  236  237  237  237  237  238  238  238  239  239  239  239  240  240  240  241  241  241  241  242  242  242  243  243  243  243  244  244  244  245  245  245  245  246  246  246  247  247  247  247  248  248  248  249  249  249  249  250  250  250  251  251  251  251  252  252  252  253  253  253  253  254  254  254  255  255  255  255  ];    // B-Y weight table for 1/3 sampling is same with Y-B except value, but same index used here for readability.  const int weight_u_avg_tab[512] = {    -12, -12, -12, -12, -12, -12, -12, -12, -11, -11, -11, -11, -11, -11, -11, -11,    -10, -10, -10, -10, -10, -10, -10, -10,  -9,  -9,  -9,  -9,  -9,  -9,  -9,  -9,     -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -7,  -7,  -7,  -7,  -7,  -7,  -7,  -7,     -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,     -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -3,  -3,  -3,  -3,  -3,  -3,  -3,  -3,     -2,  -2,  -2,  -2,  -2,  -2,  -2,  -2,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,      0,   0,   0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,      2,   2,   2,   2,   2,   2,   2,   2,   3,   3,   3,   3,   3,   3,   3,   3,      4,   4,   4,   4,   4,   4,   4,   4,   5,   5,   5,   5,   5,   5,   5,   5,      6,   6,   6,   6,   6,   6,   6,   6,   7,   7,   7,   7,   7,   7,   7,   7,      8,   8,   8,   8,   8,   8,   8,   8,   9,   9,   9,   9,   9,   9,   9,   9,     10,  10,  10,  10,  10,  10,  10,  10,  11,  11,  11,  11,  11,  11,  11,  11,     12,  12,  12,  12,  12,  12,  12,  12,  13,  13,  13,  13,  13,  13,  13,  13,     14,  14,  14,  14,  14,  14,  14,  14,  15,  15,  15,  15,  15,  15,  15,  15,     16,  16,  16,  16,  16,  16,  16,  16,  17,  17,  17,  17,  17,  17,  17,  17,     18,  18,  18,  18,  18,  18,  18,  18,  19,  19,  19,  19,  19,  19,  19,  19,     20,  20,  20,  20,  20,  20,  20,  20,  21,  21,  21,  21,  21,  21,  21,  21,     22,  22,  22,  22,  22,  22,  22,  22,  23,  23,  23,  23,  23,  23,  23,  23,     24,  24,  24,  24,  24,  24,  24,  24,  25,  25,  25,  25,  25,  25,  25,  25,     26,  26,  26,  26,  26,  26,  26,  26,  27,  27,  27,  27,  27,  27,  27,  27,     28,  28,  28,  28,  28,  28,  28,  28,  29,  29,  29,  29,  29,  29,  29,  29,     30,  30,  30,  30,  30,  30,  30,  30,  31,  31,  31,  31,  31,  31,  31,  31,     32,  32,  32,  32,  32,  32,  32,  32,  33,  33,  33,  33,  33,  33,  33,  33,     34,  34,  34,  34,  34,  34,  34,  34,  35,  35,  35,  35,  35,  35,  35,  35,     36,  36,  36,  36,  36,  36,  36,  36,  37,  37,  37,  37,  37,  37,  37,  37,     38,  38,  38,  38,  38,  38,  38,  38,  39,  39,  39,  39,  39,  39,  39,  39,     40,  40,  40,  40,  40,  40,  40,  40,  41,  41,  41,  41,  41,  41,  41,  41,     42,  42,  42,  42,  42,  42,  42,  42,  43,  43,  43,  43,  43,  43,  43,  43,     44,  44,  44,  44,  44,  44,  44,  44,  45,  45,  45,  45,  45,  45,  45,  45,     46,  46,  46,  46,  46,  46,  46,  46,  47,  47,  47,  47,  47,  47,  47,  47,     48,  48,  48,  48,  48,  48,  48,  48,  49,  49,  49,  49,  49,  49,  49,  49,     50,  50,  50,  50,  50,  50,  50,  50,  51,  51,  51,  51,  51,  51,  51,  51  };    const int weight_v_avg_tab[512] = {    -12, -12, -12, -12, -12, -12, -12, -12, -11, -11, -11, -11, -11, -11, -11, -11,    -10, -10, -10, -10, -10, -10, -10, -10,  -9,  -9,  -9,  -9,  -9,  -9,  -9,  -9,     -8,  -8,  -8,  -8,  -8,  -8,  -8,  -8,  -7,  -7,  -7,  -7,  -7,  -7,  -7,  -7,     -6,  -6,  -6,  -6,  -6,  -6,  -6,  -6,  -5,  -5,  -5,  -5,  -5,  -5,  -5,  -5,     -4,  -4,  -4,  -4,  -4,  -4,  -4,  -4,  -3,  -3,  -3,  -3,  -3,  -3,  -3,  -3,     -2,  -2,  -2,  -2,  -2,  -2,  -2,  -2,  -1,  -1,  -1,  -1,  -1,  -1,  -1,  -1,      0,   0,   0,   0,   0,   0,   0,   0,   1,   1,   1,   1,   1,   1,   1,   1,      2,   2,   2,   2,   2,   2,   2,   2,   3,   3,   3,   3,   3,   3,   3,   3,      4,   4,   4,   4,   4,   4,   4,   4,   5,   5,   5,   5,   5,   5,   5,   5,      6,   6,   6,   6,   6,   6,   6,   6,   7,   7,   7,   7,   7,   7,   7,   7,      8,   8,   8,   8,   8,   8,   8,   8,   9,   9,   9,   9,   9,   9,   9,   9,     10,  10,  10,  10,  10,  10,  10,  10,  11,  11,  11,  11,  11,  11,  11,  11,     12,  12,  12,  12,  12,  12,  12,  12,  13,  13,  13,  13,  13,  13,  13,  13,     14,  14,  14,  14,  14,  14,  14,  14,  15,  15,  15,  15,  15,  15,  15,  15,     16,  16,  16,  16,  16,  16,  16,  16,  17,  17,  17,  17,  17,  17,  17,  17,     18,  18,  18,  18,  18,  18,  18,  18,  19,  19,  19,  19,  19,  19,  19,  19,     20,  20,  20,  20,  20,  20,  20,  20,  21,  21,  21,  21,  21,  21,  21,  21,     22,  22,  22,  22,  22,  22,  22,  22,  23,  23,  23,  23,  23,  23,  23,  23,     24,  24,  24,  24,  24,  24,  24,  24,  25,  25,  25,  25,  25,  25,  25,  25,     26,  26,  26,  26,  26,  26,  26,  26,  27,  27,  27,  27,  27,  27,  27,  27,     28,  28,  28,  28,  28,  28,  28,  28,  29,  29,  29,  29,  29,  29,  29,  29,     30,  30,  30,  30,  30,  30,  30,  30,  31,  31,  31,  31,  31,  31,  31,  31,     32,  32,  32,  32,  32,  32,  32,  32,  33,  33,  33,  33,  33,  33,  33,  33,     34,  34,  34,  34,  34,  34,  34,  34,  35,  35,  35,  35,  35,  35,  35,  35,     36,  36,  36,  36,  36,  36,  36,  36,  37,  37,  37,  37,  37,  37,  37,  37,     38,  38,  38,  38,  38,  38,  38,  38,  39,  39,  39,  39,  39,  39,  39,  39,     40,  40,  40,  40,  40,  40,  40,  40,  41,  41,  41,  41,  41,  41,  41,  41,     42,  42,  42,  42,  42,  42,  42,  42,  43,  43,  43,  43,  43,  43,  43,  43,     44,  44,  44,  44,  44,  44,  44,  44,  45,  45,  45,  45,  45,  45,  45,  45,     46,  46,  46,  46,  46,  46,  46,  46,  47,  47,  47,  47,  47,  47,  47,  47,     48,  48,  48,  48,  48,  48,  48,  48,  49,  49,  49,  49,  49,  49,  49,  49,     50,  50,  50,  50,  50,  50,  50,  50,  51,  51,  51,  51,  51,  51,  51,  51  };    #define  SCALE_U_Y(u,y)   (weight_u_y_tab[(u)] + weight_y_tab[(y)])  #define  SCALE_V_Y(v,y)   (weight_v_y_tab[(v)] + weight_y_tab[(y)])  #define  SCALE_U_AVG(u)   (weight_u_avg_tab[(u)])  #define  SCALE_V_AVG(v)   (weight_v_v_tab[(v)])    #define  CLIP(x) ( ((x) < 0) ? 0 : ((x) > 255) ? 255 : (x) )      /**************************************************************   *  *  yuv422_to_yuv444_c -- YUV422 to YUV444 conversion in C   *  *  This function converts a YUV422 image (packed YUYV   *  format) to YUV444. It uses 1:2:1 horizontal interpolation   *  to upsample U and V channels.   *   **************************************************************/  void yuv422_to_yuv444_c(unsigned char *src, unsigned char *dst, int width, int height)  {      int i, j;      int w_2 = width >> 1;      int pitch_src = width << 1;      int pitch_dst = width * 3;        for (i = 0; i < height; i++) {          unsigned char *psrc = src + i * pitch_src;          unsigned char *pdst = dst + i * pitch_dst;            /* First column */          pdst[0] = psrc[0];                            /* Y */          pdst[1] = psrc[1];                            /* U */          pdst[2] = psrc[3];                            /* V */            /* Second column */          pdst[3] = psrc[2];                            /* Y */          pdst[4] = (psrc[1] * 3 + psrc[5] + 2) >> 2;   /* U */          pdst[5] = (psrc[3] * 3 + psrc[7] + 2) >> 2;   /* V */            psrc += 4;          pdst += 6;            /* Inside columns */          for (j = 1; j < w_2 - 1; j++) {              /* Pixel 2*j */              pdst[0] = psrc[0];                        /* Y */              pdst[1] = (psrc[-3] + psrc[1] * 3 + 2) >> 2; /* U */              pdst[2] = (psrc[-1] + psrc[3] * 3 + 2) >> 2; /* V */                /* Pixel 2*j + 1 */              pdst[3] = psrc[2];                        /* Y */              pdst[4] = (psrc[1] * 3 + psrc[5] + 2) >> 2; /* U */              pdst[5] = (psrc[3] * 3 + psrc[7] + 2) >> 2; /* V */                psrc += 4;              pdst += 6;          }            /* Last column but one */          pdst[0] = psrc[0];                            /* Y */          pdst[1] = (psrc[-3] + psrc[1] * 3 + 2) >> 2;   /* U */          pdst[2] = (psrc[-1] + psrc[3] * 3 + 2) >> 2;   /* V */            /* Last column */          pdst[3] = psrc[2];                            /* Y */          pdst[4] = psrc[1];                            /* U */          pdst[5] = psrc[3];                            /* V */      }  }      /**************************************************************   *  *  yuv422_to_rgb24_c -- YUV422 to RGB24 conversion in C   *  *  This function converts a YUV422 image (packed YUYV   *  format) directly to RGB24, using 1:2:1 horizontal   *  interpolation to upsample U and V channels, and   *  look-up tables for color space conversion.   *   *  Output format is BGR24 (B, G, R, B, G, R, ...).   *   **************************************************************/  void yuv422_to_rgb24_c(unsigned char *src, unsigned char *dst, int width, int height)  {      int i, j;      int w_2 = width >> 1;      int pitch_src = width << 1;      ...      ... (details omitted for length)      ...  }  </code>  ---  *Originally, I thought CPU optimization was about shaving cycles, but now I know that **it's about hardware empathy, memory hierarchy, cache lines, and branch prediction**. Without these, you aren't really optimizing, you're just guessing.*  *The performance and behavior of these implementations on specific architectures (like x86 with SSE/AVX or ARM with NEON) will be explored and optimized further in subsequent modules.*   ---  ### 3.4 **A Unified Performance Benchmarking Framework**  This section defines the microbenchmarking framework used across all modules. It utilizes `std::chrono::high_resolution_clock` to measure total elapsed time and CPU cycles.  ```cpp  #ifndef PERFORMANCE_BENCHMARK_H  #define PERFORMANCE_BENCHMARK_H    #include <chrono>  #include <iostream>  #include <string>  #include <vector>  #include <numeric>  #include <algorithm>  #include <iomanip>  #if defined(_MSC_VER)  #include <intrin.h>  #elif defined(__x86_64__) || defined(__i386__)  #include <x86intrin.h>  #endif    class PerformanceTimer {  private:      std::chrono::high_resolution_clock::time_point start_time;      std::chrono::high_resolution_clock::time_point end_time;      unsigned long long start_cycles;      unsigned long long end_cycles;        static inline unsigned long long rdtsc() {  #if defined(_MSC_VER)          return __rdtsc();  #elif defined(__x86_64__) || defined(__i386__)          unsigned int lo, hi;          __asm__ __volatile__ (",
+              "=a",
+              "=d",
+              "g"
+            ],
+            "confidence": "medium"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "MTD",
+      "as_of": "2026-08-27",
+      "session": "pre_close",
+      "cohort": "thin",
+      "status": "failed_breakout",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 173.65295679600058,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The transition from {prior.status} to {row.status} indicates that the morning's breakout has failed to hold, with the price slipping by {derived.price_change_since_prior} since the prior session.",
+            "slots": {},
+            "cites": [
+              "S+ "
+            ],
+            "confidence": "medium"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "SUN",
+      "as_of": "2026-08-25",
+      "session": "pre_close",
+      "cohort": "thin",
+      "status": "invalidated",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 33.044609977999244,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The setup for {ticker} has changed from {prior_status} to {status} as the price slipped below the planned stop of {stop}.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "prior.status",
+              "row.status",
+              "row.stop"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "Although the {group} group ranks high at {group_rank}, the trade must be avoided as the price has fallen below the {stop} stop level with a {change} decline on the day.",
+            "slots": {},
+            "cites": [
+              "row.group",
+              "group.rank_month",
+              "row.stop",
+              "row.change"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "VAL",
+      "as_of": "2026-08-21",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "gapped_through",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 193.23129269400124,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The setup has shifted from {prior_status} to {current_status} because the price declined to {price}, marking a breakdown of the prior trigger.",
+            "slots": {},
+            "cites": [
+              "prior.status",
+              "row.status",
+              "row.price"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "The strongest reason to avoid this setup is that the price is hovering a mere {stop_gap_pct} above the planned stop of {stop} with virtually no cushion from the low of the day.",
+            "slots": {},
+            "cites": [
+              "derived.stop_gap_pct",
+              "row.stop",
+              "row.atr_from_lod"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "RVTY",
+      "as_of": "2026-08-21",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "failed_breakout",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 254.3829818719987,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The breakout on {ticker} has failed as its status shifted from {prior_status} to {current_status} following a decline below the {trigger} trigger.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "prior.status",
+              "row.status",
+              "row.trigger"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, holding or buying this dip is highly risky because the stock remains {stop_gap_pct} above its planned stop at {stop}.",
+            "slots": {},
+            "cites": [
+              "derived.stop_gap_pct",
+              "row.stop"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "DBX",
+      "as_of": "2026-08-18",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "triggered",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 145.6511051230009,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "The setup for {row.ticker} is now {row.status} as price has cleared the {row.trigger} level, meaning the breakout is now active.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "row.status",
+              "row.trigger",
+              "row.price"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, the trade lacks industry tailwinds as the {row.group} group rank shifted by {group.rank_month_delta_5d} recently.",
+            "slots": {},
+            "cites": [
+              "row.group",
+              "group.rank_month_delta_5d",
+              "group.rank_month"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "ADP",
+      "as_of": "2026-08-20",
+      "session": "pre_close",
+      "cohort": "thin",
+      "status": "triggered",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 43.958731200998955,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "Since the {prior_session} read, {ticker} has recovered from its {prior_status} to become {status} above the {trigger} level.",
+            "slots": {},
+            "cites": [
+              "prior.session",
+              "row.ticker",
+              "prior.status",
+              "row.status",
+              "row.trigger"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, the {group} group's momentum is slipping, with a recent rank change of {group_rank_delta} spots.",
+            "slots": {},
+            "cites": [
+              "row.group",
+              "group.rank_month_delta_5d",
+              "context:industries#Software - Application"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "ORCL",
+      "as_of": "2026-08-31",
+      "session": "pre_close",
+      "cohort": "thin",
+      "status": "reclaim",
+      "status_changed": true,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 58.81103305800025,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "{ticker} shifted from {prior_status} to {status} by reclaiming its {reclaim_ref} at {reclaim_ref_value} since the {prior_session} read, suggesting that buyers are active.",
+            "slots": {},
+            "cites": [
+              "row.ticker",
+              "prior.status"
+            ],
+            "confidence": "high"
+          },
+          {
+            "kind": "catch",
+            "text": "However, the planned stop is exceptionally tight at only {stop_gap_atr} ATR, or {stop_gap_pct}%, leaving the trade highly vulnerable to being shaken out by minor noise.",
+            "slots": {},
+            "cites": [
+              "derived.stop_gap_atr",
+              "derived.stop_gap_pct",
+              "row.atr",
+              "row.stop",
+              "row.price"
+            ],
+            "confidence": "high"
+          }
+        ]
+      }
+    },
+    {
+      "subject": "RS",
+      "as_of": "2026-08-13",
+      "session": "morning",
+      "cohort": "thin",
+      "status": "gapped_through",
+      "status_changed": false,
+      "outcome": "dropped",
+      "attempts": 2,
+      "latency": 319.83133336100036,
+      "rules": [
+        "rule1_slot_undeclared"
+      ],
+      "statements": [],
+      "raw_first": {
+        "contract_version": "1.0.0",
+        "statements": [
+          {
+            "kind": "read",
+            "text": "While the {group} group boasts a high {momentum} momentum score, {ticker} has gapped past its {trigger} trigger, meaning you are already chasing the entry and giving up {r_at_price} R of the planned risk-reward.",
+            "slots": {},
+            "cites": [
+              "                          (                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        2                                                                                                                      2                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            *                                                                                                    127:                                                                                                                                                                                                                                                *                                                                                                                                                                                                                                                                                                                                                                            *                                                                                *                              *                                                                                    *                          *                            *                                        $                          $  this.                                                                              * {      "
+            ],
+            "confidence": "low"
+          }
+        ]
+      }
+    }
+  ]
+}

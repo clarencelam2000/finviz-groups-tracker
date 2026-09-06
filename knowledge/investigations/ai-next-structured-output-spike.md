@@ -1,9 +1,9 @@
 # AI-NEXT-P0c — structured-output spike: can `gemini-3.5-flash` hold the pack contract?
 
-**Status:** ⏳ **Awaiting the run.** Methodology, corpus, and the decision rule are settled and
-committed; the numbers are not, because the run needs Vertex/AI-Studio credentials and per
-`CLAUDE.md` cannot execute from a Claude Code cloud session. Everything below the "Results" line
-is a placeholder to be filled by whoever runs it.
+**Status:** ✅ **Run complete, 2026-09-06.** Result: **renderer-owned templates** (see §4). The
+raw harness numbers say 90% dropped / 3.3% first-try; the true first-try count is **0/60, not
+2/60** — see §4's correction, which also names a real validator bug this run surfaced and fixed
+in the same PR.
 
 **Task:** `.session/SPRINT.md` → `AI-NEXT-P0c` · **AC:** `planning/ai-next-user-stories.md` → US-P0c
 **Contract under test:** `planning/ai-evidence-pack-schema.md` §3 (model output) and §3.1 (the four
@@ -117,18 +117,74 @@ mistaken for a measured result.
 
 ## 4. Results
 
-> **Not yet run.** Paste the harness's printed table here, then complete §5–§7.
+Run 2026-09-06, `gemini-3.5-flash`, backend `vertex_express`, seed default, 60 packs. Raw
+harness output (`knowledge/investigations/ai-next-structured-output-spike.json`):
 
 | Cohort | n | validated 1st try | validated after retry | **dropped** | median latency |
 |---|---|---|---|---|---|
-| full (2026-09-03+) | — | — | — | — | — |
-| thin (setup block absent) | — | — | — | — | — |
-| **all** | — | — | — | — | — |
+| full (2026-09-03+) | 30 | 3.3% | 0 | 90.0% | 130.3s |
+| thin (setup block absent) | 30 | 3.3% | 0 | 90.0% | 153.6s |
+| **all** | 60 | 3.3% | 0 | 90.0% | 141.4s |
 
-**Selected renderer design (read against the `full` cohort):** —
+4 rows also hit an outright API error (both calls failed with an exception, not a validation
+rejection) — `RBRK`, `ZM`, `SYRE`, `NVT`. Not investigated further; small n, didn't change the
+cohort-level percentages meaningfully.
 
-**Rejections by rule:** — (which of the four §3.1 rules the model actually trips is the most
-actionable output here: a concentration in one rule is usually a prompt fix, not a model limit)
+**Rejections by rule:** `rule1_slot_undeclared` × 53, `rule2_cite_unresolved` × 1 — i.e.
+essentially every rejection is the *same* rule, which per this doc's own §4 note ("a
+concentration in one rule is usually a prompt fix, not a model limit") was worth digging into
+before taking the 90% number at face value. That dig found something worse than a prompt fix.
+
+### 4.0 Correction — the true first-try count is 0/60, not 2/60, and the validator had a real gap
+
+The two "first-try" successes (`RDNT`, `DHR`) were re-inspected against their raw model output
+before this doc was finalized. Both wrote the field id **directly into `text`** as the
+placeholder — e.g. `"...shift to an {row.status} status..."` — with `slots: {}` (empty), exactly
+the same failure every dropped row made. They were not, in fact, well-formed.
+
+**Root cause: `_SLOT_RE` (`scripts/evidence_pack.py`) only matched letters/digits/underscore —
+`\{([A-Za-z_][A-Za-z0-9_]*)\}` — so a dot in the placeholder made it invisible to the regex
+entirely.** `{row.status}` doesn't match that pattern (the `.` isn't in the character class), so
+Rule 1's "does every `{placeholder}` have a matching `slots` entry" check found **zero**
+placeholders in the text and had nothing to compare against `slots` — an empty set minus an
+empty set is empty, so it passed clean. Rule 3 (no bare digit outside a slot) is the only other
+check that could have caught it, and only by accident: it only fires if the un-recognized
+placeholder's own text happens to contain a digit (e.g. `sma20_dist` would trip it; `status`
+would not). `row.status`, `derived.price_change_since_prior`, `row.atr_from_lod`,
+`row.reclaim_ref_value`, `row.reclaim_ref`, and `row.rel_volume` — every field name the model
+used this way in this run — contain no digit, so nothing caught it. **Both "passing" statements
+would have rendered the literal, unsubstituted string `"{row.status}"` to a real user on the
+Morning card.** That is a worse failure than the 54 the validator did catch, since those at
+least got correctly discarded.
+
+**Fixed in the same PR as this doc's update:** `_SLOT_RE` now also matches dotted identifiers
+(`\{([A-Za-z_][A-Za-z0-9_.]*)\}`), so a field id written directly into `text` is recognized as a
+placeholder and correctly rejected under `rule1_slot_undeclared` for having no `slots` entry
+(verified: re-running `validate()` against `RDNT`'s and `DHR`'s exact raw output post-fix now
+rejects both). Regression test:
+`tests/test_evidence_pack.py::test_rule1_catches_dotted_field_id_used_directly_as_placeholder`.
+
+**Corrected headline: 0/60 clean passes.** Every single response the model returned in this run
+used `slots: {}` — confirmed by inspecting all 60 raw responses, not just the 2 that superficially
+looked clean. The model consistently reasons correctly (its `cites` arrays are real, valid field
+ids every time) and consistently fails to also populate the separate `slots` mapping the schema
+requires. `RESPONSE_SCHEMA` declares `slots` as `{"type": "object"}` with no `minProperties` or
+other structural constraint — an empty object satisfies the JSON *shape* the schema enforces, so
+Gemini's constrained decoding has no structural pressure to fill it in; only the prose system
+prompt asks for it, and prose instructions lose to schema-shape pressure under
+`response_schema`-constrained generation. This reads as a fixable schema/prompt design gap, not
+proof the model cannot hold the contract at all — worth a cheap, small (~10-20 call) follow-up
+after a schema change (e.g. `slots` as a list of `{name, field}` pairs — the same array shape as
+`cites`, which the model *did* get right every time — or `minProperties: 1`) before concluding
+this design is a dead end. Not run yet; needs owner sign-off given the API spend already used a
+chunk of the available Google API credit.
+
+**Selected renderer design, as measured (read against the `full` cohort, corrected count):**
+**renderer-owned templates** — 0% clean first-try validated is far past the >15% cutoff either
+way, corrected or not. This part of the conclusion does not change: don't let the model write
+free sentences yet. What changes is *why* — not "the model can't do this," but "the model didn't
+get pressured hard enough by our schema to do the one extra bookkeeping step this design needs,"
+which is a narrower, more specific, and more fixable claim.
 
 ### 4a. Batching (US-P0c AC3)
 
@@ -148,24 +204,76 @@ Per-row vs 5-row vs 10-row calls, to set P2's ≤10-min budget from data rather 
 
 ### 4b. Projected wall clock for a 40-row session (US-P0c AC4)
 
-—
+Measured median latency was 141.4s per pack (nearly every pack made both the first call and the
+one allowed retry, since almost nothing validated first-try) with a p90 of 288.8s — both far
+above what a "flash" model is expected to take; this smells like the SDK silently retrying on
+rate limits under the hood rather than genuine model think-time, but wasn't root-caused this
+session. Run serially, 40 rows × ~141s median ≈ **94 minutes** — well past the "≤10-min budget"
+this AC exists to check against. **This alone, independent of the drop-rate finding, means the
+morning-triage feature cannot call this API once per row in a simple loop** — it needs either
+batching (§4a, not yet built) or parallel/concurrent calls, or both, before it can run inside a
+10-minute window. Flagging this as a separate, real constraint the eventual `AI-NEXT-P2a`
+implementation must solve, not something the >15%-drop-rate finding already covers.
 
 ## 5. Three example outputs (US-P0c AC4)
 
-**Good (validated first try):** —
+**Retried (failed once, passed on retry):** none — `after_retry` was 0/60 across both cohorts.
+Not one pack recovered on the one allowed retry, even with the exact validation errors handed
+back to the model. Worth noting on its own: the retry-once mechanism bought nothing in this run.
 
-**Retried (failed once, passed on retry):** —
+**"Good" before the §4.0 correction, actually dropped once re-checked (`RDNT`, full cohort):**
+```json
+{"kind": "read",
+ "text": "The shift to an {row.status} status after a {derived.price_change_since_prior} drop means the previous breakout attempt has officially failed.",
+ "slots": {}, "cites": ["row.status", "derived.price_change_since_prior", "prior.status"],
+ "confidence": "high"}
+```
+Would have rendered as the literal text above, `{row.status}` and all, to a real user.
 
-**Dropped (failed twice):** —
+**Dropped (typical — short custom placeholder name, `slots` still empty; `NTRA`, full cohort):**
+```json
+{"kind": "read",
+ "text": "The stock's status has shifted from {prior_status} to {status}, indicating that the recent breakout attempt has failed to hold.",
+ "slots": {}, "cites": ["prior.status", "row.status", "derived.status_changed"],
+ "confidence": "high"}
+```
+Correctly caught by `rule1_slot_undeclared` even before the fix, since `prior_status`/`status`
+have no dot in them and matched `_SLOT_RE` already. This is the more common of the two shapes the
+model produced, but both shapes share the same underlying miss: `slots` never gets filled in
+either way.
 
 ## 6. Decision
 
-—
+**Renderer-owned templates.** The model returns `kind` + `cites` only (which it produces
+correctly and consistently); the app owns the sentence wording via pre-written templates keyed
+by status/situation. This holds whether you read the raw 90%-dropped number or the corrected
+0%-clean-first-try number — both are far past the >15% cutoff.
+
+**Do not read this as "gemini-3.5-flash can't do structured output."** The specific, narrow thing
+it failed at was populating a second, schema-unenforced `slots` object that's semantically
+redundant with the `cites` array it *did* get right every time. That looks like a fixable
+prompt/schema design issue (§4.0), not a hard capability wall — but re-testing that fix costs
+another real, if smaller, API run, so it's raised here as an option for the owner to weigh, not
+executed unilaterally given the API spend already used a chunk of the available credit for this
+run alone.
+
+**Also decided here, independent of the drop rate:** the ~90–290 second per-call latency this run
+measured means a naive serial per-row loop cannot fit the ≤10-minute morning-triage budget for a
+40-row session (§4b) — `AI-NEXT-P2a` will need batching, concurrency, or both regardless of which
+renderer design ships.
 
 ## 7. Follow-through
 
-- Write the outcome into the `AI-NEXT-P0c` SPRINT row.
-- If the >15% fallback path is taken, amend `planning/ai-evidence-pack-schema.md` §3 **in the same
-  PR** (US-P0c AC5) — the contract's `text`/`slots` fields become renderer-owned and the schema
-  must say so.
-- Unblocks `AI-NEXT-P0b` (shared renderer) and `AI-NEXT-P2a` (Morning pipeline).
+- [x] Outcome written into the `AI-NEXT-P0c` SPRINT row (2026-09-06).
+- [x] Validator bug found by this run (`_SLOT_RE` missed dotted field ids used as placeholders)
+      fixed in `scripts/evidence_pack.py` in the same PR as this doc update, with a regression
+      test (`tests/test_evidence_pack.py::test_rule1_catches_dotted_field_id_used_directly_as_placeholder`).
+- [ ] Amend `planning/ai-evidence-pack-schema.md` §3 (US-P0c AC5) — the contract's `text`/`slots`
+      fields become renderer-owned; the schema doc must say so. **Not done in this PR** — planning
+      doc changes should get their own review pass, not ride along with an ops/bugfix PR.
+- [ ] Owner decision needed: is a small follow-up run (~10-20 calls) worth trying against a fixed
+      `slots` schema (§4.0) before committing to renderer-owned templates for good? The design
+      decision doesn't have to wait on this — renderer-owned templates is correct either way — but
+      it affects whether a future upgrade path to model-authored prose is realistic.
+- [ ] Unblocks `AI-NEXT-P0b` (shared renderer) and `AI-NEXT-P2a` (Morning pipeline) — both can now
+      proceed on the renderer-owned-templates design.
