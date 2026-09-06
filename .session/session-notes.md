@@ -3,8 +3,8 @@
 > **Future Claude:** read this immediately at session start. Summarize the current state for the user before doing anything else.
 >
 > **Format:** Append a new `---` delimited block per session. Header = date + workstream description. Keep the last 4 sessions here; a human will periodically move older entries to `.session/archive/session-notes-archive.md`. Do NOT replace existing entries — append only.
-
 ---
+
 
 ## 2026-08-31 — Fix: misleading "not tracked" message on Lookup
 
@@ -62,8 +62,8 @@ mock.
 **Next steps:** None — CHART-TAP-1 is closed. If the owner wants Morning/Positions/Watchlist to
 get the same dedicated Playwright chart-toggle coverage Picks/Lookup already have, that's a
 separate, smaller follow-up (not blocking, not requested here).
-
 ---
+
 
 ## 2026-09-04 — Chart-toggle tap-target UX proposals + mock
 
@@ -95,8 +95,8 @@ implemented yet, blocked on the owner's pick among the five.
 **Next steps:** Owner picks an option (or a different pairing) → implement across all 4 surfaces
 (`docs/index.html`) in one PR, add/update Playwright coverage per surface touched, ship the usual
 release triplet (`releases.json` + `sw.js` cache bump) since this is user-facing.
-
 ---
+
 
 ## 2026-09-04 — Inline "+ Watch" quick-add (Picks / Morning-picks / Lookup / Watchlist edit-level)
 
@@ -145,8 +145,8 @@ Lookup ticker card renders — Morning needed no change, its batch loader alread
 `current` bumped; `docs/sw.js` `CACHE` bumped `v96` → `v97`.
 
 **Next steps:** none outstanding — PR opened, ready for review.
-
 ---
+
 
 ## 2026-09-04 — Fix: watchlist stuck on "Pending read" for tickers that also qualify as Focus picks
 
@@ -208,8 +208,8 @@ the fix is complete as scoped): the underlying `union_watch_levels()` collision 
 itself is unchanged and intentional (attribution still correctly favors the picks bucket for
 that CSV's own purposes); this fix only restores the PWA's ability to find the real status
 regardless of which bucket won.
-
 ---
+
 
 ## 2026-09-03 — Picks tab: group tap opens quick detail sheet + reason chips on group headers
 
@@ -241,8 +241,8 @@ release surface updated in the same PR. Non-Playwright pytest suite green (797 p
 `current` bumped; `docs/sw.js` `CACHE` bumped `v94` → `v95`.
 
 **Next steps:** none outstanding — PR opened, ready for review.
-
 ---
+
 
 ## 2026-09-03 — Morning tab: sort, launch-ready filter, bucket collapse + mini-nav
 
@@ -304,8 +304,8 @@ stash`, so unrelated to this PR). Presumably invisible in CI/local dev with real
 blocking): add the missing pre-close stub to `test_pwa_positions.py`, and/or revisit whether
 non-actionable buckets (Setting up/Invalidated/Failed breakout/No quote) should default-collapse
 now that the toggle exists — deferred since it wasn't explicitly requested.
-
 ---
+
 
 ## 2026-09-02 — Volatility floor gate: hide near-dead stocks from Picks/Focus/Morning
 
