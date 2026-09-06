@@ -1,0 +1,385 @@
+{
+  "actionable_statuses": [
+    "gapped_through",
+    "reclaim",
+    "triggered"
+  ],
+  "canonical_float_dp": 4,
+  "contract_version": "1.0.0",
+  "digit_lexicon": [
+    "S&P 500",
+    "200MA",
+    "52W High",
+    "52-week high",
+    "52W",
+    "20MA",
+    "50MA",
+    "RSI(14)",
+    "RSI 14",
+    "ATR(14)",
+    "10:05",
+    "15:30",
+    "15:50",
+    "R:R"
+  ],
+  "labels": {
+    "list_category": {
+      "accel": "Accel",
+      "all_green": "All Green",
+      "emerging": "Emerging",
+      "leaders": "Leaders",
+      "rs_new_high": "RS New High",
+      "watchlist": "Watchlist"
+    },
+    "reclaim_ref": {
+      "prior_low": "prior swing low",
+      "sma50": "50-day MA"
+    },
+    "status": {
+      "awaiting_first_read": "Awaiting first read",
+      "failed_breakout": "Failed breakout",
+      "gapped_through": "Gapped through",
+      "invalidated": "Invalidated",
+      "no_quote": "No quote",
+      "reclaim": "Reclaimed",
+      "setting_up": "Setting up",
+      "triggered": "Triggered"
+    }
+  },
+  "pack_version": "1.0.0",
+  "surfaces": {
+    "brief_public": {
+      "allows_subjects": false,
+      "fields": {},
+      "kinds": {
+        "action": 1,
+        "non_action": 1,
+        "regime": 1,
+        "uncertainty": 1
+      },
+      "requires_catch": false,
+      "total": 4
+    },
+    "morning_card": {
+      "allows_subjects": false,
+      "fields": {
+        "derived.price_change_since_prior": {
+          "l": "Price change since prior read",
+          "u": "pct"
+        },
+        "derived.r_at_price": {
+          "l": "R already used vs plan",
+          "u": "ratio"
+        },
+        "derived.range_atr": {
+          "l": "Session range as ATR multiple",
+          "u": "x"
+        },
+        "derived.sma20_ext_atr": {
+          "l": "ATR-extension from 20MA",
+          "u": "atr"
+        },
+        "derived.sma50_ext_atr": {
+          "l": "ATR-extension from 50MA",
+          "u": "atr"
+        },
+        "derived.status_changed": {
+          "l": "Status changed since prior read",
+          "u": "enum"
+        },
+        "derived.stop_gap_atr": {
+          "l": "Price to planned stop (ATR)",
+          "u": "atr"
+        },
+        "derived.stop_gap_pct": {
+          "l": "Price to planned stop",
+          "u": "pct"
+        },
+        "derived.trigger_gap_pct": {
+          "l": "Price to trigger",
+          "u": "pct"
+        },
+        "group.momentum_score": {
+          "l": "Group momentum score",
+          "u": "ratio"
+        },
+        "group.rank_month": {
+          "l": "Group 1-month rank",
+          "u": "rank"
+        },
+        "group.rank_month_delta_5d": {
+          "l": "Group rank change, 5 sessions",
+          "u": "int"
+        },
+        "group.rs_month": {
+          "l": "Group RS vs S&P, 1 month",
+          "u": "pp"
+        },
+        "group.rs_new_high": {
+          "l": "Group RS at 20-session high",
+          "u": "enum"
+        },
+        "group.rs_score": {
+          "l": "Group RS breadth score",
+          "u": "ratio"
+        },
+        "prior.price": {
+          "l": "Price at prior read",
+          "u": "usd"
+        },
+        "prior.session": {
+          "l": "Prior read",
+          "u": "enum"
+        },
+        "prior.status": {
+          "l": "Status at prior read",
+          "u": "enum"
+        },
+        "row.atr": {
+          "l": "ATR (14)",
+          "u": "usd"
+        },
+        "row.atr_from_lod": {
+          "l": "ATR from low of day",
+          "u": "atr"
+        },
+        "row.change": {
+          "l": "Change on day",
+          "u": "pct"
+        },
+        "row.group": {
+          "l": "Industry group",
+          "u": "text"
+        },
+        "row.high": {
+          "l": "Session high",
+          "u": "usd"
+        },
+        "row.list_category": {
+          "l": "Pick bucket",
+          "u": "enum"
+        },
+        "row.low": {
+          "l": "Session low",
+          "u": "usd"
+        },
+        "row.open": {
+          "l": "Open",
+          "u": "usd"
+        },
+        "row.pct_of_52w_high": {
+          "l": "From 52-week high",
+          "u": "pct"
+        },
+        "row.price": {
+          "l": "Price",
+          "u": "usd"
+        },
+        "row.reclaim_ref": {
+          "l": "Reclaim reference",
+          "u": "enum"
+        },
+        "row.reclaim_ref_value": {
+          "l": "Reclaim reference level",
+          "u": "usd"
+        },
+        "row.rel_volume": {
+          "l": "Relative volume",
+          "u": "x"
+        },
+        "row.rsi": {
+          "l": "RSI (14)",
+          "u": "ratio"
+        },
+        "row.sma20_dist": {
+          "l": "Distance to 20MA",
+          "u": "pct"
+        },
+        "row.sma50_dist": {
+          "l": "Distance to 50MA",
+          "u": "pct"
+        },
+        "row.status": {
+          "l": "Status",
+          "u": "enum"
+        },
+        "row.stop": {
+          "l": "Planned stop",
+          "u": "usd"
+        },
+        "row.ticker": {
+          "l": "Ticker",
+          "u": "text"
+        },
+        "row.trigger": {
+          "l": "Trigger",
+          "u": "usd"
+        },
+        "row.volatility_m": {
+          "l": "Volatility, 1 month",
+          "u": "pct"
+        },
+        "row.volatility_w": {
+          "l": "Volatility, 1 week",
+          "u": "pct"
+        }
+      },
+      "kinds": {
+        "catch": 1,
+        "read": 1
+      },
+      "requires_catch": true,
+      "total": 2
+    },
+    "morning_triage": {
+      "allows_subjects": true,
+      "fields": {
+        "derived.actionable_ext_atr_median": {
+          "l": "Median 50MA extension of actionable rows",
+          "u": "atr"
+        },
+        "derived.invalidated_ext_atr_median": {
+          "l": "Median 50MA extension of invalidated rows",
+          "u": "atr"
+        },
+        "derived.n_actionable": {
+          "l": "Actionable rows",
+          "u": "int"
+        },
+        "derived.n_changed": {
+          "l": "Rows whose status changed",
+          "u": "int"
+        },
+        "derived.n_failed_breakout": {
+          "l": "Failed breakout",
+          "u": "int"
+        },
+        "derived.n_gapped_through": {
+          "l": "Gapped through",
+          "u": "int"
+        },
+        "derived.n_groups_actionable": {
+          "l": "Distinct groups with an actionable row",
+          "u": "int"
+        },
+        "derived.n_invalidated": {
+          "l": "Invalidated",
+          "u": "int"
+        },
+        "derived.n_no_quote": {
+          "l": "No quote",
+          "u": "int"
+        },
+        "derived.n_reclaim": {
+          "l": "Reclaimed",
+          "u": "int"
+        },
+        "derived.n_rows": {
+          "l": "Rows in this read",
+          "u": "int"
+        },
+        "derived.n_setting_up": {
+          "l": "Setting up",
+          "u": "int"
+        },
+        "derived.n_triggered": {
+          "l": "Triggered",
+          "u": "int"
+        },
+        "derived.top_group": {
+          "l": "Group with the most actionable rows",
+          "u": "text"
+        },
+        "derived.top_group_n": {
+          "l": "Actionable rows in that group",
+          "u": "int"
+        },
+        "session.date": {
+          "l": "Trading date",
+          "u": "text"
+        },
+        "session.name": {
+          "l": "Session",
+          "u": "enum"
+        }
+      },
+      "kinds": {
+        "catch": 1,
+        "pattern": 1,
+        "triage": 3
+      },
+      "requires_catch": true,
+      "total": 5
+    },
+    "picks_card": {
+      "allows_subjects": false,
+      "fields": {},
+      "kinds": {
+        "catch": 1,
+        "thesis": 1
+      },
+      "requires_catch": true,
+      "total": 2
+    },
+    "position": {
+      "allows_subjects": false,
+      "fields": {},
+      "kinds": {
+        "catch": 1,
+        "hold_read": 1
+      },
+      "requires_catch": true,
+      "total": 2
+    }
+  },
+  "units": {
+    "atr": {
+      "desc": "multiples of ATR, 1 dp, 'ATR' suffix",
+      "plural": false
+    },
+    "days": {
+      "desc": "count of calendar days",
+      "plural": true
+    },
+    "enum": {
+      "desc": "categorical; renderer shows `d`",
+      "plural": false
+    },
+    "int": {
+      "desc": "signed whole number",
+      "plural": false
+    },
+    "pct": {
+      "desc": "percent, signed, 1 dp, % suffix",
+      "plural": false
+    },
+    "pp": {
+      "desc": "percentage points (a spread/delta)",
+      "plural": false
+    },
+    "rank": {
+      "desc": "ordinal position, 1 = best",
+      "plural": false
+    },
+    "ratio": {
+      "desc": "unitless ratio, 2 dp",
+      "plural": false
+    },
+    "sessions": {
+      "desc": "count of trading sessions",
+      "plural": true
+    },
+    "text": {
+      "desc": "free string, rendered verbatim",
+      "plural": false
+    },
+    "usd": {
+      "desc": "US dollars, 2 dp, $ prefix",
+      "plural": false
+    },
+    "x": {
+      "desc": "bare multiple, 1 dp, '×' suffix",
+      "plural": false
+    }
+  }
+}

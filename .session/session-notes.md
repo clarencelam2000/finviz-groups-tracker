@@ -453,3 +453,81 @@ renderer, P2 into P2a pipeline / P2b cards / P2c triage, P1 after P2, `AI-NEXT-R
 **Next steps:** (1) owner confirms the confidence-render variant (one line, non-blocking);
 (2) team picks up `AI-NEXT-P0a` — everything it needs is in schema §2.4/§8 and US-P0a; (3) P0c
 spike must run in GitHub Actions or locally (Vertex creds), not from Claude cloud.
+
+
+## 2026-09-06 — AI-NEXT-P0a: evidence-pack builder, registry, validator (+ P0c entry point)
+
+**Status: safe to close** — implemented, 46 new tests green, docs corrected, PR opened. Nothing
+blocking. Next task (`AI-NEXT-P0c`) is owner-run, not cloud-runnable.
+
+**Picked up from** the 2026-09-06 staff-review session below (docs locked, tasks decomposed).
+P0a was the only AI-NEXT task with zero API/network dependency, so it's the one that can actually
+be finished from a cloud session.
+
+**Sequencing correction made in this PR.** SPRINT said P0c blocks P0b/P2 — but P0c itself needs
+the P0a validator *and* Vertex creds, which per root `CLAUDE.md` cannot run from Claude Code
+cloud. Real chain: **P0a (cloud) → owner runs P0c locally/Actions → P0b/P2 unblock.** P0a
+therefore also ships the spike's entry point so running it is one command, not a build.
+
+**Also corrected: "go/no-go" was a misleading label** and the owner (rightly) asked whether the
+spike could kill the workstream. It cannot. Schema §3.2's three outcomes select a *renderer
+design* — ≤5% batched slot filling, 5–15% per-row slot filling, >15% renderer-owned templates
+(model returns `kind`+`cites`, app owns the wording). All three ship a cited, AI-selected read;
+the worst case is the *safer* product. Renamed in schema §3.2, the SPRINT row, and the knowledge
+note so nobody re-reads that risk into it.
+
+**What landed**
+- `scripts/evidence_pack.py` — `FIELD_REGISTRY` (hard error on unregistered id, per schema §6.1),
+  `UNITS`/`DIGIT_LEXICON`/`SURFACE_KINDS`, `build_morning_card` + `build_morning_triage`,
+  `canonical()`/`pack_hash()`, `prompt_parts()`, `validate()` (all four §3.1 rules + caps +
+  confidence downgrade), `validate_with_retry()`, `--emit-schema`/`--check-schema`.
+- `data/ai/pack_schema.json` — the shared registry (committed == generated, test-enforced).
+- `tests/test_evidence_pack.py` — 46 tests. Test-writing delegated to a Sonnet subagent against a
+  precise spec; I reviewed the output and spot-checked that the parity tests genuinely
+  hand-compute their expected values rather than calling the module's own helpers (they do).
+- `scripts/spike_structured_output.py` + `knowledge/investigations/ai-next-structured-output-spike.md`
+  (methodology committed, results section awaiting the owner's run).
+- Doc corrections: schema §2.4 / §3.2 / §3.3 / §6, `scripts/CLAUDE.md` new sections, SPRINT rows.
+
+**Three schema §2.4 errors found by building against the real store** (all corrected in the doc,
+all now documented in `scripts/CLAUDE.md` so the next reader doesn't re-hit them):
+1. `SMA20`/`SMA50`/`52W High` are Finviz **percent strings**, not prices — so `sma20_dist` is the
+   column, not a derivation. Only the ATR-extensions are derived, via the PWA's
+   `ma$ = price/(1+pct/100)` reconstruction (`deriveRiskMetrics()`, `docs/index.html` ~4603).
+2. **Two disagreeing ATRs per row** — lowercase `atr` (status-engine quote block) vs capital `ATR`
+   (Finviz screener block), differing on **224 of 234** rows. MA-extension must use capital (chip
+   parity); stop/trigger geometry must use lowercase (the ATR the stop was planned with). Mixing
+   them yields a plausible-looking wrong number. `price`/`Price` happen to agree exactly — that
+   near-miss is what makes the ATR trap easy to walk into.
+3. **Coverage cliff:** `RSI`/`Volatility`/`RelVol`/`52W` from 2026-09-01; `Price`/`SMA20`/`SMA50`/
+   `ATR` from 2026-09-03 only. Builder *omits* (not nulls) absent fields + adds a `notes` caveat —
+   omitted means "never collected", null means "collected and empty", and the model is prompted
+   on that difference.
+
+**Owner decisions taken this session**
+- **Schema §6 Q3 closed: render all three confidence states** (`high`/`medium`/`low`), not the
+  staff-recommended `low`-only variant. P0b builds it that way. Staff dissent recorded in §3.3
+  rather than argued: three markers add chrome and `medium` may become noise the eye skips — but
+  it's a pure render change to walk back later, nothing downstream moves.
+- **P0c corpus: mixed, cohort-split.** Full history back to 2026-08-10; drop rate reported
+  separately for full-field rows (2026-09-03+, the cohort the thresholds are read against) and
+  thin-field rows. Owner didn't want to wait ~2 weeks for depth, and 234 rows over 2 days is too
+  narrow to hang a threshold on. Dry run confirms the corpus clears US-P0c AC1: 60 packs, 30/30
+  cohort split, all six statuses, 37 status-changed.
+
+**Verification.** 46/46 new tests pass. Full CI-equivalent suite: **774 passed, 110 failed** — all
+110 confirmed **pre-existing and environmental**, verified by `git stash`-ing every change and
+reproducing an identical count. Two distinct sandbox failure modes, not one: ~92 are the documented
+Chromium-revision issue (`knowledge/investigations/playwright-cloud-session-testing.md`), and
+**18 in `tests/test_collect_benchmark.py` are a broken `bs4` in this sandbox**
+(`'BeautifulSoup' object has no attribute 'contents'`) — *not* Playwright, and not previously
+documented. Worth knowing before someone reads a red suite here as a regression.
+
+**Deferred, tracked (nothing left only in prose):** `AI-NEXT-P0c-BATCH` — the spike measures
+per-row only; batched 5/10-row calls (US-P0c AC3) are deliberately deferred until the per-row
+numbers show whether batching is needed at all.
+
+**Next steps.** Owner runs the spike (`GOOGLE_GENAI_USE_VERTEXAI=true GOOGLE_API_KEY=... python3
+scripts/spike_structured_output.py --limit 60`), pastes the printed table into §4 of the knowledge
+note, and records the outcome in the `AI-NEXT-P0c` SPRINT row. That unblocks P0b (shared renderer)
+and P2a (Morning pipeline). No release triplet in this PR — nothing user-visible ships yet.

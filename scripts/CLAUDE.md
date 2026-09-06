@@ -321,6 +321,73 @@ the planning doc sections cited above, plus ADR-012 §10 Phasing / §11 Decision
   `held_preclose` job (`worker-cron/src/routing.js` `JOB_SCHEDULE`), 15:40 ET Mon–Fri, ungated,
   dispatching `.github/workflows/collect_held_preclose.yml`. See root `CLAUDE.md` § Automation.
 
+## Evidence pack — builder / registry / validator (`scripts/evidence_pack.py`)
+
+**AI-NEXT-P0a.** Tier A source of truth for the evidence-pack contract. Required reading before
+touching it: `planning/ai-evidence-pack-schema.md` (the contract; §2 shape, §3 validation) and
+`planning/ai-next-user-stories.md` § US-P0a (acceptance criteria). Pure functions — no I/O outside
+`--emit-schema`, no network, no API client — so every rule is unit-testable
+(`tests/test_evidence_pack.py`, 46 tests).
+
+| Piece | Role |
+|---|---|
+| `FIELD_REGISTRY` | surface → field id → `{u: unit, l: label}`. **Emitting an unregistered id raises `UnregisteredFieldError`** — hard error by owner decision (schema §6.1), never a warning. |
+| `UNITS` / `DIGIT_LEXICON` / `SURFACE_KINDS` | The shared vocabulary: unit ids, the digit-bearing app words rule 3 strips (`20MA`, `52W`, `10:05`…), and per-surface statement kinds + caps + the mandatory-`catch` flag. |
+| `build_morning_card(row, prior_row, group_row, context)` | One pack per (session, ticker) row from `data/picks/sessions/{morning,pre_close}.csv`. |
+| `build_morning_triage(session_rows, prior_rows, context)` | One pack per session; every cross-row number (status counts, changed count, median extensions) computed **here**, never by the model. |
+| `canonical()` / `pack_hash()` | Sorted-key, 4-dp-rounded byte serialization of `fields`+`context`+`notes` (excludes `meta`, so the hash is stable across runs and usable as a Tier B cache key). |
+| `prompt_parts(pack)` | `(stable_prefix, volatile_tail)` — `context` first so the ~21 KB shared bulk is a byte-identical prefix across a run's calls, which is what makes Vertex prompt caching bite (US-P2a AC4). |
+| `validate(response, pack)` | The four §3.1 rules, per-surface caps (first-wins), unknown-kind drop, and the confidence downgrade. Returns kept statements + `rejections` (Tier-2 capture shape) + `card_dropped`. |
+| `validate_with_retry(response, pack, retry)` | Retry **once** with the error list, never twice (§3.2). |
+| `--emit-schema` / `--check-schema` | Writes / verifies `data/ai/pack_schema.json`. Committed-equals-generated is test-enforced, same anti-drift pattern as `delta_config.delta_columns()`. |
+
+**Three traps the Morning store sets — all found the hard way on 2026-09-06, all corrected in
+schema §2.4:**
+
+1. **`SMA20` / `SMA50` / `52W High` are Finviz percent *strings*** (`"3.05%"`), not prices — they
+   are the %-distance from the *live* price. So `row.sma20_dist` is the column, not a derivation.
+   Only `sma50_ext_atr` / `sma20_ext_atr` are derived, via the PWA's reconstruction
+   `ma$ = price / (1 + pct/100)` then `(price − ma$) / ATR`. **Parity-critical** — the counterpart
+   is `deriveRiskMetrics()` in `docs/index.html` (~line 4603); if they diverge the AI prints
+   "4.0 ATR" beside a chip reading "3.9".
+2. **There are two ATRs per row and they disagree on 224 of 234 rows.** Lowercase `atr` is the
+   status engine's quote-block scrape; capital `ATR` is the Finviz screener block. MA-extension
+   uses **capital** `ATR` (chip parity); stop/trigger geometry (`stop_gap_atr`, `range_atr`) uses
+   **lowercase** `atr` (the ATR the engine planned the stop with). Same for `price`/`Price`, which
+   happen to agree exactly — do not assume the ATRs do.
+3. **Coverage cliff.** `RSI`/`Volatility`/`Rel Volume`/`52W High` exist only from **2026-09-01**;
+   `Price`/`SMA20`/`SMA50`/`ATR` only from **2026-09-03**. The builder *omits* these fields when
+   the block is absent and adds a `notes` caveat. **Omitted ≠ null**: omitted means "never
+   collected for this date", null means "collected and empty" — the model is prompted on the
+   difference, so do not "helpfully" emit them as null.
+
+Also note `group` is null on exactly the watchlist rows (they are not screened picks and carry no
+industry group), so every `group.*` field is null there and §3.3 forces those statements to `low`
+confidence. Expected, not a data bug.
+
+## Structured-output spike (`scripts/spike_structured_output.py`)
+
+**AI-NEXT-P0c.** Runs real `morning_card` packs against `gemini-3.5-flash` with `response_schema`
+set, through the P0a validator with retry-once, and reports the drop rate that **selects the
+renderer design** (schema §3.2: ≤5% batched slot filling · 5–15% per-row slot filling · >15%
+renderer-owned templates). **There is no cancel branch** — all three outcomes ship a cited,
+AI-selected read; the third just moves sentence wording from the model to the app.
+
+- **Cannot run from a Claude Code cloud session** (no Vertex creds). Local or GitHub Actions.
+  Auth ladder matches `generate_ai.py`: Vertex express > Vertex ADC > AI Studio.
+- **`--dry-run` runs anywhere** — builds the corpus and prints a sample prompt, no API call. Use it
+  before spending quota; it caught two real bugs in this script on the day it was written.
+- **Cohort split (owner, 2026-09-06):** full history back to 2026-08-10, drop rate reported
+  separately for `full` rows (2026-09-03+, the production-shaped pack — **the cohort the thresholds
+  are read against**) and `thin` rows (setup block absent, which measures null/omission handling).
+- Corpus scope mirrors production (US-P2a AC2): actionable status **or** status changed vs the
+  prior read. Seeded, so a re-run measures the same sample.
+- Writes per-call JSON + a paste-ready markdown table into
+  `knowledge/investigations/ai-next-structured-output-spike.{json,md}`.
+- **Known gap:** measures per-row only; batched (5/10 rows per call) is US-P0c AC3 and is tracked
+  as `AI-NEXT-P0c-BATCH` in `.session/SPRINT.md`, deliberately deferred until the per-row numbers
+  show whether batching is even needed.
+
 ## AI capture constants (`scripts/generate_ai.py`)
 
 > Added in Phase 1 of the AI capture plan (ADR-006). Document changes to these in all three
