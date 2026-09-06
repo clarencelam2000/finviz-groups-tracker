@@ -364,3 +364,103 @@ owner wants the same amber chip there too.
 
 **Next steps:** open the PR, watch CI, then resume B-5b (the full undercut→reclaim Power-of-3
 trigger) from the prior session's notes above, unless the owner redirects.
+---
+
+## 2026-09-05 — AI/LLM integration proposal + picks-alpha methodology audit
+
+**Status: don't close yet** — PR #400 open (design doc + SPRINT + investigation note), 6 issues
+filed, proposal artifact still rendering. No code shipped; this is a design gate.
+
+**What the owner asked for:** a big-picture proposal for integrating LLM features into the Picks,
+Morning and Positions tabs (and possibly at top level), given that the AI tab hasn't been touched
+since it shipped while those tabs accumulated most of the app's differentiating signal.
+
+**Recon (3 parallel sonnet agents, all claims file:line-cited).** Headline finding:
+`generate_ai.py` reads **only** `data/{sectors,industries}/{snapshots,deltas}.csv` (`:98-122`) —
+zero awareness of picks, session stores, positions, or watchlist. 11 Gemini calls/run ×
+~3 runs/day, `gemini-3.5-flash` on Vertex. Naming trap for future readers: the AI layer has a
+`watchlist` *task*, but it emits sectors/industries to watch — **unrelated** to the app's personal
+watchlist feature. Every explanatory string on Picks/Morning today is a hardcoded per-status
+`_mNote()` lookup; the Positions tab has no prose at all.
+
+**The methodology audit — the most important thing that happened this session.** I quoted
+`evaluate_picks.py --report` as showing the selector is "negative at every horizon" and built a
+product recommendation on it. The owner pushed back and demanded the methodology. Auditing it found
+the headline overstated in three ways: (1) `excess_spy` is contaminated — SPY returned +3.93% over
+the sample vs +1.48% for the median industry, so much of the spread is cap-weighting, not skill;
+(2) `--report` has no significance test and forward windows overlap heavily — 39 h=10 dates over 62
+sessions is **~6 independent windows**, and under a moving-block bootstrap three of four horizons
+straddle zero; (3) it flips sign across sample halves (h=10: first half −1.25%, second half +0.16%).
+What survives is the `leaders`/`emerging` opposite gradient — and that is a selector question, not
+an AI one, and not actionable on one regime. **Explicitly not a short signal, and it says nothing
+about the traded system**, since trigger/stop/management are entirely unmeasured. Full writeup:
+`knowledge/investigations/picks-alpha-2026-09-05-significance-audit.md`. Lesson is the CLAUDE.md
+one, again: I asserted an empirical claim before auditing the instrument that produced it.
+
+**Issues filed so the findings aren't orphaned** (owner's explicit instruction — out of scope for
+current work, worth a focused sprint later): #401 add moving-block bootstrap to `--report` (ref
+impl in the issue), #402 `MIN_POWERED_DATES` counts dates not independent windows, #403 demote
+`excess_spy`, #404 PICKS-4B ticker-level scoring now buildable (D1 `ticker_quotes` + `morning.csv`)
+— **we currently cannot measure the traded system at all**, #405 leaders/emerging research spike
+(explicitly not actionable yet), #406 AI doc drift (`ai-architecture-revamp.md` cites the wrong
+model/task-count) + the lingering AI Studio auth branch.
+
+**Owner decisions locked.** Private position data to Vertex: **yes**, same GCP project. Mandatory
+never-empty "the catch": **yes**. Positions read: **on-demand tap**. Start point: **Morning tab**
+(P0→P2) — owner confirmed it's the tab they open first.
+
+**Three owner corrections folded into the doc.** (1) "Posture" (skeptical critic vs balanced
+analyst) was the wrong axis — the app is *not* one-sidedly positive (low Focus score, `invalidated`,
+extension bands, earnings badges are all negative signals), and a persona dial pre-decides the
+conclusion. Replaced with two separable properties: counter-evidence is a required field, and
+confidence is derived from evidence strength. Correct label is **evidence-complete**, not skeptical.
+(2) The proposed blocking numeric-grounding gate was brittle — replaced with a **slot-filling**
+design: the model emits a sentence template plus named slots, the renderer fills values from the
+pack, so numbers are correct *by construction* and validation reduces to "does the field exist".
+(3) Pre-chewing model inputs was a small-context-window habit — feed broadly, require field
+citation, render "Behind this" from the **cited subset** so provenance doesn't become a data dump.
+
+**Next steps.** Owner to review the proposal (artifact link in-conversation). If Morning-first is
+confirmed, next session starts at `AI-NEXT-P0` (evidence-pack builder — generalize the existing
+`serialize_*()` discipline into a typed versioned pack, no new UI) then `AI-NEXT-P2`. P0 is a
+prerequisite for every other phase; P4 (Tier B worker route) gates P5–P7. Nothing in P0–P7 needs a
+ground-truth CSV schema change.
+
+**Later in the same session — tracking hardened at the owner's request.**
+
+Owner's standing instruction going forward: *persist everything a cold session needs at every
+boundary, and keep a running task list / tracking section in the main planning doc so documentation
+doesn't scatter.* Acted on as follows.
+
+- **Evidence-pack schema is now its own design pass** (owner's call, not folded into P0):
+  `planning/ai-evidence-pack-schema.md`. It exists because three review decisions turned the pack
+  into a contract: slot-filling needs a stable addressable namespace, Tier A (Python) and Tier B
+  (JS) must emit identical structures, and citation-driven provenance must resolve a field id back
+  to a human label at render time. **3 open questions in §6 are unanswered** — registry drift a hard
+  error vs warning (recommend hard), `context` budget ceiling for the on-demand Positions tap
+  (recommend soft cap + `notes` entry on truncation), and whether `confidence` renders (recommend
+  not in v1).
+- **Epic #408** groups the methodology work with an explicit priority order and dependency graph:
+  #401 → #403 → #402 are one PR (same file, `scripts/evaluate_picks.py` reporting layer); #404
+  (ticker-level truth) is independent and the long pole; #405 (leaders/emerging) is blocked on both
+  plus an out-of-sample period that does not exist. #406 deliberately excluded — it's AI doc drift,
+  not methodology. Each child issue carries a comment stating its rank and blockers, so a cold
+  reader landing on any one of them sees the shape.
+- **#409** filed for the `serialize_*()` pre-chewing retrofit on the *existing* AI tab — feeding it
+  broadly is an improvement to what already ships, separable from the new-surface work.
+- **`planning/README.md` rebuilt as the real navigation index** (it had rotted: 7 of ~35 files
+  listed, all with dead branch names). Now maps content-type → directory, groups live docs by
+  workstream, and keeps shipped/superseded in separate tables. **This is the file a cold session
+  should open first after `CLAUDE.md` and these notes.**
+
+**Cold-start pointer for the next session.** Read in this order: `CLAUDE.md` → these notes →
+`planning/README.md` → `planning/ai-llm-integration-proposal.md` → `planning/ai-evidence-pack-schema.md`.
+Owner decisions already locked: private data to Vertex **yes**; mandatory never-empty "catch"
+**yes**; Positions read **on-demand tap**; start with **Morning** (P0 → P2); posture framing
+replaced by *evidence-complete* (counter-evidence required, confidence derived from evidence
+strength); numbers handled by **slot filling**, never written by the model; **feed context broadly**
+but require field citation so the "Behind this" drawer renders only the cited subset. The
+methodology epic is explicitly **not scheduled** — a later focused sprint.
+
+**Immediate next action:** owner answers the 3 open questions in `ai-evidence-pack-schema.md` §6,
+then `AI-NEXT-P0` (the builder + registry) is implementable with no further design work.
