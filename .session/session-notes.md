@@ -734,3 +734,28 @@ homework, and answer the obvious follow-up in the same message.
 
 **Nothing is blocked now.** EMRG-1a, 2, 4, 5, 6, 7 all run from a cloud session against committed
 CSVs.
+
+**Second follow-up — owner rejected the month split; regime segmentation revised; issue #419 filed.**
+
+Owner's correction (they are the domain expert on tape reading, and the data backs them): the
+whole summer was chop. The only real thrust was **2026-07-28 → 08-14**, preceded by weakness
+**07-14 → 07-28**. A July/August month boundary cuts straight through that thrust, so the month
+split I proposed was wrong. **Verified their read independently** with a 10d efficiency ratio
+(`abs(net move) / sum(abs(daily moves))` off `perf_day`): thrust segment **ER 0.51** vs 0.14 /
+0.22 / 0.14 for the other three segments, and the **six most-trending 10d windows in the entire
+sample all fall inside 07-28..08-14**. Eyeball labels and objective measure agree — neither is
+fitting the other.
+
+**The consequence reshapes the study:** only **~14 of 55 sessions are trend**. A binary
+chop-vs-trend comparison is too lopsided to be worth running. Use the **continuous 10d ER as a
+covariate** against the EMRG-2 daily spread instead — all 46 ER-available days contribute and no
+bucketing is needed. Recorded in EMRG-1a.
+
+**Filed #419 (P0): scrape all available SPY quote-page columns.** `scripts/collect.py` already
+fetches the full SPY quote page (`.snapshot-table2`) and then discards everything outside a
+7-entry `SPY_LABEL_MAP`. We have no Price, SMA20/50/200, 52W High/Low, ATR, RSI, Volatility or
+volume for SPY — and **this is unrecoverable**, Finviz serves point-in-time only. Fetch cost is
+already paid; the fix is widening the parse. Recommended capturing *every* label on the page
+rather than another fixed allowlist. Owner approved the ground-truth schema change under
+`.claude/rules/data-pipeline.md` on 2026-09-08 — the "compute it where it's consumed" escape
+hatch cannot apply to data never captured.
