@@ -94,15 +94,24 @@ SPREAD_COLUMNS = [
     "efficiency_ratio",
 ]
 GRADIENT_COLUMNS = ["date", "horizon", "quintile", "n", "fwd_mean", "fwd_excess"]
-STREAK_COLUMNS = ["date", "horizon", "cohort", "n", "fwd_mean", "fwd_excess"]
+STREAK_COLUMNS = ["date", "horizon", "cohort", "n", "fwd_mean", "fwd_excess", "efficiency_ratio"]
 
-# FRESH_STREAK_MAX — a firing group-day counts as a "fresh" trigger when the
-# gate has fired for at most this many consecutive sessions including today.
-# 1 means strictly the first day of a new fire. This split exists because the
-# owner acts on NEW signals: if the edge lives only in the stale cohort, the
-# gate is confirming a move that already happened rather than anticipating one,
-# which is a different (and much less useful) instrument.
-FRESH_STREAK_MAX = 1
+# STREAK_BUCKETS — how firing group-days are grouped by consecutive-fire streak
+# (inclusive of today). Bucket 1 is a brand-new fire; later buckets are
+# continuations of an existing one. Edges are (label, lo, hi) with hi inclusive
+# and None meaning open-ended.
+#
+# This is deliberately a DOSE-RESPONSE, not the binary fresh/stale split it
+# replaced. The binary version answered "is the edge in new fires or old ones";
+# the buckets answer the tradeable version of that question — HOW LONG after a
+# first fire does the edge appear, i.e. when should an entry actually be placed.
+# A monotone rise across buckets is also much harder to manufacture by chance
+# than a two-way gap, so it doubles as a robustness check on the finding.
+#
+# Widening a bucket trades resolution for sample size; at ~390 firing group-days
+# the current four already put only ~40-60 rows in the tail bucket, so do not
+# split further without more history.
+STREAK_BUCKETS = [("1", 1, 1), ("2-3", 2, 3), ("4-5", 4, 5), ("6+", 6, None)]
 
 
 def compound(values: np.ndarray) -> float:
@@ -365,42 +374,57 @@ def firing_streaks(deltas: pd.DataFrame) -> dict:
     return out
 
 
+def streak_bucket(streak: int, buckets: list = None) -> str:
+    """Label a consecutive-fire streak. Returns "" if it falls in no bucket."""
+    for label, lo, hi in (buckets or STREAK_BUCKETS):
+        if streak >= lo and (hi is None or streak <= hi):
+            return label
+    return ""
+
+
 def compute_streaks(deltas: pd.DataFrame, snapshots: pd.DataFrame,
+                    benchmark: pd.DataFrame | None = None,
                     horizons: list[int] = HORIZONS,
-                    fresh_max: int = FRESH_STREAK_MAX) -> pd.DataFrame:
-    """Forward excess return split by fresh trigger vs stale streak (EMRG-9).
+                    buckets: list = None) -> pd.DataFrame:
+    """Forward excess return by consecutive-fire streak bucket (EMRG-9).
 
     `fwd_excess` is measured against the same day's full cross-sectional mean,
-    identical to compute_spread, so the two are directly comparable.
+    identical to compute_spread, so the two numbers are directly comparable.
+    The efficiency ratio is carried on every row so the whole table can be
+    re-cut by market regime without recomputing anything.
     """
     if len(deltas) == 0 or len(snapshots) == 0:
         return pd.DataFrame(columns=STREAK_COLUMNS)
+    buckets = buckets or STREAK_BUCKETS
     perf = perf_matrix(snapshots)
     dates = list(perf.index)
     pos = {d: i for i, d in enumerate(dates)}
     streaks = firing_streaks(deltas)
+    eff = efficiency_series(benchmark) if benchmark is not None and len(benchmark) \
+        else pd.Series(dtype=float)
 
     rows = []
     for date, by_group in streaks.items():
         if date not in pos or not by_group:
             continue
         start = pos[date] + 1
+        by_bucket: dict[str, list] = {}
+        for g, s in by_group.items():
+            by_bucket.setdefault(streak_bucket(s, buckets), []).append(g)
         for horizon in horizons:
             fwd = forward_returns(perf, dates, start, horizon).dropna()
             if len(fwd) == 0:
                 continue
             day_mean = float(fwd.mean())
-            for cohort, members in (
-                ("fresh", [g for g, s in by_group.items() if s <= fresh_max]),
-                ("stale", [g for g, s in by_group.items() if s > fresh_max]),
-            ):
-                vals = fwd[fwd.index.isin(members)]
+            for label, _, _ in buckets:
+                vals = fwd[fwd.index.isin(by_bucket.get(label, []))]
                 if len(vals) == 0:
                     continue
                 rows.append({
-                    "date": date, "horizon": horizon, "cohort": cohort,
+                    "date": date, "horizon": horizon, "cohort": label,
                     "n": len(vals), "fwd_mean": log_to_pct(float(vals.mean())),
                     "fwd_excess": log_to_pct(float(vals.mean())) - log_to_pct(day_mean),
+                    "efficiency_ratio": eff.get(date, float("nan")),
                 })
     return pd.DataFrame(rows, columns=STREAK_COLUMNS)
 
@@ -443,14 +467,35 @@ def print_report(spread: pd.DataFrame, gradient: pd.DataFrame,
               f"choppier half {_fmt(lo.mean())}  trendier half {_fmt(hi.mean())}")
 
     if streak is not None and len(streak):
-        print("\n== Fresh trigger vs stale streak (excess vs same-day cross-section) ==")
-        print("  The tradeable split: does the gate ANTICIPATE a move or CONFIRM one?")
-        print("   h |  fresh exc   n |  stale exc   n")
+        labels = [b[0] for b in STREAK_BUCKETS]
+        print("\n== Entry timing: excess return by consecutive-fire streak ==")
+        print("  Bucket 1 = the gate fired TODAY for the first time. Later buckets are")
+        print("  continuations. A rise left-to-right means waiting beats entering on day 1.")
+        print("   h |" + "".join(f"    d{l:<4}" for l in labels))
         for h, g in streak.groupby("horizon"):
-            f = g[g["cohort"] == "fresh"]
-            s = g[g["cohort"] == "stale"]
-            print(f"  {h:>2} | {_fmt(f['fwd_excess'].mean())} {int(f['n'].sum()):>5} |"
-                  f" {_fmt(s['fwd_excess'].mean())} {int(s['n'].sum()):>5}")
+            cells = []
+            for l in labels:
+                s = g[g["cohort"] == l]
+                cells.append(f"{_fmt(s['fwd_excess'].mean())}" if len(s) else "   ---")
+            print(f"  {h:>2} |" + "".join(f" {c}" for c in cells))
+        print("   n |" + "".join(
+            f" {int(streak[(streak.cohort == l) & (streak.horizon == streak.horizon.min())]['n'].sum()):>6}"
+            for l in labels))
+
+        v = streak.dropna(subset=["efficiency_ratio"])
+        if len(v):
+            cut = v["efficiency_ratio"].median()
+            print("\n  Same table split by market regime (h=10 only, "
+                  f"efficiency ratio median {cut:.2f}):")
+            print("   regime  |" + "".join(f"    d{l:<4}" for l in labels))
+            for name, sub in (("choppier", v[v.efficiency_ratio <= cut]),
+                              ("trendier", v[v.efficiency_ratio > cut])):
+                sub = sub[sub["horizon"] == 10]
+                cells = []
+                for l in labels:
+                    s = sub[sub["cohort"] == l]
+                    cells.append(_fmt(s["fwd_excess"].mean()) if len(s) else "   ---")
+                print(f"   {name:<8} |" + "".join(f" {c}" for c in cells))
 
     if len(gradient):
         print("\n== Gradient: forward excess return by regime_short_long quintile ==")
@@ -487,7 +532,7 @@ def main() -> None:
 
     spread = compute_spread(deltas, snapshots, benchmark)
     gradient = compute_gradient(deltas, snapshots)
-    streak = compute_streaks(deltas, snapshots)
+    streak = compute_streaks(deltas, snapshots, benchmark)
     SPREAD_CSV.parent.mkdir(parents=True, exist_ok=True)
     spread.round(4).to_csv(SPREAD_CSV, index=False)
     gradient.round(4).to_csv(GRADIENT_CSV, index=False)

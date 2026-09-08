@@ -825,3 +825,47 @@ will be reported descriptively and labelled underpowered rather than dropped. No
 **Next:** owner review of the fresh-vs-stale result. If it holds up, the obvious follow-on is
 whether the Picks surface should be de-emphasising fresh fires — but that is a product change and
 needs the owner's call, not an inference from 54 dates.
+
+**Fourth follow-up — fresh/stale binary replaced by a streak dose-response. The finding got stronger.**
+
+Turned EMRG-9's binary split into 4 buckets (`STREAK_BUCKETS` = 1 / 2-3 / 4-5 / 6+) and carried the
+efficiency ratio onto every streak row so the table can be re-cut by regime for free.
+
+**Excess return vs same-day cross-section, by consecutive-fire streak:**
+
+| h | day 1 | day 2-3 | day 4-5 | day 6+ |
+|---|---|---|---|---|
+| 1 | −0.21 | −0.06 | +0.18 | +0.12 |
+| 3 | −0.49 | +0.27 | +0.56 | +1.07 |
+| 5 | −0.57 | +0.34 | +0.61 | +1.96 |
+| 10 | −0.19 | +0.99 | +0.08 | **+2.38** |
+| n | 146 | 132 | 64 | 48 |
+
+**Day 1 is negative at all four horizons. Every later bucket is positive at h=3/5/10, and h=3/5/10
+rise monotonically into day 6+.** A monotone dose-response is much harder to produce by chance than
+the two-way gap it replaced, so this is a strengthening, not just a re-cut.
+
+**Regime split (h=10, efficiency-ratio median 0.28):**
+
+| regime | day 1 | day 2-3 | day 4-5 | day 6+ |
+|---|---|---|---|---|
+| choppier | −0.54 | +1.92 | −2.01 | +3.38 |
+| trendier | −0.54 | +0.87 | +1.93 | +2.96 |
+
+**Day 1 is −0.54 in BOTH regimes — identical.** That is the robustness result that matters: the
+first-day penalty is not a chop artifact. The choppier day-4-5 cell (−2.01) is small-n noise;
+don't read it.
+
+**Main interpretive risk, tracked as EMRG-11 (do before any product change):** a group reaching
+day 6 has by construction kept clearing both floors for six sessions — i.e. it kept performing. So
+"streak 6+ outperforms" may be momentum rather than gate edge. It is **not** lookahead (streak
+position is knowable on the day, forward window still starts at `pos+1`), so it stays tradeable
+either way — but the story changes from "the gate predicts" to "persistence is the signal,
+freshness is noise". Also worth checking whether stale-emerging is largely the `leaders` bucket
+wearing a different tag. **EMRG-12** is the follow-on: express it as an actual entry rule and
+backtest that rule head-to-head.
+
+**Verification:** 24/24 tests in `tests/test_analyze_emerging.py`. Full suite **733 passed, 92
+failed — all 92 confirmed `ModuleNotFoundError: No module named 'playwright'`** (the documented
+sandbox limitation), zero assertion failures. Note this sandbox also started without `pandas`,
+`pytest`, `bs4`, `lxml` or `pytz`; installing them is required before the suite will even collect.

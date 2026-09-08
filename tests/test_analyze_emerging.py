@@ -106,6 +106,34 @@ def test_firing_streaks_counts_consecutive_sessions_and_breaks_on_gap():
     assert s["2026-01-05"] == {"a": 1}
 
 
+def test_streak_bucket_edges_are_inclusive_and_open_ended():
+    assert ae.streak_bucket(1) == "1"
+    assert ae.streak_bucket(2) == "2-3" and ae.streak_bucket(3) == "2-3"
+    assert ae.streak_bucket(5) == "4-5"
+    assert ae.streak_bucket(6) == "6+" and ae.streak_bucket(99) == "6+"
+
+
+def test_streak_bucket_returns_empty_for_unbucketed():
+    assert ae.streak_bucket(0) == ""
+
+
+def test_compute_streaks_labels_a_first_fire_as_bucket_one():
+    deltas, snap = _fixture()
+    out = ae.compute_streaks(deltas, snap, horizons=[1])
+    assert list(out["cohort"]) == ["1"]
+    # 'hot' is the only firing group and returns +2% on the single forward day.
+    assert out.iloc[0]["fwd_mean"] == pytest.approx(2.0)
+
+
+def test_compute_streaks_excess_matches_the_spread_convention():
+    """Both must subtract the same-day full cross-section, or they cannot be compared."""
+    deltas, snap = _fixture()
+    stk = ae.compute_streaks(deltas, snap, horizons=[1])
+    spr = ae.compute_spread(deltas, snap, pd.DataFrame(columns=["date", "perf_day"]),
+                            horizons=[1])
+    assert stk.iloc[0]["fwd_excess"] == pytest.approx(spr.iloc[0]["spread"])
+
+
 # --------------------------------------------------------------- the spread
 
 def _fixture():
