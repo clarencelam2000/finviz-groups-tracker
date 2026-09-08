@@ -759,3 +759,69 @@ already paid; the fix is widening the parse. Recommended capturing *every* label
 rather than another fixed allowlist. Owner approved the ground-truth schema change under
 `.claude/rules/data-pipeline.md` on 2026-09-08 — the "compute it where it's consumed" escape
 hatch cannot apply to data never captured.
+
+**Third follow-up — EMRG-2/4/7/9 built and run. The headline result is not the one we expected.**
+
+Owner asked for an Opus adviser review before building. Worth it — it found **two real arithmetic
+defects** in the design, both fixed before any number was reported:
+
+1. **Count-dependent gain.** `mean(fire) − mean(nonfire)` equals `N/(N−k) × (mean(fire) −
+   mean(all))`. With k = 3..16 firing groups over N ≈ 144, that is a 1.02x..1.12x multiplier —
+   and **k is itself regime-correlated** (more groups fire in a trending tape), so the complement
+   form quietly amplifies exactly the days the regime analysis is about. Now subtracts the full
+   cross-sectional mean; `fwd_nonfire_mean` retained for reference.
+2. **Compound-then-subtract cross terms.** Differencing simple compounded returns leaves a
+   market×spread term that does not cancel, inflating the spread whenever the market rose —
+   biased in the same direction as the hypothesis. Now compounds in **log space** and converts
+   back only for display.
+
+Both were real; **neither moved the numbers much** (h=10 spread +0.60 either way), which is itself
+worth knowing — the result is not an artifact of those bugs.
+
+Adviser's leakage checks came back clean: the forward window starts at `pos+1` so the signal day
+(already inside the gate's `perf_week`) is excluded, and `deltas.csv`/`snapshots.csv` have **0
+duplicate (date, name) rows**, so last-write-wins already collapsed any pre-close/EOD ambiguity.
+
+**Results (`scripts/analyze_emerging.py`, 54 dates):**
+
+| h | spread (fire − cross-section) | pos% | random control | control pos% |
+|---|---|---|---|---|
+| 1 | −0.06 | 50% | −0.04 | 48% |
+| 3 | +0.19 | 48% | +0.09 | 48% |
+| 5 | +0.33 | 54% | −0.09 | 48% |
+| 10 | +0.60 | 60% | −0.78 | 33% |
+
+Gradient (excess vs same-day cross-section, by `regime_short_long` quintile) is **cleanly
+monotone at h=5 and h=10** (h=10: −0.46 / −0.33 / −0.26 / +0.22 / **+0.87**) and **flat at h=1**
+(−0.01 / +0.03 / −0.01 / −0.05 / +0.05).
+
+**THE RESULT THAT MATTERS — fresh triggers are negative; the edge is entirely in stale streaks:**
+
+| h | fresh (first day of fire) | n | stale (day 2+) | n |
+|---|---|---|---|---|
+| 1 | **−0.21** | 146 | +0.13 | 244 |
+| 3 | **−0.49** | 143 | +0.63 | 232 |
+| 5 | **−0.57** | 135 | +0.83 | 219 |
+| 10 | **−0.19** | 122 | **+1.06** | 180 |
+
+Negative at every horizon for fresh, positive at every horizon for stale. **This inverts how the
+bucket is used** — the Picks surface highlights newly-firing groups, and new fires are where the
+edge is not. Sign consistency across all four horizons in both cohorts is the notable part; the
+magnitudes are not trustworthy at this n.
+
+**Honest limits, per the adviser (do not overstate these numbers):**
+- The trustworthy statistic is the **h=1 gradient shape**, pooled over ~7,900 group-days: no
+  window overlap, no compounding trap, and monotonicity is a shape claim. It is currently **flat**.
+- The **h=10 spread and the spread-vs-efficiency-ratio correlation are presentation-grade only**.
+  ER has one high excursion (the 07-28..08-14 thrust), so that correlation is one episode sampled
+  14 times, not 46 independent observations. Tracked as EMRG-10 (clustered SEs); until it lands
+  the report prints **no p-values, t-stats or Sharpes** by design.
+- The random control is not centred on zero at h=10 (−0.78, 33% positive), which is exactly what a
+  negative control is for: it says the instrument has real noise at that horizon.
+
+**Adviser recommended cutting EMRG-6 (tag-count).** Kept — it is the owner's own hypothesis, so it
+will be reported descriptively and labelled underpowered rather than dropped. Noted in SPRINT.
+
+**Next:** owner review of the fresh-vs-stale result. If it holds up, the obvious follow-on is
+whether the Picks surface should be de-emphasising fresh fires — but that is a product change and
+needs the owner's call, not an inference from 54 dates.
