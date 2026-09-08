@@ -869,3 +869,45 @@ backtest that rule head-to-head.
 failed — all 92 confirmed `ModuleNotFoundError: No module named 'playwright'`** (the documented
 sandbox limitation), zero assertion failures. Note this sandbox also started without `pandas`,
 `pytest`, `bs4`, `lxml` or `pytz`; installing them is required before the suite will even collect.
+
+**Fifth follow-up — the owner's pushback produced the session's actual finding, and five rejected framings are now written down.**
+
+The owner pushed back hard on five separate framings, and was right on all five. Full record with
+reasoning in **`knowledge/alpha-study-working-agreement.md`** — read it before any future
+alpha/signal/backtest work; `CLAUDE.md` now points at it. Summary:
+
+1. **"Wait for more data"** — rejected on better reasoning than the objection: if efficacy is
+   regime-dependent, a longer sample spanning regimes averages to something true in no regime.
+2. **"Isolate the buckets"** — rejected; overlap is a conviction signal ("firing on more
+   cylinders"), the goal is deciding where to look, not a controlled experiment.
+3. **"This might just be momentum"** — the worst of the five. **Momentum continuing IS the thesis.**
+   Also: returns are measured strictly from the day after the signal, so there is no lookahead —
+   the owner spotted this and was right that it settles the concern.
+4. **Publication vocabulary** (p-values, "not yet powered", "case study not evidence") —
+   *"I'm not submitting this to the Quant Trader Association."*
+5. **Elevating h=1** because it is statistically cleanest — *"so are we day trading now?"*
+   Correct. Measurement horizons follow the trading horizon; h=1 is not a swing trade. Reporting
+   an adviser's statistical preference over the owner's actual holding period was the error.
+
+**Reframing #3 comparatively produced the finding.** Not "is it momentum?" but "does our filter
+find momentum better than a simpler filter?" Measured over 54 dates:
+
+| Cut | Groups/day | 10-session excess | Days beating the average group |
+|---|---|---|---|
+| Deployed gate (`regime > 0.15` AND `rs_score > 0.5`) | ~7 | +0.60pp | 60% |
+| Top quintile by `regime_short_long` alone | ~28 | +0.79pp | 73% |
+| **Top decile by `regime_short_long` alone** | **~14** | **+1.27pp** | **71%** |
+
+**The `rs_score > 0.5` floor is costing money on every day we have data for.** Twice the excess
+return from the simpler, single-variable cut. Tracked as **EMRG-13**, now the highest-value open
+task. EMRG-11 closed as mis-framed (do not re-open).
+
+**Also landed:** `exec-brief` gains a mandatory worked-example rule (owner asked twice — every
+concept gets concrete numbers, e.g. "Monday, 144 groups, 6 fire, they return +0.7% while the board
+returns +1.2%, so the spread is −0.5pp: they made money, just less than buying everything"), a
+"making money is the standard, not statistical rigour" section listing the banned framings, and a
+rule that real caveats are stated once in plain language and never become the headline.
+
+**Next:** EMRG-13 — sweep the cut-off at 5/10/15/20 names, confirm where the payoff peaks, and
+check whether the day-1 penalty survives the simpler cut. Changing `EMERGING_RS_FLOOR` in
+`scripts/picks_config.py` is a product change and needs the owner's sign-off first.
