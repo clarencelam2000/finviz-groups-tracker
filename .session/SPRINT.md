@@ -8,6 +8,39 @@
 
 ### 🔴 Backlog
 
+#### Emerging-bucket alpha study (2026-09-08)
+
+Owner question: *is there alpha in the `emerging` picks bucket?* Methodology riff done this
+session; findings below drive the tasks. **Framing decided by the owner (do not re-litigate):**
+the goal is deciding where to put money, not a clean experiment. Bucket overlap is a *feature*
+(a group tagged by several buckets is firing on more cylinders), not contamination to isolate.
+Signal efficacy is expected to be **regime-dependent** — so pooling a longer history across
+regimes would produce an average true in no regime. Analyse *within* regime, don't wait for
+more data.
+
+Grounding measured this session (2026-09-08): 62 trading dates in `deltas.csv`; the emerging
+gate (`regime_short_long > 0.15 & rs_score > 0.5`) is computable on 55 of them and fires on
+**393 group-days**, of which only **202** ever reach `picks.csv` (4 slots, priority 2). All 202
+genuinely pass the gate — `add_bucket_with_backfill` walks only the qualifying pool, so the
+backfill-contamination hypothesis is **disproved**, don't re-open it.
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| EMRG-1 | **Regime classifier** — encode "trending vs choppy tape" from `data/benchmark/snapshots.csv`. Blocked on owner's definition (SPY vs 20SMA / chop filter / owner's own model). | new `scripts/` analysis module | S | Blocking input for EMRG-3. Owner decision outstanding as of 2026-09-08. |
+| EMRG-2 | **Portfolio spread series** — collapse each date to one number: mean forward return of gate-firing groups − mean of non-firing, horizons 1/3/5/10, from `deltas.csv` (not `picks.csv`, so all 393 obs are in scope). Emit a daily series + cumulative equity curve. | new analysis script | M | Replaces the row-pooled average in `evaluate_picks.py`, which over-weights broad-signal days (16-qualifier days contribute 16 rows, 3-qualifier days contribute 3) and so partly measures "the market went up". |
+| EMRG-3 | **Regime overlay** — plot/report the EMRG-2 curve conditioned on the EMRG-1 regime label. Answers "when does emerging work", the actual owner question. | analysis script | M | Depends on EMRG-1 + EMRG-2. |
+| EMRG-4 | **Gradient / dose-response on `regime_short_long`** — daily quintile-sort all 144 groups, forward return per bin. Four outcome shapes → four actions (staircase = threshold is a dial; flat-then-jump = tighten gate; flat = wrong variable, try `rs_score`; inverted = wrong side). Re-run per month to see if the gradient shape is regime-dependent. | analysis script | M | Owner flagged this as the highest-value test: the `0.15` and `0.5` floors in `scripts/picks_config.py` are admittedly arbitrary and this is what would let us set them from evidence. Measured across all 144 groups, so it never touches the buckets. |
+| EMRG-5 | **Slot-count replay** — replay the gate historically at 4 / 8 / all-qualifiers slots to see what the 4-slot truncation costs. | analysis script | S | Free: `deltas.csv` has every group every day. |
+| EMRG-6 | **Tag-count as a conviction signal** — do groups tagged by 3 buckets outperform groups tagged by 1? Owner's "firing on more cylinders" hypothesis; if it holds, tag-count becomes sizing information. | analysis script | S | 77 of 202 emerging rows are multi-tagged, so there is a real sample to test. |
+| EMRG-7 | **Negative control harness** — run the same measurement over randomly-selected groups. If random also shows an edge, the instrument is biased and every number it has ever produced is suspect. | analysis script | S | Cheap; do it alongside EMRG-2, not after. |
+| EMRG-8 | **Execution-timing bias** — picks publish 17:00 ET (post-close) but forward returns start at `close(t)→close(t+1)`, handing us an untradeable overnight gap. Quantify it or document it as a known optimistic bias. | `scripts/evaluate_picks.py` | S | We have no opens in `snapshots.csv`, so this may only be documentable, not fixable. |
+
+> **Not doing (owner decision, 2026-09-08):** waiting for a longer sample before running any of
+> this; isolating buckets for statistical cleanliness; the group-vs-tradeable-instrument gap
+> (the owner picks the strongest names inside a chosen group — the group is a pointer, not a
+> position).
+
+
 #### AI/LLM integration across new tabs (2026-09-05; staff review 2026-09-06)
 
 Design gate **passed**: `planning/ai-llm-integration-proposal.md` (§6 = locked owner decisions,

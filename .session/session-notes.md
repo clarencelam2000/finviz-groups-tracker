@@ -627,3 +627,77 @@ numbers show whether batching is needed at all.
 scripts/spike_structured_output.py --limit 60`), pastes the printed table into §4 of the knowledge
 note, and records the outcome in the `AI-NEXT-P0c` SPRINT row. That unblocks P0b (shared renderer)
 and P2a (Morning pipeline). No release triplet in this PR — nothing user-visible ships yet.
+
+---
+
+## 2026-09-08 — Emerging-bucket alpha: methodology riff + exec-brief comms skill
+
+**Status: safe to close** — no code touched in the pipeline; this session produced a measurement
+plan (SPRINT § EMRG-1..8), a communication skill, and one outstanding owner decision.
+
+**What the owner asked:** is there alpha in the `emerging` picks bucket, and is
+`scripts/evaluate_picks.py` even the right instrument? Explicitly wanted methodology discussed
+before any code.
+
+**Grounding measured (do not re-derive):**
+- 62 trading dates in `data/industries/deltas.csv` (2026-06-09 → 09-04). The emerging gate is
+  computable on **55** (needs `rs_score`, first non-null 2026-06-18).
+- Gate (`regime_short_long > 0.15 & rs_score > 0.5`) fires on **393 group-days**; mean 7.1/day,
+  range 3–16. Only **202** reach `picks.csv` — `EMERGING_SLOTS = 4` at priority 2.
+- All **202/202** emerging rows genuinely pass the gate. **The backfill-contamination hypothesis
+  is disproved** — `add_bucket_with_backfill` walks only the already-filtered qualifying pool,
+  so it can never pad with non-qualifiers. 14 rows sit past natural rank 4; all 14 still pass.
+  Don't re-open this.
+- 77/202 emerging rows are multi-tagged (`emerging|rs_new_high` 29, `emerging|leaders` 15, …).
+- `picks.csv` spans 49 dates across **three selector versions** (v1: 5, v2: 35, v3: 9), which
+  `print_report` currently pools without splitting.
+
+**Owner decisions taken this session (locked — do not re-litigate):**
+1. **No waiting for a longer sample.** The owner's hypothesis is that signal efficacy is
+   *regime-dependent* (a swing trader adapts style to a trending vs choppy tape). That
+   reframes the problem rather than just the timeline: pooling more history across regimes
+   yields an average true in no regime. Analyse *within* regime instead. My "wait until spring"
+   argument was wrong on its own terms and was withdrawn.
+2. **Bucket overlap is a feature, not contamination.** A group tagged by several buckets is
+   "firing on more cylinders" — that's a candidate conviction/sizing signal (EMRG-6), not noise
+   to isolate. The goal is deciding where to put money, not a clean experiment.
+3. **Tradeability gap is out of scope.** The owner picks the strongest names inside a chosen
+   group; the group is a heuristic pointer, not a position.
+4. Terminology: "spike" in this project means a *research spike*, never a price spike.
+
+**Real methodological findings that survived:**
+- **Row-pooling bias.** `evaluate_picks.py` averages 393 rows, so a 16-qualifier day counts 16×
+  and a 3-qualifier day 3×. Broad-signal days are likely strong-market days, so part of the
+  measured "edge" is just market direction. Fix: collapse to one number per date
+  (mean firing − mean non-firing) → a daily spread series and a cumulative equity curve, which
+  also makes the regime hypothesis *visible* rather than statistical. (EMRG-2/EMRG-3.)
+- **We grade the picker, never the signal.** Everything to date measures a 4-slot ranked
+  selector on `picks.csv`, not the gate. Replaying from `deltas.csv` gives 393 obs instead of
+  202 and starts a week earlier, with no slots/priority/version breaks. (EMRG-2/EMRG-5.)
+- **The thresholds are unexamined.** `EMERGING_REGIME_FLOOR = 0.15` / `EMERGING_RS_FLOOR = 0.5`
+  were picked, never tested. Owner flagged the **gradient/dose-response test as the highest-value
+  item** (EMRG-4): daily quintile-sort all 144 groups by `regime_short_long`, forward return per
+  bin. Shape → action: staircase means the threshold is just a dial; flat-then-jump means tighten
+  it; flat means the variable is wrong; inverted means wrong side.
+- **No negative control anywhere.** Nothing has ever checked whether the harness shows an edge on
+  randomly-selected groups (EMRG-7). Cheap and highest-leverage-per-hour.
+- **Execution-timing bias** (EMRG-8): picks publish 17:00 ET, post-close, but forward returns
+  start `close(t)→close(t+1)` — an overnight gap we couldn't have traded. Likely only
+  documentable; `snapshots.csv` has no opens.
+
+**What landed in this PR**
+- `.claude/skills/exec-brief/SKILL.md` — the owner's required communication style (headline
+  first, one decision with a recommendation + cost-of-not-deciding, layered detail, three
+  bullets not eight, pushback rules incl. "statistical rigour is not the goal, making money is").
+  Written at the owner's request after this session's first two replies were, fairly, called out
+  as information dumps.
+- `CLAUDE.md` § Communication style — pointer so the skill applies by default, not only on
+  explicit invocation.
+- `.session/SPRINT.md` § Emerging-bucket alpha study — EMRG-1..8 with the locked framing and the
+  "not doing" list, so none of the above lives only in chat.
+
+**Blocker / next step.** **EMRG-1 needs an owner decision: how to define market regime**
+(SPY vs its 20-day average / add a chop filter / the owner's own mental model). It's a trading
+judgment, not a data question, and EMRG-3 can't start without it. EMRG-2, EMRG-4, EMRG-5,
+EMRG-6 and EMRG-7 are all unblocked and runnable from a cloud session today — no Finviz access
+needed, they read committed CSVs only.
