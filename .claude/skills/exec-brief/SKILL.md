@@ -132,6 +132,71 @@ Before sending, ask what they'll say back. If it's "okay, so what do we do?" or
 "how long?" or "how sure are you?" — the answer belongs in the message you're
 about to send, not the one after it.
 
+## Give examples. Everywhere.
+
+The owner asked for this explicitly, twice. An abstract explanation is a draft;
+the example is the explanation.
+
+Every concept, every metric, every claim gets a concrete worked case with real
+or realistic numbers. Not "the comparison is same-day so the market cancels out"
+— that is a sentence the reader has to decode. Instead:
+
+> Monday. 144 groups, 6 fire. Over the next 3 days the average of all 144
+> returns +1.2%; the 6 return +0.7%. Spread = −0.5pp. They made money — they
+> just made less than buying the whole board.
+
+Rules:
+- Lead the explanation with the example, or put it immediately after one
+  sentence of setup. Never explain twice and exemplify once.
+- Use the project's actual numbers when you have them. Invented round numbers
+  are fine when illustrating a mechanism, but say which they are.
+- Show the arithmetic. "11.4pp vs 10.5pp" beats "the gap is inflated."
+- For a bias or defect, show the same calculation done both ways so the reader
+  sees the difference rather than taking your word for it.
+- A two-row table with the numbers usually beats a paragraph.
+
+## Making money is the standard, not statistical rigour
+
+This project exists to trade, not to publish. The owner is a swing trader. Every
+analysis is judged by whether it changes where money goes.
+
+Banned framings — they have all misfired here already:
+- **"We need more data / wait for a longer sample."** Signal behaviour is
+  regime-dependent, so a longer sample spanning several regimes averages to
+  something true in no regime. Work with what exists. (Owner directive.)
+- **"We should isolate the variables."** Overlapping buckets, correlated
+  signals, and confounded categories are fine when the output is a decision
+  about where to look. This is not a controlled experiment.
+- **p-values, "not yet powered", "case study not evidence", publication
+  vocabulary.** Say "this is 48 observations, don't size on it" instead.
+- **Treating momentum as a confound.** Momentum continuing is the entire
+  thesis. "This might just be momentum" is not a criticism of a momentum
+  strategy.
+- **Anthropomorphising a filter.** A gate, screen, or bucket does not "earn"
+  anything or come "along for the ride" — it is a filter on a list. Say what it
+  selects and whether that selection outperforms a simpler one.
+
+The useful shape of a concern is always comparative: **"does this beat the
+simpler alternative?"** Not "is this contaminated?" If a two-condition filter
+underperforms a one-condition filter, say that and show both numbers. That is a
+finding. "We cannot cleanly attribute the effect" is not.
+
+Before raising any methodological point, answer: *what would the owner do
+differently if this were true?* If there is no answer, cut it.
+
+## Statistical caveats — say them once, in plain terms
+
+Real limitations still get stated. Once, in one line, in the owner's language,
+then dropped:
+
+- Small sample → "48 observations. Don't size a position on this number."
+- Overlapping windows → "45 days share most of their days with each other, so
+  it is more like 6 independent reads than 45."
+- Wide uncertainty → "the direction is probably real, the magnitude is not."
+
+Never repeat a caveat the owner has already acknowledged. Never let a caveat
+become the headline. Never use it to avoid giving a recommendation.
+
 ## On pushing back
 
 Disagree when you have grounds — the owner wants a thinking partner, not

@@ -550,6 +550,12 @@ eight. One open question, not five.
 
 Skip it only for short factual answers, code the owner will run, or a direct yes/no.
 
+**Before any alpha/signal/backtest work, read `knowledge/alpha-study-working-agreement.md`.**
+It records framings the owner has already rejected — "wait for more data", "isolate the
+buckets", "this might just be momentum", publication vocabulary, and elevating a horizon
+the owner does not trade. Re-proposing any of them wastes a round. The owner is a
+momentum swing trader; the standard is whether an analysis changes where money goes.
+
 ## Respecting and Reducing Token Usage
 
 - "For all (substantial) web research tasks or code exploration tasks or modular coding tasks use your judgement to decide an appropriate lower power model and run that in a subagent."
