@@ -108,6 +108,58 @@ Not everything was rejected. These landed and are worth raising again in future 
    reading. **Compound in log space, convert back only for display.** Compounding is not
    discarded; only the double-count is.
 
+## The playbook — how to answer "does bucket X earn its place?"
+
+**This is now one command.** `scripts/analyze_signals.py` scores any selection rule
+against every other on identical dates and identical forward windows, so the answer to
+"should we drop Accel", "are Leaders giving us alpha", "is top-10 better than top-20"
+is a leaderboard, not a new study.
+
+```bash
+python3 scripts/analyze_signals.py --compare --horizons 5,10        # everything
+python3 scripts/analyze_signals.py --compare leaders,top14_regime   # head-to-head
+```
+
+Rules live in `RULES` in that file. Adding one is a function plus a dict entry. The
+deployed buckets (`emerging`, `leaders`, `accel`, `rs_new_high`) import their floors
+from `picks_config.py`, so they track the live selector instead of drifting.
+
+**Always include a single-variable baseline.** A multi-condition screen has to beat
+"rank on one column, take the top N" to justify its complexity. That comparison is what
+found the 2026-09-08 result; without it the emerging gate looked fine in isolation.
+
+**Always split by regime** (thrust vs chop) before recommending anything. A rule that
+loses in both tapes is dead. A rule that loses in one is a scheduling question, not a
+deletion question.
+
+### Results as of 2026-09-08 (54 dates, mostly chop, one thrust 07-28..08-14)
+
+Excess return vs the day's average industry group, 10 sessions forward:
+
+| Rule | Picks/day | All dates | Thrust | Chop | Hit rate |
+|---|---|---|---|---|---|
+| `top5_regime` | 5 | **+1.72pp** | — | — | 54% |
+| `top10_regime` | 10 | **+1.64pp** | +3.35 | +0.94 | 73% |
+| `top14_regime` | 14 | +1.30pp | +2.43 | +0.84 | 73% |
+| `top28_regime` | 28 | +0.87pp | — | — | 75% |
+| `emerging` (deployed gate) | 7 | +0.60pp | +0.79 | +0.51 | 60% |
+| `accel` (deployed) | 18 | **−1.02pp** | −2.26 | −0.40 | 36% |
+| `rs_new_high` (deployed) | 8 | **−1.36pp** | −3.43 | −0.39 | 41% |
+| `leaders` (deployed) | 11 | **−2.00pp** | −1.56 | −2.16 | 31% |
+| `top10_momentum` | 10 | **−2.69pp** | −2.06 | −2.93 | 25% |
+
+**Three of the four deployed buckets lose money against simply holding the average
+industry group, in BOTH tapes.** Leaders is the worst and has the most slots (11 of a
+27-name daily budget). Only `regime_short_long` cuts are positive, and they are positive
+in both regimes.
+
+`momentum_score`-ranked cuts are strongly negative, which says high-momentum groups
+mean-reverted over 10 sessions across this sample. 14 thrust dates is thin — but the
+signs are consistent across both segments and both horizons, which is the part to trust.
+
+**Do not treat this as settled product direction.** It is a measurement. Changing
+`picks_config.py` is a product change and needs the owner's explicit sign-off.
+
 ## Communication
 
 `.claude/skills/exec-brief` is mandatory and now carries the examples rule. The short

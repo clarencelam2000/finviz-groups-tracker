@@ -1,4 +1,4 @@
-"""Tests for scripts/analyze_emerging.py (SPRINT § EMRG-2/4/7/9).
+"""Tests for scripts/analyze_signals.py (SPRINT § EMRG-2/4/7/9).
 
 Expected values are hand-computed from the fixtures below, never by calling the
 module's own helpers — otherwise a sign or scaling bug would satisfy its own test.
@@ -13,7 +13,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-import analyze_emerging as ae  # noqa: E402
+import analyze_signals as ae  # noqa: E402
 
 
 # ---------------------------------------------------------------- compounding

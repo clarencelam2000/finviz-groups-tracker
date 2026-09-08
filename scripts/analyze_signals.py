@@ -42,7 +42,15 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-from picks_config import EMERGING_REGIME_FLOOR, EMERGING_RS_FLOOR  # noqa: E402
+from picks_config import (  # noqa: E402
+    ACCEL_RS_FLOOR,
+    ACCEL_THRESHOLD,
+    ANTIFLASH_PCTILE,
+    EMERGING_REGIME_FLOOR,
+    EMERGING_RS_FLOOR,
+    LEADER_SS_SLOTS,
+    RS_NH_RS_FLOOR,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 DELTAS_CSV = ROOT / "data" / "industries" / "deltas.csv"
@@ -51,6 +59,7 @@ BENCHMARK_CSV = ROOT / "data" / "benchmark" / "snapshots.csv"
 SPREAD_CSV = ROOT / "data" / "picks" / "eval" / "emerging_spread.csv"
 GRADIENT_CSV = ROOT / "data" / "picks" / "eval" / "emerging_gradient.csv"
 STREAK_CSV = ROOT / "data" / "picks" / "eval" / "emerging_streak.csv"
+COMPARE_CSV = ROOT / "data" / "picks" / "eval" / "rule_comparison.csv"
 
 # Forward horizons in TRADING SESSIONS, positional in the sorted date list so
 # weekend/holiday gaps are skipped for free (same convention as
@@ -194,6 +203,171 @@ def gate_fires(deltas_today: pd.DataFrame,
     d = deltas_today.dropna(subset=["regime_short_long", "rs_score"])
     fired = d[(d["regime_short_long"] > regime_floor) & (d["rs_score"] > rs_floor)]
     return set(fired["name"])
+
+
+# ---------------------------------------------------------------------------
+# SELECTION RULES — the thing being compared.
+#
+# Each rule takes one date's slice of deltas.csv and returns the set of group
+# names it would pick that day. Every rule is scored identically downstream, so
+# `--rules a,b,c` is a straight "which cut makes more money" leaderboard.
+#
+# Two families:
+#   * DEPLOYED rules mirror scripts/collect_picks.py's selector, floors imported
+#     from picks_config so they follow the live config rather than drifting.
+#     Slot caps and cross-bucket priority are deliberately NOT applied — we are
+#     scoring the rule, not the 27-name daily budget.
+#   * SIMPLE rules are single-variable top-N cuts. They exist as the honest
+#     baseline: a multi-condition screen has to beat "just rank on one column
+#     and take the top N" to justify itself. On 2026-09-08 the emerging gate
+#     did not (see knowledge/alpha-study-working-agreement.md).
+#
+# Adding a rule is one function plus one RULES entry. That is the intended way
+# to answer "is Accel earning its place" or "should Leaders be top 11 or top 20"
+# without writing a new study.
+# ---------------------------------------------------------------------------
+
+def _pctile(day: pd.DataFrame, col: str = "momentum_score") -> pd.Series:
+    """Cross-sectional percentile (0-1) of `col` within this date."""
+    return day[col].rank(pct=True, ascending=True)
+
+
+def _top_n(day: pd.DataFrame, col: str, n: int, ascending: bool = False) -> set:
+    d = day.dropna(subset=[col])
+    if len(d) == 0:
+        return set()
+    d = d.sort_values(col, ascending=ascending)
+    return set(d["name"].head(n))
+
+
+def rule_emerging(day):
+    """DEPLOYED emerging gate: regime floor AND rs_score floor."""
+    return gate_fires(day)
+
+
+def rule_emerging_regime_only(day):
+    """The emerging gate with the rs_score floor removed — the ablation."""
+    d = day.dropna(subset=["regime_short_long"])
+    return set(d[d["regime_short_long"] > EMERGING_REGIME_FLOOR]["name"])
+
+
+def rule_leaders(day):
+    """DEPLOYED leaders core: best LEADER_SS_SLOTS by summed mid-horizon rank."""
+    d = day.dropna(subset=["rank_month", "rank_quarter", "rank_half"]).copy()
+    if len(d) == 0:
+        return set()
+    d["_sum_mid"] = d["rank_month"] + d["rank_quarter"] + d["rank_half"]
+    return _top_n(d, "_sum_mid", LEADER_SS_SLOTS, ascending=True)
+
+
+def rule_accel(day):
+    """DEPLOYED accel gate: momentum_accel + anti-flash percentile + rs floor."""
+    d = day.dropna(subset=["momentum_accel", "momentum_score", "rs_score"]).copy()
+    if len(d) == 0:
+        return set()
+    d["_p"] = _pctile(d)
+    return set(d[(d["momentum_accel"] > ACCEL_THRESHOLD)
+                 & (d["_p"] >= ANTIFLASH_PCTILE)
+                 & (d["rs_score"] > ACCEL_RS_FLOOR)]["name"])
+
+
+def rule_rs_new_high(day):
+    """DEPLOYED rs_new_high gate."""
+    d = day.dropna(subset=["rs_new_high", "rs_score", "momentum_score"]).copy()
+    if len(d) == 0:
+        return set()
+    d["_p"] = _pctile(d)
+    return set(d[(d["rs_new_high"] == 1)
+                 & (d["rs_score"] >= RS_NH_RS_FLOOR)
+                 & (d["_p"] >= ANTIFLASH_PCTILE)]["name"])
+
+
+def _mk_top(col, n):
+    return lambda day, _c=col, _n=n: _top_n(day, _c, _n)
+
+
+RULES = {
+    # deployed selector buckets
+    "emerging": rule_emerging,
+    "leaders": rule_leaders,
+    "accel": rule_accel,
+    "rs_new_high": rule_rs_new_high,
+    # ablation of the emerging gate
+    "emerging_regime_only": rule_emerging_regime_only,
+    # single-variable baselines (the bar a multi-condition screen must clear)
+    **{f"top{n}_regime": _mk_top("regime_short_long", n) for n in (5, 10, 14, 20, 28)},
+    **{f"top{n}_momentum": _mk_top("momentum_score", n) for n in (10, 14, 28)},
+    **{f"top{n}_mom_confirmed": _mk_top("momentum_confirmed", n) for n in (10, 14, 28)},
+    **{f"top{n}_rs_confirmed": _mk_top("rs_confirmed", n) for n in (10, 14, 28)},
+}
+
+
+def compare_rules(deltas: pd.DataFrame, snapshots: pd.DataFrame,
+                  rule_names: list[str] | None = None,
+                  horizons: list[int] = HORIZONS) -> pd.DataFrame:
+    """Score every named rule on the same dates and horizons.
+
+    Returns one row per (rule, horizon): average selection size, mean excess
+    return vs the day's full cross-section, and the share of days the selection
+    beat that cross-section. Every rule sees identical dates and identical
+    forward windows, so the numbers are directly comparable.
+    """
+    names = rule_names or list(RULES)
+    cols = ["rule", "horizon", "n_dates", "avg_picks", "excess_mean", "hit_rate"]
+    if len(deltas) == 0 or len(snapshots) == 0:
+        return pd.DataFrame(columns=cols)
+    perf = perf_matrix(snapshots)
+    dates = list(perf.index)
+    pos = {d: i for i, d in enumerate(dates)}
+
+    acc: dict = {(r, h): [] for r in names for h in horizons}
+    for date, day in deltas.groupby("date", sort=True):
+        if date not in pos:
+            continue
+        picks = {r: RULES[r](day) for r in names}
+        start = pos[date] + 1
+        for h in horizons:
+            fwd = forward_returns(perf, dates, start, h).dropna()
+            if len(fwd) == 0:
+                continue
+            day_mean = log_to_pct(float(fwd.mean()))
+            for r in names:
+                v = fwd[fwd.index.isin(picks[r])]
+                if len(v) == 0:
+                    continue
+                acc[(r, h)].append((len(v), log_to_pct(float(v.mean())) - day_mean))
+
+    rows = []
+    for (r, h), vals in acc.items():
+        if not vals:
+            continue
+        exc = [e for _, e in vals]
+        rows.append({
+            "rule": r, "horizon": h, "n_dates": len(vals),
+            "avg_picks": float(np.mean([n for n, _ in vals])),
+            "excess_mean": float(np.mean(exc)),
+            "hit_rate": float(np.mean([e > 0 for e in exc])),
+        })
+    return pd.DataFrame(rows, columns=cols).sort_values(
+        ["horizon", "excess_mean"], ascending=[True, False])
+
+
+def print_rule_comparison(cmp_df: pd.DataFrame, horizons: list[int] | None = None) -> None:
+    """Leaderboard: which cut made the most money, per horizon."""
+    if len(cmp_df) == 0:
+        print("No rule-comparison rows.")
+        return
+    print("\n== Which cut makes more money? (excess vs the day's average group) ==")
+    print("  Every rule scored on identical dates and identical forward windows.")
+    for h in (horizons or sorted(cmp_df["horizon"].unique())):
+        g = cmp_df[cmp_df["horizon"] == h]
+        if len(g) == 0:
+            continue
+        print(f"\n  --- {h} sessions forward ---")
+        print(f"  {'rule':<22} {'picks/day':>9} {'excess':>8} {'hit':>6}  {'dates':>5}")
+        for _, r in g.iterrows():
+            print(f"  {r['rule']:<22} {r['avg_picks']:>9.1f} {r['excess_mean']:>+8.2f}"
+                  f" {100 * r['hit_rate']:>5.0f}% {int(r['n_dates']):>6}")
 
 
 def efficiency_ratio(daily_pct: np.ndarray) -> float:
@@ -512,7 +686,32 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--report", action="store_true",
                     help="print the roll-up from existing CSVs (no rebuild)")
+    ap.add_argument("--compare", nargs="?", const="ALL", metavar="RULES",
+                    help="score selection rules head-to-head instead of running the "
+                         "emerging study. Comma-separated names, or omit for all. "
+                         f"Available: {', '.join(RULES)}")
+    ap.add_argument("--horizons", default=None,
+                    help="comma-separated forward horizons in sessions "
+                         f"(default {','.join(map(str, HORIZONS))})")
     args = ap.parse_args()
+
+    horizons = [int(x) for x in args.horizons.split(",")] if args.horizons else HORIZONS
+
+    if args.compare:
+        deltas = pd.read_csv(DELTAS_CSV, dtype={"date": str}, low_memory=False)
+        snapshots = pd.read_csv(SNAPSHOTS_CSV, dtype={"date": str}, low_memory=False)
+        names = None if args.compare == "ALL" else [
+            n.strip() for n in args.compare.split(",")]
+        if names:
+            unknown = [n for n in names if n not in RULES]
+            if unknown:
+                raise SystemExit(f"unknown rule(s): {', '.join(unknown)}. "
+                                 f"Available: {', '.join(RULES)}")
+        cmp_df = compare_rules(deltas, snapshots, names, horizons)
+        cmp_df.round(4).to_csv(COMPARE_CSV, index=False)
+        print(f"Wrote {len(cmp_df)} rows -> {COMPARE_CSV}")
+        print_rule_comparison(cmp_df, horizons)
+        return
 
     if args.report:
         if not SPREAD_CSV.exists():

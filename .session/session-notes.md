@@ -911,3 +911,56 @@ rule that real caveats are stated once in plain language and never become the he
 **Next:** EMRG-13 — sweep the cut-off at 5/10/15/20 names, confirm where the payoff peaks, and
 check whether the day-1 penalty survives the simpler cut. Changing `EMERGING_RS_FLOOR` in
 `scripts/picks_config.py` is a product change and needs the owner's sign-off first.
+
+**Sixth follow-up — EMRG-13 done, and it turned into a much bigger finding than the question asked.**
+
+Generalised the study into a **rule-comparison harness**: `scripts/analyze_emerging.py` →
+**`scripts/analyze_signals.py`**, with a `RULES` registry and `--compare`. Any selection rule is
+now scored against any other on identical dates and identical forward windows, so
+*"should we drop Accel?"* / *"are Leaders giving us alpha?"* is **one command**, not a new study:
+
+```bash
+python3 scripts/analyze_signals.py --compare --horizons 5,10
+python3 scripts/analyze_signals.py --compare leaders,top14_regime
+```
+
+Deployed buckets (`emerging`, `leaders`, `accel`, `rs_new_high`) import their floors from
+`picks_config.py` so they track the live selector. Single-variable top-N baselines
+(`top{5,10,14,20,28}_regime`, `_momentum`, `_mom_confirmed`, `_rs_confirmed`) are included on
+purpose: **a multi-condition screen has to beat "rank on one column, take the top N" to justify
+itself.** Without that baseline the emerging gate looked fine in isolation.
+
+**Result — excess vs the day's average industry group, 10 sessions forward, 54 dates:**
+
+| Rule | Picks/day | All | Thrust | Chop | Hit |
+|---|---|---|---|---|---|
+| `top5_regime` | 5 | **+1.72** | — | — | 54% |
+| `top10_regime` | 10 | **+1.64** | +3.35 | +0.94 | 73% |
+| `top14_regime` | 14 | +1.30 | +2.43 | +0.84 | 73% |
+| `emerging` (deployed) | 7 | +0.60 | +0.79 | +0.51 | 60% |
+| `accel` (deployed) | 18 | **−1.02** | −2.26 | −0.40 | 36% |
+| `rs_new_high` (deployed) | 8 | **−1.36** | −3.43 | −0.39 | 41% |
+| `leaders` (deployed) | 11 | **−2.00** | −1.56 | −2.16 | 31% |
+| `top10_momentum` | 10 | **−2.69** | −2.06 | −2.93 | 25% |
+
+**Three of the four deployed buckets lose money versus simply holding the average industry group
+— in BOTH the thrust segment and the chop segment, so it is not a regime artifact.** Leaders is
+the worst performer and holds the most slots (11 of the 27-name daily budget). Only
+`regime_short_long` cuts are positive, and they are positive in both tapes.
+
+`momentum_score`-ranked cuts are strongly negative — high-momentum groups mean-reverted over 10
+sessions across this sample.
+
+**Honest caveats (state once, don't bury the finding):** 54 dates with only 14 trending; and the
+deployed buckets were scored *without* their slot caps and cross-bucket priority, so this measures
+the rules rather than the exact 27-name list the selector emits. Neither flips any sign; both
+affect how hard to lean.
+
+**Tracked as EMRG-14 — a product decision, blocked on the owner's explicit sign-off.** Rebalancing
+`picks_config.py` toward `regime_short_long` is not something to do off a measurement alone.
+
+**Docs generalised so this doesn't get re-derived:** `knowledge/alpha-study-working-agreement.md`
+gains a **Playbook** section (the one-command recipe, the two mandatory rules — always include a
+single-variable baseline, always split by regime — and the full results table).
+`CLAUDE.md` points at it from the communication-style section, so a future session asked
+"are Leaders giving us alpha?" lands on the method and the prior results before writing any code.

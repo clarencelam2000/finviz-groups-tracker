@@ -556,6 +556,11 @@ buckets", "this might just be momentum", publication vocabulary, and elevating a
 the owner does not trade. Re-proposing any of them wastes a round. The owner is a
 momentum swing trader; the standard is whether an analysis changes where money goes.
 
+That doc also carries the **playbook**: "does bucket X earn its place?" is one command —
+`python3 scripts/analyze_signals.py --compare` scores every selection rule head-to-head on
+identical dates. Always include a single-variable top-N baseline and always split by regime
+before recommending anything.
+
 ## Respecting and Reducing Token Usage
 
 - "For all (substantial) web research tasks or code exploration tasks or modular coding tasks use your judgement to decide an appropriate lower power model and run that in a subagent."
