@@ -701,3 +701,36 @@ before any code.
 judgment, not a data question, and EMRG-3 can't start without it. EMRG-2, EMRG-4, EMRG-5,
 EMRG-6 and EMRG-7 are all unblocked and runnable from a cloud session today — no Finviz access
 needed, they read committed CSVs only.
+
+**Follow-up in the same session — regime definition answered, EMRG-1 unblocked.**
+
+Owner had no quantitative model, only chart-reading heuristics: time split above/below the 20SMA,
+staying inside a 50d high/low range, MA slope, MACD-ish. Checked what the data can actually
+support before designing anything:
+
+- `data/benchmark/snapshots.csv` carries **only `perf_*` for SPY** — no price, no SMA, no 52W
+  high/low. `SMA20`/`SMA50`/`52W High`/`52W Low` exist only in `picks.csv`, per *stock ticker*,
+  and only from 2026-09-03.
+- A synthetic SPY index compounds cleanly from `perf_day` (55 days, +3.93% total). But a 20SMA
+  costs 19 warm-up days → **36 of 55 usable**; a 50d high/low leaves ~5. **The 50d-range
+  heuristic is not viable on current history** — that's a data fact, not a judgment.
+- Recommended substitute: **efficiency ratio** over 10 days (`abs(net move) / sum(abs(daily
+  moves))`) — same "moving around but going nowhere" intuition, 9 days of warm-up instead of 19.
+- Secondary source: cross-sectional breadth over the 144 industries (share with `perf_week > 0`),
+  available on all 62 days. Mean 0.52, std 0.12, but **crosses 0.50 seventeen times in 62 days** —
+  too noisy raw, needs smoothing.
+
+**The better move, found while checking the above: July vs August is a natural experiment.**
+July = SPY **+0.03% over 22 sessions** (textbook chop). August = **+2.67% over 21 sessions**
+(trend). Two regimes of near-equal length already in the data. Split EMRG-2/EMRG-4 on the month
+and the regime question gets a first answer with **no classifier at all**. Tracked as **EMRG-1a**,
+and it demotes EMRG-1 from blocker to "build it properly only if EMRG-1a shows the split matters".
+
+**Also extended `.claude/skills/exec-brief`** at the owner's request with six more executive-comms
+rules: separate measured/inferred/guessed and always state what would change your mind; recommend
+even when uncertain; flag one-way vs two-way doors so exec attention scales with reversibility;
+give cost in time/money/risk rather than engineering units; bad news first; don't hand back
+homework, and answer the obvious follow-up in the same message.
+
+**Nothing is blocked now.** EMRG-1a, 2, 4, 5, 6, 7 all run from a cloud session against committed
+CSVs.
