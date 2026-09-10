@@ -2,7 +2,7 @@
   "date": "2026-09-09",
   "model": "gemini-3.5-flash",
   "backend": "vertex_ai",
-  "captured_at": "2026-09-09T22:04:15Z",
+  "captured_at": "2026-09-10T19:53:53Z",
   "calls": {
     "sectors.note": {
       "input_blocks": "STRENGTH SIGNALS:\n  Breadth: 3 of 11 groups are all-green (positive across week, month, quarter, half, ytd).\n  All-green: Energy (momentum 0.93); Technology (momentum 0.87); Basic Materials (momentum 0.80)\n  Sustained strong (top 3 across 1/3/6-month rank): Energy\n\nTOP GAINERS (rank improved most in 5 sessions):\n  Financial: +2 spots, rank 5, momentum 0.65\n  Industrials: +1 spots, rank 4, momentum 0.37\n  Basic Materials: +0 spots, rank 3, momentum 0.80\n  Communication Services: +0 spots, rank 10, momentum 0.32\n  Consumer Cyclical: +0 spots, rank 11, momentum 0.15\n  Consumer Defensive: +0 spots, rank 8, momentum 0.22\n  Energy: +0 spots, rank 1, momentum 0.93\n  Technology: +0 spots, rank 2, momentum 0.87\n\nTOP LOSERS (rank declined most in 5 sessions):\n  Healthcare: -2 spots, rank 6, momentum 0.52\n  Real Estate: -1 spots, rank 7, momentum 0.33\n  Basic Materials: 0 spots, rank 3, momentum 0.80\n  Communication Services: 0 spots, rank 10, momentum 0.32\n  Consumer Cyclical: 0 spots, rank 11, momentum 0.15\n  Consumer Defensive: 0 spots, rank 8, momentum 0.22\n  Energy: 0 spots, rank 1, momentum 0.93\n  Technology: 0 spots, rank 2, momentum 0.87\n\nMOMENTUM LEADERS (score 0=weakest, 1=strongest):\n  Energy: 0.933 (rank_ytd=1)\n  Technology: 0.867 (rank_ytd=2)\n  Basic Materials: 0.800 (rank_ytd=3)\n  Financial: 0.650 (rank_ytd=5)\n  Healthcare: 0.517 (rank_ytd=6)\n\nMOMENTUM LAGGARDS (score 0=weakest, 1=strongest):\n  Consumer Cyclical: 0.150 (rank_ytd=11)\n  Consumer Defensive: 0.217 (rank_ytd=8)\n  Communication Services: 0.317 (rank_ytd=10)\n  Real Estate: 0.333 (rank_ytd=7)\n  Utilities: 0.350 (rank_ytd=9)\n\nDIVERGENCES (early-warning):\n  Fragile all-green (green but unstable rank): nan (agreement nan); nan (agreement nan); nan (agreement nan); nan (agreement nan); nan (agreement nan)",
@@ -10,15 +10,11 @@
       "generation_config": {
         "temperature": 0.6
       },
-      "raw_response": "**TL;DR:** Energy, Technology, and Basic Materials cement their market leadership as the only \"all-green\" sectors, while Financials surge and Healthcare experiences a sharp near-term pullback.\n\nCommodity-linked and growth sectors continue to dominate the US equity landscape as of September 9, 2026. Energy, Technology, and Basic Materials stand out as the only three sectors showing positive performance across all timeframes (weekly, monthly, quarterly, semi-annual, and YTD). Energy remains the market's undisputed anchor, holding the top YTD rank with a momentum score of 0.93, closely followed by Technology at 0.87 and Basic Materials at 0.80.\n\nMeanwhile, a clear rotation is occurring within the middle-tier sectors. Financials and Industrials are gaining ground, while Healthcare and Real Estate are fading. Lagging areas like Consumer Cyclicals remain deeply entrenched at the bottom of the momentum spectrum, highlighting a highly bifurcated market.\n\n## Strength\n* **All-Green Leadership:** Only 3 of 11 groups (Energy, Technology, and Basic Materials) are positive across all measured timeframes, demonstrating highly concentrated market breadth.\n* **Sustained Energy Dominance:** Energy is the sole sector sustained in the top 3 across 1-, 3-, and 6-month horizons, leading all groups with a momentum score of 0.93.\n* **High-Beta Alignment:** Technology (0.87 momentum) and Basic Materials (0.80 momentum) round out the top three YTD ranks, showing robust, multi-timeframe strength alongside Energy.\n\n## Movers & Momentum\n* **Financials Ascending:** Financials are the week's biggest gainer, climbing 2 spots to rank 5 with a solid momentum score of 0.65.\n* **Healthcare Pullback:** Healthcare is the biggest loser over the last 5 sessions, dropping 2 spots to rank 6, though it maintains a moderate momentum score of 0.52.\n* **Industrials Edging Up:** Industrials improved by 1 spot to reach rank 4, though momentum remains modest at 0.37.\n* **Severe Momentum Lag:** Consumer Cyclicals (momentum 0.15) and Consumer Defensives (momentum 0.22) remain heavily depressed at the bottom of the momentum rankings.\n\n## Divergences\n* **No Fragile Leaders:** There are no \"fragile all-green\" warnings flagged among the top performers, indicating that the strength in Energy, Technology, and Basic Materials remains technically stable.\n* **Cyclical vs. Commodity Split:** Despite Basic Materials (0.80 momentum) showing immense strength, Consumer Cyclicals (0.15 momentum) continue to languish at the very bottom of the YTD rankings.\n* **Defensive Divergence:** Rate-sensitive Real Estate (0.33 momentum, down 1 spot to rank 7) and Utilities (0.35 momentum) continue to lag significantly behind the broader market momentum leaders.",
+      "raw_response": "",
       "parsed_output": null,
-      "usage": {
-        "prompt_tokens": 879,
-        "output_tokens": 647,
-        "total_tokens": 3791
-      },
-      "latency_seconds": 17.17,
-      "status": "ok"
+      "usage": {},
+      "latency_seconds": 0.78,
+      "status": "error"
     },
     "sectors.rotation_phase": {
       "input_blocks": "STRENGTH SIGNALS:\n  Breadth: 3 of 11 groups are all-green (positive across week, month, quarter, half, ytd).\n  All-green: Energy (momentum 0.93); Technology (momentum 0.87); Basic Materials (momentum 0.80)\n  Sustained strong (top 3 across 1/3/6-month rank): Energy\n\nMOMENTUM LEADERS (score 0=weakest, 1=strongest):\n  Energy: 0.933 (rank_ytd=1)\n  Technology: 0.867 (rank_ytd=2)\n  Basic Materials: 0.800 (rank_ytd=3)\n  Financial: 0.650 (rank_ytd=5)\n  Healthcare: 0.517 (rank_ytd=6)",
@@ -26,18 +22,11 @@
       "generation_config": {
         "temperature": 0.2
       },
-      "raw_response": "Label: Late Cycle\nWhy: Energy and Basic Materials are leading the market while Healthcare lags, which fits the Late Cycle phase as commodity-driven sectors typically dominate the final stages of economic expansion.",
-      "parsed_output": {
-        "label": "Late Cycle",
-        "reasoning": "Energy and Basic Materials are leading the market while Healthcare lags, which fits the Late Cycle phase as commodity-driven sectors typically dominate the final stages of economic expansion."
-      },
-      "usage": {
-        "prompt_tokens": 347,
-        "output_tokens": 39,
-        "total_tokens": 1463
-      },
-      "latency_seconds": 6.27,
-      "status": "ok"
+      "raw_response": "",
+      "parsed_output": null,
+      "usage": {},
+      "latency_seconds": 1.32,
+      "status": "error"
     },
     "sectors.pulse": {
       "input_blocks": "MARKET STATE (quantified — use these to set the Conviction level):\n  All-green breadth: 3/11 (27%) positive across week, month, quarter, half, ytd.\n  Mean rank agreement: 0.70 (1 = timeframes unanimous, 0 = conflicting).\n  Momentum accel: 5 groups building, 6 fading (of 11 with data).\n\nTOP GAINERS (rank improved most in 5 sessions):\n  Financial: +2 spots, rank 5, momentum 0.65\n  Industrials: +1 spots, rank 4, momentum 0.37\n  Basic Materials: +0 spots, rank 3, momentum 0.80\n  Communication Services: +0 spots, rank 10, momentum 0.32\n  Consumer Cyclical: +0 spots, rank 11, momentum 0.15\n\nTOP LOSERS (rank declined most in 5 sessions):\n  Healthcare: -2 spots, rank 6, momentum 0.52\n  Real Estate: -1 spots, rank 7, momentum 0.33\n  Basic Materials: 0 spots, rank 3, momentum 0.80\n  Communication Services: 0 spots, rank 10, momentum 0.32\n  Consumer Cyclical: 0 spots, rank 11, momentum 0.15\n\nDIVERGENCES (early-warning):\n  Fragile all-green (green but unstable rank): nan (agreement nan); nan (agreement nan); nan (agreement nan); nan (agreement nan); nan (agreement nan)",
@@ -45,21 +34,11 @@
       "generation_config": {
         "temperature": 0.4
       },
-      "raw_response": "## Headline\nWeak sector breadth of 27% keeps overall market conviction low.\n\n## Conviction\nLevel: Low\nWhy: Conviction is low because all-green breadth is at 27% despite a 0.70 mean rank agreement and zero divergences.",
-      "parsed_output": {
-        "headline": "Weak sector breadth of 27% keeps overall market conviction low.",
-        "conviction": {
-          "level": "Low",
-          "why": "Conviction is low because all-green breadth is at 27% despite a 0.70 mean rank agreement and zero divergences."
-        }
-      },
-      "usage": {
-        "prompt_tokens": 561,
-        "output_tokens": 57,
-        "total_tokens": 2884
-      },
-      "latency_seconds": 13.36,
-      "status": "ok"
+      "raw_response": "",
+      "parsed_output": null,
+      "usage": {},
+      "latency_seconds": 1.99,
+      "status": "error"
     },
     "sectors.rotation_map": {
       "input_blocks": "ROTATION FLOW (rank change over 5 sessions; regime>0 = short-horizon leader, <0 = fading):\n  OUTFLOWS — capital leaving (rank slipping):\n    Healthcare: -2 spots, wk=-2.9%, mo=-1.7%, rs_slope=+0.307, regime=-0.45\n    Real Estate: -1 spots, wk=-1.5%, mo=-2.5%, rs_slope=+0.707, regime=+0.05\n    Basic Materials: +0 spots, wk=+1.4%, mo=+2.2%, rs_slope=-0.729, regime=+0.17\n    Communication Services: +0 spots, wk=+0.8%, mo=-2.6%, rs_slope=+0.237, regime=+0.23\n    Consumer Cyclical: +0 spots, wk=-1.6%, mo=-6.3%, rs_slope=-0.572, regime=-0.13\n  INFLOWS — capital arriving (rank rising):\n    Financial: +2 spots, wk=+0.3%, mo=-1.1%, rs_slope=+0.466, regime=-0.27\n    Industrials: +1 spots, wk=+0.6%, mo=-5.5%, rs_slope=-0.109, regime=+0.00\n    Basic Materials: +0 spots, wk=+1.4%, mo=+2.2%, rs_slope=-0.729, regime=+0.17\n    Communication Services: +0 spots, wk=+0.8%, mo=-2.6%, rs_slope=+0.237, regime=+0.23\n    Consumer Cyclical: +0 spots, wk=-1.6%, mo=-6.3%, rs_slope=-0.572, regime=-0.13",
@@ -67,15 +46,11 @@
       "generation_config": {
         "temperature": 0.25
       },
-      "raw_response": "- OUT: Healthcare -> IN: Financial - capital rotated from defensive healthcare as it fell 2 spots with a -2.9% weekly return into financials which gained 2 spots with a +0.3% weekly return.\n- OUT: Real Estate -> IN: Industrials - yield-sensitive real estate slipped 1 spot with a -1.5% weekly return while industrials gained 1 spot with a +0.6% weekly return.",
+      "raw_response": "",
       "parsed_output": null,
-      "usage": {
-        "prompt_tokens": 622,
-        "output_tokens": 93,
-        "total_tokens": 2428
-      },
-      "latency_seconds": 9.47,
-      "status": "ok"
+      "usage": {},
+      "latency_seconds": 2.01,
+      "status": "error"
     },
     "sectors.watchlist": {
       "input_blocks": "WATCHLIST CANDIDATES (each tagged with its trigger type):\n  - Utilities [rs_cross: RS just flipped positive vs SPY (earliest rotation trigger)]\n  - Real Estate [rs_new_high: RS at a 20-session high (IBD-style leadership)]",
@@ -83,15 +58,11 @@
       "generation_config": {
         "temperature": 0.25
       },
-      "raw_response": "- Utilities - Monitor for follow-through relative strength to confirm the RS cross trigger (where RS just flipped positive vs SPY), while a quick reversal back below the crossing point invalidates this early rotation signal.\n- Real Estate - Watch for continued price expansion to confirm the RS new high trigger (RS at a 20-session high), whereas a failure to hold the breakout level and a drop back into the prior 20-session relative range invalidates the leadership signal.",
+      "raw_response": "",
       "parsed_output": null,
-      "usage": {
-        "prompt_tokens": 205,
-        "output_tokens": 98,
-        "total_tokens": 1477
-      },
-      "latency_seconds": 8.36,
-      "status": "ok"
+      "usage": {},
+      "latency_seconds": 2.0,
+      "status": "error"
     },
     "sectors.risk_radar": {
       "input_blocks": "RELATIVE STRENGTH vs S&P (rs_score = fraction of 7 timeframes beating SPY; rs_confirmed gates that by directional consistency):\n  Energy: rs_score 1.00, rs_confirmed 1.00, beats SPY on 7/7 timeframes\n  Technology: rs_score 1.00, rs_confirmed 1.00, beats SPY on 7/7 timeframes\n  Basic Materials: rs_score 0.83, rs_confirmed 0.28, beats SPY on 6/7 timeframes\n  Financial: rs_score 0.67, rs_confirmed 0.67, beats SPY on 4/7 timeframes\n  Healthcare: rs_score 0.33, rs_confirmed 0.11, beats SPY on 2/7 timeframes\n  Utilities: rs_score 0.33, rs_confirmed 0.11, beats SPY on 2/7 timeframes\n  RS new highs (20-session): Real Estate, Utilities\n  RS crosses (just turned positive vs SPY): Utilities\n\nDIVERGENCES (early-warning):\n  Fragile all-green (green but unstable rank): nan (agreement nan); nan (agreement nan); nan (agreement nan); nan (agreement nan); nan (agreement nan)",
@@ -99,18 +70,11 @@
       "generation_config": {
         "temperature": 0.4
       },
-      "raw_response": "## Relative Strength\nEnergy and Technology lead the market with perfect rs_score and rs_confirmed metrics of 1.00, beating the S&P 500 on 7/7 timeframes, while Basic Materials (rs_score 0.83 / rs_confirmed 0.28, 6/7 timeframes) and Financials (rs_score 0.67 / rs_confirmed 0.67, 4/7 timeframes) also outpace the benchmark. Meanwhile, Real Estate and Utilities have booked 20-session RS new highs, with Utilities also registering a positive RS cross despite its low overall rs_score of 0.33 (rs_confirmed 0.11, 2/7 timeframes).\n\n## Risks\n* **Fragile Momentum in Basic Materials:** The sector exhibits a highly unconfirmed strength profile, posting a strong rs_score of 0.83 (beating SPY on 6/7 timeframes) but carrying a very weak directional consistency with an rs_confirmed of just 0.28.\n* **Crowded Top-Tier Leadership:** Market leadership is highly concentrated, with both Energy and Technology showing potentially crowded momentum profiles as they share perfect rs_score and rs_confirmed metrics of 1.00 across 7/7 timeframes.\n* **Divergent Utilities Setup:** Although Utilities registered a positive RS cross and a 20-session RS new high, its broader structure remains weak and fragile, with an rs_score of 0.33 and rs_confirmed of 0.11 (beating SPY on only 2/7 timeframes).",
-      "parsed_output": {
-        "relative_strength": "Energy and Technology lead the market with perfect rs_score and rs_confirmed metrics of 1.00, beating the S&P 500 on 7/7 timeframes, while Basic Materials (rs_score 0.83 / rs_confirmed 0.28, 6/7 timeframes) and Financials (rs_score 0.67 / rs_confirmed 0.67, 4/7 timeframes) also outpace the benchmark. Meanwhile, Real Estate and Utilities have booked 20-session RS new highs, with Utilities also registering a positive RS cross despite its low overall rs_score of 0.33 (rs_confirmed 0.11, 2/7 timeframes).",
-        "risks": "* **Fragile Momentum in Basic Materials:** The sector exhibits a highly unconfirmed strength profile, posting a strong rs_score of 0.83 (beating SPY on 6/7 timeframes) but carrying a very weak directional consistency with an rs_confirmed of just 0.28.\n* **Crowded Top-Tier Leadership:** Market leadership is highly concentrated, with both Energy and Technology showing potentially crowded momentum profiles as they share perfect rs_score and rs_confirmed metrics of 1.00 across 7/7 timeframes.\n* **Divergent Utilities Setup:** Although Utilities registered a positive RS cross and a 20-session RS new high, its broader structure remains weak and fragile, with an rs_score of 0.33 and rs_confirmed of 0.11 (beating SPY on only 2/7 timeframes)."
-      },
-      "usage": {
-        "prompt_tokens": 484,
-        "output_tokens": 353,
-        "total_tokens": 2801
-      },
-      "latency_seconds": 12.0,
-      "status": "ok"
+      "raw_response": "",
+      "parsed_output": null,
+      "usage": {},
+      "latency_seconds": 1.99,
+      "status": "error"
     },
     "industries.note": {
       "input_blocks": "STRENGTH SIGNALS:\n  Breadth: 14 of 144 groups are all-green (positive across week, month, quarter, half, ytd).\n  All-green: Oil & Gas Refining & Marketing (momentum 0.98); Computer Hardware (momentum 0.97); Copper (momentum 0.92); Marine Shipping (momentum 0.92); Semiconductors (momentum 0.88); Electronics & Computer Distribution (momentum 0.85); Oil & Gas Integrated (momentum 0.85); Banks - Diversified (momentum 0.82)\n  Sustained strong (top 36 across 1/3/6-month rank): Oil & Gas Refining & Marketing, Computer Hardware, Copper, Marine Shipping, Oil & Gas Integrated, Capital Markets, Biotechnology, Coking Coal\n\nTOP GAINERS (rank improved most in 5 sessions):\n  Other Precious Metals & Mining: +29 spots, rank 71, momentum 0.74\n  Textile Manufacturing: +28 spots, rank 36, momentum 0.53\n  Internet Content & Information: +16 spots, rank 80, momentum 0.54\n  Uranium: +16 spots, rank 69, momentum 0.60\n  Airlines: +12 spots, rank 109, momentum 0.43\n  Paper & Paper Products: +12 spots, rank 107, momentum 0.56\n  Utilities - Regulated Water: +12 spots, rank 59, momentum 0.69\n  Gold: +11 spots, rank 37, momentum 0.80\n\nTOP LOSERS (rank declined most in 5 sessions):\n  Health Information Services: -18 spots, rank 52, momentum 0.64\n  Education & Training Services: -17 spots, rank 101, momentum 0.30\n  Beverages - Wineries & Distilleries: -16 spots, rank 93, momentum 0.33\n  Business Equipment & Supplies: -14 spots, rank 49, momentum 0.68\n  REIT - Office: -14 spots, rank 75, momentum 0.38\n  Restaurants: -13 spots, rank 106, momentum 0.27\n  Packaging & Containers: -12 spots, rank 81, momentum 0.32\n  Publishing: -12 spots, rank 64, momentum 0.43\n\nMOMENTUM LEADERS (score 0=weakest, 1=strongest):\n  Oil & Gas Refining & Marketing: 0.984 (rank_ytd=2)\n  Computer Hardware: 0.969 (rank_ytd=1)\n  Copper: 0.921 (rank_ytd=7)\n  Marine Shipping: 0.921 (rank_ytd=6)\n  Semiconductors: 0.881 (rank_ytd=12)\n\nMOMENTUM LAGGARDS (score 0=weakest, 1=strongest):\n  Footwear & Accessories: 0.054 (rank_ytd=142)\n  Advertising Agencies: 0.055 (rank_ytd=144)\n  Broadcasting: 0.119 (rank_ytd=134)\n  Personal Services: 0.129 (rank_ytd=137)\n  Apparel Retail: 0.135 (rank_ytd=118)\n\nDIVERGENCES (early-warning):\n  Fading (strong momentum, rank slipping): Health Information Services (momentum 0.64, rank -18 in 5d); Business Equipment & Supplies (momentum 0.68, rank -14 in 5d); Staffing & Employment Services (momentum 0.64, rank -7 in 5d); Diagnostics & Research (momentum 0.71, rank -6 in 5d); Medical Distribution (momentum 0.62, rank -5 in 5d)\n  Emerging (rank jumping, momentum still low): Airlines (rank +12 in 5d, momentum 0.43); Auto Parts (rank +10 in 5d, momentum 0.35); Auto Manufacturers (rank +6 in 5d, momentum 0.46); Utilities - Independent Power Producers (rank +6 in 5d, momentum 0.50); Aerospace & Defense (rank +5 in 5d, momentum 0.33)\n  Fragile all-green (green but unstable rank): nan (agreement nan); nan (agreement nan); nan (agreement nan); nan (agreement nan); nan (agreement nan)",
@@ -118,15 +82,11 @@
       "generation_config": {
         "temperature": 0.6
       },
-      "raw_response": "**TL;DR:** US market breadth remains highly concentrated with only 14 of 144 groups holding all-green status, led by dominant energy and hardware sectors, while precious metals and mining show aggressive upward rotation.\n\nMarket leadership continues to be anchored by a small group of high-performing industries. Oil & Gas Refining & Marketing (momentum 0.984) and Computer Hardware (momentum 0.969) remain the market's primary anchors, sustaining their top-tier rankings across 1-, 3-, and 6-month horizons. Commodities and industrial transport also show persistent strength, with Copper (momentum 0.921) and Marine Shipping (momentum 0.921) holding firm in all-green territory. \n\nBeneath the surface, a sharp rotation is underway. Other Precious Metals & Mining surged 29 spots to rank 71 (momentum 0.74), and Textile Manufacturing jumped 28 spots to rank 36 (momentum 0.53). Conversely, several previously resilient sectors are fading, led by Health Information Services, which dropped 18 spots despite a decent momentum score of 0.64. Early-stage turnarounds are emerging in beaten-down cyclical areas like Airlines (+12 spots) and Auto Parts (+10 spots), which are climbing in rank despite low absolute momentum.\n\n## Strength\n* **Narrow Breadth:** Only 14 out of 144 industry groups maintain all-green status across all timeframes, signaling a highly concentrated market.\n* **Dominant Leaders:** Oil & Gas Refining & Marketing (momentum 0.984) and Computer Hardware (momentum 0.969) lead the all-green cohort and represent the market's strongest sustained trends.\n* **Commodity & Tech Anchors:** Copper (momentum 0.921), Marine Shipping (momentum 0.921), and Semiconductors (momentum 0.881) remain firmly entrenched as top-tier momentum leaders.\n\n## Movers & Momentum\n* **Rapid Climbers:** Other Precious Metals & Mining rose 29 spots to rank 71 (momentum 0.74), while Textile Manufacturing advanced 28 spots to rank 36 (momentum 0.53). Gold also gained 11 spots to reach rank 37 (momentum 0.80).\n* **Sharp Decliners:** Health Information Services fell 18 spots to rank 52, and Education & Training Services dropped 17 spots to rank 101 (momentum 0.30). \n* **Momentum Bottom:** Footwear & Accessories (momentum 0.054) and Advertising Agencies (momentum 0.055) remain the weakest-performing industries in the market.\n\n## Divergences\n* **Fading Momentum:** Health Information Services (momentum 0.64, rank -18) and Business Equipment & Supplies (momentum 0.68, rank -14) are experiencing rapid rank declines despite maintaining relatively high momentum scores.\n* **Emerging Turnarounds:** Airlines (rank +12, momentum 0.43) and Auto Parts (rank +10, momentum 0.35) are jumping in rank from deep laggard status, signaling potential early-stage trend reversals.\n* **Service Sector Fatigue:** Diagnostics & Research (rank -6, momentum 0.71) and Staffing & Employment Services (rank -7, momentum 0.64) are slipping, indicating softening demand in business and health services.",
+      "raw_response": "",
       "parsed_output": null,
-      "usage": {
-        "prompt_tokens": 1268,
-        "output_tokens": 759,
-        "total_tokens": 4027
-      },
-      "latency_seconds": 13.91,
-      "status": "ok"
+      "usage": {},
+      "latency_seconds": 1.89,
+      "status": "error"
     },
     "industries.pulse": {
       "input_blocks": "MARKET STATE (quantified — use these to set the Conviction level):\n  All-green breadth: 14/144 (10%) positive across week, month, quarter, half, ytd.\n  Mean rank agreement: 0.68 (1 = timeframes unanimous, 0 = conflicting).\n  Momentum accel: 70 groups building, 62 fading (of 143 with data).\n\nTOP GAINERS (rank improved most in 5 sessions):\n  Other Precious Metals & Mining: +29 spots, rank 71, momentum 0.74\n  Textile Manufacturing: +28 spots, rank 36, momentum 0.53\n  Internet Content & Information: +16 spots, rank 80, momentum 0.54\n  Uranium: +16 spots, rank 69, momentum 0.60\n  Airlines: +12 spots, rank 109, momentum 0.43\n\nTOP LOSERS (rank declined most in 5 sessions):\n  Health Information Services: -18 spots, rank 52, momentum 0.64\n  Education & Training Services: -17 spots, rank 101, momentum 0.30\n  Beverages - Wineries & Distilleries: -16 spots, rank 93, momentum 0.33\n  Business Equipment & Supplies: -14 spots, rank 49, momentum 0.68\n  REIT - Office: -14 spots, rank 75, momentum 0.38\n\nDIVERGENCES (early-warning):\n  Fading (strong momentum, rank slipping): Health Information Services (momentum 0.64, rank -18 in 5d); Business Equipment & Supplies (momentum 0.68, rank -14 in 5d); Staffing & Employment Services (momentum 0.64, rank -7 in 5d); Diagnostics & Research (momentum 0.71, rank -6 in 5d); Medical Distribution (momentum 0.62, rank -5 in 5d)\n  Emerging (rank jumping, momentum still low): Airlines (rank +12 in 5d, momentum 0.43); Auto Parts (rank +10 in 5d, momentum 0.35); Auto Manufacturers (rank +6 in 5d, momentum 0.46); Utilities - Independent Power Producers (rank +6 in 5d, momentum 0.50); Aerospace & Defense (rank +5 in 5d, momentum 0.33)\n  Fragile all-green (green but unstable rank): nan (agreement nan); nan (agreement nan); nan (agreement nan); nan (agreement nan); nan (agreement nan)",
@@ -134,21 +94,11 @@
       "generation_config": {
         "temperature": 0.4
       },
-      "raw_response": "## Headline\nOther Precious Metals and Textile Manufacturing lead gains despite weak breadth.\n\n## Conviction\nLevel: Low\nWhy: Conviction is low because all-green breadth is 10%, mean rank agreement is 0.68, and there are 10 divergences.",
-      "parsed_output": {
-        "headline": "Other Precious Metals and Textile Manufacturing lead gains despite weak breadth.",
-        "conviction": {
-          "level": "Low",
-          "why": "Conviction is low because all-green breadth is 10%, mean rank agreement is 0.68, and there are 10 divergences."
-        }
-      },
-      "usage": {
-        "prompt_tokens": 823,
-        "output_tokens": 58,
-        "total_tokens": 3511
-      },
-      "latency_seconds": 14.25,
-      "status": "ok"
+      "raw_response": "",
+      "parsed_output": null,
+      "usage": {},
+      "latency_seconds": 2.0,
+      "status": "error"
     },
     "industries.rotation_map": {
       "input_blocks": "ROTATION FLOW (rank change over 5 sessions; regime>0 = short-horizon leader, <0 = fading):\n  OUTFLOWS — capital leaving (rank slipping):\n    Health Information Services: -18 spots, wk=-4.1%, mo=+4.5%, rs_slope=-0.596, regime=-0.25\n    Education & Training Services: -17 spots, wk=-4.5%, mo=-3.0%, rs_slope=+0.374, regime=-0.06\n    Beverages - Wineries & Distilleries: -16 spots, wk=-3.7%, mo=-10.4%, rs_slope=-0.674, regime=-0.37\n    Business Equipment & Supplies: -14 spots, wk=+2.2%, mo=-2.1%, rs_slope=+0.329, regime=+0.03\n    REIT - Office: -14 spots, wk=-3.2%, mo=-4.1%, rs_slope=+0.618, regime=-0.15\n  INFLOWS — capital arriving (rank rising):\n    Other Precious Metals & Mining: +29 spots, wk=+7.5%, mo=+10.4%, rs_slope=-2.139, regime=+0.29\n    Textile Manufacturing: +28 spots, wk=+9.7%, mo=-5.4%, rs_slope=+2.977, regime=+0.25\n    Internet Content & Information: +16 spots, wk=+2.1%, mo=-3.4%, rs_slope=+0.145, regime=+0.11\n    Uranium: +16 spots, wk=+4.5%, mo=+2.6%, rs_slope=-1.983, regime=+0.43\n    Airlines: +12 spots, wk=+2.5%, mo=-11.3%, rs_slope=-0.033, regime=-0.03",
@@ -156,15 +106,11 @@
       "generation_config": {
         "temperature": 0.25
       },
-      "raw_response": "- OUT: Beverages - Wineries & Distilleries -> IN: Airlines - capital rotated away from defensive consumer staples (-16 spots, wk=-3.7%) and into cyclical travel plays (+12 spots, wk=+2.5%).\n- OUT: Health Information Services -> IN: Internet Content & Information - a tech-adjacent handoff occurred as investors abandoned lagging health tech (-18 spots, wk=-4.1%, regime=-0.25) for broader digital media (+16 spots, wk=+2.1%, regime=+0.11).\n- OUT: REIT - Office -> IN: Other Precious Metals & Mining - capital fled rate-sensitive real estate (-14 spots, wk=-3.2%) to seek safety in hard assets (+29 spots, wk=+7.5%, mo=+10.4%).",
+      "raw_response": "",
       "parsed_output": null,
-      "usage": {
-        "prompt_tokens": 657,
-        "output_tokens": 176,
-        "total_tokens": 2948
-      },
-      "latency_seconds": 12.73,
-      "status": "ok"
+      "usage": {},
+      "latency_seconds": 2.0,
+      "status": "error"
     },
     "industries.watchlist": {
       "input_blocks": "WATCHLIST CANDIDATES (each tagged with its trigger type):\n  - Beverages - Non-Alcoholic [rs_cross: RS just flipped positive vs SPY (earliest rotation trigger)]\n  - Computer Hardware [rs_cross: RS just flipped positive vs SPY (earliest rotation trigger)]\n  - Confectioners [rs_cross: RS just flipped positive vs SPY (earliest rotation trigger)]\n  - Beverages - Brewers [rs_new_high: RS at a 20-session high (IBD-style leadership)]\n  - Farm & Heavy Construction Machinery [rs_new_high: RS at a 20-session high (IBD-style leadership)]\n  - Insurance - Specialty [rs_new_high: RS at a 20-session high (IBD-style leadership)]\n  - Airlines [emerging: rank +12 in 5d but momentum still 0.43, accel +0.06]\n  - Auto Parts [emerging: rank +10 in 5d but momentum still 0.35, accel +0.09]",
@@ -172,15 +118,11 @@
       "generation_config": {
         "temperature": 0.25
       },
-      "raw_response": "- Computer Hardware - Watch for a sustained price breakout above immediate resistance to confirm the RS cross trigger, while a quick reversal of the relative strength line back below its zero line would invalidate it.\n- Beverages - Brewers - Watch for a high-volume continuation move to confirm the RS new high trigger, whereas a failure to hold the 20-day exponential moving average on a pullback would invalidate this leadership signal.\n- Airlines - Watch for a breakout above the recent swing highs to confirm the emerging trigger, while a breakdown below the 5-day low would invalidate the nascent momentum.\n- Insurance - Specialty - Watch for a constructive consolidation breakout to confirm the RS new high trigger, while a high-volume drop below key support levels would invalidate the bullish trend.",
+      "raw_response": "",
       "parsed_output": null,
-      "usage": {
-        "prompt_tokens": 383,
-        "output_tokens": 154,
-        "total_tokens": 1969
-      },
-      "latency_seconds": 9.26,
-      "status": "ok"
+      "usage": {},
+      "latency_seconds": 2.0,
+      "status": "error"
     },
     "industries.risk_radar": {
       "input_blocks": "RELATIVE STRENGTH vs S&P (rs_score = fraction of 7 timeframes beating SPY; rs_confirmed gates that by directional consistency):\n  Copper: rs_score 1.00, rs_confirmed 1.00, beats SPY on 7/7 timeframes\n  Computer Hardware: rs_score 1.00, rs_confirmed 1.00, beats SPY on 7/7 timeframes\n  Oil & Gas Refining & Marketing: rs_score 1.00, rs_confirmed 1.00, beats SPY on 7/7 timeframes\n  Oil & Gas Integrated: rs_score 1.00, rs_confirmed 1.00, beats SPY on 7/7 timeframes\n  Marine Shipping: rs_score 1.00, rs_confirmed 1.00, beats SPY on 7/7 timeframes\n  Capital Markets: rs_score 1.00, rs_confirmed 1.00, beats SPY on 6/7 timeframes\n  RS new highs (20-session): Beverages - Brewers, Farm & Heavy Construction Machinery, Insurance - Specialty, Marine Shipping, Paper & Paper Products, REIT - Diversified, REIT - Hotel & Motel, REIT - Residential\n  RS crosses (just turned positive vs SPY): Beverages - Non-Alcoholic, Computer Hardware, Confectioners, Credit Services, Electrical Equipment & Parts, Electronics & Computer Distribution, Farm & Heavy Construction Machinery, Financial Conglomerates\n\nDIVERGENCES (early-warning):\n  Fading (strong momentum, rank slipping): Health Information Services (momentum 0.64, rank -18 in 5d); Business Equipment & Supplies (momentum 0.68, rank -14 in 5d); Staffing & Employment Services (momentum 0.64, rank -7 in 5d); Diagnostics & Research (momentum 0.71, rank -6 in 5d); Medical Distribution (momentum 0.62, rank -5 in 5d)\n  Emerging (rank jumping, momentum still low): Airlines (rank +12 in 5d, momentum 0.43); Auto Parts (rank +10 in 5d, momentum 0.35); Auto Manufacturers (rank +6 in 5d, momentum 0.46); Utilities - Independent Power Producers (rank +6 in 5d, momentum 0.50); Aerospace & Defense (rank +5 in 5d, momentum 0.33)\n  Fragile all-green (green but unstable rank): nan (agreement nan); nan (agreement nan); nan (agreement nan); nan (agreement nan); nan (agreement nan)",
@@ -188,18 +130,11 @@
       "generation_config": {
         "temperature": 0.4
       },
-      "raw_response": "## Relative Strength\nCopper, Computer Hardware, Oil & Gas Refining & Marketing, Oil & Gas Integrated, and Marine Shipping lead the market with perfect rs_score and rs_confirmed metrics of 1.00 (beating the S&P 500 on 7/7 timeframes), while Capital Markets also shows strength with an rs_score and rs_confirmed of 1.00 (beating on 6/7 timeframes). Marine Shipping is among the industries marking new 20-session RS highs, while Computer Hardware and Farm & Heavy Construction Machinery (which also hit a new high) registered positive RS crosses.\n\n## Risks\n* Health Information Services shows a fading setup, carrying strong momentum of 0.64 but suffering a sharp rank slippage of -18 over the last 5 days.\n* Business Equipment & Supplies exhibits a similar divergence, maintaining a momentum of 0.68 while its rank dropped by -14 over 5 days.\n* Other fading setups with slipping 5-day ranks despite solid momentum include Staffing & Employment Services (momentum 0.64, rank -7), Diagnostics & Research (momentum 0.71, rank -6), and Medical Distribution (momentum 0.62, rank -5).",
-      "parsed_output": {
-        "relative_strength": "Copper, Computer Hardware, Oil & Gas Refining & Marketing, Oil & Gas Integrated, and Marine Shipping lead the market with perfect rs_score and rs_confirmed metrics of 1.00 (beating the S&P 500 on 7/7 timeframes), while Capital Markets also shows strength with an rs_score and rs_confirmed of 1.00 (beating on 6/7 timeframes). Marine Shipping is among the industries marking new 20-session RS highs, while Computer Hardware and Farm & Heavy Construction Machinery (which also hit a new high) registered positive RS crosses.",
-        "risks": "* Health Information Services shows a fading setup, carrying strong momentum of 0.64 but suffering a sharp rank slippage of -18 over the last 5 days.\n* Business Equipment & Supplies exhibits a similar divergence, maintaining a momentum of 0.68 while its rank dropped by -14 over 5 days.\n* Other fading setups with slipping 5-day ranks despite solid momentum include Staffing & Employment Services (momentum 0.64, rank -7), Diagnostics & Research (momentum 0.71, rank -6), and Medical Distribution (momentum 0.62, rank -5)."
-      },
-      "usage": {
-        "prompt_tokens": 779,
-        "output_tokens": 268,
-        "total_tokens": 2809
-      },
-      "latency_seconds": 10.5,
-      "status": "ok"
+      "raw_response": "",
+      "parsed_output": null,
+      "usage": {},
+      "latency_seconds": 2.01,
+      "status": "error"
     }
   }
 }
