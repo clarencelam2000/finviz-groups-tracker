@@ -409,6 +409,44 @@ python scripts/generate_ai.py --preview [--task pulse] [--group sector] [--json]
 ```
 Builds prompts from existing CSVs and writes Tier-1 provenance — no API call, no credentials required. Add `--date YYYY-MM-DD` to use a specific date (defaults to latest snapshot date).
 
+## AI spend controls (`scripts/generate_ai.py` + `scripts/ai_cost.py`)
+
+> Added 2026-09-10 (AI-WALLET) to protect the shared monthly Gemini credit once the
+> $300 free-trial credits lapse. Document constant changes in all three places per the
+> configurable-constants rule in root `CLAUDE.md`.
+
+Measured baseline before this work (29 clean runs of Tier-2 captures): **~11 calls/run ×
+3 runs/day**, ~7k prompt + ~2.6k visible-output + **~21k billed _thinking_ tokens/run**.
+Thinking bills at the output rate, so it was ~85% of the bill — on `gemini-3.5-flash`
+(~$9/1M output) that's **~$14–17/mo**, which alone exceeds the shared $10 credit.
+
+| Constant | Default | Controls |
+|----------|---------|---------|
+| `GEMINI_MODEL` | `gemini-3.8-flash` | Switched 3.5→3.8 (durably cheaper output; much cheaper during the intro window through 2026-12-31). Same `thinking_level` API; we never set the `minimal` level 3.8 dropped. |
+| `THINKING_LEVEL` | `"low"` | **The cost lever.** Reasoning effort (`low`/`medium`/`high`/`None`). MEDIUM = model default = the ~21k thinking tokens above. Applied to every call in `_build_call_config`; a `TASK_SPEC`'s `generation_config` may override `thinking_level`. Built defensively: an SDK that rejects the level degrades to the model default (warn, not outage). |
+| `DEFAULT_MAX_OUTPUT_TOKENS` | `2048` | Anti-truncation ceiling on *visible* output, every call. NOT a cost lever (thinking is governed by `THINKING_LEVEL`). Generous on purpose — too low with thinking on can exhaust the budget before any visible text (empty-response error path). |
+| `MAX_API_CALLS_PER_RUN` | `25` | Runaway/loop guard. Expected 11/run; exceeding it raises `RunawayGuardError` → run aborts loud (exit 1), partial output saved. |
+| `AI_DISABLED` (env) | unset | Kill switch — `1`/`true` exits 0 before any backend setup. The documented "stop spending now" toggle; checked after `--preview`, before the new-delta/dedupe gates. |
+| `SPEND_SOFT_BUDGET_USD` | `10.0` | Display-only; the **shared** Gemini credit (other projects draw on it). A ceiling, not a target. Nothing enforces it. |
+| `data/ai/spend.json` (`SPEND_SUMMARY_NAME`) | `spend.json` | Month-to-date actual cost, rebuilt each run from `ai_run_log.jsonl`'s per-run `cost_usd`. Written DATA_DIR-relative (honors the monkeypatch tests use for the run log). The PWA AI tab reads it. |
+
+**`scripts/ai_cost.py`** is the reusable meter (shared with the AI-NEXT workstream — one
+ledger, one accountant): `price_for(model, on_date)` (date-aware — encodes the 2027-01-01
+intro→standard price cliff), `billed_tokens(usage)` (thinking counts as output),
+`cost_of_usage(model, usage, on_date)`, `sum_usage(usages)`. Tested in `tests/test_ai_cost.py`.
+Update `PRICING` when Google changes published rates (Vertex AI rates for the backend we use).
+
+**Usage capture:** `_extract_usage()` surfaces `thoughts_tokens` + `cached_tokens` + the
+full `usage_metadata.model_dump()` (real field names, nothing dropped — the field name was
+confirmed by introspecting the installed `google-genai`, not from docs). `_write_run_artifacts`
+records summed tokens + `cost_usd` per run.
+
+**Dedupe:** `_compute_input_signature(date)` hashes every task's input blocks; `main()` stamps
+it on the output and skips a re-trigger whose inputs match the committed, complete output for
+that date (kills the EOD backstop's redundant 3rd run; also covers non-trading-day re-fires).
+`--force-ai` bypasses. No separate trading-day guard — it would be unreachable (the run date is
+the snapshot date, always a trading day).
+
 ## Playwright scraping dev workflow
 
 We can write, iterate, and debug `collect.py` scraping logic (selectors, parsing, retry

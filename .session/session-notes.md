@@ -6,6 +6,54 @@
 ---
 
 
+## 2026-09-10 — AI-WALLET: protect Gemini spend before free-trial credits expire
+
+**Status: safe to close** for the wallet core (5 commits, pushed, PR opened — backend only,
+fully tested). Two user-facing PWA items deliberately deferred + tracked (see below).
+
+**Why:** owner's $300 GCP free-trial credits expire within ~24h; after that spend draws on a
+$10/mo Gemini credit **shared with other projects**. Measured the real bill from Tier-2
+captures (29 clean runs): ~11 calls/run × **3 runs/day**, ~7k prompt + ~2.6k visible-output +
+**~21k billed _thinking_ tokens/run**. Thinking bills at the output rate, so on
+`gemini-3.5-flash` (~$9/1M out) that's **~$14–17/mo — exceeds the shared $10 alone.** (My first
+pass wrongly called it "trivial" using a placeholder output price 20× too low; corrected with
+real pricing via web search + the captured token metadata.)
+
+**What landed (branch `claude/amazing-wozniak-vc8hwi`):**
+1. `GEMINI_MODEL` 3.5→**3.8 Flash** — durably cheaper output, much cheaper during intro window
+   (through 2026-12-31). API-safe (we never used the `minimal` level 3.8 dropped).
+2. **`THINKING_LEVEL="low"`** — the big lever (~85% of the bill was MEDIUM-default thinking).
+   Applied every call via `_build_call_config`, defensively (degrades to default, not outage).
+3. **`AI_DISABLED=1` kill switch**, **`MAX_API_CALLS_PER_RUN=25`** runaway guard
+   (`RunawayGuardError`, exit 1), **`DEFAULT_MAX_OUTPUT_TOKENS=2048`** anti-truncation rail.
+4. **Actual-cost accounting:** `_extract_usage` now captures `thoughts_token_count` +
+   `cached_content_token_count` + full `usage_metadata.model_dump()` (field names confirmed by
+   introspecting the installed `google-genai`, not docs). New **`scripts/ai_cost.py`** meter
+   (date-aware pricing incl. the 2027-01-01 intro→standard cliff) — **reused by AI-NEXT**.
+   Per-run tokens+`cost_usd` logged to `ai_run_log.jsonl`; `data/ai/spend.json` = month-to-date.
+5. **Input-diff dedupe** (`_compute_input_signature`) kills the EOD backstop's redundant 3rd
+   run (~33%); also covers non-trading-day re-fires. No separate trading-day guard (unreachable).
+6. Docs in 3 places (README / scripts CLAUDE.md / root CLAUDE.md).
+
+Tests: 856 pass (full non-Playwright suite). ai_cost: 13 tests; generate_ai: +12 new tests.
+
+**Owner to handle (GCP console, out of repo — owner said they'd do it):** billing budget +
+**hard API quota cap** (the only real server-side stop; budgets only alert). Confirmed: the
+expiring credit is the $300 trial, NOT the $10/mo (which survives).
+
+**Deferred + tracked (both are `index.html` / user-facing → need real-browser verification not
+reliable in this cloud session; see SPRINT AI-WALLET):**
+- **AI-WALLET-PWA**: render `spend.json` at the bottom of the AI tab (owner's explicit ask — no
+  Python dashboard). Backend data already ships; render is a small follow-up + release triplet.
+- **AI-WALLET-CONVICTION**: remove the Conviction half of the `pulse` call (owner finds it
+  unused; modest token save). Backend prompt/parser + guarded PWA render deletion + release triplet.
+
+**Next:** do both PWA items in a follow-up PR with a browser check, then gate the AI-NEXT
+expansion (60–90 calls/day) behind thinking_level + Batch API + the spend surface.
+
+---
+
+
 ## 2026-09-06 — AI-NEXT-P0c structured-output spike run (real API, owner-authorized)
 
 **Status: safe to close** — spike run complete, decision recorded, a validator bug it surfaced

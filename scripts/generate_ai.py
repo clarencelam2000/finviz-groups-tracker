@@ -12,6 +12,7 @@ Exits 0 silently when the selected backend is not configured.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -25,6 +26,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
 from delta_config import LOOKBACK_WINDOWS
+import ai_cost  # AI-WALLET: date-aware pricing + actual-cost accounting (reused by AI-NEXT)
 
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -36,7 +38,34 @@ AI_DIR = DATA_DIR / "ai"
 SHORT_WIN = LOOKBACK_WINDOWS[0]
 SHORT_DELTA_COL = f"rank_ytd_delta_{SHORT_WIN}d"
 
-GEMINI_MODEL = "gemini-3.5-flash"
+# GEMINI_MODEL — switched 3.5→3.8 Flash (AI-WALLET, 2026-09-10). 3.8 is durably cheaper
+# on output ($7.50 vs $9.00/1M at standard rates; $3.75 during the intro window through
+# 2026-12-31), same input price, and uses the same thinking_level control. We never set the
+# `minimal` thinking level that 3.8 dropped, so the swap is API-safe. Pricing (incl. the
+# 2027-01-01 intro→standard cliff) lives in scripts/ai_cost.py's date-aware table.
+GEMINI_MODEL = "gemini-3.8-flash"
+
+# THINKING_LEVEL — reasoning-effort control for Gemini 3.x Flash ("low"|"medium"|"high").
+# MEDIUM is the model default and was generating ~21k billed *thinking* tokens/run (~85% of
+# the bill, since thinking bills at the output rate). LOW is retuned to be much cheaper at
+# comparable quality for the format-constrained summary tasks here — the single biggest cost
+# lever. Applied to every call by _call_api unless a TASK_SPEC's generation_config overrides
+# "thinking_level". Set to None to send no thinking config (model default). See README §
+# Configurable parameters + scripts/CLAUDE.md § AI spend controls.
+THINKING_LEVEL = "low"
+
+# DEFAULT_MAX_OUTPUT_TOKENS — anti-truncation safety ceiling on *visible* output (candidates),
+# applied to every call unless a task overrides it. NOT a cost lever: thinking tokens are
+# governed by THINKING_LEVEL, not this. Observed visible output is ~250 tok/call (max ~700),
+# so 2048 never truncates a legitimate response while still capping a pathological runaway.
+# Deliberately generous — too low a value with thinking on can exhaust the budget before any
+# visible text and surface as the empty-response error path.
+DEFAULT_MAX_OUTPUT_TOKENS = 2048
+
+# MAX_API_CALLS_PER_RUN — hard ceiling on Gemini calls in a single run (runaway/loop defense;
+# post-trial this is real money). Expected is 11 calls/run; 2x headroom absorbs legitimate
+# retries and incremental resumes. Exceeding it raises RunawayGuardError and aborts the run.
+MAX_API_CALLS_PER_RUN = 25
 
 # ---------------------------------------------------------------------------
 # Capture artifact paths and constants (documented in README + CLAUDE.md too)
@@ -51,9 +80,25 @@ CAPTURE_DIR = DATA_DIR / "ai" / "debug"
 PROVENANCE_DIR = DATA_DIR / "ai" / "provenance"
 CAPTURE_RETENTION_DAYS = 30
 
+# SPEND_SUMMARY_NAME: small committed JSON (at data/ai/<name>) the PWA's AI tab reads to
+# show actual month-to-date AI cost. Rebuilt each run from ai_run_log.jsonl's per-run
+# cost_usd. Resolved DATA_DIR-relative at write time (not a fixed absolute constant) so it
+# honors the DATA_DIR monkeypatch every test/caller already uses for the run log.
+SPEND_SUMMARY_NAME = "spend.json"
+# SPEND_SOFT_BUDGET_USD: the shared monthly Gemini credit this app's spend draws on.
+# It is SHARED with the owner's other projects, so treat it as a ceiling to stay well
+# under, not a target to fill. Display-only (drives the PWA "of ~$10 shared" context);
+# nothing enforces it — the hard stops are THINKING_LEVEL, MAX_API_CALLS_PER_RUN, and the
+# GCP-side budget/quota cap. Documented in README § Configurable parameters.
+SPEND_SOFT_BUDGET_USD = 10.0
+
 
 class DailyQuotaExhaustedError(Exception):
     """Gemini daily free-tier RPD quota is fully consumed. Cannot retry until reset."""
+
+
+class RunawayGuardError(Exception):
+    """MAX_API_CALLS_PER_RUN exceeded — a loop/runaway is billing real money. Abort now."""
 
 
 @dataclass
@@ -140,6 +185,29 @@ def _has_new_delta_data(date_str: str) -> bool:
     return False
 
 
+def _compute_input_signature(date_str: str) -> str:
+    """SHA-256 of every task's input blocks for this date — the exact data the model would
+    see, across both group types. No API calls (pure read of the committed CSVs).
+
+    AI-WALLET dedupe: the EOD backstop double-dispatches collect.yml, so generate_ai is
+    re-triggered a 3rd time on byte-identical EOD data (and the same would happen on any
+    non-trading-day re-fire, since collect.py rolls the date back and rewrites identical
+    rows). Comparing this signature to the one stamped on the already-committed output lets
+    main() skip that redundant run with zero API spend. `--force-ai` bypasses the check.
+    """
+    parts = []
+    for group_type in ("sector", "industry"):
+        snap_df = load_latest_snapshot(group_type)
+        delta_df = load_latest_delta(group_type)
+        if snap_df.empty:
+            continue
+        for spec in TASK_SPECS:
+            if group_type in spec["group_types"]:
+                parts.append(f"{group_type}.{spec['name']}")
+                parts.append(_build_input_blocks(spec, group_type, snap_df, delta_df))
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+
+
 # ---------------------------------------------------------------------------
 # Run tracking helpers
 # ---------------------------------------------------------------------------
@@ -167,16 +235,36 @@ def _extract_usage(response) -> dict:
     """Pull usage_metadata from a genai response defensively.
 
     Returns {} when metadata is absent — some error/retry paths don't include it.
+
+    Captures the THREE headline counts plus `thoughts_tokens` — the billed reasoning
+    tokens that dominate this pipeline's cost (~85%) and that the old 3-field extractor
+    silently dropped. `total_tokens` includes thinking, so billed output = candidates +
+    thoughts ≈ total − prompt; cost math lives in scripts/ai_cost.py.
+
+    We do NOT trust Google's docs for the field name — `raw` carries the SDK object's
+    full `model_dump()` (all real keys: thoughts_token_count, cached_content_token_count,
+    *_tokens_details, traffic_type, …) so whatever Vertex actually returns is recorded
+    verbatim and a future field can be surfaced without another live run to discover it.
     """
     try:
         meta = response.usage_metadata
-        return {
-            "prompt_tokens": getattr(meta, "prompt_token_count", None),
-            "output_tokens": getattr(meta, "candidates_token_count", None),
-            "total_tokens": getattr(meta, "total_token_count", None),
-        }
     except Exception:
         return {}
+    if meta is None:
+        return {}
+    usage = {
+        "prompt_tokens": getattr(meta, "prompt_token_count", None),
+        "output_tokens": getattr(meta, "candidates_token_count", None),
+        "thoughts_tokens": getattr(meta, "thoughts_token_count", None),
+        "cached_tokens": getattr(meta, "cached_content_token_count", None),
+        "total_tokens": getattr(meta, "total_token_count", None),
+    }
+    # Forensic: the full metadata object, real field names, nothing dropped.
+    try:
+        usage["raw"] = meta.model_dump(exclude_none=True)
+    except Exception:
+        pass
+    return usage
 
 
 def _record_capture(fkey: str, *, input_blocks: str, prompt: str = "",
@@ -1086,28 +1174,59 @@ def _missing_fields(data: dict) -> list:
 # API call helper
 # ---------------------------------------------------------------------------
 
+def _build_call_config(generation_config: dict = None):
+    """Build the per-call GenerateContentConfig applied to EVERY Gemini call.
+
+    Sets: temperature, a default visible-output ceiling (DEFAULT_MAX_OUTPUT_TOKENS,
+    anti-truncation — not a cost lever), and the thinking level (THINKING_LEVEL — the
+    cost lever). A TASK_SPEC's generation_config may override "temperature",
+    "max_output_tokens", or "thinking_level".
+
+    Defensive on thinking_config: if the installed SDK rejects the level (too old, or a
+    future enum change), it degrades to the model default thinking — which still works,
+    only costs more — with a warning, rather than erroring every call (an outage). The
+    pinned SDK (google-genai>=2.8,<3) accepts "low"/"LOW" case-insensitively.
+    """
+    from google.genai import types  # noqa: PLC0415 — lazy; google-genai only required at runtime
+    gc = generation_config or {}
+    cfg_kwargs = {
+        "temperature": gc.get("temperature", 0.6),
+        "max_output_tokens": gc.get("max_output_tokens", DEFAULT_MAX_OUTPUT_TOKENS),
+    }
+    level = gc.get("thinking_level", THINKING_LEVEL)
+    if level:
+        try:
+            cfg_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level=level)
+        except Exception as e:  # noqa: BLE001 — never outage a run over the thinking knob
+            print(f"    WARNING: thinking_level={level!r} not applied ({e}); "
+                  f"using model default thinking (higher cost)")
+    return types.GenerateContentConfig(**cfg_kwargs)
+
+
 def _call_api(client, prompt: str, max_retries: int = 3,
               generation_config: dict = None) -> CallResult:
     """Call Gemini for freeform text with rate-limit spacing and retry.
 
-    No JSON mode, no response schema, no max_output_tokens — the model writes a
-    markdown note and we display it verbatim. Only the temperature is set.
+    Per-call config (temperature, a default output ceiling, and the cost-saving
+    THINKING_LEVEL) is built by _build_call_config. A per-run call ceiling
+    (MAX_API_CALLS_PER_RUN) guards against a runaway billing real money post-trial.
 
     Returns CallResult(text, usage, latency) instead of a bare string so callers
     can forward usage/latency to _record_capture() without side-channel globals.
     """
     global _last_api_call, _api_call_count, _rate_limit_hits
+
+    # Runaway/loop guard — abort before spending beyond the expected per-run budget.
+    if _api_call_count >= MAX_API_CALLS_PER_RUN:
+        raise RunawayGuardError(
+            f"MAX_API_CALLS_PER_RUN ({MAX_API_CALLS_PER_RUN}) reached — aborting run"
+        )
+
     elapsed = time.monotonic() - _last_api_call
     if elapsed < _INTER_CALL_DELAY:
         time.sleep(_INTER_CALL_DELAY - elapsed)
 
-    extra = {}
-    if generation_config:
-        from google.genai import types  # noqa: PLC0415 — lazy; google-genai only required at runtime
-        cfg_kwargs = {"temperature": generation_config.get("temperature", 0.6)}
-        if generation_config.get("max_output_tokens"):
-            cfg_kwargs["max_output_tokens"] = generation_config["max_output_tokens"]
-        extra["config"] = types.GenerateContentConfig(**cfg_kwargs)
+    extra = {"config": _build_call_config(generation_config)}
 
     _api_call_count += 1
     call_start = time.monotonic()
@@ -1206,6 +1325,11 @@ def generate_for_group(client, group_type: str, date_str: str, existing=None) ->
                             generation_config=spec.get("generation_config"),
                             status="quota_exhausted", latency=time.monotonic() - t0)
             raise  # propagate to main() — do not continue generating other fields
+        except RunawayGuardError:
+            # Call ceiling hit — do NOT keep trying other fields (each would re-raise
+            # and, worse, could keep spending). Propagate to main() to abort the run.
+            _record_field(fkey, "runaway_guard", was_new=True, elapsed=time.monotonic() - t0)
+            raise
         except Exception as e:
             print(f"  [{group_type}] {spec['name']} failed: {e}")
             _record_field(fkey, "error", was_new=True, elapsed=time.monotonic() - t0, error=str(e))
@@ -1222,8 +1346,16 @@ def generate_for_group(client, group_type: str, date_str: str, existing=None) ->
 
 def _write_run_artifacts(outcome: str, was_incremental: bool,
                          run_elapsed: float, date_str: str) -> None:
-    """Append one entry to ai_run_log.jsonl and overwrite ai_run_summary.json."""
+    """Append one entry to ai_run_log.jsonl and overwrite ai_run_summary.json.
+
+    Also records this run's ACTUAL token usage and dollar cost (from the real
+    usage_metadata captured per call) into the log entry, and rebuilds spend.json so the
+    PWA can show month-to-date spend. Cost uses ai_cost's date-aware table keyed on the
+    run's market date, so it stays correct across the 2027-01-01 intro-price cliff.
+    """
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    run_usage = ai_cost.sum_usage(e.get("usage") for e in _capture_log.values())
+    run_cost = ai_cost.cost_of_usage(GEMINI_MODEL, run_usage, date_str)
     log_entry = {
         "timestamp": timestamp,
         "run_id": os.environ.get("GITHUB_RUN_ID", ""),
@@ -1236,6 +1368,9 @@ def _write_run_artifacts(outcome: str, was_incremental: bool,
         "elapsed_seconds": round(run_elapsed, 1),
         "api_calls": _api_call_count,
         "rate_limit_hits": _rate_limit_hits,
+        "tokens": run_usage,
+        "cost_usd": run_cost["total_usd"],
+        "cost_priced": run_cost["priced"],
         "fields": dict(_field_log),
     }
     try:
@@ -1245,6 +1380,8 @@ def _write_run_artifacts(outcome: str, was_incremental: bool,
     except Exception as e:
         print(f"  [log] Failed to write ai_run_log.jsonl: {e}")
 
+    _write_spend_summary(date_str)
+
     # Sidecar for collect.yml: fields that failed or had no snapshot data
     error_fields = [k for k, v in _field_log.items() if v.get("status") in ("error", "no_data")]
     summary = {"outcome": outcome, "fields_missing": ",".join(error_fields)}
@@ -1253,6 +1390,63 @@ def _write_run_artifacts(outcome: str, was_incremental: bool,
             json.dump(summary, f)
     except Exception as e:
         print(f"  [log] Failed to write ai_run_summary.json: {e}")
+
+
+def _write_spend_summary(date_str: str) -> None:
+    """Rebuild data/ai/spend.json — month-to-date ACTUAL AI cost — from ai_run_log.jsonl.
+
+    Month is taken from date_str (the run's market date → YYYY-MM). Sums cost_usd across
+    every logged run in that month; runs logged before cost tracking shipped lack the
+    field and count as 0 (surfaced via runs vs runs_with_cost, so a partial month reads
+    honestly). The current run's entry is already appended when this is called. The PWA's
+    AI tab renders this at the bottom. Best-effort — never fails the run.
+    """
+    try:
+        month = str(date_str)[:7]  # YYYY-MM
+        log_path = DATA_DIR / "ai_run_log.jsonl"
+        total = 0.0
+        runs = runs_with_cost = 0
+        last = None
+        if log_path.exists():
+            with open(log_path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if str(entry.get("date", ""))[:7] != month:
+                        continue
+                    runs += 1
+                    if "cost_usd" in entry:
+                        total += float(entry.get("cost_usd") or 0.0)
+                        runs_with_cost += 1
+                    last = entry
+        summary = {
+            "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "model": GEMINI_MODEL,
+            "month": month,
+            "month_to_date_usd": round(total, 4),
+            "runs": runs,
+            "runs_with_cost": runs_with_cost,
+            "soft_budget_usd": SPEND_SOFT_BUDGET_USD,
+            "budget_is_shared": True,
+            "last_run": {
+                "date": last.get("date"),
+                "cost_usd": last.get("cost_usd"),
+                "tokens": last.get("tokens"),
+                "outcome": last.get("outcome"),
+            } if last else None,
+        }
+        spend_path = DATA_DIR / "ai" / SPEND_SUMMARY_NAME  # DATA_DIR-relative: honors monkeypatch
+        spend_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = spend_path.with_suffix(".tmp")
+        tmp.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        tmp.replace(spend_path)
+    except Exception as e:  # noqa: BLE001 — spend surface is best-effort, never fatal
+        print(f"  [spend] Failed to write spend.json: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -1467,10 +1661,38 @@ def main():
                      as_json=args.as_json)
         return
 
+    # Kill switch (AI-WALLET): the documented "stop spending now" toggle. Set AI_DISABLED=1
+    # (repo var / workflow env) to make every run exit 0 immediately with no API call — no
+    # secret deletion or WIF teardown needed, and CI stays green. See README § Configurable
+    # parameters. Checked after --preview (preview spends nothing) and before any backend setup.
+    if os.getenv("AI_DISABLED", "").lower() in ("1", "true", "yes"):
+        print("AI_DISABLED is set — skipping AI generation (kill switch).")
+        _write_run_artifacts("disabled", False, time.monotonic() - run_start, today)
+        sys.exit(0)
+
     if not force and not _has_new_delta_data(today):
         print(f"No new delta data for {today} — skipping AI regeneration.")
         _write_run_artifacts("skipped", False, time.monotonic() - run_start, today)
         sys.exit(0)
+
+    # Input-diff dedupe (AI-WALLET): skip regeneration when a re-triggered run carries
+    # byte-identical inputs to the already-committed, complete output for this date (the
+    # EOD backstop's double-dispatch is the common case — ~33% of daily runs). No API
+    # spend. --force-ai bypasses. Computed once here and stamped onto the output below.
+    input_sig = _compute_input_signature(today)
+    if not force:
+        existing_path = AI_DIR / f"{today}.json"
+        if existing_path.exists():
+            try:
+                prior = json.loads(existing_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                prior = None
+            if prior and _is_complete(prior) and prior.get("input_signature") == input_sig:
+                print(f"Inputs unchanged since last complete AI run for {today} — "
+                      f"skipping regeneration (dedupe, no API spend).")
+                _write_run_artifacts("skipped_unchanged", False,
+                                     time.monotonic() - run_start, today)
+                sys.exit(0)
 
     use_vertexai = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower() in ("1", "true", "yes")
     api_key = os.getenv("GEMINI_API_KEY")
@@ -1552,6 +1774,9 @@ def main():
             datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         ),
         "model": GEMINI_MODEL,
+        # Inputs this output was generated from — lets the next run's dedupe skip a
+        # byte-identical re-trigger (AI-WALLET). See _compute_input_signature.
+        "input_signature": input_sig,
     }
 
     try:
@@ -1574,6 +1799,20 @@ def main():
         _write_capture_tiers(today, capture_on)
         _write_run_artifacts("quota_exhausted", was_incremental, time.monotonic() - run_start, today)
         sys.exit(0)
+
+    except RunawayGuardError as e:
+        # Call ceiling tripped mid-run — save whatever completed, then FAIL LOUD (exit 1)
+        # so CI goes red and the anomaly is investigated. Unlike quota exhaustion (a benign
+        # daily ceiling), this means something generated far more calls than expected.
+        print(f"RUNAWAY GUARD: {e} — saving partial output and failing loudly.")
+        has_partial = any(output.get(k) for k in ("sectors", "industries"))
+        if has_partial:
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(output, f, indent=2, ensure_ascii=False)
+            print(f"Partial output saved to {output_path}")
+        _write_capture_tiers(today, capture_on)
+        _write_run_artifacts("runaway_guard", was_incremental, time.monotonic() - run_start, today)
+        sys.exit(1)
 
     has_content = any(output.get(k) for k in ("sectors", "industries"))
     if not was_incremental and not has_content:

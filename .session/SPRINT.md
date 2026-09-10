@@ -8,6 +8,20 @@
 
 ### 🔴 Backlog
 
+#### AI spend controls (AI-WALLET, 2026-09-10)
+
+Protect the shared $10/mo Gemini credit now that the $300 free-trial credits are expiring.
+Wallet core shipped on `claude/amazing-wozniak-vc8hwi` (see session notes 2026-09-10). Two
+user-facing PWA items deferred here because they need a real-browser check not reliable in a
+cloud session — do them in a follow-up PR with a release triplet (`releases.json` + `current` +
+`sw.js`), per `docs/CLAUDE.md`.
+
+| # | Task | File(s) | Effort | Notes |
+|---|------|---------|--------|-------|
+| AI-WALLET-CORE | **Guards + 3.8 Flash + low thinking + cost meter + dedupe** | `scripts/generate_ai.py`, `scripts/ai_cost.py`, `tests/` | M | ✅ **Done 2026-09-10.** Model 3.5→3.8, `THINKING_LEVEL=low`, `AI_DISABLED` kill switch, `MAX_API_CALLS_PER_RUN` runaway guard, `DEFAULT_MAX_OUTPUT_TOKENS`, full usage capture (`thoughts_token_count` + `model_dump`), `ai_cost.py` date-aware meter, per-run `cost_usd` → `ai_run_log.jsonl` + `data/ai/spend.json`, input-diff dedupe. 3-places documented. |
+| AI-WALLET-PWA | **Render `spend.json` at the bottom of the AI tab** | `docs/index.html`, `docs/releases.json`, `docs/sw.js`, `tests/test_pwa_ai_*.py` | S | Owner's explicit ask — wants spend visible in the PWA, NOT a Python dashboard. Fetch `data/ai/spend.json` (via `BASE`, SW-bypassed like other CSVs), render a small read-only strip: month-to-date actual $ of ~$10 shared, last-run cost, model. Backend data already ships (AI-WALLET-CORE). Release triplet same PR; new Playwright test → CI `--ignore=`. Needs a real-browser check. |
+| AI-WALLET-CONVICTION | **Remove Conviction from the `pulse` call** | `scripts/generate_ai.py`, `docs/index.html`, `docs/releases.json`, `docs/sw.js`, `tests/test_generate_ai.py` | S | Owner finds Conviction unused; modest token save. NOT its own call — it's half the `pulse` output. Drop the Conviction section from `build_pulse_prompt` + its breadth input + `parse_pulse_response`/`_parse_conviction`, keep Headline. Delete the guarded PWA render block (`index.html` ~2816–2831) — removal can't break the UI (already `if (pulse && pulse.conviction...)`). Update conviction tests. Release triplet same PR; needs a browser check. |
+
 #### AI/LLM integration across new tabs (2026-09-05; staff review 2026-09-06)
 
 Design gate **passed**: `planning/ai-llm-integration-proposal.md` (§6 = locked owner decisions,
