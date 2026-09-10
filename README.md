@@ -492,6 +492,26 @@ Controls Tier-1 (provenance) and Tier-2 (debug capture) output, auth, and retent
 
 **Auth priority for Vertex AI:** `GOOGLE_API_KEY` (express key) → `GOOGLE_CLOUD_PROJECT` + ADC → graceful-skip with a clear error message.
 
+#### AI spend controls (`scripts/generate_ai.py` / `scripts/ai_cost.py`)
+
+Added 2026-09-10 to protect the shared monthly Gemini credit once free-trial credits lapse.
+
+| Parameter | Default | What it controls |
+|-----------|---------|-----------------|
+| `GEMINI_MODEL` | `gemini-3.8-flash` | The model. 3.8 is durably cheaper than 3.5 on output ($7.50 vs $9.00/1M standard; $3.75 intro through 2026-12-31). Same `thinking_level` API; we never used the `minimal` level 3.8 dropped. |
+| `THINKING_LEVEL` | `"low"` | Reasoning effort (`"low"`/`"medium"`/`"high"`/`None`). **Biggest cost lever** — MEDIUM (the model default) was ~85% of the bill in billed thinking tokens. Applied to every call; a `TASK_SPEC`'s `generation_config` may override. Degrades to model default (warn, not outage) if an SDK rejects it. |
+| `DEFAULT_MAX_OUTPUT_TOKENS` | `2048` | Anti-truncation ceiling on **visible** output, every call. Not a cost lever (thinking governs cost). Set generously on purpose — too low with thinking on can surface as an empty-response error. |
+| `MAX_API_CALLS_PER_RUN` | `25` | Runaway/loop guard. Expected is 11 calls/run; exceeding this raises `RunawayGuardError` and the run aborts **loud (exit 1)**. |
+| `AI_DISABLED` (env) | unset | **Kill switch.** Set to `1`/`true` to make every run exit 0 immediately with no API call — the documented "stop spending now" toggle; no secret/WIF teardown, CI stays green. |
+| `SPEND_SOFT_BUDGET_USD` | `10.0` | Display-only reference for the PWA spend surface — the **shared** monthly Gemini credit (other projects draw on it too), so a ceiling to stay under, not a target. Nothing enforces it. |
+| `PRICING` (ai_cost.py) | see file | Date-aware USD/1M-token table per model. Encodes the 2027-01-01 intro→standard cliff so month-to-date cost stays correct across it. Update here when Google changes published rates. |
+
+**Kill switch / pause AI spend:** set repo/workflow env `AI_DISABLED=1` (no code change, no secret deletion). Re-enable by removing it. `generate_ai.py` also still exits 0 gracefully if credentials are simply absent.
+
+**Actual-cost surface:** each run records real token usage + dollar cost (from the API's `usage_metadata`) into `data/ai_run_log.jsonl`, and rebuilds `data/ai/spend.json` (month-to-date actual cost). The hard stops that protect the wallet are `THINKING_LEVEL`, `MAX_API_CALLS_PER_RUN`, `AI_DISABLED`, and a GCP-side billing budget + API quota cap (set in the Cloud console, out of repo).
+
+**Dedupe:** a run whose input data is byte-identical to the already-committed output for that date skips regeneration (no API spend) — kills the EOD backstop's redundant 3rd run. `--force-ai` bypasses.
+
 **Preview mode:** `python scripts/generate_ai.py --preview [--task TASK] [--group TYPE] [--json]` — builds prompts from CSVs, writes Tier-1 provenance, no API calls, no credentials required.
 
 ### Releases / "What's New" (`docs/releases.json`)
