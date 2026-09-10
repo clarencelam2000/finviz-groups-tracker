@@ -12,6 +12,7 @@ Exits 0 silently when the selected backend is not configured.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -180,6 +181,29 @@ def _has_new_delta_data(date_str: str) -> bool:
                 flush=True,
             )
     return False
+
+
+def _compute_input_signature(date_str: str) -> str:
+    """SHA-256 of every task's input blocks for this date — the exact data the model would
+    see, across both group types. No API calls (pure read of the committed CSVs).
+
+    AI-WALLET dedupe: the EOD backstop double-dispatches collect.yml, so generate_ai is
+    re-triggered a 3rd time on byte-identical EOD data (and the same would happen on any
+    non-trading-day re-fire, since collect.py rolls the date back and rewrites identical
+    rows). Comparing this signature to the one stamped on the already-committed output lets
+    main() skip that redundant run with zero API spend. `--force-ai` bypasses the check.
+    """
+    parts = []
+    for group_type in ("sector", "industry"):
+        snap_df = load_latest_snapshot(group_type)
+        delta_df = load_latest_delta(group_type)
+        if snap_df.empty:
+            continue
+        for spec in TASK_SPECS:
+            if group_type in spec["group_types"]:
+                parts.append(f"{group_type}.{spec['name']}")
+                parts.append(_build_input_blocks(spec, group_type, snap_df, delta_df))
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
 
 
 # ---------------------------------------------------------------------------
@@ -1648,6 +1672,25 @@ def main():
         _write_run_artifacts("skipped", False, time.monotonic() - run_start, today)
         sys.exit(0)
 
+    # Input-diff dedupe (AI-WALLET): skip regeneration when a re-triggered run carries
+    # byte-identical inputs to the already-committed, complete output for this date (the
+    # EOD backstop's double-dispatch is the common case — ~33% of daily runs). No API
+    # spend. --force-ai bypasses. Computed once here and stamped onto the output below.
+    input_sig = _compute_input_signature(today)
+    if not force:
+        existing_path = AI_DIR / f"{today}.json"
+        if existing_path.exists():
+            try:
+                prior = json.loads(existing_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                prior = None
+            if prior and _is_complete(prior) and prior.get("input_signature") == input_sig:
+                print(f"Inputs unchanged since last complete AI run for {today} — "
+                      f"skipping regeneration (dedupe, no API spend).")
+                _write_run_artifacts("skipped_unchanged", False,
+                                     time.monotonic() - run_start, today)
+                sys.exit(0)
+
     use_vertexai = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").lower() in ("1", "true", "yes")
     api_key = os.getenv("GEMINI_API_KEY")
     gcp_project = os.getenv("GOOGLE_CLOUD_PROJECT")
@@ -1728,6 +1771,9 @@ def main():
             datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         ),
         "model": GEMINI_MODEL,
+        # Inputs this output was generated from — lets the next run's dedupe skip a
+        # byte-identical re-trigger (AI-WALLET). See _compute_input_signature.
+        "input_signature": input_sig,
     }
 
     try:

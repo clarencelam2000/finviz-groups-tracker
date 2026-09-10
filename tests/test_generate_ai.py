@@ -764,6 +764,57 @@ def test_write_spend_summary_month_to_date(tmp_path, monkeypatch):
     assert summary["last_run"]["outcome"] == "skipped"
 
 
+def _sig_frames():
+    snap = pd.DataFrame({"date": [pd.Timestamp("2026-10-05").date()], "name": ["Energy"],
+                         "perf_week": [1.0], "perf_month": [2.0], "perf_quarter": [2.0],
+                         "perf_half": [2.0], "perf_ytd": [3.0]})
+    delta = pd.DataFrame({"date": [pd.Timestamp("2026-10-05").date()], "name": ["Energy"],
+                          "rank_ytd": [1.0], "rank_ytd_delta_5d": [1.0], "momentum_score": [0.5]})
+    return snap, delta
+
+
+def test_input_signature_stable_and_sensitive(monkeypatch):
+    snap, delta = _sig_frames()
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
+    s1 = generate_ai._compute_input_signature("2026-10-05")
+    assert s1 == generate_ai._compute_input_signature("2026-10-05")  # deterministic
+
+    delta2 = delta.copy()
+    delta2.loc[0, "momentum_score"] = 0.9  # different input data
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta2)
+    assert generate_ai._compute_input_signature("2026-10-05") != s1
+
+
+def test_main_dedupe_skips_when_inputs_unchanged(tmp_path, monkeypatch):
+    """A re-trigger with byte-identical inputs to a complete prior output skips, no API."""
+    monkeypatch.setattr(sys, "argv", ["generate_ai"])
+    monkeypatch.delenv("AI_DISABLED", raising=False)
+    monkeypatch.delenv("FORCE_AI", raising=False)
+    snap, delta = _sig_frames()
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: snap)
+    monkeypatch.setattr(generate_ai, "load_latest_delta", lambda _: delta)
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data", lambda _: True)
+    monkeypatch.setattr(generate_ai, "_is_complete", lambda d: True)
+    monkeypatch.setattr(generate_ai, "AI_DIR", tmp_path)
+    recorded = {}
+    monkeypatch.setattr(generate_ai, "_write_run_artifacts",
+                        lambda outcome, *a, **k: recorded.setdefault("outcome", outcome))
+    # If dedupe fails, main reaches backend setup — make that path loud instead of silent.
+    monkeypatch.setattr(generate_ai, "_write_capture_tiers",
+                        lambda *a, **k: (_ for _ in ()).throw(AssertionError("reached generation")))
+
+    sig = generate_ai._compute_input_signature("2026-10-05")
+    (tmp_path / "2026-10-05.json").write_text(json.dumps(
+        {"date": "2026-10-05", "model": "gemini-3.8-flash",
+         "input_signature": sig, "sectors": {"note": "x"}}))
+
+    with pytest.raises(SystemExit) as exc:
+        generate_ai.main()
+    assert exc.value.code == 0
+    assert recorded["outcome"] == "skipped_unchanged"
+
+
 def test_main_kill_switch_exits_without_backend(monkeypatch):
     """AI_DISABLED=1 makes main() exit 0 before any client/backend setup."""
     monkeypatch.setattr(sys, "argv", ["generate_ai"])
