@@ -25,6 +25,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
 from delta_config import LOOKBACK_WINDOWS
+import ai_cost  # AI-WALLET: date-aware pricing + actual-cost accounting (reused by AI-NEXT)
 
 BASE_DIR = Path(__file__).parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -77,6 +78,16 @@ MAX_API_CALLS_PER_RUN = 25
 CAPTURE_DIR = DATA_DIR / "ai" / "debug"
 PROVENANCE_DIR = DATA_DIR / "ai" / "provenance"
 CAPTURE_RETENTION_DAYS = 30
+
+# SPEND_SUMMARY_PATH: small committed JSON the PWA's AI tab reads to show actual
+# month-to-date AI cost. Rebuilt each run from ai_run_log.jsonl's per-run cost_usd.
+SPEND_SUMMARY_PATH = DATA_DIR / "ai" / "spend.json"
+# SPEND_SOFT_BUDGET_USD: the shared monthly Gemini credit this app's spend draws on.
+# It is SHARED with the owner's other projects, so treat it as a ceiling to stay well
+# under, not a target to fill. Display-only (drives the PWA "of ~$10 shared" context);
+# nothing enforces it — the hard stops are THINKING_LEVEL, MAX_API_CALLS_PER_RUN, and the
+# GCP-side budget/quota cap. Documented in README § Configurable parameters.
+SPEND_SOFT_BUDGET_USD = 10.0
 
 
 class DailyQuotaExhaustedError(Exception):
@@ -1309,8 +1320,16 @@ def generate_for_group(client, group_type: str, date_str: str, existing=None) ->
 
 def _write_run_artifacts(outcome: str, was_incremental: bool,
                          run_elapsed: float, date_str: str) -> None:
-    """Append one entry to ai_run_log.jsonl and overwrite ai_run_summary.json."""
+    """Append one entry to ai_run_log.jsonl and overwrite ai_run_summary.json.
+
+    Also records this run's ACTUAL token usage and dollar cost (from the real
+    usage_metadata captured per call) into the log entry, and rebuilds spend.json so the
+    PWA can show month-to-date spend. Cost uses ai_cost's date-aware table keyed on the
+    run's market date, so it stays correct across the 2027-01-01 intro-price cliff.
+    """
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    run_usage = ai_cost.sum_usage(e.get("usage") for e in _capture_log.values())
+    run_cost = ai_cost.cost_of_usage(GEMINI_MODEL, run_usage, date_str)
     log_entry = {
         "timestamp": timestamp,
         "run_id": os.environ.get("GITHUB_RUN_ID", ""),
@@ -1323,6 +1342,9 @@ def _write_run_artifacts(outcome: str, was_incremental: bool,
         "elapsed_seconds": round(run_elapsed, 1),
         "api_calls": _api_call_count,
         "rate_limit_hits": _rate_limit_hits,
+        "tokens": run_usage,
+        "cost_usd": run_cost["total_usd"],
+        "cost_priced": run_cost["priced"],
         "fields": dict(_field_log),
     }
     try:
@@ -1332,6 +1354,8 @@ def _write_run_artifacts(outcome: str, was_incremental: bool,
     except Exception as e:
         print(f"  [log] Failed to write ai_run_log.jsonl: {e}")
 
+    _write_spend_summary(date_str)
+
     # Sidecar for collect.yml: fields that failed or had no snapshot data
     error_fields = [k for k, v in _field_log.items() if v.get("status") in ("error", "no_data")]
     summary = {"outcome": outcome, "fields_missing": ",".join(error_fields)}
@@ -1340,6 +1364,62 @@ def _write_run_artifacts(outcome: str, was_incremental: bool,
             json.dump(summary, f)
     except Exception as e:
         print(f"  [log] Failed to write ai_run_summary.json: {e}")
+
+
+def _write_spend_summary(date_str: str) -> None:
+    """Rebuild data/ai/spend.json — month-to-date ACTUAL AI cost — from ai_run_log.jsonl.
+
+    Month is taken from date_str (the run's market date → YYYY-MM). Sums cost_usd across
+    every logged run in that month; runs logged before cost tracking shipped lack the
+    field and count as 0 (surfaced via runs vs runs_with_cost, so a partial month reads
+    honestly). The current run's entry is already appended when this is called. The PWA's
+    AI tab renders this at the bottom. Best-effort — never fails the run.
+    """
+    try:
+        month = str(date_str)[:7]  # YYYY-MM
+        log_path = DATA_DIR / "ai_run_log.jsonl"
+        total = 0.0
+        runs = runs_with_cost = 0
+        last = None
+        if log_path.exists():
+            with open(log_path, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if str(entry.get("date", ""))[:7] != month:
+                        continue
+                    runs += 1
+                    if "cost_usd" in entry:
+                        total += float(entry.get("cost_usd") or 0.0)
+                        runs_with_cost += 1
+                    last = entry
+        summary = {
+            "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "model": GEMINI_MODEL,
+            "month": month,
+            "month_to_date_usd": round(total, 4),
+            "runs": runs,
+            "runs_with_cost": runs_with_cost,
+            "soft_budget_usd": SPEND_SOFT_BUDGET_USD,
+            "budget_is_shared": True,
+            "last_run": {
+                "date": last.get("date"),
+                "cost_usd": last.get("cost_usd"),
+                "tokens": last.get("tokens"),
+                "outcome": last.get("outcome"),
+            } if last else None,
+        }
+        SPEND_SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = SPEND_SUMMARY_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+        tmp.replace(SPEND_SUMMARY_PATH)
+    except Exception as e:  # noqa: BLE001 — spend surface is best-effort, never fatal
+        print(f"  [spend] Failed to write spend.json: {e}")
 
 
 # ---------------------------------------------------------------------------

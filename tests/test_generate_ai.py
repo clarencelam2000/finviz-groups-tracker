@@ -719,6 +719,51 @@ def test_extract_usage_missing_metadata_returns_empty():
     assert generate_ai._extract_usage(_Resp()) == {}
 
 
+def test_write_run_artifacts_records_tokens_and_cost(tmp_path, monkeypatch):
+    """The run-log entry carries actual summed tokens + a dollar cost from real usage."""
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "SPEND_SUMMARY_PATH", tmp_path / "spend.json")
+    monkeypatch.setattr(generate_ai, "GEMINI_MODEL", "gemini-3.8-flash")
+    generate_ai._reset_tracking()
+    generate_ai._capture_log["sectors.note"] = {
+        "usage": {"prompt_tokens": 700, "output_tokens": 260, "thoughts_tokens": 2100,
+                  "total_tokens": 3060}}
+    generate_ai._capture_log["industries.note"] = {
+        "usage": {"prompt_tokens": 650, "output_tokens": 240, "thoughts_tokens": 1900,
+                  "total_tokens": 2790}}
+
+    generate_ai._write_run_artifacts("complete", False, 12.3, "2026-10-05")
+
+    lines = (tmp_path / "ai_run_log.jsonl").read_text().strip().splitlines()
+    entry = json.loads(lines[-1])
+    assert entry["tokens"]["prompt_tokens"] == 1350
+    assert entry["tokens"]["thoughts_tokens"] == 4000
+    assert entry["cost_priced"] is True
+    # billed output = (260+2100)+(240+1900)=4500 @ $3.75/1M; input 1350 @ $0.75/1M
+    assert entry["cost_usd"] == pytest.approx(4500 / 1e6 * 3.75 + 1350 / 1e6 * 0.75, abs=1e-6)
+
+
+def test_write_spend_summary_month_to_date(tmp_path, monkeypatch):
+    """spend.json sums the month's logged cost and counts priced vs total runs."""
+    monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(generate_ai, "SPEND_SUMMARY_PATH", tmp_path / "spend.json")
+    log = tmp_path / "ai_run_log.jsonl"
+    log.write_text(
+        json.dumps({"date": "2026-10-01", "cost_usd": 0.09, "outcome": "complete",
+                    "tokens": {"prompt_tokens": 1}}) + "\n"
+        + json.dumps({"date": "2026-10-02", "cost_usd": 0.08, "outcome": "complete"}) + "\n"
+        + json.dumps({"date": "2026-09-30", "cost_usd": 5.0, "outcome": "complete"}) + "\n"
+        + json.dumps({"date": "2026-10-03", "outcome": "skipped"}) + "\n"  # no cost field
+    )
+    generate_ai._write_spend_summary("2026-10-03")
+    summary = json.loads((tmp_path / "spend.json").read_text())
+    assert summary["month"] == "2026-10"
+    assert summary["month_to_date_usd"] == pytest.approx(0.17, abs=1e-6)  # Sept excluded
+    assert summary["runs"] == 3          # three October entries
+    assert summary["runs_with_cost"] == 2
+    assert summary["last_run"]["outcome"] == "skipped"
+
+
 def test_main_kill_switch_exits_without_backend(monkeypatch):
     """AI_DISABLED=1 makes main() exit 0 before any client/backend setup."""
     monkeypatch.setattr(sys, "argv", ["generate_ai"])
