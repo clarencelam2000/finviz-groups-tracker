@@ -413,7 +413,7 @@ _BRIEFING_ROUTES = [
 
 
 def test_gemini_model_is_pinned_version():
-    assert generate_ai.GEMINI_MODEL == "gemini-3.5-flash"
+    assert generate_ai.GEMINI_MODEL == "gemini-3.8-flash"
 
 
 # ---------------------------------------------------------------------------
@@ -614,18 +614,18 @@ def test_call_api_reraises_after_max_retries(monkeypatch):
     assert client.models.generate_content.call_count == 4  # initial + 3 retries
 
 
-def test_call_api_no_generation_config_omits_config_kwarg(monkeypatch):
-    """Without a generation_config, generate_content is called without a config kwarg."""
+def test_call_api_always_passes_config_kwarg(monkeypatch):
+    """Every call now carries a config (thinking level + output ceiling apply to all)."""
     monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
     monkeypatch.setattr("time.sleep", lambda _: None)
     client = _make_client(["result"])
     generate_ai._call_api(client, "prompt")
     call_kwargs = client.models.generate_content.call_args[1]
-    assert "config" not in call_kwargs
+    assert "config" in call_kwargs  # config is no longer conditional
 
 
-def test_call_api_config_has_no_schema_or_token_cap(monkeypatch):
-    """Freeform mode: only temperature is set — no JSON schema, no max_output_tokens."""
+def test_call_api_config_has_no_schema_but_sets_cap_and_thinking(monkeypatch):
+    """Freeform mode: temperature + default output cap + thinking level; never a JSON schema."""
     from unittest.mock import MagicMock
     monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
     monkeypatch.setattr("time.sleep", lambda _: None)
@@ -646,10 +646,94 @@ def test_call_api_config_has_no_schema_or_token_cap(monkeypatch):
     assert ctor_kwargs["temperature"] == 0.2
     assert "response_mime_type" not in ctor_kwargs
     assert "response_schema" not in ctor_kwargs
-    assert "max_output_tokens" not in ctor_kwargs
+    # AI-WALLET: an anti-truncation cap and a thinking level are now always present.
+    assert ctor_kwargs["max_output_tokens"] == generate_ai.DEFAULT_MAX_OUTPUT_TOKENS
+    assert "thinking_config" in ctor_kwargs
 
     call_kwargs = client.models.generate_content.call_args[1]
     assert call_kwargs["config"] is mock_config_instance
+
+
+# ---------------------------------------------------------------------------
+# AI-WALLET: config builder, call ceiling, usage capture, kill switch
+# ---------------------------------------------------------------------------
+
+def test_build_call_config_defaults_use_real_sdk():
+    """Against the real pinned SDK: LOW thinking + 2048 cap wired onto the config."""
+    cfg = generate_ai._build_call_config(None)
+    assert cfg.max_output_tokens == generate_ai.DEFAULT_MAX_OUTPUT_TOKENS
+    # ThinkingLevel enum stringifies to include the level name (e.g. "...LOW").
+    assert "LOW" in str(cfg.thinking_config.thinking_level).upper()
+
+
+def test_build_call_config_spec_overrides_win():
+    """A TASK_SPEC may override thinking_level and max_output_tokens."""
+    cfg = generate_ai._build_call_config(
+        {"temperature": 0.1, "thinking_level": "high", "max_output_tokens": 512}
+    )
+    assert cfg.temperature == 0.1
+    assert cfg.max_output_tokens == 512
+    assert "HIGH" in str(cfg.thinking_config.thinking_level).upper()
+
+
+def test_call_api_runaway_guard_trips_at_ceiling(monkeypatch):
+    """At the per-run call ceiling, _call_api raises RunawayGuardError without an API call."""
+    monkeypatch.setattr(generate_ai, "_last_api_call", 0.0)
+    monkeypatch.setattr("time.sleep", lambda _: None)
+    monkeypatch.setattr(generate_ai, "_api_call_count", generate_ai.MAX_API_CALLS_PER_RUN)
+    client = _make_client(["nope"])
+    with pytest.raises(generate_ai.RunawayGuardError):
+        generate_ai._call_api(client, "prompt")
+    client.models.generate_content.assert_not_called()
+
+
+def test_extract_usage_captures_thoughts_and_raw():
+    """_extract_usage surfaces thoughts_tokens and a full model_dump, not just 3 fields."""
+    class _Meta:
+        prompt_token_count = 800
+        candidates_token_count = 250
+        thoughts_token_count = 1900
+        cached_content_token_count = 0
+        total_token_count = 2950
+
+        def model_dump(self, exclude_none=False):
+            return {
+                "prompt_token_count": 800, "candidates_token_count": 250,
+                "thoughts_token_count": 1900, "total_token_count": 2950,
+            }
+
+    class _Resp:
+        usage_metadata = _Meta()
+
+    usage = generate_ai._extract_usage(_Resp())
+    assert usage["prompt_tokens"] == 800
+    assert usage["output_tokens"] == 250
+    assert usage["thoughts_tokens"] == 1900
+    assert usage["total_tokens"] == 2950
+    assert usage["raw"]["thoughts_token_count"] == 1900
+
+
+def test_extract_usage_missing_metadata_returns_empty():
+    class _Resp:
+        usage_metadata = None
+    assert generate_ai._extract_usage(_Resp()) == {}
+
+
+def test_main_kill_switch_exits_without_backend(monkeypatch):
+    """AI_DISABLED=1 makes main() exit 0 before any client/backend setup."""
+    monkeypatch.setattr(sys, "argv", ["generate_ai"])
+    monkeypatch.setenv("AI_DISABLED", "1")
+    monkeypatch.setattr(generate_ai, "load_latest_snapshot", lambda _: pd.DataFrame())
+    recorded = {}
+    monkeypatch.setattr(generate_ai, "_write_run_artifacts",
+                        lambda outcome, *a, **k: recorded.setdefault("outcome", outcome))
+    # If the kill switch fails, main() would try to import/create a client — make that loud.
+    monkeypatch.setattr(generate_ai, "_has_new_delta_data",
+                        lambda _: (_ for _ in ()).throw(AssertionError("reached delta check")))
+    with pytest.raises(SystemExit) as exc:
+        generate_ai.main()
+    assert exc.value.code == 0
+    assert recorded["outcome"] == "disabled"
 
 
 # ---------------------------------------------------------------------------
