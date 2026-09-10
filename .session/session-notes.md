@@ -627,3 +627,340 @@ numbers show whether batching is needed at all.
 scripts/spike_structured_output.py --limit 60`), pastes the printed table into §4 of the knowledge
 note, and records the outcome in the `AI-NEXT-P0c` SPRINT row. That unblocks P0b (shared renderer)
 and P2a (Morning pipeline). No release triplet in this PR — nothing user-visible ships yet.
+
+---
+
+## 2026-09-08 — Emerging-bucket alpha: methodology riff + exec-brief comms skill
+
+**Status: safe to close** — no code touched in the pipeline; this session produced a measurement
+plan (SPRINT § EMRG-1..8), a communication skill, and one outstanding owner decision.
+
+**What the owner asked:** is there alpha in the `emerging` picks bucket, and is
+`scripts/evaluate_picks.py` even the right instrument? Explicitly wanted methodology discussed
+before any code.
+
+**Grounding measured (do not re-derive):**
+- 62 trading dates in `data/industries/deltas.csv` (2026-06-09 → 09-04). The emerging gate is
+  computable on **55** (needs `rs_score`, first non-null 2026-06-18).
+- Gate (`regime_short_long > 0.15 & rs_score > 0.5`) fires on **393 group-days**; mean 7.1/day,
+  range 3–16. Only **202** reach `picks.csv` — `EMERGING_SLOTS = 4` at priority 2.
+- All **202/202** emerging rows genuinely pass the gate. **The backfill-contamination hypothesis
+  is disproved** — `add_bucket_with_backfill` walks only the already-filtered qualifying pool,
+  so it can never pad with non-qualifiers. 14 rows sit past natural rank 4; all 14 still pass.
+  Don't re-open this.
+- 77/202 emerging rows are multi-tagged (`emerging|rs_new_high` 29, `emerging|leaders` 15, …).
+- `picks.csv` spans 49 dates across **three selector versions** (v1: 5, v2: 35, v3: 9), which
+  `print_report` currently pools without splitting.
+
+**Owner decisions taken this session (locked — do not re-litigate):**
+1. **No waiting for a longer sample.** The owner's hypothesis is that signal efficacy is
+   *regime-dependent* (a swing trader adapts style to a trending vs choppy tape). That
+   reframes the problem rather than just the timeline: pooling more history across regimes
+   yields an average true in no regime. Analyse *within* regime instead. My "wait until spring"
+   argument was wrong on its own terms and was withdrawn.
+2. **Bucket overlap is a feature, not contamination.** A group tagged by several buckets is
+   "firing on more cylinders" — that's a candidate conviction/sizing signal (EMRG-6), not noise
+   to isolate. The goal is deciding where to put money, not a clean experiment.
+3. **Tradeability gap is out of scope.** The owner picks the strongest names inside a chosen
+   group; the group is a heuristic pointer, not a position.
+4. Terminology: "spike" in this project means a *research spike*, never a price spike.
+
+**Real methodological findings that survived:**
+- **Row-pooling bias.** `evaluate_picks.py` averages 393 rows, so a 16-qualifier day counts 16×
+  and a 3-qualifier day 3×. Broad-signal days are likely strong-market days, so part of the
+  measured "edge" is just market direction. Fix: collapse to one number per date
+  (mean firing − mean non-firing) → a daily spread series and a cumulative equity curve, which
+  also makes the regime hypothesis *visible* rather than statistical. (EMRG-2/EMRG-3.)
+- **We grade the picker, never the signal.** Everything to date measures a 4-slot ranked
+  selector on `picks.csv`, not the gate. Replaying from `deltas.csv` gives 393 obs instead of
+  202 and starts a week earlier, with no slots/priority/version breaks. (EMRG-2/EMRG-5.)
+- **The thresholds are unexamined.** `EMERGING_REGIME_FLOOR = 0.15` / `EMERGING_RS_FLOOR = 0.5`
+  were picked, never tested. Owner flagged the **gradient/dose-response test as the highest-value
+  item** (EMRG-4): daily quintile-sort all 144 groups by `regime_short_long`, forward return per
+  bin. Shape → action: staircase means the threshold is just a dial; flat-then-jump means tighten
+  it; flat means the variable is wrong; inverted means wrong side.
+- **No negative control anywhere.** Nothing has ever checked whether the harness shows an edge on
+  randomly-selected groups (EMRG-7). Cheap and highest-leverage-per-hour.
+- **Execution-timing bias** (EMRG-8): picks publish 17:00 ET, post-close, but forward returns
+  start `close(t)→close(t+1)` — an overnight gap we couldn't have traded. Likely only
+  documentable; `snapshots.csv` has no opens.
+
+**What landed in this PR**
+- `.claude/skills/exec-brief/SKILL.md` — the owner's required communication style (headline
+  first, one decision with a recommendation + cost-of-not-deciding, layered detail, three
+  bullets not eight, pushback rules incl. "statistical rigour is not the goal, making money is").
+  Written at the owner's request after this session's first two replies were, fairly, called out
+  as information dumps.
+- `CLAUDE.md` § Communication style — pointer so the skill applies by default, not only on
+  explicit invocation.
+- `.session/SPRINT.md` § Emerging-bucket alpha study — EMRG-1..8 with the locked framing and the
+  "not doing" list, so none of the above lives only in chat.
+
+**Blocker / next step.** **EMRG-1 needs an owner decision: how to define market regime**
+(SPY vs its 20-day average / add a chop filter / the owner's own mental model). It's a trading
+judgment, not a data question, and EMRG-3 can't start without it. EMRG-2, EMRG-4, EMRG-5,
+EMRG-6 and EMRG-7 are all unblocked and runnable from a cloud session today — no Finviz access
+needed, they read committed CSVs only.
+
+**Follow-up in the same session — regime definition answered, EMRG-1 unblocked.**
+
+Owner had no quantitative model, only chart-reading heuristics: time split above/below the 20SMA,
+staying inside a 50d high/low range, MA slope, MACD-ish. Checked what the data can actually
+support before designing anything:
+
+- `data/benchmark/snapshots.csv` carries **only `perf_*` for SPY** — no price, no SMA, no 52W
+  high/low. `SMA20`/`SMA50`/`52W High`/`52W Low` exist only in `picks.csv`, per *stock ticker*,
+  and only from 2026-09-03.
+- A synthetic SPY index compounds cleanly from `perf_day` (55 days, +3.93% total). But a 20SMA
+  costs 19 warm-up days → **36 of 55 usable**; a 50d high/low leaves ~5. **The 50d-range
+  heuristic is not viable on current history** — that's a data fact, not a judgment.
+- Recommended substitute: **efficiency ratio** over 10 days (`abs(net move) / sum(abs(daily
+  moves))`) — same "moving around but going nowhere" intuition, 9 days of warm-up instead of 19.
+- Secondary source: cross-sectional breadth over the 144 industries (share with `perf_week > 0`),
+  available on all 62 days. Mean 0.52, std 0.12, but **crosses 0.50 seventeen times in 62 days** —
+  too noisy raw, needs smoothing.
+
+**The better move, found while checking the above: July vs August is a natural experiment.**
+July = SPY **+0.03% over 22 sessions** (textbook chop). August = **+2.67% over 21 sessions**
+(trend). Two regimes of near-equal length already in the data. Split EMRG-2/EMRG-4 on the month
+and the regime question gets a first answer with **no classifier at all**. Tracked as **EMRG-1a**,
+and it demotes EMRG-1 from blocker to "build it properly only if EMRG-1a shows the split matters".
+
+**Also extended `.claude/skills/exec-brief`** at the owner's request with six more executive-comms
+rules: separate measured/inferred/guessed and always state what would change your mind; recommend
+even when uncertain; flag one-way vs two-way doors so exec attention scales with reversibility;
+give cost in time/money/risk rather than engineering units; bad news first; don't hand back
+homework, and answer the obvious follow-up in the same message.
+
+**Nothing is blocked now.** EMRG-1a, 2, 4, 5, 6, 7 all run from a cloud session against committed
+CSVs.
+
+**Second follow-up — owner rejected the month split; regime segmentation revised; issue #419 filed.**
+
+Owner's correction (they are the domain expert on tape reading, and the data backs them): the
+whole summer was chop. The only real thrust was **2026-07-28 → 08-14**, preceded by weakness
+**07-14 → 07-28**. A July/August month boundary cuts straight through that thrust, so the month
+split I proposed was wrong. **Verified their read independently** with a 10d efficiency ratio
+(`abs(net move) / sum(abs(daily moves))` off `perf_day`): thrust segment **ER 0.51** vs 0.14 /
+0.22 / 0.14 for the other three segments, and the **six most-trending 10d windows in the entire
+sample all fall inside 07-28..08-14**. Eyeball labels and objective measure agree — neither is
+fitting the other.
+
+**The consequence reshapes the study:** only **~14 of 55 sessions are trend**. A binary
+chop-vs-trend comparison is too lopsided to be worth running. Use the **continuous 10d ER as a
+covariate** against the EMRG-2 daily spread instead — all 46 ER-available days contribute and no
+bucketing is needed. Recorded in EMRG-1a.
+
+**Filed #419 (P0): scrape all available SPY quote-page columns.** `scripts/collect.py` already
+fetches the full SPY quote page (`.snapshot-table2`) and then discards everything outside a
+7-entry `SPY_LABEL_MAP`. We have no Price, SMA20/50/200, 52W High/Low, ATR, RSI, Volatility or
+volume for SPY — and **this is unrecoverable**, Finviz serves point-in-time only. Fetch cost is
+already paid; the fix is widening the parse. Recommended capturing *every* label on the page
+rather than another fixed allowlist. Owner approved the ground-truth schema change under
+`.claude/rules/data-pipeline.md` on 2026-09-08 — the "compute it where it's consumed" escape
+hatch cannot apply to data never captured.
+
+**Third follow-up — EMRG-2/4/7/9 built and run. The headline result is not the one we expected.**
+
+Owner asked for an Opus adviser review before building. Worth it — it found **two real arithmetic
+defects** in the design, both fixed before any number was reported:
+
+1. **Count-dependent gain.** `mean(fire) − mean(nonfire)` equals `N/(N−k) × (mean(fire) −
+   mean(all))`. With k = 3..16 firing groups over N ≈ 144, that is a 1.02x..1.12x multiplier —
+   and **k is itself regime-correlated** (more groups fire in a trending tape), so the complement
+   form quietly amplifies exactly the days the regime analysis is about. Now subtracts the full
+   cross-sectional mean; `fwd_nonfire_mean` retained for reference.
+2. **Compound-then-subtract cross terms.** Differencing simple compounded returns leaves a
+   market×spread term that does not cancel, inflating the spread whenever the market rose —
+   biased in the same direction as the hypothesis. Now compounds in **log space** and converts
+   back only for display.
+
+Both were real; **neither moved the numbers much** (h=10 spread +0.60 either way), which is itself
+worth knowing — the result is not an artifact of those bugs.
+
+Adviser's leakage checks came back clean: the forward window starts at `pos+1` so the signal day
+(already inside the gate's `perf_week`) is excluded, and `deltas.csv`/`snapshots.csv` have **0
+duplicate (date, name) rows**, so last-write-wins already collapsed any pre-close/EOD ambiguity.
+
+**Results (`scripts/analyze_emerging.py`, 54 dates):**
+
+| h | spread (fire − cross-section) | pos% | random control | control pos% |
+|---|---|---|---|---|
+| 1 | −0.06 | 50% | −0.04 | 48% |
+| 3 | +0.19 | 48% | +0.09 | 48% |
+| 5 | +0.33 | 54% | −0.09 | 48% |
+| 10 | +0.60 | 60% | −0.78 | 33% |
+
+Gradient (excess vs same-day cross-section, by `regime_short_long` quintile) is **cleanly
+monotone at h=5 and h=10** (h=10: −0.46 / −0.33 / −0.26 / +0.22 / **+0.87**) and **flat at h=1**
+(−0.01 / +0.03 / −0.01 / −0.05 / +0.05).
+
+**THE RESULT THAT MATTERS — fresh triggers are negative; the edge is entirely in stale streaks:**
+
+| h | fresh (first day of fire) | n | stale (day 2+) | n |
+|---|---|---|---|---|
+| 1 | **−0.21** | 146 | +0.13 | 244 |
+| 3 | **−0.49** | 143 | +0.63 | 232 |
+| 5 | **−0.57** | 135 | +0.83 | 219 |
+| 10 | **−0.19** | 122 | **+1.06** | 180 |
+
+Negative at every horizon for fresh, positive at every horizon for stale. **This inverts how the
+bucket is used** — the Picks surface highlights newly-firing groups, and new fires are where the
+edge is not. Sign consistency across all four horizons in both cohorts is the notable part; the
+magnitudes are not trustworthy at this n.
+
+**Honest limits, per the adviser (do not overstate these numbers):**
+- The trustworthy statistic is the **h=1 gradient shape**, pooled over ~7,900 group-days: no
+  window overlap, no compounding trap, and monotonicity is a shape claim. It is currently **flat**.
+- The **h=10 spread and the spread-vs-efficiency-ratio correlation are presentation-grade only**.
+  ER has one high excursion (the 07-28..08-14 thrust), so that correlation is one episode sampled
+  14 times, not 46 independent observations. Tracked as EMRG-10 (clustered SEs); until it lands
+  the report prints **no p-values, t-stats or Sharpes** by design.
+- The random control is not centred on zero at h=10 (−0.78, 33% positive), which is exactly what a
+  negative control is for: it says the instrument has real noise at that horizon.
+
+**Adviser recommended cutting EMRG-6 (tag-count).** Kept — it is the owner's own hypothesis, so it
+will be reported descriptively and labelled underpowered rather than dropped. Noted in SPRINT.
+
+**Next:** owner review of the fresh-vs-stale result. If it holds up, the obvious follow-on is
+whether the Picks surface should be de-emphasising fresh fires — but that is a product change and
+needs the owner's call, not an inference from 54 dates.
+
+**Fourth follow-up — fresh/stale binary replaced by a streak dose-response. The finding got stronger.**
+
+Turned EMRG-9's binary split into 4 buckets (`STREAK_BUCKETS` = 1 / 2-3 / 4-5 / 6+) and carried the
+efficiency ratio onto every streak row so the table can be re-cut by regime for free.
+
+**Excess return vs same-day cross-section, by consecutive-fire streak:**
+
+| h | day 1 | day 2-3 | day 4-5 | day 6+ |
+|---|---|---|---|---|
+| 1 | −0.21 | −0.06 | +0.18 | +0.12 |
+| 3 | −0.49 | +0.27 | +0.56 | +1.07 |
+| 5 | −0.57 | +0.34 | +0.61 | +1.96 |
+| 10 | −0.19 | +0.99 | +0.08 | **+2.38** |
+| n | 146 | 132 | 64 | 48 |
+
+**Day 1 is negative at all four horizons. Every later bucket is positive at h=3/5/10, and h=3/5/10
+rise monotonically into day 6+.** A monotone dose-response is much harder to produce by chance than
+the two-way gap it replaced, so this is a strengthening, not just a re-cut.
+
+**Regime split (h=10, efficiency-ratio median 0.28):**
+
+| regime | day 1 | day 2-3 | day 4-5 | day 6+ |
+|---|---|---|---|---|
+| choppier | −0.54 | +1.92 | −2.01 | +3.38 |
+| trendier | −0.54 | +0.87 | +1.93 | +2.96 |
+
+**Day 1 is −0.54 in BOTH regimes — identical.** That is the robustness result that matters: the
+first-day penalty is not a chop artifact. The choppier day-4-5 cell (−2.01) is small-n noise;
+don't read it.
+
+**Main interpretive risk, tracked as EMRG-11 (do before any product change):** a group reaching
+day 6 has by construction kept clearing both floors for six sessions — i.e. it kept performing. So
+"streak 6+ outperforms" may be momentum rather than gate edge. It is **not** lookahead (streak
+position is knowable on the day, forward window still starts at `pos+1`), so it stays tradeable
+either way — but the story changes from "the gate predicts" to "persistence is the signal,
+freshness is noise". Also worth checking whether stale-emerging is largely the `leaders` bucket
+wearing a different tag. **EMRG-12** is the follow-on: express it as an actual entry rule and
+backtest that rule head-to-head.
+
+**Verification:** 24/24 tests in `tests/test_analyze_emerging.py`. Full suite **733 passed, 92
+failed — all 92 confirmed `ModuleNotFoundError: No module named 'playwright'`** (the documented
+sandbox limitation), zero assertion failures. Note this sandbox also started without `pandas`,
+`pytest`, `bs4`, `lxml` or `pytz`; installing them is required before the suite will even collect.
+
+**Fifth follow-up — the owner's pushback produced the session's actual finding, and five rejected framings are now written down.**
+
+The owner pushed back hard on five separate framings, and was right on all five. Full record with
+reasoning in **`knowledge/alpha-study-working-agreement.md`** — read it before any future
+alpha/signal/backtest work; `CLAUDE.md` now points at it. Summary:
+
+1. **"Wait for more data"** — rejected on better reasoning than the objection: if efficacy is
+   regime-dependent, a longer sample spanning regimes averages to something true in no regime.
+2. **"Isolate the buckets"** — rejected; overlap is a conviction signal ("firing on more
+   cylinders"), the goal is deciding where to look, not a controlled experiment.
+3. **"This might just be momentum"** — the worst of the five. **Momentum continuing IS the thesis.**
+   Also: returns are measured strictly from the day after the signal, so there is no lookahead —
+   the owner spotted this and was right that it settles the concern.
+4. **Publication vocabulary** (p-values, "not yet powered", "case study not evidence") —
+   *"I'm not submitting this to the Quant Trader Association."*
+5. **Elevating h=1** because it is statistically cleanest — *"so are we day trading now?"*
+   Correct. Measurement horizons follow the trading horizon; h=1 is not a swing trade. Reporting
+   an adviser's statistical preference over the owner's actual holding period was the error.
+
+**Reframing #3 comparatively produced the finding.** Not "is it momentum?" but "does our filter
+find momentum better than a simpler filter?" Measured over 54 dates:
+
+| Cut | Groups/day | 10-session excess | Days beating the average group |
+|---|---|---|---|
+| Deployed gate (`regime > 0.15` AND `rs_score > 0.5`) | ~7 | +0.60pp | 60% |
+| Top quintile by `regime_short_long` alone | ~28 | +0.79pp | 73% |
+| **Top decile by `regime_short_long` alone** | **~14** | **+1.27pp** | **71%** |
+
+**The `rs_score > 0.5` floor is costing money on every day we have data for.** Twice the excess
+return from the simpler, single-variable cut. Tracked as **EMRG-13**, now the highest-value open
+task. EMRG-11 closed as mis-framed (do not re-open).
+
+**Also landed:** `exec-brief` gains a mandatory worked-example rule (owner asked twice — every
+concept gets concrete numbers, e.g. "Monday, 144 groups, 6 fire, they return +0.7% while the board
+returns +1.2%, so the spread is −0.5pp: they made money, just less than buying everything"), a
+"making money is the standard, not statistical rigour" section listing the banned framings, and a
+rule that real caveats are stated once in plain language and never become the headline.
+
+**Next:** EMRG-13 — sweep the cut-off at 5/10/15/20 names, confirm where the payoff peaks, and
+check whether the day-1 penalty survives the simpler cut. Changing `EMERGING_RS_FLOOR` in
+`scripts/picks_config.py` is a product change and needs the owner's sign-off first.
+
+**Sixth follow-up — EMRG-13 done, and it turned into a much bigger finding than the question asked.**
+
+Generalised the study into a **rule-comparison harness**: `scripts/analyze_emerging.py` →
+**`scripts/analyze_signals.py`**, with a `RULES` registry and `--compare`. Any selection rule is
+now scored against any other on identical dates and identical forward windows, so
+*"should we drop Accel?"* / *"are Leaders giving us alpha?"* is **one command**, not a new study:
+
+```bash
+python3 scripts/analyze_signals.py --compare --horizons 5,10
+python3 scripts/analyze_signals.py --compare leaders,top14_regime
+```
+
+Deployed buckets (`emerging`, `leaders`, `accel`, `rs_new_high`) import their floors from
+`picks_config.py` so they track the live selector. Single-variable top-N baselines
+(`top{5,10,14,20,28}_regime`, `_momentum`, `_mom_confirmed`, `_rs_confirmed`) are included on
+purpose: **a multi-condition screen has to beat "rank on one column, take the top N" to justify
+itself.** Without that baseline the emerging gate looked fine in isolation.
+
+**Result — excess vs the day's average industry group, 10 sessions forward, 54 dates:**
+
+| Rule | Picks/day | All | Thrust | Chop | Hit |
+|---|---|---|---|---|---|
+| `top5_regime` | 5 | **+1.72** | — | — | 54% |
+| `top10_regime` | 10 | **+1.64** | +3.35 | +0.94 | 73% |
+| `top14_regime` | 14 | +1.30 | +2.43 | +0.84 | 73% |
+| `emerging` (deployed) | 7 | +0.60 | +0.79 | +0.51 | 60% |
+| `accel` (deployed) | 18 | **−1.02** | −2.26 | −0.40 | 36% |
+| `rs_new_high` (deployed) | 8 | **−1.36** | −3.43 | −0.39 | 41% |
+| `leaders` (deployed) | 11 | **−2.00** | −1.56 | −2.16 | 31% |
+| `top10_momentum` | 10 | **−2.69** | −2.06 | −2.93 | 25% |
+
+**Three of the four deployed buckets lose money versus simply holding the average industry group
+— in BOTH the thrust segment and the chop segment, so it is not a regime artifact.** Leaders is
+the worst performer and holds the most slots (11 of the 27-name daily budget). Only
+`regime_short_long` cuts are positive, and they are positive in both tapes.
+
+`momentum_score`-ranked cuts are strongly negative — high-momentum groups mean-reverted over 10
+sessions across this sample.
+
+**Honest caveats (state once, don't bury the finding):** 54 dates with only 14 trending; and the
+deployed buckets were scored *without* their slot caps and cross-bucket priority, so this measures
+the rules rather than the exact 27-name list the selector emits. Neither flips any sign; both
+affect how hard to lean.
+
+**Tracked as EMRG-14 — a product decision, blocked on the owner's explicit sign-off.** Rebalancing
+`picks_config.py` toward `regime_short_long` is not something to do off a measurement alone.
+
+**Docs generalised so this doesn't get re-derived:** `knowledge/alpha-study-working-agreement.md`
+gains a **Playbook** section (the one-command recipe, the two mandatory rules — always include a
+single-variable baseline, always split by regime — and the full results table).
+`CLAUDE.md` points at it from the communication-style section, so a future session asked
+"are Leaders giving us alpha?" lands on the method and the prior results before writing any code.
