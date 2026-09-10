@@ -722,7 +722,6 @@ def test_extract_usage_missing_metadata_returns_empty():
 def test_write_run_artifacts_records_tokens_and_cost(tmp_path, monkeypatch):
     """The run-log entry carries actual summed tokens + a dollar cost from real usage."""
     monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(generate_ai, "SPEND_SUMMARY_PATH", tmp_path / "spend.json")
     monkeypatch.setattr(generate_ai, "GEMINI_MODEL", "gemini-3.8-flash")
     generate_ai._reset_tracking()
     generate_ai._capture_log["sectors.note"] = {
@@ -746,7 +745,6 @@ def test_write_run_artifacts_records_tokens_and_cost(tmp_path, monkeypatch):
 def test_write_spend_summary_month_to_date(tmp_path, monkeypatch):
     """spend.json sums the month's logged cost and counts priced vs total runs."""
     monkeypatch.setattr(generate_ai, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(generate_ai, "SPEND_SUMMARY_PATH", tmp_path / "spend.json")
     log = tmp_path / "ai_run_log.jsonl"
     log.write_text(
         json.dumps({"date": "2026-10-01", "cost_usd": 0.09, "outcome": "complete",
@@ -756,7 +754,7 @@ def test_write_spend_summary_month_to_date(tmp_path, monkeypatch):
         + json.dumps({"date": "2026-10-03", "outcome": "skipped"}) + "\n"  # no cost field
     )
     generate_ai._write_spend_summary("2026-10-03")
-    summary = json.loads((tmp_path / "spend.json").read_text())
+    summary = json.loads((tmp_path / "ai" / "spend.json").read_text())
     assert summary["month"] == "2026-10"
     assert summary["month_to_date_usd"] == pytest.approx(0.17, abs=1e-6)  # Sept excluded
     assert summary["runs"] == 3          # three October entries

@@ -80,9 +80,11 @@ CAPTURE_DIR = DATA_DIR / "ai" / "debug"
 PROVENANCE_DIR = DATA_DIR / "ai" / "provenance"
 CAPTURE_RETENTION_DAYS = 30
 
-# SPEND_SUMMARY_PATH: small committed JSON the PWA's AI tab reads to show actual
-# month-to-date AI cost. Rebuilt each run from ai_run_log.jsonl's per-run cost_usd.
-SPEND_SUMMARY_PATH = DATA_DIR / "ai" / "spend.json"
+# SPEND_SUMMARY_NAME: small committed JSON (at data/ai/<name>) the PWA's AI tab reads to
+# show actual month-to-date AI cost. Rebuilt each run from ai_run_log.jsonl's per-run
+# cost_usd. Resolved DATA_DIR-relative at write time (not a fixed absolute constant) so it
+# honors the DATA_DIR monkeypatch every test/caller already uses for the run log.
+SPEND_SUMMARY_NAME = "spend.json"
 # SPEND_SOFT_BUDGET_USD: the shared monthly Gemini credit this app's spend draws on.
 # It is SHARED with the owner's other projects, so treat it as a ceiling to stay well
 # under, not a target to fill. Display-only (drives the PWA "of ~$10 shared" context);
@@ -1438,10 +1440,11 @@ def _write_spend_summary(date_str: str) -> None:
                 "outcome": last.get("outcome"),
             } if last else None,
         }
-        SPEND_SUMMARY_PATH.parent.mkdir(parents=True, exist_ok=True)
-        tmp = SPEND_SUMMARY_PATH.with_suffix(".tmp")
+        spend_path = DATA_DIR / "ai" / SPEND_SUMMARY_NAME  # DATA_DIR-relative: honors monkeypatch
+        spend_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = spend_path.with_suffix(".tmp")
         tmp.write_text(json.dumps(summary, indent=2), encoding="utf-8")
-        tmp.replace(SPEND_SUMMARY_PATH)
+        tmp.replace(spend_path)
     except Exception as e:  # noqa: BLE001 — spend surface is best-effort, never fatal
         print(f"  [spend] Failed to write spend.json: {e}")
 
