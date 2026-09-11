@@ -201,6 +201,29 @@ there is no resolve step and no ticker input in this UI at all.
   the Positions tab…") — no add attempted, same wording convention as `watchAddErrorText`.
 - Tests: `tests/test_pwa_quick_watch.py` (Playwright — in the CI `--ignore=` list).
 
+## AI tab — spend card (AI-WALLET-PWA, 2026-09-11)
+
+A small "AI Spend" card renders at the bottom of `renderAI()`'s output, reading
+`data/ai/spend.json` (rebuilt by every `generate_ai.py` run — see `scripts/CLAUDE.md` § AI
+spend controls). `loadSpend()`/`state.spendData`/`SPEND_URL` follow the same load-once,
+reset-on-`__refresh()` convention as the rest of the AI tab's data (`loadAI`/`state.aiData`).
+
+- **Account-wide, not date-scoped.** Unlike the rest of the AI tab, the spend card doesn't
+  change when the user navigates the AI date picker — `spendSectionHtml()` is called from
+  every one of `renderAI()`'s three exit points (`_noData`, "not yet available" empty state,
+  and the normal briefing-cards path), so it's always the last thing rendered regardless of
+  which state the tab is in.
+- **Self-omits on a missing/failed fetch** (a repo that hasn't run `generate_ai.py` since
+  AI-WALLET landed, or a network hiccup) — `spendSectionHtml()` returns `''` when
+  `state.spendData` is null, same silent-degrade convention as `behindThis()`'s provenance
+  drawer.
+- **Budget bar is a display ceiling, not an enforcement mechanism** — mirrors
+  `SPEND_SOFT_BUDGET_USD`'s own doc note (scripts/CLAUDE.md, root CLAUDE.md § AI spend
+  controls): going over it shows a red bar + explicit "nothing is blocked" copy rather than
+  implying a hard stop. Tested in `tests/test_pwa_ai_spend.py` (Playwright — in the CI
+  `--ignore=` list, see `.claude/rules/branch-commit-discipline.md` § New Playwright test
+  files).
+
 ## Morning tab (WS3, ADR-013)
 
 **Subtabs (morning-subtabs-watchlist).** The tab has two panes, `#morning-subtab-picks`

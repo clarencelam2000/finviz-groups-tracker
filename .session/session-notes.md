@@ -6,6 +6,52 @@
 ---
 
 
+## 2026-09-11 — AI-WALLET-PWA: render spend.json at the bottom of the AI tab
+
+**Status: safe to close.** Follow-up to 2026-09-10's AI-WALLET-CORE (backend spend accounting)
+— this closes the PWA half deferred there (see that entry below).
+
+**What landed (branch `claude/ai-spend-controls-render-bpyfrk`):**
+- `docs/index.html`: `SPEND_URL` (`${BASE}/ai/spend.json`), `state.spendData`, `loadSpend()`
+  (fetched alongside the other `loadAndRender()` calls, best-effort — never blocks the render),
+  and `spendSectionHtml()` — a small card rendered at the bottom of `renderAI()`'s output in
+  **all three** of its exit branches (`_noData`, "AI analysis not yet available", and the normal
+  briefing-cards path), since the spend card is account-wide, not tied to whichever AI date is
+  being browsed. Shows month-to-date $ vs. `SPEND_SOFT_BUDGET_USD` with a color-coded bar
+  (emerald/amber/red), run counts, last-run model/outcome/cost, and an "Updated Xh ago" caption.
+  Going over budget shows red + an explicit "a display ceiling only, nothing is blocked" note,
+  matching `SPEND_SOFT_BUDGET_USD`'s own doc contract (scripts/CLAUDE.md, root CLAUDE.md § AI
+  spend controls) — it was never meant to be an enforcement mechanism. A missing/failed
+  `spend.json` fetch (repo hasn't run `generate_ai.py` since AI-WALLET landed, or a network
+  hiccup) silently omits the section — never breaks the rest of the AI tab.
+- Release triplet in the same PR: `docs/releases.json` (`2026.09.11`, tag `feature`, tab `ai`)
+  + `docs/sw.js` (`CACHE` v99→v100).
+- `docs/CLAUDE.md` new § "AI tab — spend card"; README.md § AI spend controls updated to note
+  the render now exists.
+- **4 new Playwright tests** (`tests/test_pwa_ai_spend.py`, added to the CI `--ignore=` list
+  per `.claude/rules/branch-commit-discipline.md`): normal render (all fields present), the
+  over-budget red-warning state, silent omission on a 404, and rendering inside the "AI analysis
+  not yet available" empty state (using the small `tests/fixtures/ai/*.csv` fixtures to force a
+  controlled fallback date with no AI JSON). All 4 pass.
+
+**Real-browser verification, done in this cloud session (the thing 2026-09-10 flagged as
+needing "a real-browser check not reliable in a cloud session"):** installed `playwright==1.44.0`
++ pytest fresh (not preinstalled here), used the pre-installed `/opt/pw-browsers/chromium-1194`
+via the documented symlink trick
+(`knowledge/investigations/playwright-cloud-session-testing.md`) to run the committed test suite
+headlessly, AND — beyond what that doc's harness does — fetched the **real** `cdn.tailwindcss.com`
+script via `curl` (reachable from the shell even though not from Chromium directly, per that
+doc's Root Cause 2) and served it through `page.route()` instead of the usual empty-comment
+stub, so the visual (not just DOM-text) rendering could actually be screenshotted and eyeballed:
+confirmed card styling, budget-bar color states (green under-budget / red over-budget), and
+layout consistency with the rest of the AI tab's cards. Screenshots were scratch-only, not
+committed.
+
+**Next:** `AI-WALLET-CONVICTION` (remove Conviction from the `pulse` call) is the one remaining
+item from the 2026-09-10 AI-WALLET backlog — still open, not touched this session.
+
+---
+
 ## 2026-09-10 — AI-WALLET: protect Gemini spend before free-trial credits expire
 
 **Status: safe to close** for the wallet core (5 commits, pushed, PR opened — backend only,

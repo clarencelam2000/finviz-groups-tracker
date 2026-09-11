@@ -441,6 +441,10 @@
     // WS3b pre-close status (issue #268). Same provisional store family as morning, keyed
     // (date, ticker), session=pre_close — a ~15:30 ET last-half-hour read of the same setups.
     const PRECLOSE_URL  = `${BASE}/picks/sessions/pre_close_latest.csv`;
+    // AI-WALLET-PWA: month-to-date Gemini spend, rebuilt by generate_ai.py every run from
+    // ai_run_log.jsonl (see scripts/CLAUDE.md § AI spend controls). Not date-keyed like the AI
+    // JSON above — one file, always current-month, refreshed on pull-to-refresh only.
+    const SPEND_URL      = `${BASE}/ai/spend.json`;
     const WORKER_URL = 'https://finviz-ticker-lookup.salmonbaby8.workers.dev';
     // WS5 phase 1 (#309): finviz-positions worker (D1-backed trade lifecycle store, auth
     // via bearer token — see worker-positions/README.md). Endpoint + localStorage key, not
@@ -689,6 +693,7 @@
       latestAiDate: null,
       latestSnapshotDate: null,
       currentAiDate: null,
+      spendData: null,  // AI-WALLET-PWA: data/ai/spend.json, rendered at the bottom of the AI tab
       loading: false,
       expandedName: null,
       sectorBreadth: {},  // sector → {top, total} computed after industries data loads
@@ -1925,6 +1930,18 @@
       }
     }
 
+    async function loadSpend(force = false) {
+      // AI-WALLET-PWA: month-to-date Gemini spend surface. Absent on any repo that hasn't run
+      // generate_ai.py since AI-WALLET landed (2026-09-10) — silently omitted, not an error.
+      if (!force && state.spendData !== null) return;
+      try {
+        const res = await fetch(`${SPEND_URL}${force ? `?_=${Date.now()}` : ''}`);
+        state.spendData = res.ok ? await res.json() : null;
+      } catch {
+        state.spendData = null;
+      }
+    }
+
     function renderPipeline() {
       const section = document.getElementById('pipeline-section');
       const logs = state.fetchLog;
@@ -2727,6 +2744,60 @@
 
     // ── Render: AI Insights ────────────────────────────────────────────────
 
+    // AI-WALLET-PWA: month-to-date Gemini spend, read from data/ai/spend.json (rebuilt every
+    // generate_ai.py run — see scripts/CLAUDE.md § AI spend controls). Account-wide, not
+    // date-scoped like the rest of the AI tab, so it renders identically regardless of which
+    // date is being browsed via the date nav. Absent/null spendData (a repo that hasn't run
+    // generate_ai.py since AI-WALLET landed, 2026-09-10, or a fetch failure) renders nothing.
+    function spendSectionHtml() {
+      const s = state.spendData;
+      if (!s || typeof s.month_to_date_usd !== 'number') return '';
+
+      const budget = typeof s.soft_budget_usd === 'number' && s.soft_budget_usd > 0 ? s.soft_budget_usd : null;
+      const pct = budget !== null ? Math.min(1, s.month_to_date_usd / budget) : null;
+      const overBudget = budget !== null && s.month_to_date_usd > budget;
+      const barColor = overBudget ? 'bg-rose-500' : (pct !== null && pct >= 0.7 ? 'bg-yellow-500' : 'bg-emerald-500');
+
+      let updatedStr = '';
+      if (s.updated_at) {
+        try {
+          const upd = new Date(s.updated_at);
+          const diffMin = Math.max(0, Math.floor((Date.now() - upd.getTime()) / 60000));
+          if (diffMin < 1)          updatedStr = 'just now';
+          else if (diffMin < 60)    updatedStr = `${diffMin}m ago`;
+          else if (diffMin < 1440)  updatedStr = `${Math.floor(diffMin / 60)}h ago`;
+          else                      updatedStr = `${Math.floor(diffMin / 1440)}d ago`;
+        } catch {}
+      }
+
+      const lastRun = s.last_run || null;
+      const lastRunLine = lastRun
+        ? `Last run ${escapeHtml(lastRun.date || '—')} · ${escapeHtml(lastRun.outcome || 'unknown')}` +
+          (typeof lastRun.cost_usd === 'number' ? ` · ${fmtUsd(lastRun.cost_usd)}` : '')
+        : '';
+
+      return `
+        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mt-6 mb-2">AI Spend${s.month ? ' — ' + escapeHtml(s.month) : ''}</div>
+        <div class="rounded-xl p-4 bg-slate-800 border border-slate-700">
+          <div class="flex items-baseline justify-between gap-2 mb-1">
+            <span class="text-lg font-bold text-white">${fmtUsd(s.month_to_date_usd)}</span>
+            ${budget !== null ? `<span class="text-xs text-slate-500">of ${fmtUsd(budget)} budget${s.budget_is_shared ? ' (shared)' : ''}</span>` : ''}
+          </div>
+          ${budget !== null ? `
+            <div class="w-full h-1.5 rounded-full bg-slate-700 overflow-hidden mb-2">
+              <div class="h-full ${barColor} rounded-full" style="width:${(pct * 100).toFixed(0)}%"></div>
+            </div>
+            ${overBudget ? '<div class="text-xs text-rose-400 mb-1">Over the soft budget — a display ceiling only, nothing is blocked.</div>' : ''}
+          ` : ''}
+          <div class="text-xs text-slate-500 space-y-0.5">
+            ${typeof s.runs === 'number' ? `<div>${s.runs} run${s.runs === 1 ? '' : 's'} this month${typeof s.runs_with_cost === 'number' ? ` · ${s.runs_with_cost} priced` : ''}</div>` : ''}
+            ${lastRunLine ? `<div>${lastRunLine}</div>` : ''}
+            ${s.model ? `<div>Model: ${escapeHtml(s.model)}</div>` : ''}
+            ${updatedStr ? `<div>Updated ${updatedStr}</div>` : ''}
+          </div>
+        </div>`;
+    }
+
     function renderAI() {
       const container = document.getElementById('ai-content');
 
@@ -2741,7 +2812,7 @@
         container.innerHTML = `
           <div class="rounded-xl p-6 bg-slate-800 border border-slate-700 text-center">
             <p class="text-slate-400 text-sm">No data available for this period.</p>
-          </div>`;
+          </div>` + spendSectionHtml();
         updateAINavUI();
         return;
       }
@@ -2753,7 +2824,7 @@
             <p class="text-white font-semibold mb-1">AI analysis not yet available</p>
             <p class="text-slate-400 text-sm">Generated automatically after each evening data collection.</p>
             <p class="text-slate-500 text-xs mt-2">Requires GEMINI_API_KEY in GitHub Actions secrets.</p>
-          </div>`;
+          </div>` + spendSectionHtml();
         return;
       }
 
@@ -2896,6 +2967,8 @@
         briefingCard(riskRadar.relative_strength, 'Relative Strength vs S&P', 'text-emerald-300', 'risk_radar');
         briefingCard(riskRadar.risks, 'Risks & Fragility', 'text-rose-300');
       }
+
+      html += spendSectionHtml();
 
       container.innerHTML = html;
 
@@ -9288,6 +9361,7 @@
         loadMorning(force),
         loadPreClose(force), // WS3b (#268): the ~15:30 ET read for the Morning tab session toggle
         loadWatchlist(force).catch(() => {}), // WS5 §8b P3: best-effort, must not block the picks morning render
+        loadSpend(force).catch(() => {}), // AI-WALLET-PWA: best-effort, must not block the render
         new Promise(r => setTimeout(r, minMs)),
       ]);
       // AI JSON is keyed by the latest data date — derive it after CSVs are loaded
@@ -9876,6 +9950,7 @@
       state.latestAiDate = null;
       state.latestSnapshotDate = null;
       state.currentAiDate = null;
+      state.spendData = null;
       // Reset windows so they're re-derived from the fresh CSV on next load.
       state.windows = [];
       const nav = document.getElementById('ai-date-nav');

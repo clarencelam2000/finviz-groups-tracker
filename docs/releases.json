@@ -1,6 +1,16 @@
 {
-  "current": "2026.09.04.2",
+  "current": "2026.09.11",
   "releases": [
+    {
+      "version": "2026.09.11",
+      "date": "2026-09-11",
+      "title": "AI tab: monthly Gemini spend card",
+      "tag": "feature",
+      "tab": "ai",
+      "notes": [
+        "A new \"AI Spend\" card at the bottom of the AI tab shows month-to-date Gemini cost against the shared budget, plus the model and outcome of the most recent run — so you can see at a glance whether the daily AI analysis is staying within its wallet."
+      ]
+    },
     {
       "version": "2026.09.04.2",
       "date": "2026-09-04",
