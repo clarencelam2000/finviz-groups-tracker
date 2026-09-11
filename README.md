@@ -508,7 +508,7 @@ Added 2026-09-10 to protect the shared monthly Gemini credit once free-trial cre
 
 **Kill switch / pause AI spend:** set repo/workflow env `AI_DISABLED=1` (no code change, no secret deletion). Re-enable by removing it. `generate_ai.py` also still exits 0 gracefully if credentials are simply absent.
 
-**Actual-cost surface:** each run records real token usage + dollar cost (from the API's `usage_metadata`) into `data/ai_run_log.jsonl`, and rebuilds `data/ai/spend.json` (month-to-date actual cost). The hard stops that protect the wallet are `THINKING_LEVEL`, `MAX_API_CALLS_PER_RUN`, `AI_DISABLED`, and a GCP-side billing budget + API quota cap (set in the Cloud console, out of repo).
+**Actual-cost surface:** each run records real token usage + dollar cost (from the API's `usage_metadata`) into `data/ai_run_log.jsonl`, and rebuilds `data/ai/spend.json` (month-to-date actual cost). The PWA's AI tab renders this as a small "AI Spend" card at the bottom (AI-WALLET-PWA, 2026-09-11) — month-to-date cost vs. `SPEND_SOFT_BUDGET_USD`, run counts, and the last run's model/outcome; the card is account-wide, not tied to whichever date is being browsed, and silently omits itself if `spend.json` doesn't exist yet. The hard stops that protect the wallet are `THINKING_LEVEL`, `MAX_API_CALLS_PER_RUN`, `AI_DISABLED`, and a GCP-side billing budget + API quota cap (set in the Cloud console, out of repo).
 
 **Dedupe:** a run whose input data is byte-identical to the already-committed output for that date skips regeneration (no API spend) — kills the EOD backstop's redundant 3rd run. `--force-ai` bypasses.
 
