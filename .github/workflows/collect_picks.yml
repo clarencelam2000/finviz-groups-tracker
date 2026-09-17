@@ -73,7 +73,8 @@ jobs:
           path: data/picks/debug_html/
           if-no-files-found: ignore
       - name: Build agent feed (manifest + latest_signals)
-        if: always()
+        # Intentionally NOT if: always() — on a failed scrape we must not refresh
+        # the feed's generated_at against stale data (would look freshly generated).
         run: python scripts/build_signals.py
       - name: Commit and push
         if: always()

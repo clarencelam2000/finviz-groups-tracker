@@ -113,7 +113,9 @@ jobs:
         id: evalpicks
         run: python scripts/evaluate_picks.py
       - name: Build agent feed (manifest + latest_signals)
-        if: always()
+        # Intentionally NOT if: always() — on a failed scrape/deltas we must not
+        # refresh the feed's generated_at against stale data (would look freshly
+        # generated to a consumer trusting that field).
         run: python scripts/build_signals.py
       - name: Log fetch result
         if: always()
