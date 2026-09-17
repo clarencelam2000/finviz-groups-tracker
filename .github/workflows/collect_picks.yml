@@ -72,12 +72,16 @@ jobs:
           name: picks-debug-html
           path: data/picks/debug_html/
           if-no-files-found: ignore
+      - name: Build agent feed (manifest + latest_signals)
+        if: always()
+        run: python scripts/build_signals.py
       - name: Commit and push
         if: always()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/picks/
+          # data/api/ carries the regenerated agent feed; data/picks/ the scrape.
+          git add data/picks/ data/api/
           git diff --cached --quiet || git commit -m "data: picks $(TZ=America/New_York date +%Y-%m-%d)"
           git pull --rebase
           git push

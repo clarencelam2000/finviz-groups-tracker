@@ -112,6 +112,9 @@ jobs:
       - name: Evaluate picks scoreboard
         id: evalpicks
         run: python scripts/evaluate_picks.py
+      - name: Build agent feed (manifest + latest_signals)
+        if: always()
+        run: python scripts/build_signals.py
       - name: Log fetch result
         if: always()
         env:
