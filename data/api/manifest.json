@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "generated_at": "2026-09-17T10:18:21Z",
+  "as_of": "2026-09-16",
+  "session": "eod",
+  "data_branch": "claude/elegant-babbage-hlxnfy",
+  "row_counts": {
+    "sectors": 11,
+    "industries": 144,
+    "picks": 374
+  },
+  "signals_file": "data/api/latest_signals.json",
+  "history": {
+    "sectors_snapshots": "data/sectors/snapshots.csv",
+    "sectors_deltas": "data/sectors/deltas.csv",
+    "industries_snapshots": "data/industries/snapshots.csv",
+    "industries_deltas": "data/industries/deltas.csv",
+    "benchmark_snapshots": "data/benchmark/snapshots.csv",
+    "picks_history": "data/picks/picks.csv",
+    "picks_latest": "data/picks/picks_latest.csv"
+  },
+  "config": {
+    "atr_bands": {
+      "actionable_max": 4.0,
+      "trim_min": 8.0
+    },
+    "lookback_windows": [
+      5,
+      10,
+      20,
+      50
+    ],
+    "movers_window": 20,
+    "regime_short_long": {
+      "short": [
+        "perf_week",
+        "perf_month"
+      ],
+      "long": [
+        "perf_quarter",
+        "perf_half",
+        "perf_year"
+      ]
+    }
+  }
+}

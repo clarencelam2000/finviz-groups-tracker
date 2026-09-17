@@ -42,6 +42,7 @@ python scripts/export_db.py
 | `scripts/export_db.py` | Exports CSVs → SQLite (`finviz_groups.db`) + Parquet in `./exports/` (not committed) | ~150 |
 | `scripts/backfill.py` | Shows current date coverage; prints manual backfill instructions. Accepts `--status` | ~50 |
 | `scripts/evaluate_picks.py` | Picks alpha scoreboard: rebuilds `data/picks/eval/group_scores.csv` (forward group returns vs SPY + cross-sectional median + non-selected control, per bucket, horizons 1/3/5/10 sessions). `--report` prints the alpha roll-up with a sample-size guard. Derived artifact — fully rebuilt each run, not append-only. Runs in `collect.yml` after `compute_deltas.py`. | ~150 |
+| `scripts/build_signals.py` | Builds the **public agent feed** — `data/api/manifest.json` (freshness + self-describing file index + config constants) and `data/api/latest_signals.json` (versioned top-N signal summary). A stable read contract for external read-only agents so they don't couple to raw CSV schemas. Runs at the end of `collect.yml` and `collect_picks.yml`. **Public-only** — nothing from the private position book (worker-positions D1) is ever written here. `SCHEMA_VERSION` is major.minor, additive-only within a major. See README § Agent feed. | ~120 |
 | `scripts/seed_taxonomy.py` | Seeds `data/finviz_sector_industry_map.{json,csv}` by parsing fasiha/finviz-git-scraper's `map-sec_all.json` (plain HTTP — no Playwright, no Cloudflare). Run once; re-run only after Finviz restructures taxonomy. Validates against snapshot CSVs automatically. | ~80 |
 | `dashboard/app.py` | Streamlit dashboard: Snapshot, Top Movers, Time Series, Momentum tabs | ~100 |
 
@@ -53,6 +54,9 @@ python scripts/export_db.py
 
 ```
 data/
+  api/
+    manifest.json         # DERIVED (rebuilt each run): freshness + file index + config for the public agent feed
+    latest_signals.json   # DERIVED (rebuilt each run): versioned top-N signal summary; external agent read contract
   sectors/
     snapshots.csv    # append-only; one row per (date, sector)   ~11 rows/day
     deltas.csv       # append-only; one row per (date, sector)   ~11 rows/day
