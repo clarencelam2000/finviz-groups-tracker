@@ -373,3 +373,27 @@ release surface updated in the same PR. Non-Playwright pytest suite green (797 p
 
 **Next steps:** none outstanding — PR opened, ready for review.
 ---
+
+---
+
+## 2026-09-17 — Public agent feed (manifest + latest_signals) for external agents
+
+**Status:** safe-to-close once PR is merged. Public-feed work landed; private-book access is deliberate fast-follow (see SPRINT § AGENT-FEED).
+
+**Context:** Owner (Clarence) wants his Meta agent "Muse" to read the Finviz tracker directly. Repo is public (verified), so reads need no credentials. Decided against Muse consuming raw CSVs (118-col picks, generated delta schema → brittle coupling) in favor of a small, versioned JSON contract the pipeline publishes.
+
+**What landed:**
+- `scripts/build_signals.py` — pure builders `build_signals()` / `build_manifest()` + `main()`. Writes `data/api/manifest.json` (freshness, self-describing file index, history pointers, config constants: `atr_bands`, `lookback_windows`, `regime_short_long`) and `data/api/latest_signals.json` (`schema_version` 1.0, `as_of`, `session=eod`, `universe`, `emerging_leaders` top-15 by regime, `top_movers`/`fading` by `rank_ytd_delta_20d`, `picks` grouped by real `list_category` = leaders/all_green/accel/emerging/rs_new_high). ~80KB output.
+- Wired into `collect.yml` (after evaluate_picks; existing `git add data/` catches it) and `collect_picks.yml` (after scrape; expanded `git add` to `data/picks/ data/api/` so the picks section is same-day fresh).
+- `tests/test_build_signals.py` — 7 tests (shape/version, sort+NaN drop, movers/fading split, picks-by-category with raw ATR + NaN passthrough, manifest index/config, empty-frame safety, main() writes valid JSON). Full non-playwright suite green (123 passed).
+- Docs: README § Agent feed (config table), CLAUDE.md scripts table + data/api/ in the data-structure block.
+
+**Design decisions (grounded, not assumed):**
+- **Privacy boundary:** feed is public-signals-only. Position/held/P&L status lives only in worker-positions D1 (HMAC bearer auth) and is NEVER written to a public file. Muse's proposed picks `status` field was dropped for this reason.
+- **ATR band not persisted:** per data-pipeline.md, emit raw `atr_ext_50` + publish thresholds in manifest; consumer derives the band. Avoids stale labels on retune.
+- **Two files, not one:** manifest = cheap freshness poll + index; signals = payload. Combining would drag the full payload on every freshness check.
+- Corrected two of Muse's assumptions against real schema: `list_category` is selector buckets (not All/Focus), and `atr_ext_50` is per-ticker (not per-group).
+
+**Next steps / deferred (SPRINT § AGENT-FEED):**
+- Fast-follow: read-only authenticated endpoint on worker-positions (`GET /positions/summary`) + vaulted token for Muse, if/when owner wants position-aware answers. Security-sensitive; needs explicit sign-off. Prefer a narrow REST endpoint over handing Muse Cloudflare/wrangler account keys (blast-radius).
+- Verify the two new workflow steps actually run green in Actions on the next scheduled collect (couldn't run collect.py in cloud — Cloudflare blocks it).

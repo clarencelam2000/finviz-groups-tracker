@@ -260,6 +260,20 @@ All pipeline parameters live in `scripts/delta_config.py`. Edit that file to cha
 | `RS_AGREEMENT_COLS` | `["rs_month", "rs_quarter", "rs_half"]` | RS spread columns used to compute `rs_agreement`. Mirrors `rank_agreement` inputs for consistency. |
 | `RS_REGIME_SHORT` / `RS_REGIME_LONG` | wk+month / qtr+half+year | Buckets for `rs_regime_short_long` (RS analog of `regime_short_long`). |
 | `RS_BEAT_TIMEFRAMES` | `["day","week","month","quarter","half","year","ytd"]` | Timeframe suffixes that get a `beats_benchmark_X` boolean column. Changing this adds or removes columns from the delta schema; auto-migrated by `ensure_deltas_csv()`. |
+
+### Agent feed (`scripts/build_signals.py`)
+
+Publishes `data/api/manifest.json` + `data/api/latest_signals.json` — a small, versioned,
+**public** JSON contract for external read-only agents so they never couple to the raw CSV
+schemas. Regenerated at the end of `collect.yml` and `collect_picks.yml`. Nothing derived from
+the private position book is ever written here.
+
+| Parameter | Default | What it controls |
+|-----------|---------|-----------------|
+| `SCHEMA_VERSION` | `"1.0"` | major.minor contract version. **Additive-only within a major**; bump the minor for additive fields, the major only for a breaking shape change. Consumers halt on a major bump. |
+| `TOP_N` | `15` | Rows per top-N signal list (emerging leaders / movers / fading). Keeps the file KBs, not MBs. |
+| `MOVERS_WINDOW` | `20` | Lookback (sessions) for the movers/fading `rank_ytd_delta_Nd` column. Must exist in `LOOKBACK_WINDOWS`. |
+| `ATR_BANDS` | `{actionable_max: 4.0, trim_min: 8.0}` | ATR-extension band thresholds **published (not applied)** in the manifest so a consumer derives the band itself. Source of truth is the PWA `ATR_EXT_ACTIONABLE` / `ATR_EXT_TRIM` (`docs/CLAUDE.md`); keep in sync in the same PR. |
 | `RS_NEW_HIGH_WINDOW` | `20` | Trading sessions looked back for `rs_new_high`. 20 ≈ 1 trading month — classic IBD RS-new-high window. Must be ≥ 2. |
 | `RS_CROSS_WINDOW` | `5` | Trading sessions looked back for `rs_cross`. 5 ≈ 1 trading week — tight window to catch fresh rotations and filter noise. Must be ≥ 2. |
 
