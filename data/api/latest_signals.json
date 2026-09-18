@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-09-18T19:52:10Z",
+  "generated_at": "2026-09-18T21:03:05Z",
   "as_of": "2026-09-18",
   "session": "eod",
   "data_branch": "claude/elegant-babbage-hlxnfy",
@@ -12,78 +12,78 @@
     {
       "group": "Grocery Stores",
       "rank_ytd": 106.0,
-      "regime_short_long": 0.6457,
-      "momentum_score": 0.4907,
+      "regime_short_long": 0.6434,
+      "momentum_score": 0.486,
       "rs_score": 0.3333
     },
     {
       "group": "Electronic Gaming & Multimedia",
       "rank_ytd": 136.0,
-      "regime_short_long": 0.486,
-      "momentum_score": 0.3403,
+      "regime_short_long": 0.4569,
+      "momentum_score": 0.3287,
       "rs_score": 0.1667
     },
     {
       "group": "Pharmaceutical Retailers",
       "rank_ytd": 124.0,
-      "regime_short_long": 0.4499,
-      "momentum_score": 0.5618,
+      "regime_short_long": 0.4452,
+      "momentum_score": 0.5583,
       "rs_score": 0.5
     },
     {
       "group": "Auto Manufacturers",
       "rank_ytd": 128.0,
-      "regime_short_long": 0.4277,
-      "momentum_score": 0.4254,
+      "regime_short_long": 0.4172,
+      "momentum_score": 0.4161,
       "rs_score": 0.1667
     },
     {
       "group": "Advertising Agencies",
       "rank_ytd": 144.0,
-      "regime_short_long": 0.4114,
-      "momentum_score": 0.1527,
+      "regime_short_long": 0.3834,
+      "momentum_score": 0.1375,
       "rs_score": 0.0
     },
     {
       "group": "Education & Training Services",
       "rank_ytd": 89.0,
-      "regime_short_long": 0.3858,
-      "momentum_score": 0.486,
+      "regime_short_long": 0.3753,
+      "momentum_score": 0.4825,
       "rs_score": 0.3333
     },
     {
       "group": "Paper & Paper Products",
-      "rank_ytd": 96.0,
-      "regime_short_long": 0.3636,
-      "momentum_score": 0.5851,
-      "rs_score": 0.5
-    },
-    {
-      "group": "Internet Content & Information",
-      "rank_ytd": 64.0,
-      "regime_short_long": 0.3322,
-      "momentum_score": 0.7343,
-      "rs_score": 0.5
+      "rank_ytd": 95.0,
+      "regime_short_long": 0.3706,
+      "momentum_score": 0.5886,
+      "rs_score": 0.3333
     },
     {
       "group": "Publishing",
       "rank_ytd": 52.0,
-      "regime_short_long": 0.3322,
-      "momentum_score": 0.6725,
+      "regime_short_long": 0.3403,
+      "momentum_score": 0.6772,
       "rs_score": 0.5
+    },
+    {
+      "group": "Internet Content & Information",
+      "rank_ytd": 65.0,
+      "regime_short_long": 0.3287,
+      "momentum_score": 0.7319,
+      "rs_score": 0.3333
     },
     {
       "group": "Airports & Air Services",
       "rank_ytd": 140.0,
-      "regime_short_long": 0.3322,
-      "momentum_score": 0.1387,
+      "regime_short_long": 0.3263,
+      "momentum_score": 0.1329,
       "rs_score": 0.0
     },
     {
       "group": "Aerospace & Defense",
       "rank_ytd": 83.0,
-      "regime_short_long": 0.31,
-      "momentum_score": 0.4289,
+      "regime_short_long": 0.3124,
+      "momentum_score": 0.4277,
       "rs_score": 0.0
     },
     {
@@ -94,33 +94,33 @@
       "rs_score": 0.1667
     },
     {
-      "group": "Luxury Goods",
-      "rank_ytd": 114.0,
-      "regime_short_long": 0.2855,
-      "momentum_score": 0.3089,
-      "rs_score": 0.0
-    },
-    {
       "group": "Financial Data & Stock Exchanges",
       "rank_ytd": 108.0,
-      "regime_short_long": 0.2774,
-      "momentum_score": 0.5618,
+      "regime_short_long": 0.2692,
+      "momentum_score": 0.5571,
       "rs_score": 0.3333
     },
     {
       "group": "Medical Instruments & Supplies",
       "rank_ytd": 119.0,
-      "regime_short_long": 0.2611,
-      "momentum_score": 0.5396,
+      "regime_short_long": 0.2599,
+      "momentum_score": 0.5373,
       "rs_score": 0.3333
+    },
+    {
+      "group": "Luxury Goods",
+      "rank_ytd": 114.0,
+      "regime_short_long": 0.2471,
+      "momentum_score": 0.296,
+      "rs_score": 0.0
     }
   ],
   "top_movers": [
     {
       "group": "Internet Content & Information",
       "timeframe": "20d",
-      "to_rank": 64.0,
-      "rank_delta": 40.0
+      "to_rank": 65.0,
+      "rank_delta": 39.0
     },
     {
       "group": "Insurance - Diversified",
@@ -131,8 +131,8 @@
     {
       "group": "Paper & Paper Products",
       "timeframe": "20d",
-      "to_rank": 96.0,
-      "rank_delta": 30.0
+      "to_rank": 95.0,
+      "rank_delta": 31.0
     },
     {
       "group": "Consumer Electronics",
@@ -143,8 +143,8 @@
     {
       "group": "Department Stores",
       "timeframe": "20d",
-      "to_rank": 82.0,
-      "rank_delta": 29.0
+      "to_rank": 84.0,
+      "rank_delta": 27.0
     },
     {
       "group": "Discount Stores",
@@ -165,21 +165,21 @@
       "rank_delta": 21.0
     },
     {
+      "group": "Aerospace & Defense",
+      "timeframe": "20d",
+      "to_rank": 83.0,
+      "rank_delta": 18.0
+    },
+    {
       "group": "Insurance - Life",
       "timeframe": "20d",
-      "to_rank": 49.0,
-      "rank_delta": 19.0
+      "to_rank": 50.0,
+      "rank_delta": 18.0
     },
     {
       "group": "Medical Distribution",
       "timeframe": "20d",
-      "to_rank": 70.0,
-      "rank_delta": 19.0
-    },
-    {
-      "group": "Aerospace & Defense",
-      "timeframe": "20d",
-      "to_rank": 83.0,
+      "to_rank": 71.0,
       "rank_delta": 18.0
     },
     {
@@ -241,8 +241,8 @@
     {
       "group": "Aluminum",
       "timeframe": "20d",
-      "to_rank": 97.0,
-      "rank_delta": -22.0
+      "to_rank": 96.0,
+      "rank_delta": -21.0
     },
     {
       "group": "Utilities - Renewable",
@@ -257,27 +257,27 @@
       "rank_delta": -17.0
     },
     {
-      "group": "Insurance Brokers",
-      "timeframe": "20d",
-      "to_rank": 115.0,
-      "rank_delta": -16.0
-    },
-    {
       "group": "REIT - Residential",
       "timeframe": "20d",
       "to_rank": 99.0,
       "rank_delta": -16.0
     },
     {
-      "group": "REIT - Retail",
+      "group": "Insurance Brokers",
       "timeframe": "20d",
-      "to_rank": 65.0,
-      "rank_delta": -16.0
+      "to_rank": 114.0,
+      "rank_delta": -15.0
     },
     {
       "group": "Packaging & Containers",
       "timeframe": "20d",
       "to_rank": 73.0,
+      "rank_delta": -15.0
+    },
+    {
+      "group": "REIT - Retail",
+      "timeframe": "20d",
+      "to_rank": 64.0,
       "rank_delta": -15.0
     },
     {
