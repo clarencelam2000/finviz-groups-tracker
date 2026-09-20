@@ -528,6 +528,33 @@ def parse_spy_quote(html: str, snapshot_date: str, collected_at: str) -> dict:
     return rec
 
 
+def _migrate_bench_header(csv_path: Path) -> bool:
+    """Rewrite the benchmark CSV under the current BENCH_CSV_COLUMNS if its header is stale.
+
+    Existing rows keep their data; any new columns backfill blank (same
+    additive-migration contract as _evict_bench_row's rewrite). No-op — and no
+    rewrite — if the header already matches, so a normal run doesn't pay this
+    cost. Without this, appending a current-schema row under a stale header
+    (e.g. the pre-PR 10-column file) corrupts the CSV: header/row field counts
+    stop matching and pandas fails to load it in compute_deltas.py.
+    """
+    if not csv_path.exists():
+        return False
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        if reader.fieldnames == BENCH_CSV_COLUMNS:
+            return False
+        all_rows = list(reader)
+    tmp = csv_path.with_suffix(".tmp")
+    with open(tmp, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=BENCH_CSV_COLUMNS)
+        writer.writeheader()
+        for row in all_rows:
+            writer.writerow({col: row.get(col, "") for col in BENCH_CSV_COLUMNS})
+    tmp.replace(csv_path)
+    return True
+
+
 def _evict_bench_row(csv_path: Path, date_str: str) -> int:
     """Remove the SPY row for date_str from benchmark CSV (atomic rewrite).
 
@@ -575,6 +602,8 @@ def collect_spy(bench_path: Path = None):
         with open(bench_path, "w", newline="", encoding="utf-8") as f:
             csv.DictWriter(f, fieldnames=BENCH_CSV_COLUMNS).writeheader()
         print(f"  Created {bench_path}")
+    elif _migrate_bench_header(bench_path):
+        print(f"  Migrated {bench_path} header to current BENCH_CSV_COLUMNS schema.")
 
     evicted = _evict_bench_row(bench_path, snapshot_date)
     if evicted:

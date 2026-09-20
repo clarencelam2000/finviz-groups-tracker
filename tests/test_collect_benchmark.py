@@ -14,6 +14,7 @@ from scripts.collect import (
     SPY_FIELD_MAP,
     SPY_LABEL_MAP,
     _evict_bench_row,
+    _migrate_bench_header,
     _normalize_spy_label,
     parse_spy_quote,
 )
@@ -536,3 +537,44 @@ class TestQuoteFieldSet:
         assert rows[0]["perf_week"] == "0.5"
         assert rows[0]["price"] == ""
         assert rows[0]["sma20"] == ""
+
+    def test_migrate_bench_header_no_file(self, tmp_path):
+        assert _migrate_bench_header(tmp_path / "missing.csv") is False
+
+    def test_migrate_bench_header_already_current(self, tmp_path):
+        path = tmp_path / "bench.csv"
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=BENCH_CSV_COLUMNS)
+            writer.writeheader()
+            writer.writerow({"date": "2026-06-18"})
+        assert _migrate_bench_header(path) is False
+
+    def test_collect_spy_appends_onto_pre_existing_old_schema_file(self, tmp_path, monkeypatch):
+        # Reproduces the production scenario: data/benchmark/snapshots.csv
+        # already exists with the old 10-column header, and today's date is
+        # NOT yet in the file (so _evict_bench_row alone is a no-op). Without
+        # a header migration, appending a 47-column row under a 10-column
+        # header corrupts the CSV.
+        bench_path = tmp_path / "benchmark" / "snapshots.csv"
+        bench_path.parent.mkdir(parents=True)
+        with open(bench_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=BENCH_CSV_COLUMNS[:10])
+            writer.writeheader()
+            writer.writerow({"date": "2026-06-18", "ticker": "SPY", "perf_week": "0.5"})
+
+        monkeypatch.setattr(
+            "scripts.collect.fetch_html",
+            lambda url, wait_selector=None: FIXTURE_HTML_QUOTE_FULL,
+        )
+        collect_module.collect_spy(bench_path=bench_path)
+
+        with open(bench_path, newline="") as f:
+            reader = csv.DictReader(f)
+            assert list(reader.fieldnames) == BENCH_CSV_COLUMNS
+            rows = list(reader)
+        assert len(rows) == 2
+        assert rows[0]["date"] == "2026-06-18"
+        assert rows[0]["perf_week"] == "0.5"
+        assert rows[0]["price"] == ""
+        assert rows[1]["price"] == "684.12"
+        assert rows[1]["rsi_14"] == "58.24"
