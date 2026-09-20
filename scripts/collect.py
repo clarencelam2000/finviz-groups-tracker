@@ -93,6 +93,67 @@ SPY_LABEL_MAP = {
     "Perf YTD": "perf_ytd",
 }
 
+# Map every other Finviz quote-page label text → internal column name
+# (issue #419). Values are stored as raw stripped text — Finviz formats vary
+# ("593.21 - 712.80", "1.24% 1.87%", "45,231,098", "Yes") and the consumers
+# (e.g. the EMRG-1 regime classifier) parse what they need.
+# Mirrors the fields picks.csv already collects per stock ticker.
+SPY_FIELD_MAP = {
+    "Price": "price",
+    "Prev Close": "prev_close",
+    "High": "high",
+    "Low": "low",
+    "SMA20": "sma20",
+    "SMA50": "sma50",
+    "SMA200": "sma200",
+    "52W High": "dist_52w_high",
+    "52W Low": "dist_52w_low",
+    "52W Range": "range_52w",
+    "RSI (14)": "rsi_14",
+    "RSI": "rsi_14",
+    "Beta": "beta",
+    "ATR": "atr",
+    "Volatility": "volatility",
+    "Volume": "volume",
+    "Avg Volume": "avg_volume",
+    "Rel Volume": "rel_volume",
+    "Market Cap": "market_cap",
+    "P/E": "pe",
+    "Forward P/E": "fwd_pe",
+    "Target Price": "target_price",
+    "Recom": "recom",
+    "Short Ratio": "short_ratio",
+    "Short Float": "short_float",
+    "Inst Own": "inst_own",
+    "Inst Trans": "inst_trans",
+    "Shs Outstand": "shs_outstand",
+    "Shs Float": "shs_float",
+    "Dividend": "dividend",
+    "Dividend TTM": "dividend_ttm",
+    "Dividend Est.": "dividend_est",
+    "Payout": "payout",
+    "Income": "income",
+    "Sales": "sales",
+    "Optionable": "optionable",
+    "Shortable": "shortable",
+    "Index": "spy_index",
+    "Employees": "employees",
+}
+
+import re as _re
+
+def _normalize_spy_label(label: str) -> str:
+    """Normalize an unrecognized Finviz quote-page label to a column name."""
+    name = label.strip().lower()
+    name = _re.sub(r"[^a-z0-9]+", "_", name).strip("_")
+    return name or "unknown_field"
+
+
+def _parse_raw(val: str):
+    """Return stripped text, or None for Finviz null markers."""
+    v = val.strip()
+    return None if v in ("", "-", "N/A") else v
+
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -416,32 +477,53 @@ def trading_date(now_et: datetime) -> str:
 def parse_spy_quote(html: str, snapshot_date: str, collected_at: str) -> dict:
     """Parse Finviz SPY quote page HTML and return a benchmark row dict.
 
-    Scans all <td> elements for known performance labels; the next sibling <td>
-    holds the value. Robust to different table structures on the quote page.
-    Any missing label leaves the corresponding column as None.
+    Captures the full quote-page field set from `.snapshot-table2`
+    (SPY_LABEL_MAP + SPY_FIELD_MAP), not just the 7 perf_* columns.
+    perf_* keep their parsed float values (unchanged in name, order, and
+    value); every other field is stored as raw stripped text. Labels not in
+    either map are captured under a normalized name and warned about
+    (CI-visible) so a Finviz label addition/change is noticed instead of
+    silently dropped. Any missing label leaves the column as None.
     """
     soup = BeautifulSoup(html, "lxml")
+    # Scope to the quote table; fall back to the whole page for resilience
+    # (some fixture/legacy pages lack the class).
+    table = soup.select_one(".snapshot-table2") or soup
 
     rec: dict = {
         "date": snapshot_date,
         "collected_at": collected_at,
         "ticker": "SPY",
-        "perf_day": None,
-        "perf_week": None,
-        "perf_month": None,
-        "perf_quarter": None,
-        "perf_half": None,
-        "perf_year": None,
-        "perf_ytd": None,
     }
+    for col in BENCH_CSV_COLUMNS:
+        if col not in rec:
+            rec[col] = None
 
-    for td in soup.find_all("td"):
+    unknown = []
+    consumed = set()  # ids of <td>s already taken as values — the table is
+    for td in table.find_all("td"):  # strict label/value alternation, so a
+        if id(td) in consumed:  # value cell must not be re-read as a label
+            continue
         label = td.get_text(strip=True)
+        value_td = td.find_next_sibling("td")
+        if value_td is None:
+            continue
+        consumed.add(id(value_td))
+        value = value_td.get_text(strip=True)
         if label in SPY_LABEL_MAP:
-            col = SPY_LABEL_MAP[label]
-            value_td = td.find_next_sibling("td")
-            if value_td:
-                rec[col] = parse_perf(value_td.get_text(strip=True))
+            rec[SPY_LABEL_MAP[label]] = parse_perf(value)
+        elif label in SPY_FIELD_MAP:
+            rec[SPY_FIELD_MAP[label]] = _parse_raw(value)
+        elif label and label not in unknown:
+            unknown.append(label)
+            rec[_normalize_spy_label(label)] = _parse_raw(value)
+
+    if unknown:
+        print(
+            f"  [warn] Unknown SPY quote labels (captured but not in "
+            f"BENCH_CSV_COLUMNS): {unknown}",
+            file=sys.stderr,
+        )
 
     return rec
 
