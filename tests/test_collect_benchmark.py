@@ -11,7 +11,11 @@ import pytest
 import scripts.collect as collect_module
 from scripts.collect import (
     BENCH_CSV_COLUMNS,
+    SPY_FIELD_MAP,
+    SPY_LABEL_MAP,
     _evict_bench_row,
+    _migrate_bench_header,
+    _normalize_spy_label,
     parse_spy_quote,
 )
 
@@ -79,6 +83,89 @@ FIXTURE_HTML_ALT_LABELS = """
 """
 
 FIXTURE_HTML_EMPTY = "<html><body></body></html>"
+
+# 2026-09-20 (issue #419): full quote-page field set fixture. Exercises the
+# widened SPY_FIELD_MAP alongside the 7 perf labels.
+FIXTURE_HTML_QUOTE_FULL = """
+<html><body>
+<table class="snapshot-table2">
+  <tr>
+    <td>Price</td><td>684.12</td>
+    <td>Change</td><td>0.54%</td>
+    <td>Perf Week</td><td>1.23%</td>
+    <td>Perf Month</td><td>2.34%</td>
+    <td>Perf Quart</td><td>5.67%</td>
+    <td>Perf Half Y</td><td>8.90%</td>
+  </tr>
+  <tr>
+    <td>Perf Year</td><td>15.23%</td>
+    <td>Perf YTD</td><td>12.34%</td>
+    <td>Prev Close</td><td>683.45</td>
+    <td>High</td><td>685.30</td>
+    <td>Low</td><td>681.10</td>
+    <td>SMA20</td><td>0.85%</td>
+  </tr>
+  <tr>
+    <td>SMA50</td><td>2.14%</td>
+    <td>SMA200</td><td>5.32%</td>
+    <td>52W High</td><td>-4.12%</td>
+    <td>52W Low</td><td>15.25%</td>
+    <td>52W Range</td><td>593.21 - 712.80</td>
+    <td>RSI (14)</td><td>58.24</td>
+  </tr>
+  <tr>
+    <td>Beta</td><td>1.00</td>
+    <td>ATR</td><td>8.42</td>
+    <td>Volatility</td><td>1.24% 1.87%</td>
+    <td>Volume</td><td>45,231,098</td>
+    <td>Avg Volume</td><td>58,234,112</td>
+    <td>Rel Volume</td><td>0.89</td>
+  </tr>
+  <tr>
+    <td>Market Cap</td><td>649.77B</td>
+    <td>P/E</td><td>27.35</td>
+    <td>Forward P/E</td><td>24.89</td>
+    <td>Target Price</td><td>-</td>
+    <td>Recom</td><td>-</td>
+    <td>Short Ratio</td><td>1.02</td>
+  </tr>
+  <tr>
+    <td>Short Float</td><td>1.12%</td>
+    <td>Inst Own</td><td>95.20%</td>
+    <td>Inst Trans</td><td>-0.21%</td>
+    <td>Shs Outstand</td><td>948.52M</td>
+    <td>Shs Float</td><td>948.51M</td>
+    <td>Dividend</td><td>-</td>
+  </tr>
+  <tr>
+    <td>Dividend TTM</td><td>-</td>
+    <td>Dividend Est.</td><td>-</td>
+    <td>Payout</td><td>-</td>
+    <td>Income</td><td>23.77B</td>
+    <td>Sales</td><td>0.00</td>
+    <td>Optionable</td><td>Yes</td>
+  </tr>
+  <tr>
+    <td>Shortable</td><td>Yes</td>
+    <td>Index</td><td>DJI S&amp;P500</td>
+    <td>Employees</td><td>-</td>
+  </tr>
+</table>
+</body></html>
+"""
+
+# A label Finviz could add tomorrow — must be captured under a normalized name
+# and warned about, never silently dropped.
+FIXTURE_HTML_UNKNOWN_LABEL = """
+<html><body>
+<table class="snapshot-table2">
+  <tr>
+    <td>Change</td><td>0.54%</td>
+    <td>Quantum Flux</td><td>42</td>
+  </tr>
+</table>
+</body></html>
+"""
 
 # 2026-08-07: Finviz renamed the quote-page daily-change label from "Change"
 # to "Change %". Both forms must resolve to perf_day (SPY_LABEL_MAP).
@@ -317,3 +404,177 @@ class TestCollectSpy:
         with open(bench_path, newline="") as f:
             reader = csv.DictReader(f)
             assert list(reader.fieldnames) == BENCH_CSV_COLUMNS
+
+
+# ---------------------------------------------------------------------------
+# Issue #419 — full quote-page field set
+# ---------------------------------------------------------------------------
+
+class TestQuoteFieldSet:
+    def _parse(self, html, date_str="2026-09-18"):
+        return parse_spy_quote(html, date_str, "2026-09-18T19:48:00Z")
+
+    def test_perf_cols_unchanged_in_name_order_and_value(self):
+        # The original 7 perf_* columns must be untouched by the widening.
+        rec = self._parse(FIXTURE_HTML_QUOTE_FULL)
+        assert rec["perf_day"] == pytest.approx(0.54)
+        assert rec["perf_week"] == pytest.approx(1.23)
+        assert rec["perf_month"] == pytest.approx(2.34)
+        assert rec["perf_quarter"] == pytest.approx(5.67)
+        assert rec["perf_half"] == pytest.approx(8.90)
+        assert rec["perf_year"] == pytest.approx(15.23)
+        assert rec["perf_ytd"] == pytest.approx(12.34)
+
+    def test_price_and_ma_captured(self):
+        rec = self._parse(FIXTURE_HTML_QUOTE_FULL)
+        assert rec["price"] == "684.12"
+        assert rec["prev_close"] == "683.45"
+        assert rec["high"] == "685.30"
+        assert rec["low"] == "681.10"
+        assert rec["sma20"] == "0.85%"
+        assert rec["sma50"] == "2.14%"
+        assert rec["sma200"] == "5.32%"
+
+    def test_range_volatility_momentum_captured(self):
+        rec = self._parse(FIXTURE_HTML_QUOTE_FULL)
+        assert rec["dist_52w_high"] == "-4.12%"
+        assert rec["dist_52w_low"] == "15.25%"
+        assert rec["range_52w"] == "593.21 - 712.80"
+        assert rec["rsi_14"] == "58.24"
+        assert rec["beta"] == "1.00"
+        assert rec["atr"] == "8.42"
+        assert rec["volatility"] == "1.24% 1.87%"
+
+    def test_volume_fields_captured(self):
+        rec = self._parse(FIXTURE_HTML_QUOTE_FULL)
+        assert rec["volume"] == "45,231,098"
+        assert rec["avg_volume"] == "58,234,112"
+        assert rec["rel_volume"] == "0.89"
+
+    def test_fundamental_fields_captured(self):
+        rec = self._parse(FIXTURE_HTML_QUOTE_FULL)
+        assert rec["market_cap"] == "649.77B"
+        assert rec["pe"] == "27.35"
+        assert rec["fwd_pe"] == "24.89"
+        assert rec["short_ratio"] == "1.02"
+        assert rec["short_float"] == "1.12%"
+        assert rec["inst_own"] == "95.20%"
+        assert rec["inst_trans"] == "-0.21%"
+        assert rec["shs_outstand"] == "948.52M"
+        assert rec["shs_float"] == "948.51M"
+        assert rec["income"] == "23.77B"
+        assert rec["sales"] == "0.00"
+        assert rec["optionable"] == "Yes"
+        assert rec["shortable"] == "Yes"
+        assert rec["spy_index"] == "DJI S&P500"
+
+    def test_dash_values_become_none(self):
+        rec = self._parse(FIXTURE_HTML_QUOTE_FULL)
+        assert rec["target_price"] is None
+        assert rec["recom"] is None
+        assert rec["dividend"] is None
+        assert rec["employees"] is None
+
+    def test_bench_csv_columns_first_ten_unchanged(self):
+        # Schema is append-only: the original 10 columns keep name and order.
+        assert BENCH_CSV_COLUMNS[:10] == [
+            "date", "collected_at", "ticker",
+            "perf_day", "perf_week", "perf_month", "perf_quarter",
+            "perf_half", "perf_year", "perf_ytd",
+        ]
+
+    def test_field_map_covers_new_columns(self):
+        # Every appended CSV column is reachable from a Finviz label, and
+        # every mapped field has a CSV column — the two stay in sync.
+        new_cols = set(BENCH_CSV_COLUMNS[10:])
+        assert set(SPY_FIELD_MAP.values()) == new_cols
+
+    def test_unknown_label_captured_and_warned(self, capsys):
+        rec = self._parse(FIXTURE_HTML_UNKNOWN_LABEL)
+        assert rec["quantum_flux"] == "42"
+        assert rec["perf_day"] == pytest.approx(0.54)
+        assert "Unknown SPY quote labels" in capsys.readouterr().err
+
+    def test_normalize_spy_label(self):
+        assert _normalize_spy_label("RSI (14)") == "rsi_14"
+        assert _normalize_spy_label("52W Range") == "52w_range"
+        assert _normalize_spy_label("Dividend Est.") == "dividend_est"
+
+    def test_collect_spy_writes_new_columns(self, tmp_path, monkeypatch):
+        bench_path = tmp_path / "benchmark" / "snapshots.csv"
+        monkeypatch.setattr(
+            "scripts.collect.fetch_html",
+            lambda url, wait_selector=None: FIXTURE_HTML_QUOTE_FULL,
+        )
+        collect_module.collect_spy(bench_path=bench_path)
+        with open(bench_path, newline="") as f:
+            reader = csv.DictReader(f)
+            assert list(reader.fieldnames) == BENCH_CSV_COLUMNS
+            rows = list(reader)
+        assert len(rows) == 1
+        assert rows[0]["price"] == "684.12"
+        assert rows[0]["sma20"] == "0.85%"
+        assert rows[0]["rsi_14"] == "58.24"
+        assert rows[0]["range_52w"] == "593.21 - 712.80"
+        assert rows[0]["perf_week"] == "1.23"
+
+    def test_backfill_safe_evict_of_old_schema_rows(self, tmp_path):
+        # Old rows (10-column schema) rewritten by _evict_bench_row must keep
+        # their data and get blanks for the new columns.
+        path = tmp_path / "bench.csv"
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=BENCH_CSV_COLUMNS[:10])
+            writer.writeheader()
+            writer.writerow({"date": "2026-06-18", "ticker": "SPY", "perf_week": "0.5"})
+            writer.writerow({"date": "2026-06-19", "ticker": "SPY", "perf_week": "1.0"})
+        _evict_bench_row(path, "2026-06-19")
+        with open(path, newline="") as f:
+            reader = csv.DictReader(f)
+            assert list(reader.fieldnames) == BENCH_CSV_COLUMNS
+            rows = list(reader)
+        assert len(rows) == 1
+        assert rows[0]["date"] == "2026-06-18"
+        assert rows[0]["perf_week"] == "0.5"
+        assert rows[0]["price"] == ""
+        assert rows[0]["sma20"] == ""
+
+    def test_migrate_bench_header_no_file(self, tmp_path):
+        assert _migrate_bench_header(tmp_path / "missing.csv") is False
+
+    def test_migrate_bench_header_already_current(self, tmp_path):
+        path = tmp_path / "bench.csv"
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=BENCH_CSV_COLUMNS)
+            writer.writeheader()
+            writer.writerow({"date": "2026-06-18"})
+        assert _migrate_bench_header(path) is False
+
+    def test_collect_spy_appends_onto_pre_existing_old_schema_file(self, tmp_path, monkeypatch):
+        # Reproduces the production scenario: data/benchmark/snapshots.csv
+        # already exists with the old 10-column header, and today's date is
+        # NOT yet in the file (so _evict_bench_row alone is a no-op). Without
+        # a header migration, appending a 47-column row under a 10-column
+        # header corrupts the CSV.
+        bench_path = tmp_path / "benchmark" / "snapshots.csv"
+        bench_path.parent.mkdir(parents=True)
+        with open(bench_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=BENCH_CSV_COLUMNS[:10])
+            writer.writeheader()
+            writer.writerow({"date": "2026-06-18", "ticker": "SPY", "perf_week": "0.5"})
+
+        monkeypatch.setattr(
+            "scripts.collect.fetch_html",
+            lambda url, wait_selector=None: FIXTURE_HTML_QUOTE_FULL,
+        )
+        collect_module.collect_spy(bench_path=bench_path)
+
+        with open(bench_path, newline="") as f:
+            reader = csv.DictReader(f)
+            assert list(reader.fieldnames) == BENCH_CSV_COLUMNS
+            rows = list(reader)
+        assert len(rows) == 2
+        assert rows[0]["date"] == "2026-06-18"
+        assert rows[0]["perf_week"] == "0.5"
+        assert rows[0]["price"] == ""
+        assert rows[1]["price"] == "684.12"
+        assert rows[1]["rsi_14"] == "58.24"
