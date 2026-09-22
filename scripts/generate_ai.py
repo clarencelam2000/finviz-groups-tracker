@@ -1739,6 +1739,9 @@ def main():
             )
             _backend = "vertex_ai"
     else:
+        # AI Studio (GEMINI_API_KEY) fallback: intentionally retained post-Vertex-
+        # migration as a deliberate rollback path (issue #406), not dead code — do
+        # not remove per planning/vertex-ai-migration.md § Cleanup.
         client = genai.Client(api_key=api_key)
         _backend = "google_ai_studio"
     print(f"  [backend] {_backend}")
