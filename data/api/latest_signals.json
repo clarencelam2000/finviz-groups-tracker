@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-09-22T21:11:48Z",
+  "generated_at": "2026-09-22T22:27:55Z",
   "as_of": "2026-09-22",
   "session": "eod",
   "data_branch": "claude/elegant-babbage-hlxnfy",
@@ -80,13 +80,6 @@
       "rs_score": 0.5
     },
     {
-      "group": "Electrical Equipment & Parts",
-      "rank_ytd": 5.0,
-      "regime_short_long": 0.3543,
-      "momentum_score": 0.7774,
-      "rs_score": 0.6667
-    },
-    {
       "group": "Solar",
       "rank_ytd": 134.0,
       "regime_short_long": 0.3531,
@@ -99,6 +92,13 @@
       "regime_short_long": 0.3531,
       "momentum_score": 0.3776,
       "rs_score": 0.1667
+    },
+    {
+      "group": "Electrical Equipment & Parts",
+      "rank_ytd": 5.0,
+      "regime_short_long": 0.352,
+      "momentum_score": 0.7786,
+      "rs_score": 0.6667
     },
     {
       "group": "Building Products & Equipment",
