@@ -13,7 +13,6 @@ Guards (all zero-cost):
   1. Hallucination guard — every Finviz group name in the raw output must appear
      in that call's input_blocks.  Catches invented sectors/industries.
   2. Format adherence:
-     - pulse: parsed_output has non-empty 'headline' and conviction.level ∈ {High,Medium,Low}
      - rotation_phase: parsed_output label ∈ {Early Cycle, Mid Cycle, Late Cycle, Defensive}
      - watchlist: raw_response has ≤ 5 bullet lines
      - risk_radar: parsed_output has non-empty 'relative_strength' and 'risks'
@@ -33,7 +32,6 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 DEBUG_DIR = DATA_DIR / "ai" / "debug"
 
 PHASE_LABELS = frozenset({"Early Cycle", "Mid Cycle", "Late Cycle", "Defensive"})
-CONVICTION_LEVELS = frozenset({"High", "Medium", "Low"})
 
 # Prefix used to mark hallucination findings as non-blocking warnings.
 _WARN_TAG = "  [WARN] "
@@ -111,25 +109,7 @@ def check_format(fkey: str, call: dict) -> list:
     parsed = call.get("parsed_output")
     issues = []
 
-    if task == "pulse":
-        if not isinstance(parsed, dict):
-            issues.append(f"  format: pulse parsed_output is not a dict (got {type(parsed).__name__})")
-            return issues
-        headline = (parsed.get("headline") or "").strip()
-        if not headline:
-            issues.append("  format: pulse headline is empty")
-        conv = parsed.get("conviction")
-        if not isinstance(conv, dict):
-            issues.append(f"  format: pulse conviction is not a dict (got {type(conv).__name__})")
-        else:
-            level = (conv.get("level") or "").strip()
-            if level not in CONVICTION_LEVELS:
-                issues.append(
-                    f"  format: conviction.level={level!r} not in "
-                    f"{sorted(CONVICTION_LEVELS)}"
-                )
-
-    elif task == "rotation_phase":
+    if task == "rotation_phase":
         if not isinstance(parsed, dict):
             issues.append(
                 f"  format: rotation_phase parsed_output is not a dict "

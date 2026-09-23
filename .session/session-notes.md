@@ -397,3 +397,44 @@ release surface updated in the same PR. Non-Playwright pytest suite green (797 p
 **Next steps / deferred (SPRINT § AGENT-FEED):**
 - Fast-follow: read-only authenticated endpoint on worker-positions (`GET /positions/summary`) + vaulted token for Muse, if/when owner wants position-aware answers. Security-sensitive; needs explicit sign-off. Prefer a narrow REST endpoint over handing Muse Cloudflare/wrangler account keys (blast-radius).
 - Verify the two new workflow steps actually run green in Actions on the next scheduled collect (couldn't run collect.py in cloud — Cloudflare blocks it).
+
+---
+
+## 2026-09-23 — AI tab: remove Headline + Conviction (SPRINT § AI-WALLET-CONVICTION, widened)
+
+**Status: safe to close.**
+
+Owner asked to remove the AI tab's headline hero + "Conviction: Low" badge (not useful, and
+wants to stop paying Gemini for them). This is the same `pulse` task the AI-WALLET-CONVICTION
+SPRINT item already flagged for a Conviction-only trim — since the owner wants both fields gone,
+removed the whole task instead of half-trimming it.
+
+**What landed (branch `claude/remove-ai-tab-sections-sa2k48`):**
+- `scripts/generate_ai.py`: deleted the `pulse` `TASK_SPEC` entry entirely (no more Gemini call
+  for it — 11→9 calls/run × 3 runs/day, ~33/day → ~27/day) plus its now-dead machinery:
+  `build_pulse_prompt`, `parse_pulse_response`, `_parse_conviction`, `_input_pulse`,
+  `_PULSE_ALIASES`. `_expected_fields()`/`_is_complete()`/`_missing_fields()` need no code change
+  — they derive from `TASK_SPECS` automatically. Updated the TASK_SPECS call-count comment and
+  the `--task`/`--preview` CLI help examples (were `pulse`, now `note`).
+- `docs/index.html`: removed the headline-hero + conviction-badge render block in `renderAI()`
+  and the share-text's headline lead-in (`shareAI()`) — both guarded on `pulse` already, so
+  removal degrades cleanly to just showing the rest of the briefing (rotation phase, daily note,
+  rotation map, watchlist, relative-strength/risks — all unchanged).
+- `scripts/eval_ai.py`: removed the now-unreachable `pulse` branch from `check_format()` and the
+  `CONVICTION_LEVELS` constant (Tier-2 debug captures will never carry a `pulse` call again).
+- Release triplet in the same PR: `docs/releases.json` (`2026.09.23`, tag `improvement`, tab
+  `ai`) + `current` bump + `docs/sw.js` (`CACHE` v100→v101).
+- `scripts/CLAUDE.md` + `README.md` updated (call-count/example references to `pulse`).
+- Tests: `tests/test_generate_ai.py` and `tests/test_eval_ai.py` — removed every pulse-specific
+  test (parser tests, format-check tests) and repointed generic mechanism tests that happened to
+  use `"pulse"`/`"sectors.pulse"` as an arbitrary label onto `note`/`rotation_phase`. Updated
+  call-count assertions (5→4 in one `generate_for_group` test) and the `_expected_fields`/
+  `_missing_fields`/`TASK_SPECS` set assertions. `python3 -m pytest tests/ -q` with the same
+  `--ignore=` list `.github/workflows/tests.yml` uses: **812 passed**.
+
+**Not done this session:** no live-browser check of the AI tab (no Playwright/dev-server pass) —
+the guarded-render removal is standard/low-risk (`docs/CLAUDE.md`'s established pattern for this
+exact block), but worth a quick spot-check on the next PWA session.
+
+**Next steps:** none blocking. If Conviction/Headline are ever wanted back, the pre-removal
+prompt/parser is in git history (see the `TASK_SPECS` comment in `generate_ai.py`).
