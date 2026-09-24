@@ -5,6 +5,47 @@
 > **Format:** Append a new `---` delimited block per session. Header = date + workstream description. Keep the last 4 sessions here; a human will periodically move older entries to `.session/archive/session-notes-archive.md`. Do NOT replace existing entries — append only.
 ---
 
+## 2026-09-24 — Pre-Power of 3 MA-bunching band tightened to 1.5x ATR
+
+**Status: safe to close.** Small, self-contained constant change requested by the owner.
+
+**What landed (branch `claude/pre-power-of-3-atr-threshold-jdkalv`):**
+- `POWER_OF_3_ATR_MULT` in `docs/index.html` lowered from `2.0` to `1.5` (the "Pre-Power of 3"
+  MA-bunching chip fires when price/20MA/50MA all fit inside `POWER_OF_3_ATR_MULT`×ATR). Updated
+  the triple-documented comment/README/`docs/CLAUDE.md` copies and the two affected test
+  docstrings in `tests/test_pwa_picks_atr_earnings.py` (assertions themselves were unaffected —
+  the ANET fixture's span (~5.6) stays under the new 1.5×ATR (~12.6) threshold).
+- Release triplet: `docs/releases.json` (`2026.09.24`, tag `improvement`, tab `picks`) +
+  `docs/sw.js` (`CACHE` v101→v102).
+- `.session/SPRINT.md` Done entry `POWER3-THRESH-1` with the measured impact.
+
+**Impact analysis (requested by owner), computed against the live `data/picks/picks_latest.csv`
+(459 rows with valid Price/ATR/SMA20/SMA50) using a standalone script — not committed, one-off
+verification:**
+- At the old 2.0x band: 231/459 rows (50.3%) flagged as bunched.
+- At the new 1.5x band: 150/459 rows (32.7%) flagged — **81 fewer flagged rows** (~35% relative
+  drop from the 2.0x count).
+- Also measured a 1.0x band for comparison (not shipped): 66/459 rows (14.4%) flagged — a further
+  84-row drop from 1.5x, i.e. cuts the flagged pool by more than half again.
+- Median span/ATR ratio among the previously-flagged (2.0x) rows was ~1.25, so most of the 2.0x
+  pool sits comfortably under 1.5x too, but a real ~35% slice (spans between 1.5x and 2.0x ATR)
+  drops out.
+
+**Verification:** `python3 -m pytest tests/test_pwa_picks_atr_earnings.py -q -k power_of_3` — 2
+passed (used the documented Playwright-in-cloud symlink workaround for the Chromium
+headless-shell revision mismatch, cleaned up afterward — session-local `/opt` edit, not
+committed). Full non-Playwright suite (783 tests) passes; the ~29 pre-existing failures
+(`test_collect_benchmark.py`, `test_generate_ai.py`) are unrelated environment/mocking gaps in
+this sandbox, not caused by this change. `tests/test_guide_releases.py` passes against the new
+`releases.json` entry.
+
+**No pipeline/schema change** — this is a pure client-side PWA display constant, computed at
+render time from already-scraped Price/ATR/SMA20/SMA50, never a stored CSV column.
+
+**Next steps:** none — this was a one-shot config tweak. If the owner wants to revisit the 1.0x
+alternative later, the comparison numbers above are already captured in the SPRINT.md entry.
+
+---
 
 ## 2026-09-11 — AI-WALLET-PWA: render spend.json at the bottom of the AI tab
 
