@@ -1,6 +1,16 @@
 {
-  "current": "2026.09.11",
+  "current": "2026.09.23",
   "releases": [
+    {
+      "version": "2026.09.23",
+      "date": "2026-09-23",
+      "title": "AI tab: removed headline & conviction",
+      "tag": "improvement",
+      "tab": "ai",
+      "notes": [
+        "The daily headline and conviction meter at the top of the AI tab are gone — they weren't pulling their weight. The daily note, rotation phase, rotation map, watchlist, and relative-strength/risks sections are unchanged. This also cuts the daily Gemini call count, saving on AI spend."
+      ]
+    },
     {
       "version": "2026.09.11",
       "date": "2026-09-11",
