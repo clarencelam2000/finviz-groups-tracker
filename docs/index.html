@@ -761,7 +761,7 @@
     // Price/ATR/SMA20/SMA50 columns — deliberately NOT a stored CSV column (a config-dependent pure
     // single-row value belongs at render time; see .claude/rules/data-pipeline.md § Schema changes).
     // Triple-documented: here, README § Configurable parameters, docs/CLAUDE.md § PWA display thresholds.
-    const POWER_OF_3_ATR_MULT = 2.0;
+    const POWER_OF_3_ATR_MULT = 1.5;
     // VOLATILITY_FLOOR_PCT (2026-09-02, owner call after the APGE false-"coiled" case): a hard
     // exclusion gate on Picks/Focus/Morning (system-selected surfaces) — a row is hidden when
     // its Volatility W % OR ATR/Price % is below this floor, i.e. it's provably near-dead
@@ -4792,7 +4792,7 @@
     //   • B-3 (§5.2) volume dry-up — Rel Volume trend sparkline (owner's strongest/cheapest
     //     VCP sub-signal).
     //   • B-5 (§5.3) Pre-Power of 3 — MA-bunching COIL PRECONDITION chip (price/20MA/50MA within a
-    //     2×ATR band, computed client-side here from raw Price/ATR/SMA20/SMA50 — not a stored CSV
+    //     1.5×ATR band, computed client-side here from raw Price/ATR/SMA20/SMA50 — not a stored CSV
     //     column) + the two SHOWN SMA % distances and the classic MA-to-MA cluster spread %. NOT the
     //     full undercut→reclaim trigger (that's B-5b).
     // Extracted verbatim from renderPickRow so the Morning family (B-6) can render the IDENTICAL
@@ -4843,7 +4843,7 @@
       const relVolSpark = r['relvol_spark'] || '';
       const hasVolDryup = !!relVolSpark;
 
-      // Pre-Power of 3 (B-5, §5.3) — MA bunching: price, 20MA and 50MA all inside one 2×ATR band.
+      // Pre-Power of 3 (B-5, §5.3) — MA bunching: price, 20MA and 50MA all inside one 1.5×ATR band.
       // This is the COIL PRECONDITION only, honestly labeled "Pre-Power of 3" — NOT the full
       // Power-of-3 setup, which is bunched → undercut the cluster → reclaim the highest MA (the
       // reclaim is the trigger). That undercut→reclaim trigger is a later slice (B-5b) built on the
@@ -4855,7 +4855,7 @@
       // render time also makes it real-time on Morning/Watch cards: SMA20/SMA50/Price/ATR are in
       // _SETUP_FRESH_COLS, so setupRowForCard overrides them with this-morning's scrape, and the
       // chip re-fires off fresh MA levels rather than last night's close. price/20/50 only — we
-      // don't scrape the 10MA and the 200 isn't this pattern's third line. Owner set the 2×ATR band
+      // don't scrape the 10MA and the 200 isn't this pattern's third line. Owner set the 1.5×ATR band
       // (domain authority per doc §4.0), so a binary chip is legitimate. The two SMA % distances AND
       // the classic MA-to-MA cluster spread % are SHOWN values so the trader sees WHY it is/isn't
       // bunched. Missing price/SMA/ATR (a morning orphan, thin scrape) → the block self-hides.
