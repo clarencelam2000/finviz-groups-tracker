@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-09-25T21:02:35Z",
+  "generated_at": "2026-09-25T21:10:44Z",
   "as_of": "2026-09-25",
   "session": "eod",
   "data_branch": "claude/elegant-babbage-hlxnfy",
@@ -302,410 +302,550 @@
   "picks": {
     "accel": [
       {
-        "ticker": "VEEV",
-        "group": "Health Information Services",
-        "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.02
-      },
-      {
-        "ticker": "TEM",
-        "group": "Health Information Services",
-        "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.9
-      },
-      {
-        "ticker": "BTSG",
-        "group": "Health Information Services",
-        "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.74
-      },
-      {
-        "ticker": "HNGE",
-        "group": "Health Information Services",
-        "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.22
-      },
-      {
-        "ticker": "HQY",
-        "group": "Health Information Services",
-        "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -3.71
-      },
-      {
-        "ticker": "WAY",
-        "group": "Health Information Services",
-        "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.36
-      },
-      {
-        "ticker": "DOCS",
-        "group": "Health Information Services",
-        "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.48
-      },
-      {
-        "ticker": "HTFL",
-        "group": "Health Information Services",
-        "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.83
-      },
-      {
-        "ticker": "SDGR",
-        "group": "Health Information Services",
-        "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 5.74
-      },
-      {
         "ticker": "TMO",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.82
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 4.48
       },
       {
         "ticker": "DHR",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.23
       },
       {
         "ticker": "NTRA",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 7.04
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 7.31
       },
       {
         "ticker": "A",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.95
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 4.91
       },
       {
         "ticker": "IQV",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.95
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.19
       },
       {
         "ticker": "WAT",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.42
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.62
       },
       {
         "ticker": "ILMN",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 5.55
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 5.16
       },
       {
         "ticker": "MTD",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.24
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.04
       },
       {
         "ticker": "DGX",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.24
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.11
       },
       {
         "ticker": "LH",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
+        "signal_date": "2026-09-25",
         "atr_ext_50": -0.9
       },
       {
         "ticker": "GH",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.75
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.84
       },
       {
         "ticker": "MEDP",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.79
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.61
       },
       {
         "ticker": "RVTY",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 5.68
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 5.61
       },
       {
         "ticker": "CRL",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.55
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.32
       },
       {
         "ticker": "ICLR",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.97
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.75
       },
       {
         "ticker": "QGEN",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.53
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.2
       },
       {
         "ticker": "BLLN",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.22
-      },
-      {
-        "ticker": "RDNT",
-        "group": "Diagnostics & Research",
-        "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.04
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.03
       },
       {
         "ticker": "GRAL",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 6.42
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 6.24
+      },
+      {
+        "ticker": "RDNT",
+        "group": "Diagnostics & Research",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.3
       },
       {
         "ticker": "SHC",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.18
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.42
       },
       {
         "ticker": "ADPT",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.76
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.56
       },
       {
         "ticker": "VCYT",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.85
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.32
       },
       {
         "ticker": "CDNA",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 5.27
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 5.66
       },
       {
         "ticker": "WGS",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.49
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.41
       },
       {
         "ticker": "NEO",
         "group": "Diagnostics & Research",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.41
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.0
       },
       {
-        "ticker": "GOOGL",
-        "group": "Internet Content & Information",
+        "ticker": "MSFT",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.24
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.43
       },
       {
-        "ticker": "GOOG",
-        "group": "Internet Content & Information",
+        "ticker": "PLTR",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.74
+      },
+      {
+        "ticker": "PANW",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.02
+      },
+      {
+        "ticker": "CRWD",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.26
+      },
+      {
+        "ticker": "FTNT",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.75
+      },
+      {
+        "ticker": "NET",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.76
+      },
+      {
+        "ticker": "NBIS",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.31
+      },
+      {
+        "ticker": "CRWV",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.33
+      },
+      {
+        "ticker": "XYZ",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.52
+      },
+      {
+        "ticker": "TWLO",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.51
+      },
+      {
+        "ticker": "NTAP",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.73
+      },
+      {
+        "ticker": "OKTA",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.73
+      },
+      {
+        "ticker": "MDB",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.14
+      },
+      {
+        "ticker": "ZS",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.87
+      },
+      {
+        "ticker": "CPAY",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.1
+      },
+      {
+        "ticker": "VRSN",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.07
+      },
+      {
+        "ticker": "FFIV",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.6
+      },
+      {
+        "ticker": "GPN",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.52
+      },
+      {
+        "ticker": "RBRK",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.04
+      },
+      {
+        "ticker": "IOT",
+        "group": "Software - Infrastructure",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
         "atr_ext_50": -0.37
       },
       {
-        "ticker": "META",
-        "group": "Internet Content & Information",
+        "ticker": "NTNX",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 6.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.85
       },
       {
-        "ticker": "SPOT",
-        "group": "Internet Content & Information",
+        "ticker": "KSPI",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.19
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.46
       },
       {
-        "ticker": "RDDT",
-        "group": "Internet Content & Information",
+        "ticker": "TOST",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.95
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -2.13
       },
       {
-        "ticker": "PINS",
-        "group": "Internet Content & Information",
+        "ticker": "DOCN",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -3.93
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.64
       },
       {
-        "ticker": "MTCH",
-        "group": "Internet Content & Information",
+        "ticker": "AKAM",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.42
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.1
       },
       {
-        "ticker": "SNAP",
-        "group": "Internet Content & Information",
+        "ticker": "GEN",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.66
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -5.33
       },
       {
-        "ticker": "RUM",
-        "group": "Internet Content & Information",
+        "ticker": "GDDY",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.59
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.16
       },
       {
-        "ticker": "PPLI",
-        "group": "Internet Content & Information",
+        "ticker": "SAIL",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -3.46
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.82
       },
       {
-        "ticker": "JOYY",
-        "group": "Internet Content & Information",
+        "ticker": "PAYP",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.46
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.67
       },
       {
-        "ticker": "DJT",
-        "group": "Internet Content & Information",
+        "ticker": "GTLB",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.26
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.41
       },
       {
-        "ticker": "ATHM",
-        "group": "Internet Content & Information",
+        "ticker": "S",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.16
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.21
       },
       {
-        "ticker": "LLY",
-        "group": "Drug Manufacturers - General",
+        "ticker": "ZETA",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.14
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.43
       },
       {
-        "ticker": "JNJ",
-        "group": "Drug Manufacturers - General",
+        "ticker": "NTSK",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.15
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.08
       },
       {
-        "ticker": "ABBV",
-        "group": "Drug Manufacturers - General",
+        "ticker": "DBX",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.54
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.26
       },
       {
-        "ticker": "MRK",
-        "group": "Drug Manufacturers - General",
+        "ticker": "PATH",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.18
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -2.47
       },
       {
-        "ticker": "AMGN",
-        "group": "Drug Manufacturers - General",
+        "ticker": "WEX",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.21
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.56
       },
       {
-        "ticker": "GILD",
-        "group": "Drug Manufacturers - General",
+        "ticker": "QLYS",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.34
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.19
       },
       {
-        "ticker": "PFE",
-        "group": "Drug Manufacturers - General",
+        "ticker": "BLSH",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.94
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.29
       },
       {
-        "ticker": "BMY",
-        "group": "Drug Manufacturers - General",
+        "ticker": "CORZ",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.11
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.71
       },
       {
-        "ticker": "GSK",
-        "group": "Drug Manufacturers - General",
+        "ticker": "VRNS",
+        "group": "Software - Infrastructure",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.27
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.92
       },
       {
-        "ticker": "BIIB",
-        "group": "Drug Manufacturers - General",
+        "ticker": "DDS",
+        "group": "Department Stores",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.36
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.12
       },
       {
-        "ticker": "OGN",
-        "group": "Drug Manufacturers - General",
+        "ticker": "M",
+        "group": "Department Stores",
         "list_category": "accel",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.71
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.77
+      },
+      {
+        "ticker": "KSS",
+        "group": "Department Stores",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.38
+      },
+      {
+        "ticker": "KEYS",
+        "group": "Scientific & Technical Instruments",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.92
+      },
+      {
+        "ticker": "COHR",
+        "group": "Scientific & Technical Instruments",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.05
+      },
+      {
+        "ticker": "GRMN",
+        "group": "Scientific & Technical Instruments",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.51
+      },
+      {
+        "ticker": "TDY",
+        "group": "Scientific & Technical Instruments",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -2.0
+      },
+      {
+        "ticker": "MKSI",
+        "group": "Scientific & Technical Instruments",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.81
+      },
+      {
+        "ticker": "TRMB",
+        "group": "Scientific & Technical Instruments",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.12
+      },
+      {
+        "ticker": "CGNX",
+        "group": "Scientific & Technical Instruments",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.55
+      },
+      {
+        "ticker": "ESE",
+        "group": "Scientific & Technical Instruments",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -2.72
+      },
+      {
+        "ticker": "ST",
+        "group": "Scientific & Technical Instruments",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.42
+      },
+      {
+        "ticker": "NOVT",
+        "group": "Scientific & Technical Instruments",
+        "list_category": "accel",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.6
       }
     ],
     "all_green": [
@@ -713,582 +853,589 @@
         "ticker": "TMO",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.82
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 4.48
       },
       {
         "ticker": "DHR",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.23
       },
       {
         "ticker": "NTRA",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 7.04
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 7.31
       },
       {
         "ticker": "A",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.95
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 4.91
       },
       {
         "ticker": "IQV",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.95
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.19
       },
       {
         "ticker": "WAT",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.42
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.62
       },
       {
         "ticker": "ILMN",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 5.55
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 5.16
       },
       {
         "ticker": "MTD",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.24
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.04
       },
       {
         "ticker": "DGX",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.24
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.11
       },
       {
         "ticker": "LH",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
+        "signal_date": "2026-09-25",
         "atr_ext_50": -0.9
       },
       {
         "ticker": "GH",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.75
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.84
       },
       {
         "ticker": "MEDP",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.79
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.61
       },
       {
         "ticker": "RVTY",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 5.68
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 5.61
       },
       {
         "ticker": "CRL",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.55
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.32
       },
       {
         "ticker": "ICLR",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.97
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.75
       },
       {
         "ticker": "QGEN",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.53
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.2
       },
       {
         "ticker": "BLLN",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.22
-      },
-      {
-        "ticker": "RDNT",
-        "group": "Diagnostics & Research",
-        "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.04
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.03
       },
       {
         "ticker": "GRAL",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 6.42
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 6.24
+      },
+      {
+        "ticker": "RDNT",
+        "group": "Diagnostics & Research",
+        "list_category": "all_green",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.3
       },
       {
         "ticker": "SHC",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.18
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.42
       },
       {
         "ticker": "ADPT",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.76
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.56
       },
       {
         "ticker": "VCYT",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.85
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.32
       },
       {
         "ticker": "CDNA",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 5.27
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 5.66
       },
       {
         "ticker": "WGS",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.49
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.41
       },
       {
         "ticker": "NEO",
         "group": "Diagnostics & Research",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.41
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.0
       },
       {
-        "ticker": "GOOGL",
-        "group": "Internet Content & Information",
+        "ticker": "SNX",
+        "group": "Electronics & Computer Distribution",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.24
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.51
       },
       {
-        "ticker": "GOOG",
-        "group": "Internet Content & Information",
+        "ticker": "ARW",
+        "group": "Electronics & Computer Distribution",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.37
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.52
       },
       {
-        "ticker": "META",
-        "group": "Internet Content & Information",
+        "ticker": "AVT",
+        "group": "Electronics & Computer Distribution",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 6.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.86
       },
       {
-        "ticker": "SPOT",
-        "group": "Internet Content & Information",
+        "ticker": "NSIT",
+        "group": "Electronics & Computer Distribution",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.19
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.07
       },
       {
-        "ticker": "RDDT",
-        "group": "Internet Content & Information",
+        "ticker": "CNXN",
+        "group": "Electronics & Computer Distribution",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.95
-      },
-      {
-        "ticker": "PINS",
-        "group": "Internet Content & Information",
-        "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -3.93
-      },
-      {
-        "ticker": "MTCH",
-        "group": "Internet Content & Information",
-        "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.42
-      },
-      {
-        "ticker": "SNAP",
-        "group": "Internet Content & Information",
-        "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.66
-      },
-      {
-        "ticker": "RUM",
-        "group": "Internet Content & Information",
-        "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.59
-      },
-      {
-        "ticker": "PPLI",
-        "group": "Internet Content & Information",
-        "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -3.46
-      },
-      {
-        "ticker": "JOYY",
-        "group": "Internet Content & Information",
-        "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.46
-      },
-      {
-        "ticker": "DJT",
-        "group": "Internet Content & Information",
-        "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.26
-      },
-      {
-        "ticker": "ATHM",
-        "group": "Internet Content & Information",
-        "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.16
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.83
       },
       {
         "ticker": "NVDA",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.48
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.55
       },
       {
         "ticker": "TSM",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.93
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.89
       },
       {
         "ticker": "AVGO",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.34
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -2.17
       },
       {
         "ticker": "SKHY",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.45
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.98
       },
       {
         "ticker": "MU",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
+        "signal_date": "2026-09-25",
         "atr_ext_50": 2.93
       },
       {
         "ticker": "AMD",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.97
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 5.1
       },
       {
         "ticker": "INTC",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.51
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.83
       },
       {
         "ticker": "ARM",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.27
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.42
       },
       {
         "ticker": "TXN",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.85
       },
       {
         "ticker": "MRVL",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.89
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.06
       },
       {
         "ticker": "QCOM",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.92
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.66
       },
       {
         "ticker": "ADI",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.87
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.79
       },
       {
         "ticker": "ASX",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.92
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.41
       },
       {
         "ticker": "MPWR",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.57
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.12
       },
       {
         "ticker": "ALAB",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.43
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.58
       },
       {
         "ticker": "UMC",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.57
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.89
       },
       {
         "ticker": "NXPI",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.85
-      },
-      {
-        "ticker": "CBRS",
-        "group": "Semiconductors",
-        "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.31
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.26
       },
       {
         "ticker": "STM",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.65
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.36
+      },
+      {
+        "ticker": "CBRS",
+        "group": "Semiconductors",
+        "list_category": "all_green",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.3
       },
       {
         "ticker": "MCHP",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.56
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.91
       },
       {
         "ticker": "CRDO",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.06
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.07
       },
       {
         "ticker": "ON",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.37
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.15
       },
       {
         "ticker": "GFS",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.04
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.03
       },
       {
         "ticker": "TSEM",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.61
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.37
       },
       {
         "ticker": "MTSI",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.77
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.82
       },
       {
         "ticker": "SITM",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.51
       },
       {
         "ticker": "LSCC",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.15
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.15
       },
       {
         "ticker": "SMTC",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.04
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.65
       },
       {
         "ticker": "SWKS",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.64
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.86
       },
       {
         "ticker": "RMBS",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.22
       },
       {
         "ticker": "QRVO",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.97
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 4.22
       },
       {
         "ticker": "SIMO",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.04
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.13
       },
       {
         "ticker": "MXL",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.3
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.42
       },
       {
         "ticker": "SLAB",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.23
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.11
       },
       {
         "ticker": "ALGM",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.58
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.58
       },
       {
         "ticker": "PI",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.63
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.79
       },
       {
         "ticker": "VSH",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.9
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.44
       },
       {
         "ticker": "DIOD",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.59
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.82
       },
       {
         "ticker": "SYNA",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.29
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.08
       },
       {
         "ticker": "NVTS",
         "group": "Semiconductors",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.25
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.2
       },
       {
-        "ticker": "SNX",
-        "group": "Electronics & Computer Distribution",
+        "ticker": "DELL",
+        "group": "Computer Hardware",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.26
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.76
       },
       {
-        "ticker": "ARW",
-        "group": "Electronics & Computer Distribution",
+        "ticker": "ANET",
+        "group": "Computer Hardware",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.86
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.12
       },
       {
-        "ticker": "AVT",
-        "group": "Electronics & Computer Distribution",
+        "ticker": "SNDK",
+        "group": "Computer Hardware",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.39
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.34
       },
       {
-        "ticker": "NSIT",
-        "group": "Electronics & Computer Distribution",
+        "ticker": "STX",
+        "group": "Computer Hardware",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.29
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.36
       },
       {
-        "ticker": "CNXN",
-        "group": "Electronics & Computer Distribution",
+        "ticker": "WDC",
+        "group": "Computer Hardware",
         "list_category": "all_green",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.72
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.62
+      },
+      {
+        "ticker": "P",
+        "group": "Computer Hardware",
+        "list_category": "all_green",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 4.27
+      },
+      {
+        "ticker": "SMCI",
+        "group": "Computer Hardware",
+        "list_category": "all_green",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.53
+      },
+      {
+        "ticker": "HPQ",
+        "group": "Computer Hardware",
+        "list_category": "all_green",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.9
+      },
+      {
+        "ticker": "IONQ",
+        "group": "Computer Hardware",
+        "list_category": "all_green",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.09
+      },
+      {
+        "ticker": "LOGI",
+        "group": "Computer Hardware",
+        "list_category": "all_green",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.29
+      },
+      {
+        "ticker": "QBTS",
+        "group": "Computer Hardware",
+        "list_category": "all_green",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.72
+      },
+      {
+        "ticker": "RGTI",
+        "group": "Computer Hardware",
+        "list_category": "all_green",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.62
+      },
+      {
+        "ticker": "QUBT",
+        "group": "Computer Hardware",
+        "list_category": "all_green",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.38
+      },
+      {
+        "ticker": "IQMX",
+        "group": "Computer Hardware",
+        "list_category": "all_green",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.55
       }
     ],
     "emerging": [
@@ -1296,407 +1443,358 @@
         "ticker": "APH",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.99
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.32
       },
       {
         "ticker": "GLW",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.16
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.49
       },
       {
         "ticker": "CLS",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.52
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.07
       },
       {
         "ticker": "FLEX",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.54
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.09
       },
       {
         "ticker": "JBL",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.58
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.07
       },
       {
         "ticker": "TTMI",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.3
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.6
       },
       {
         "ticker": "VICR",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.58
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.89
       },
       {
         "ticker": "SANM",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.01
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.23
       },
       {
         "ticker": "LFUS",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.1
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.41
       },
       {
         "ticker": "RAL",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.3
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.31
       },
       {
         "ticker": "PLXS",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.03
-      },
-      {
-        "ticker": "BELFA",
-        "group": "Electronic Components",
-        "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.57
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.18
       },
       {
         "ticker": "BELFB",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.89
+      },
+      {
+        "ticker": "BELFA",
+        "group": "Electronic Components",
+        "list_category": "emerging",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.55
       },
       {
         "ticker": "KN",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.45
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.06
       },
       {
         "ticker": "OUST",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.14
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.94
       },
       {
         "ticker": "BHE",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.55
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.65
       },
       {
         "ticker": "ROG",
         "group": "Electronic Components",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.05
-      },
-      {
-        "ticker": "KEYS",
-        "group": "Scientific & Technical Instruments",
-        "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.56
-      },
-      {
-        "ticker": "COHR",
-        "group": "Scientific & Technical Instruments",
-        "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.28
-      },
-      {
-        "ticker": "GRMN",
-        "group": "Scientific & Technical Instruments",
-        "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.73
-      },
-      {
-        "ticker": "TDY",
-        "group": "Scientific & Technical Instruments",
-        "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.16
-      },
-      {
-        "ticker": "MKSI",
-        "group": "Scientific & Technical Instruments",
-        "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.06
-      },
-      {
-        "ticker": "TRMB",
-        "group": "Scientific & Technical Instruments",
-        "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.06
-      },
-      {
-        "ticker": "CGNX",
-        "group": "Scientific & Technical Instruments",
-        "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.95
-      },
-      {
-        "ticker": "ESE",
-        "group": "Scientific & Technical Instruments",
-        "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.72
-      },
-      {
-        "ticker": "ST",
-        "group": "Scientific & Technical Instruments",
-        "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.42
-      },
-      {
-        "ticker": "NOVT",
-        "group": "Scientific & Technical Instruments",
-        "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.03
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.34
       },
       {
         "ticker": "ASML",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.51
       },
       {
         "ticker": "LRCX",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.16
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.72
       },
       {
         "ticker": "AMAT",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.85
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.26
       },
       {
         "ticker": "KLAC",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.29
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.12
       },
       {
         "ticker": "TER",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.96
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.44
       },
       {
         "ticker": "Q",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.23
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.76
       },
       {
         "ticker": "ENTG",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.35
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.79
       },
       {
         "ticker": "ONTO",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.05
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.45
       },
       {
         "ticker": "AMKR",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.12
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.28
       },
       {
         "ticker": "NVMI",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.21
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.06
       },
       {
         "ticker": "FORM",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.35
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.44
       },
       {
         "ticker": "CAMT",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.3
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.05
       },
       {
         "ticker": "ACMR",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.25
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.01
       },
       {
         "ticker": "AXTI",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.58
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.95
       },
       {
         "ticker": "KLIC",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.14
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.55
       },
       {
         "ticker": "ACLS",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.46
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.23
       },
       {
         "ticker": "UCTT",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.59
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.3
       },
       {
         "ticker": "AEHR",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.35
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.09
       },
       {
         "ticker": "AMBA",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.44
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.16
       },
       {
         "ticker": "COHU",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.93
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.74
       },
       {
         "ticker": "VECO",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.98
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.75
       },
       {
         "ticker": "ICHR",
         "group": "Semiconductor Equipment & Materials",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.46
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.96
       },
       {
         "ticker": "VRT",
         "group": "Electrical Equipment & Parts",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.66
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.0
       },
       {
         "ticker": "BE",
         "group": "Electrical Equipment & Parts",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.09
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.07
       },
       {
         "ticker": "NVT",
         "group": "Electrical Equipment & Parts",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.94
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.17
       },
       {
         "ticker": "FPS",
         "group": "Electrical Equipment & Parts",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.53
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.6
       },
       {
         "ticker": "AEIS",
         "group": "Electrical Equipment & Parts",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.87
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.76
       },
       {
         "ticker": "AYI",
         "group": "Electrical Equipment & Parts",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.55
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.42
       },
       {
         "ticker": "POWL",
         "group": "Electrical Equipment & Parts",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.95
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.09
       },
       {
         "ticker": "ENS",
         "group": "Electrical Equipment & Parts",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.74
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.4
       },
       {
         "ticker": "ATKR",
         "group": "Electrical Equipment & Parts",
         "list_category": "emerging",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 10.76
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 10.59
+      },
+      {
+        "ticker": "DDS",
+        "group": "Department Stores",
+        "list_category": "emerging",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.12
+      },
+      {
+        "ticker": "M",
+        "group": "Department Stores",
+        "list_category": "emerging",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.77
+      },
+      {
+        "ticker": "KSS",
+        "group": "Department Stores",
+        "list_category": "emerging",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.38
       }
     ],
     "leaders": [
@@ -1704,1261 +1802,1494 @@
         "ticker": "VLO",
         "group": "Oil & Gas Refining & Marketing",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.46
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.59
       },
       {
         "ticker": "MPC",
         "group": "Oil & Gas Refining & Marketing",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.45
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.51
       },
       {
         "ticker": "PSX",
         "group": "Oil & Gas Refining & Marketing",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.43
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.32
       },
       {
         "ticker": "DINO",
         "group": "Oil & Gas Refining & Marketing",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.83
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.96
       },
       {
         "ticker": "SUN",
         "group": "Oil & Gas Refining & Marketing",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.12
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.41
       },
       {
         "ticker": "PBF",
         "group": "Oil & Gas Refining & Marketing",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.41
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.74
       },
       {
         "ticker": "UGP",
         "group": "Oil & Gas Refining & Marketing",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.63
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.54
       },
       {
         "ticker": "CVI",
         "group": "Oil & Gas Refining & Marketing",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.42
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 4.37
       },
       {
         "ticker": "DK",
         "group": "Oil & Gas Refining & Marketing",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.44
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.26
       },
       {
         "ticker": "PARR",
         "group": "Oil & Gas Refining & Marketing",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.53
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.39
       },
       {
         "ticker": "DKL",
         "group": "Oil & Gas Refining & Marketing",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.23
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.62
       },
       {
         "ticker": "VEEV",
         "group": "Health Information Services",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.02
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 4.53
       },
       {
         "ticker": "TEM",
         "group": "Health Information Services",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.9
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 5.31
       },
       {
         "ticker": "BTSG",
         "group": "Health Information Services",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.74
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -2.42
       },
       {
         "ticker": "HNGE",
         "group": "Health Information Services",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.22
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.01
       },
       {
         "ticker": "HQY",
         "group": "Health Information Services",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -3.71
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -3.86
       },
       {
         "ticker": "WAY",
         "group": "Health Information Services",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.36
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.41
       },
       {
         "ticker": "DOCS",
         "group": "Health Information Services",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.48
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.71
       },
       {
         "ticker": "HTFL",
         "group": "Health Information Services",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.83
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.96
       },
       {
         "ticker": "SDGR",
         "group": "Health Information Services",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 5.74
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 5.18
       },
       {
         "ticker": "TMO",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.82
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 4.48
       },
       {
         "ticker": "DHR",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.23
       },
       {
         "ticker": "NTRA",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 7.04
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 7.31
       },
       {
         "ticker": "A",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.95
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 4.91
       },
       {
         "ticker": "IQV",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.95
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.19
       },
       {
         "ticker": "WAT",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.42
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.62
       },
       {
         "ticker": "ILMN",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 5.55
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 5.16
       },
       {
         "ticker": "MTD",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.24
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.04
       },
       {
         "ticker": "DGX",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.24
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.11
       },
       {
         "ticker": "LH",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
+        "signal_date": "2026-09-25",
         "atr_ext_50": -0.9
       },
       {
         "ticker": "GH",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.75
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.84
       },
       {
         "ticker": "MEDP",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.79
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.61
       },
       {
         "ticker": "RVTY",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 5.68
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 5.61
       },
       {
         "ticker": "CRL",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.55
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.32
       },
       {
         "ticker": "ICLR",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.97
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.75
       },
       {
         "ticker": "QGEN",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.53
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.2
       },
       {
         "ticker": "BLLN",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.22
-      },
-      {
-        "ticker": "RDNT",
-        "group": "Diagnostics & Research",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.04
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.03
       },
       {
         "ticker": "GRAL",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 6.42
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 6.24
+      },
+      {
+        "ticker": "RDNT",
+        "group": "Diagnostics & Research",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.3
       },
       {
         "ticker": "SHC",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.18
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.42
       },
       {
         "ticker": "ADPT",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.76
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.56
       },
       {
         "ticker": "VCYT",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.85
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.32
       },
       {
         "ticker": "CDNA",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 5.27
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 5.66
       },
       {
         "ticker": "WGS",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.49
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.41
       },
       {
         "ticker": "NEO",
         "group": "Diagnostics & Research",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.41
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.0
       },
       {
         "ticker": "MSFT",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.23
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.43
       },
       {
         "ticker": "PLTR",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.23
-      },
-      {
-        "ticker": "ORCL",
-        "group": "Software - Infrastructure",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.33
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.74
       },
       {
         "ticker": "PANW",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.89
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.02
       },
       {
         "ticker": "CRWD",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.87
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.26
       },
       {
         "ticker": "FTNT",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.53
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.75
       },
       {
         "ticker": "NET",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.42
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.76
       },
       {
         "ticker": "NBIS",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.72
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.31
       },
       {
         "ticker": "CRWV",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.83
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.33
       },
       {
         "ticker": "XYZ",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.41
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.52
       },
       {
         "ticker": "TWLO",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 5.73
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.51
       },
       {
         "ticker": "NTAP",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.31
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.73
       },
       {
         "ticker": "OKTA",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 5.05
-      },
-      {
-        "ticker": "ZS",
-        "group": "Software - Infrastructure",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.44
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.73
       },
       {
         "ticker": "MDB",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.74
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.14
       },
       {
-        "ticker": "VRSN",
+        "ticker": "ZS",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.54
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.87
       },
       {
         "ticker": "CPAY",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.22
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.1
+      },
+      {
+        "ticker": "VRSN",
+        "group": "Software - Infrastructure",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.07
       },
       {
         "ticker": "FFIV",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.86
-      },
-      {
-        "ticker": "RBRK",
-        "group": "Software - Infrastructure",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.84
-      },
-      {
-        "ticker": "IOT",
-        "group": "Software - Infrastructure",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.27
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.6
       },
       {
         "ticker": "GPN",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.92
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.52
+      },
+      {
+        "ticker": "RBRK",
+        "group": "Software - Infrastructure",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.04
+      },
+      {
+        "ticker": "IOT",
+        "group": "Software - Infrastructure",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.37
       },
       {
         "ticker": "NTNX",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.21
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.85
       },
       {
         "ticker": "KSPI",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.39
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.46
       },
       {
         "ticker": "TOST",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.53
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -2.13
       },
       {
         "ticker": "DOCN",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.86
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.64
       },
       {
         "ticker": "AKAM",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.52
-      },
-      {
-        "ticker": "CHKP",
-        "group": "Software - Infrastructure",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.74
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.1
       },
       {
         "ticker": "GEN",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -4.38
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -5.33
       },
       {
         "ticker": "GDDY",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.82
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.16
       },
       {
         "ticker": "SAIL",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.13
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.82
       },
       {
         "ticker": "PAYP",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.75
-      },
-      {
-        "ticker": "S",
-        "group": "Software - Infrastructure",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.79
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.67
       },
       {
         "ticker": "GTLB",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.39
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.41
       },
       {
-        "ticker": "NTSK",
+        "ticker": "S",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.15
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.21
       },
       {
         "ticker": "ZETA",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.62
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.43
+      },
+      {
+        "ticker": "NTSK",
+        "group": "Software - Infrastructure",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.08
       },
       {
         "ticker": "DBX",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.93
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.26
       },
       {
         "ticker": "PATH",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.21
-      },
-      {
-        "ticker": "QLYS",
-        "group": "Software - Infrastructure",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.36
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -2.47
       },
       {
         "ticker": "WEX",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.39
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.56
+      },
+      {
+        "ticker": "QLYS",
+        "group": "Software - Infrastructure",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.19
       },
       {
         "ticker": "BLSH",
         "group": "Software - Infrastructure",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.31
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.29
+      },
+      {
+        "ticker": "CORZ",
+        "group": "Software - Infrastructure",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.71
+      },
+      {
+        "ticker": "VRNS",
+        "group": "Software - Infrastructure",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.92
       },
       {
         "ticker": "AAPL",
         "group": "Consumer Electronics",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.05
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.76
+      },
+      {
+        "ticker": "SONY",
+        "group": "Consumer Electronics",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.46
       },
       {
         "ticker": "SONO",
         "group": "Consumer Electronics",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.2
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.67
       },
       {
-        "ticker": "GOOGL",
-        "group": "Internet Content & Information",
+        "ticker": "SNX",
+        "group": "Electronics & Computer Distribution",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.24
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.51
       },
       {
-        "ticker": "GOOG",
-        "group": "Internet Content & Information",
+        "ticker": "ARW",
+        "group": "Electronics & Computer Distribution",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.37
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.52
       },
       {
-        "ticker": "META",
-        "group": "Internet Content & Information",
+        "ticker": "AVT",
+        "group": "Electronics & Computer Distribution",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 6.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.86
       },
       {
-        "ticker": "SPOT",
-        "group": "Internet Content & Information",
+        "ticker": "NSIT",
+        "group": "Electronics & Computer Distribution",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.19
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.07
       },
       {
-        "ticker": "RDDT",
-        "group": "Internet Content & Information",
+        "ticker": "CNXN",
+        "group": "Electronics & Computer Distribution",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.95
-      },
-      {
-        "ticker": "PINS",
-        "group": "Internet Content & Information",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -3.93
-      },
-      {
-        "ticker": "MTCH",
-        "group": "Internet Content & Information",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.42
-      },
-      {
-        "ticker": "SNAP",
-        "group": "Internet Content & Information",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.66
-      },
-      {
-        "ticker": "RUM",
-        "group": "Internet Content & Information",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.59
-      },
-      {
-        "ticker": "PPLI",
-        "group": "Internet Content & Information",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -3.46
-      },
-      {
-        "ticker": "JOYY",
-        "group": "Internet Content & Information",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.46
-      },
-      {
-        "ticker": "DJT",
-        "group": "Internet Content & Information",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.26
-      },
-      {
-        "ticker": "ATHM",
-        "group": "Internet Content & Information",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.16
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.83
       },
       {
         "ticker": "NVDA",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.48
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.55
       },
       {
         "ticker": "TSM",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.93
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.89
       },
       {
         "ticker": "AVGO",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.34
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -2.17
       },
       {
         "ticker": "SKHY",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.45
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.98
       },
       {
         "ticker": "MU",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
+        "signal_date": "2026-09-25",
         "atr_ext_50": 2.93
       },
       {
         "ticker": "AMD",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.97
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 5.1
       },
       {
         "ticker": "INTC",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 4.51
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.83
       },
       {
         "ticker": "ARM",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.27
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.42
       },
       {
         "ticker": "TXN",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.85
       },
       {
         "ticker": "MRVL",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.89
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.06
       },
       {
         "ticker": "QCOM",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.92
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.66
       },
       {
         "ticker": "ADI",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.87
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.79
       },
       {
         "ticker": "ASX",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.92
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.41
       },
       {
         "ticker": "MPWR",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.57
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.12
       },
       {
         "ticker": "ALAB",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.43
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.58
       },
       {
         "ticker": "UMC",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.57
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.89
       },
       {
         "ticker": "NXPI",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.85
-      },
-      {
-        "ticker": "CBRS",
-        "group": "Semiconductors",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.31
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.26
       },
       {
         "ticker": "STM",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.65
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.36
+      },
+      {
+        "ticker": "CBRS",
+        "group": "Semiconductors",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.3
       },
       {
         "ticker": "MCHP",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.56
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.91
       },
       {
         "ticker": "CRDO",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.06
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.07
       },
       {
         "ticker": "ON",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.37
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.15
       },
       {
         "ticker": "GFS",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.04
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.03
       },
       {
         "ticker": "TSEM",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.61
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.37
       },
       {
         "ticker": "MTSI",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.77
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.82
       },
       {
         "ticker": "SITM",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.51
       },
       {
         "ticker": "LSCC",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.15
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.15
       },
       {
         "ticker": "SMTC",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.04
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.65
       },
       {
         "ticker": "SWKS",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.64
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.86
       },
       {
         "ticker": "RMBS",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.22
       },
       {
         "ticker": "QRVO",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.97
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 4.22
       },
       {
         "ticker": "SIMO",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.04
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.13
       },
       {
         "ticker": "MXL",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.3
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.42
       },
       {
         "ticker": "SLAB",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.23
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.11
       },
       {
         "ticker": "ALGM",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.58
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.58
       },
       {
         "ticker": "PI",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.63
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.79
       },
       {
         "ticker": "VSH",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.9
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.44
       },
       {
         "ticker": "DIOD",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.59
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.82
       },
       {
         "ticker": "SYNA",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.29
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.08
       },
       {
         "ticker": "NVTS",
         "group": "Semiconductors",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.25
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.2
       },
       {
-        "ticker": "SNX",
-        "group": "Electronics & Computer Distribution",
+        "ticker": "DELL",
+        "group": "Computer Hardware",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.26
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.76
       },
       {
-        "ticker": "ARW",
-        "group": "Electronics & Computer Distribution",
+        "ticker": "ANET",
+        "group": "Computer Hardware",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.86
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.12
       },
       {
-        "ticker": "AVT",
-        "group": "Electronics & Computer Distribution",
+        "ticker": "SNDK",
+        "group": "Computer Hardware",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.39
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.34
       },
       {
-        "ticker": "NSIT",
-        "group": "Electronics & Computer Distribution",
+        "ticker": "STX",
+        "group": "Computer Hardware",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.29
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.36
       },
       {
-        "ticker": "CNXN",
-        "group": "Electronics & Computer Distribution",
+        "ticker": "WDC",
+        "group": "Computer Hardware",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.72
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.62
+      },
+      {
+        "ticker": "P",
+        "group": "Computer Hardware",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 4.27
+      },
+      {
+        "ticker": "SMCI",
+        "group": "Computer Hardware",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.53
+      },
+      {
+        "ticker": "HPQ",
+        "group": "Computer Hardware",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.9
+      },
+      {
+        "ticker": "IONQ",
+        "group": "Computer Hardware",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.09
+      },
+      {
+        "ticker": "LOGI",
+        "group": "Computer Hardware",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.29
+      },
+      {
+        "ticker": "QBTS",
+        "group": "Computer Hardware",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.72
+      },
+      {
+        "ticker": "RGTI",
+        "group": "Computer Hardware",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.62
+      },
+      {
+        "ticker": "QUBT",
+        "group": "Computer Hardware",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.38
+      },
+      {
+        "ticker": "IQMX",
+        "group": "Computer Hardware",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.55
+      },
+      {
+        "ticker": "GOOG",
+        "group": "Internet Content & Information",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.11
+      },
+      {
+        "ticker": "GOOGL",
+        "group": "Internet Content & Information",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.04
+      },
+      {
+        "ticker": "META",
+        "group": "Internet Content & Information",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 5.0
+      },
+      {
+        "ticker": "SPOT",
+        "group": "Internet Content & Information",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.3
+      },
+      {
+        "ticker": "RDDT",
+        "group": "Internet Content & Information",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.26
+      },
+      {
+        "ticker": "PINS",
+        "group": "Internet Content & Information",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -3.75
+      },
+      {
+        "ticker": "MTCH",
+        "group": "Internet Content & Information",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.23
+      },
+      {
+        "ticker": "SNAP",
+        "group": "Internet Content & Information",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.59
+      },
+      {
+        "ticker": "RUM",
+        "group": "Internet Content & Information",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.17
+      },
+      {
+        "ticker": "PPLI",
+        "group": "Internet Content & Information",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.05
+      },
+      {
+        "ticker": "JOYY",
+        "group": "Internet Content & Information",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.44
+      },
+      {
+        "ticker": "DJT",
+        "group": "Internet Content & Information",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.14
+      },
+      {
+        "ticker": "ATHM",
+        "group": "Internet Content & Information",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.12
       },
       {
         "ticker": "KEX",
         "group": "Marine Shipping",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.46
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -2.81
       },
       {
         "ticker": "MATX",
         "group": "Marine Shipping",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
+        "signal_date": "2026-09-25",
         "atr_ext_50": 0.87
       },
       {
         "ticker": "HAFN",
         "group": "Marine Shipping",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.0
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.03
       },
       {
         "ticker": "ZIM",
         "group": "Marine Shipping",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.45
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.22
       },
       {
         "ticker": "SBLK",
         "group": "Marine Shipping",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.4
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.05
       },
       {
         "ticker": "ECO",
         "group": "Marine Shipping",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 3.59
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.35
       },
       {
         "ticker": "DAC",
         "group": "Marine Shipping",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.37
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.05
       },
       {
         "ticker": "NMM",
         "group": "Marine Shipping",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.44
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.86
       },
       {
         "ticker": "NUE",
         "group": "Steel",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.92
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.05
       },
       {
         "ticker": "MT",
         "group": "Steel",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.46
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.83
       },
       {
         "ticker": "STLD",
         "group": "Steel",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.08
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.31
       },
       {
         "ticker": "RS",
         "group": "Steel",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.37
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.24
       },
       {
         "ticker": "PKX",
         "group": "Steel",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.66
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.21
       },
       {
         "ticker": "TX",
         "group": "Steel",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.55
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.28
       },
       {
         "ticker": "CLF",
         "group": "Steel",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 1.37
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.75
       },
       {
         "ticker": "GGB",
         "group": "Steel",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.2
-      },
-      {
-        "ticker": "RGA",
-        "group": "Insurance - Reinsurance",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.32
-      },
-      {
-        "ticker": "EG",
-        "group": "Insurance - Reinsurance",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.41
-      },
-      {
-        "ticker": "RNR",
-        "group": "Insurance - Reinsurance",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.84
-      },
-      {
-        "ticker": "HG",
-        "group": "Insurance - Reinsurance",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.18
-      },
-      {
-        "ticker": "SPNT",
-        "group": "Insurance - Reinsurance",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.43
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.14
       },
       {
         "ticker": "IX",
         "group": "Financial Conglomerates",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.69
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.55
       },
       {
         "ticker": "FRHC",
         "group": "Financial Conglomerates",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 2.71
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.92
       },
       {
         "ticker": "VOYA",
         "group": "Financial Conglomerates",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.67
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.2
       },
       {
         "ticker": "HTH",
         "group": "Financial Conglomerates",
         "list_category": "leaders",
-        "signal_date": "2026-09-24",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.43
+      },
+      {
+        "ticker": "LLY",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.18
+      },
+      {
+        "ticker": "JNJ",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.21
+      },
+      {
+        "ticker": "ABBV",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.4
+      },
+      {
+        "ticker": "MRK",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.33
+      },
+      {
+        "ticker": "AMGN",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.94
+      },
+      {
+        "ticker": "GILD",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.63
+      },
+      {
+        "ticker": "PFE",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.31
+      },
+      {
+        "ticker": "BMY",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.11
+      },
+      {
+        "ticker": "GSK",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.63
+      },
+      {
+        "ticker": "BIIB",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.53
+      },
+      {
+        "ticker": "OGN",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.81
+      }
+    ],
+    "rs_new_high": [
+      {
+        "ticker": "ASML",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.51
+      },
+      {
+        "ticker": "LRCX",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.72
+      },
+      {
+        "ticker": "AMAT",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.26
+      },
+      {
+        "ticker": "KLAC",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.12
+      },
+      {
+        "ticker": "TER",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.44
+      },
+      {
+        "ticker": "Q",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
         "atr_ext_50": -0.76
       },
       {
-        "ticker": "MFC",
-        "group": "Insurance - Life",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.24
+        "ticker": "ENTG",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.79
       },
       {
-        "ticker": "MET",
-        "group": "Insurance - Life",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.57
+        "ticker": "ONTO",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.45
       },
       {
-        "ticker": "PRU",
-        "group": "Insurance - Life",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.74
+        "ticker": "AMKR",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.28
       },
       {
-        "ticker": "UNM",
-        "group": "Insurance - Life",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": 0.03
+        "ticker": "NVMI",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.06
       },
       {
-        "ticker": "GL",
-        "group": "Insurance - Life",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.54
+        "ticker": "FORM",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 2.44
       },
       {
-        "ticker": "JXN",
-        "group": "Insurance - Life",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.15
+        "ticker": "CAMT",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.05
       },
       {
-        "ticker": "LNC",
-        "group": "Insurance - Life",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.71
+        "ticker": "ACMR",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.01
       },
       {
-        "ticker": "CNO",
-        "group": "Insurance - Life",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -0.88
+        "ticker": "AXTI",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.95
       },
       {
-        "ticker": "GNW",
-        "group": "Insurance - Life",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -2.15
+        "ticker": "KLIC",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.55
       },
       {
-        "ticker": "BHF",
-        "group": "Insurance - Life",
-        "list_category": "leaders",
-        "signal_date": "2026-09-24",
-        "atr_ext_50": -1.77
+        "ticker": "ACLS",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.23
+      },
+      {
+        "ticker": "UCTT",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -0.3
+      },
+      {
+        "ticker": "AEHR",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 1.09
+      },
+      {
+        "ticker": "AMBA",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.16
+      },
+      {
+        "ticker": "COHU",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 3.74
+      },
+      {
+        "ticker": "VECO",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": 0.75
+      },
+      {
+        "ticker": "ICHR",
+        "group": "Semiconductor Equipment & Materials",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-09-25",
+        "atr_ext_50": -1.96
       }
     ]
   }
