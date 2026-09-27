@@ -8,6 +8,8 @@
 
 ### 🔴 Backlog
 
+> **Priority order (2026-09-27 triage):** see `planning/roadmap-triage-2026-09-27.md`. TL;DR: merge #425 → alpha-report rigor #401/#402/#403 → PICKS-4B #404 + #405 → WS5-7 #337 → #275 before the 2026-11-01 DST switch → AI-NEXT P2 → the rest.
+
 #### Agent feed → private book access (AGENT-FEED, 2026-09-17)
 
 Public read-only feed (`scripts/build_signals.py` → `data/api/{manifest,latest_signals}.json`)
@@ -17,7 +19,7 @@ shipped 2026-09-17. Remaining fast-follow items:
 |---|------|---------|--------|-------|
 | AGENT-FEED-CORE | **Public manifest + latest_signals feed** | `scripts/build_signals.py`, `tests/test_build_signals.py`, `collect.yml`, `collect_picks.yml`, README, CLAUDE.md | M | ✅ **Done 2026-09-17.** Versioned (`SCHEMA_VERSION` 1.0) top-N JSON contract for external agents; public-signals-only, no position-book data. 7 tests. |
 | AGENT-FEED-BOOK | **Read-only authenticated position-book endpoint for Muse** | `worker-positions/src/index.js`, `worker-positions/src/auth.js`, `worker-positions/README.md` | M | Deferred (owner: public first, everything else fast-follow). Add `GET /positions/summary` returning the book as JSON behind the existing HMAC bearer token; Muse stores token in its vault. **Security-sensitive — needs explicit owner sign-off before implementing.** Prefer a narrow REST endpoint over granting Muse Cloudflare/wrangler account keys (blast-radius). Optional later: wrap as an MCP server if multi-tool structured access is wanted. |
-| AGENT-FEED-VERIFY | **Confirm new workflow steps run green in Actions** | `collect.yml`, `collect_picks.yml` | S | Couldn't run collect.py in cloud (Cloudflare blocks headless Chromium on GCP IPs). Spot-check the next scheduled collect run's "Build agent feed" step + that `data/api/*.json` committed. |
+| AGENT-FEED-VERIFY | **Confirm new workflow steps run green in Actions** | `collect.yml`, `collect_picks.yml` | S | ✅ **Verified 2026-09-27** — `data/api/manifest.json` committed by the scheduled pipeline (`generated_at` 2026-09-26T01:50Z, `as_of` 2026-09-25). Couldn't run collect.py in cloud (Cloudflare blocks headless Chromium on GCP IPs). Spot-check the next scheduled collect run's "Build agent feed" step + that `data/api/*.json` committed. |
 
 #### AI spend controls (AI-WALLET, 2026-09-10)
 
