@@ -349,3 +349,22 @@ exact block), but worth a quick spot-check on the next PWA session.
 
 **Next steps:** none blocking. If Conviction/Headline are ever wanted back, the pre-removal
 prompt/parser is in git history (see the `TASK_SPECS` comment in `generate_ai.py`).
+
+---
+
+## 2026-09-27 — Roadmap triage + prioritization
+
+**Status:** safe to close once the PR merges. Docs/planning only, no code changes.
+
+**What landed:** `planning/roadmap-triage-2026-09-27.md` (P0–P3 tiers + owner asks), a pointer to
+the priority order at the top of the SPRINT backlog, and AGENT-FEED-VERIFY marked verified
+(manifest committed by the pipeline 2026-09-26).
+
+**Key finding:** `evaluate_picks.py --report` paired test: selected minus non-selected is negative
+at every horizon (−0.13/−0.46/−0.70/−0.76pp at 1/3/5/10d). `leaders` is worst and `all_green` is
+the only positive bucket. This is **not significant yet** (overlapping windows #402, no bootstrap
+#401), so measurement rigor (#401–#404) now leads the roadmap, ahead of more Picks-surface work.
+
+**Next steps:** owner merges #425 (SPY history is unrecoverable daily), then decides the stale-PR
+closures and the other asks in the doc's "what I need" section. After that, one PR for
+#401/#402/#403.
