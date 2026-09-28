@@ -1,9 +1,10 @@
 """
 collect.py — Fetch Finviz Groups data (sectors + industries) using Playwright
-and append to append-only snapshot CSVs. Also scrapes SPY benchmark data.
+and append to append-only snapshot CSVs. Also scrapes benchmark ETF data (BENCH_TICKERS).
 """
 
 import csv
+import re
 import os
 import sys
 import time
@@ -15,7 +16,9 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
 sys.path.insert(0, str(Path(__file__).parent))
-from delta_config import BENCH_CSV_COLUMNS, BENCH_PERF_COLS, SNAPSHOT_COLS
+from delta_config import (
+    BENCH_CSV_COLUMNS, BENCH_PERF_COLS, BENCH_TICKERS, RS_BENCHMARK_TICKER, SNAPSHOT_COLS,
+)
 
 # ---------------------------------------------------------------------------
 # Config
@@ -67,19 +70,19 @@ PERF_COLS = {
 }
 
 # ---------------------------------------------------------------------------
-# Benchmark (SPY) config
+# Benchmark ETF (SPY/QQQ/IWM, see delta_config.BENCH_TICKERS) config
 # ---------------------------------------------------------------------------
 
-# Finviz SPY quote page. The &p=d parameter selects the daily chart view.
-# NOTE: this URL is Cloudflare-gated. collect_spy() requires GitHub Actions
-# (Azure IPs) or a local machine — it will 403 from Google Cloud IPs.
-SPY_URL = "https://finviz.com/stock?t=SPY&p=d"
+# Finviz quote page per benchmark ticker. The &p=d parameter selects the daily
+# chart view. NOTE: this URL is Cloudflare-gated. collect_bench() requires
+# GitHub Actions (Azure IPs) or a local machine — it will 403 from Google Cloud IPs.
+BENCH_URL_TEMPLATE = "https://finviz.com/stock?t={ticker}&p=d"
 
 # BENCH_CSV_COLUMNS and BENCH_PERF_COLS are imported from delta_config above.
 
 # Map Finviz quote-page performance label text → internal column name.
 # Multiple label forms accepted for resilience to Finviz wording changes.
-SPY_LABEL_MAP = {
+BENCH_LABEL_MAP = {
     "Change": "perf_day",
     "Change %": "perf_day",
     "Perf Day": "perf_day",
@@ -98,7 +101,7 @@ SPY_LABEL_MAP = {
 # ("593.21 - 712.80", "1.24% 1.87%", "45,231,098", "Yes") and the consumers
 # (e.g. the EMRG-1 regime classifier) parse what they need.
 # Mirrors the fields picks.csv already collects per stock ticker.
-SPY_FIELD_MAP = {
+BENCH_FIELD_MAP = {
     "Price": "price",
     "Prev Close": "prev_close",
     "High": "high",
@@ -136,16 +139,14 @@ SPY_FIELD_MAP = {
     "Sales": "sales",
     "Optionable": "optionable",
     "Shortable": "shortable",
-    "Index": "spy_index",
+    "Index": "index",
     "Employees": "employees",
 }
 
-import re as _re
-
-def _normalize_spy_label(label: str) -> str:
+def _normalize_bench_label(label: str) -> str:
     """Normalize an unrecognized Finviz quote-page label to a column name."""
     name = label.strip().lower()
-    name = _re.sub(r"[^a-z0-9]+", "_", name).strip("_")
+    name = re.sub(r"[^a-z0-9]+", "_", name).strip("_")
     return name or "unknown_field"
 
 
@@ -239,7 +240,7 @@ def fetch_html(url: str, wait_selector: str = ".groups_table") -> str:
     """Fetch page HTML using Playwright with retry logic.
 
     wait_selector: CSS selector that must appear before capturing HTML.
-    Groups pages use the default '.groups_table'; the SPY quote page uses
+    Groups pages use the default '.groups_table'; the ETF quote page uses
     '.snapshot-table2'. If the selector is never found, the attempt raises
     a timeout and retry logic fires.
     """
@@ -361,6 +362,8 @@ def evict_today_rows(csv_path: Path, date_str: str) -> int:
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         all_rows = list(reader)
+    # Group snapshots have no ticker column — evict on date alone (unlike
+    # _evict_bench_row, which is keyed on (date, ticker)).
     kept = [r for r in all_rows if r.get("date") != date_str]
     evicted = len(all_rows) - len(kept)
     if evicted == 0:
@@ -474,16 +477,20 @@ def trading_date(now_et: datetime) -> str:
     return d.strftime("%Y-%m-%d")
 
 
-def parse_spy_quote(html: str, snapshot_date: str, collected_at: str) -> dict:
-    """Parse Finviz SPY quote page HTML and return a benchmark row dict.
+def parse_bench_quote(html: str, ticker: str, snapshot_date: str, collected_at: str) -> dict:
+    """Parse a Finviz ETF quote page (SPY/QQQ/IWM, ...) into a benchmark row dict.
+
+    `ticker` is stamped from the caller (the URL we fetched), not read from the page.
 
     Captures the full quote-page field set from `.snapshot-table2`
-    (SPY_LABEL_MAP + SPY_FIELD_MAP), not just the 7 perf_* columns.
+    (BENCH_LABEL_MAP + BENCH_FIELD_MAP), not just the 7 perf_* columns.
     perf_* keep their parsed float values (unchanged in name, order, and
     value); every other field is stored as raw stripped text. Labels not in
-    either map are captured under a normalized name and warned about
-    (CI-visible) so a Finviz label addition/change is noticed instead of
-    silently dropped. Any missing label leaves the column as None.
+    either map are kept in the returned dict under a normalized name and
+    warned about (CI-visible) — prefixed `unmapped_` if that name would
+    collide with a real column — but the CSV writer only persists
+    BENCH_CSV_COLUMNS — so an unknown label is DROPPED from the CSV until it
+    is added to BENCH_FIELD_MAP + BENCH_CSV_COLUMNS. The warning is the signal. Any missing label leaves the column as None.
     """
     soup = BeautifulSoup(html, "lxml")
     # Scope to the quote table; fall back to the whole page for resilience
@@ -493,7 +500,7 @@ def parse_spy_quote(html: str, snapshot_date: str, collected_at: str) -> dict:
     rec: dict = {
         "date": snapshot_date,
         "collected_at": collected_at,
-        "ticker": "SPY",
+        "ticker": ticker,
     }
     for col in BENCH_CSV_COLUMNS:
         if col not in rec:
@@ -510,18 +517,24 @@ def parse_spy_quote(html: str, snapshot_date: str, collected_at: str) -> dict:
             continue
         consumed.add(id(value_td))
         value = value_td.get_text(strip=True)
-        if label in SPY_LABEL_MAP:
-            rec[SPY_LABEL_MAP[label]] = parse_perf(value)
-        elif label in SPY_FIELD_MAP:
-            rec[SPY_FIELD_MAP[label]] = _parse_raw(value)
+        if label in BENCH_LABEL_MAP:
+            rec[BENCH_LABEL_MAP[label]] = parse_perf(value)
+        elif label in BENCH_FIELD_MAP:
+            rec[BENCH_FIELD_MAP[label]] = _parse_raw(value)
         elif label and label not in unknown:
             unknown.append(label)
-            rec[_normalize_spy_label(label)] = _parse_raw(value)
+            key = _normalize_bench_label(label)
+            # An unmapped label whose normalized name collides with a real
+            # column (e.g. a renamed "Perf. Week" -> perf_week) must not
+            # clobber it — perf_* would get raw text instead of a float.
+            if key in BENCH_CSV_COLUMNS:
+                key = f"unmapped_{key}"
+            rec[key] = _parse_raw(value)
 
     if unknown:
         print(
-            f"  [warn] Unknown SPY quote labels (captured but not in "
-            f"BENCH_CSV_COLUMNS): {unknown}",
+            f"  [warn] Unknown {ticker} quote labels (NOT written to CSV — add "
+            f"to BENCH_FIELD_MAP + BENCH_CSV_COLUMNS to keep): {unknown}",
             file=sys.stderr,
         )
 
@@ -555,8 +568,10 @@ def _migrate_bench_header(csv_path: Path) -> bool:
     return True
 
 
-def _evict_bench_row(csv_path: Path, date_str: str) -> int:
-    """Remove the SPY row for date_str from benchmark CSV (atomic rewrite).
+def _evict_bench_row(csv_path: Path, date_str: str, ticker: str) -> int:
+    """Remove the (date_str, ticker) row from benchmark CSV (atomic rewrite).
+
+    Keyed on (date, ticker) so re-collecting QQQ never evicts that date's SPY row.
 
     Returns the number of rows removed (0 or 1 in normal operation).
     """
@@ -565,7 +580,8 @@ def _evict_bench_row(csv_path: Path, date_str: str) -> int:
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         all_rows = list(reader)
-    kept = [r for r in all_rows if r.get("date") != date_str]
+    kept = [r for r in all_rows
+            if not (r.get("date") == date_str and r.get("ticker") == ticker)]
     evicted = len(all_rows) - len(kept)
     if evicted == 0:
         return 0
@@ -579,10 +595,10 @@ def _evict_bench_row(csv_path: Path, date_str: str) -> int:
     return evicted
 
 
-def collect_spy(bench_path: Path = None):
-    """Fetch SPY quote page and append/overwrite in data/benchmark/snapshots.csv.
+def collect_bench(ticker: str, bench_path: Path = None):
+    """Fetch one ETF's quote page and append/overwrite in data/benchmark/snapshots.csv.
 
-    Last-write-wins per date: a later run on the same trading day replaces the
+    Last-write-wins per (date, ticker): a later run on the same trading day replaces the
     earlier one. If the scrape fails after all retries, raises RuntimeError —
     the caller is responsible for logging the warning and exiting non-zero.
 
@@ -605,28 +621,28 @@ def collect_spy(bench_path: Path = None):
     elif _migrate_bench_header(bench_path):
         print(f"  Migrated {bench_path} header to current BENCH_CSV_COLUMNS schema.")
 
-    evicted = _evict_bench_row(bench_path, snapshot_date)
+    evicted = _evict_bench_row(bench_path, snapshot_date, ticker)
     if evicted:
-        print(f"  Evicted {evicted} existing SPY row(s) for {snapshot_date} (last-write-wins).")
+        print(f"  Evicted {evicted} existing {ticker} row(s) for {snapshot_date} (last-write-wins).")
 
-    print(f"\n[benchmark/SPY] snapshot_date={snapshot_date}")
+    print(f"\n[benchmark/{ticker}] snapshot_date={snapshot_date}")
 
-    # The SPY quote page uses '.snapshot-table2' (not '.groups_table').
+    # The quote page uses '.snapshot-table2' (not '.groups_table').
     # Selector verified against live Finviz via GitHub Actions (Azure IPs).
     t0 = time.time()
-    html = fetch_html(SPY_URL, wait_selector=".snapshot-table2")
+    html = fetch_html(BENCH_URL_TEMPLATE.format(ticker=ticker), wait_selector=".snapshot-table2")
     print(f"  fetch_html took {time.time() - t0:.1f}s")
 
-    rec = parse_spy_quote(html, snapshot_date, collected_at)
+    rec = parse_bench_quote(html, ticker, snapshot_date, collected_at)
 
-    # Validate parse completeness. SPY always has full perf history, so fewer
+    # Validate parse completeness. A benchmark ETF always has full perf history, so fewer
     # than all 7 values means a Finviz label change or page-structure failure —
     # not a legitimate data gap. Raise so the caller exits non-zero and GitHub
-    # Actions flags the run (groups success must not mask SPY parse failure).
+    # Actions flags the run (groups success must not mask a benchmark parse failure).
     parsed_count = sum(1 for c in BENCH_PERF_COLS if rec.get(c) is not None)
     if parsed_count < len(BENCH_PERF_COLS):
         raise RuntimeError(
-            f"SPY parse yielded only {parsed_count}/{len(BENCH_PERF_COLS)} perf values "
+            f"{ticker} parse yielded only {parsed_count}/{len(BENCH_PERF_COLS)} perf values "
             "— possible Finviz label change on quote page"
         )
 
@@ -635,7 +651,7 @@ def collect_spy(bench_path: Path = None):
         writer.writerow(
             {col: ("" if rec.get(col) is None else rec[col]) for col in BENCH_CSV_COLUMNS}
         )
-    print(f"  Wrote SPY benchmark row for {snapshot_date} to {bench_path}")
+    print(f"  Wrote {ticker} benchmark row for {snapshot_date} to {bench_path}")
 
 
 def collect(group_type: str):
@@ -690,21 +706,32 @@ def main():
     for group_type in ("sector", "industry"):
         collect(group_type)
 
-    # SPY benchmark — must not silently fail. Groups success does not mask SPY failure.
-    spy_failed = False
-    try:
-        collect_spy()
-    except Exception as exc:
-        eastern = pytz.timezone("US/Eastern")
-        date_str = trading_date(datetime.now(eastern))
-        print(
-            f"[WARN] SPY scrape failed for {date_str} — RS will be NaN: {exc}",
-            file=sys.stderr,
-        )
-        spy_failed = True
+    # Benchmark ETFs. Each ticker is independent: a QQQ failure still lets
+    # SPY/IWM write. Only an RS_BENCHMARK_TICKER (SPY) failure exits non-zero —
+    # a non-zero exit fails the collect step in collect.yml, which skips
+    # compute_deltas and fails the picks dependency gate for the whole day.
+    # That cost is justified for SPY (RS columns go NaN) but not for a
+    # secondary ETF like QQQ/IWM, which nothing downstream reads yet: those
+    # emit a GitHub ::warning:: annotation instead (visible on the run page).
+    bench_failed = []
+    for ticker in BENCH_TICKERS:
+        try:
+            collect_bench(ticker)
+        except Exception as exc:
+            eastern = pytz.timezone("US/Eastern")
+            date_str = trading_date(datetime.now(eastern))
+            impact = " — RS will be NaN" if ticker == RS_BENCHMARK_TICKER else ""
+            print(
+                f"[WARN] {ticker} scrape failed for {date_str}{impact}: {exc}",
+                file=sys.stderr,
+            )
+            if ticker == RS_BENCHMARK_TICKER:
+                bench_failed.append(ticker)
+            else:
+                print(f"::warning::{ticker} benchmark scrape failed for {date_str}: {exc}")
 
     print("\nDone.")
-    if spy_failed:
+    if bench_failed:
         sys.exit(1)
 
 
