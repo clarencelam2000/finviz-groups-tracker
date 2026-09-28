@@ -16,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from delta_config import (
     ACCEL_WINDOW,
     BENCH_CSV_COLUMNS,
+    RS_BENCHMARK_TICKER,
     LOOKBACK_WINDOWS,
     MOMENTUM_COLS,
     PERF_DELTA_METRICS,
@@ -319,10 +320,18 @@ def compute_rank_trend_slope(df_hist: pd.DataFrame, available_dates: list,
 # ---------------------------------------------------------------------------
 
 def load_benchmark(csv_path: Path) -> pd.DataFrame:
-    """Load benchmark (SPY) snapshots CSV. Returns empty DataFrame if missing."""
+    """Load the RS_BENCHMARK_TICKER (SPY) rows of the benchmark CSV.
+
+    The file holds one row per (date, ticker) for every BENCH_TICKERS ETF; RS is
+    measured against SPY only, and every caller indexes by date assuming one
+    row per date — so non-SPY rows are dropped here. Returns an empty
+    DataFrame if the file is missing or has no SPY rows.
+    """
     if not csv_path.exists():
         return pd.DataFrame(columns=BENCH_CSV_COLUMNS)
-    df = pd.read_csv(csv_path)
+    df = pd.read_csv(csv_path, low_memory=False)
+    if "ticker" in df.columns:
+        df = df[df["ticker"] == RS_BENCHMARK_TICKER].copy()
     if df.empty:
         return pd.DataFrame(columns=BENCH_CSV_COLUMNS)
     for col in ["perf_day", "perf_week", "perf_month", "perf_quarter",

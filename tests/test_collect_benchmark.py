@@ -11,12 +11,12 @@ import pytest
 import scripts.collect as collect_module
 from scripts.collect import (
     BENCH_CSV_COLUMNS,
-    SPY_FIELD_MAP,
-    SPY_LABEL_MAP,
+    BENCH_FIELD_MAP,
+    BENCH_LABEL_MAP,
     _evict_bench_row,
     _migrate_bench_header,
-    _normalize_spy_label,
-    parse_spy_quote,
+    _normalize_bench_label,
+    parse_bench_quote,
 )
 
 
@@ -85,7 +85,7 @@ FIXTURE_HTML_ALT_LABELS = """
 FIXTURE_HTML_EMPTY = "<html><body></body></html>"
 
 # 2026-09-20 (issue #419): full quote-page field set fixture. Exercises the
-# widened SPY_FIELD_MAP alongside the 7 perf labels.
+# widened BENCH_FIELD_MAP alongside the 7 perf labels.
 FIXTURE_HTML_QUOTE_FULL = """
 <html><body>
 <table class="snapshot-table2">
@@ -168,7 +168,7 @@ FIXTURE_HTML_UNKNOWN_LABEL = """
 """
 
 # 2026-08-07: Finviz renamed the quote-page daily-change label from "Change"
-# to "Change %". Both forms must resolve to perf_day (SPY_LABEL_MAP).
+# to "Change %". Both forms must resolve to perf_day (BENCH_LABEL_MAP).
 FIXTURE_HTML_CHANGE_PCT_LABEL = """
 <html><body>
 <table class="snapshot-table2">
@@ -189,12 +189,12 @@ FIXTURE_HTML_CHANGE_PCT_LABEL = """
 
 
 # ---------------------------------------------------------------------------
-# parse_spy_quote
+# parse_bench_quote
 # ---------------------------------------------------------------------------
 
 class TestParseSpyQuote:
     def _parse(self, html, date_str="2026-06-20"):
-        return parse_spy_quote(html, date_str, "2026-06-20T19:48:00Z")
+        return parse_bench_quote(html, "SPY", date_str, "2026-06-20T19:48:00Z")
 
     def test_all_7_metrics_populated(self):
         rec = self._parse(FIXTURE_HTML_FULL)
@@ -282,13 +282,13 @@ class TestEvictBenchRow:
                 writer.writerow({col: row.get(col, "") for col in BENCH_CSV_COLUMNS})
 
     def test_returns_zero_when_file_missing(self, tmp_path):
-        result = _evict_bench_row(tmp_path / "missing.csv", "2026-06-20")
+        result = _evict_bench_row(tmp_path / "missing.csv", "2026-06-20", "SPY")
         assert result == 0
 
     def test_returns_zero_when_date_not_present(self, tmp_path):
         path = tmp_path / "bench.csv"
         self._write_bench(path, [{"date": "2026-06-19", "ticker": "SPY"}])
-        result = _evict_bench_row(path, "2026-06-20")
+        result = _evict_bench_row(path, "2026-06-20", "SPY")
         assert result == 0
 
     def test_removes_matching_date_row(self, tmp_path):
@@ -297,7 +297,7 @@ class TestEvictBenchRow:
             {"date": "2026-06-19", "ticker": "SPY", "perf_week": "1.0"},
             {"date": "2026-06-20", "ticker": "SPY", "perf_week": "2.0"},
         ])
-        result = _evict_bench_row(path, "2026-06-20")
+        result = _evict_bench_row(path, "2026-06-20", "SPY")
         assert result == 1
         with open(path, newline="") as f:
             rows = list(csv.DictReader(f))
@@ -311,7 +311,7 @@ class TestEvictBenchRow:
             {"date": "2026-06-19", "ticker": "SPY", "perf_week": "1.0"},
             {"date": "2026-06-20", "ticker": "SPY", "perf_week": "2.0"},
         ])
-        _evict_bench_row(path, "2026-06-20")
+        _evict_bench_row(path, "2026-06-20", "SPY")
         with open(path, newline="") as f:
             rows = list(csv.DictReader(f))
         assert len(rows) == 2
@@ -320,12 +320,12 @@ class TestEvictBenchRow:
     def test_no_tmp_file_left_behind(self, tmp_path):
         path = tmp_path / "bench.csv"
         self._write_bench(path, [{"date": "2026-06-20", "ticker": "SPY"}])
-        _evict_bench_row(path, "2026-06-20")
+        _evict_bench_row(path, "2026-06-20", "SPY")
         assert not path.with_suffix(".tmp").exists()
 
 
 # ---------------------------------------------------------------------------
-# collect_spy — integration (mocked fetch, real CSV I/O)
+# collect_bench — integration (mocked fetch, real CSV I/O)
 # ---------------------------------------------------------------------------
 
 class TestCollectSpy:
@@ -335,7 +335,7 @@ class TestCollectSpy:
             "scripts.collect.fetch_html",
             lambda url, wait_selector=None: FIXTURE_HTML_FULL,
         )
-        collect_module.collect_spy(bench_path=bench_path)
+        collect_module.collect_bench("SPY", bench_path=bench_path)
         with open(bench_path, newline="") as f:
             rows = list(csv.DictReader(f))
         assert len(rows) == 1
@@ -350,14 +350,14 @@ class TestCollectSpy:
             "scripts.collect.fetch_html",
             lambda url, wait_selector=None: FIXTURE_HTML_FULL,
         )
-        collect_module.collect_spy(bench_path=bench_path)
+        collect_module.collect_bench("SPY", bench_path=bench_path)
         # Second run — same date, different data (simulate late-day update)
         html2 = FIXTURE_HTML_FULL.replace("1.23%", "1.99%")
         monkeypatch.setattr(
             "scripts.collect.fetch_html",
             lambda url, wait_selector=None: html2,
         )
-        collect_module.collect_spy(bench_path=bench_path)
+        collect_module.collect_bench("SPY", bench_path=bench_path)
         with open(bench_path, newline="") as f:
             rows = list(csv.DictReader(f))
         assert len(rows) == 1
@@ -365,7 +365,7 @@ class TestCollectSpy:
 
     def test_raises_when_partial_perf_cols_parsed(self, tmp_path, monkeypatch):
         # FIXTURE_HTML_DASH_VALUES has 7 labels but 4 are "-"/N/A/empty → only
-        # 3 non-None values. collect_spy must raise rather than silently write
+        # 3 non-None values. collect_bench must raise rather than silently write
         # a partial row (SPY always has full perf history; fewer than 7 = parser
         # failure, e.g. Finviz label change on the quote page).
         bench_path = tmp_path / "benchmark" / "snapshots.csv"
@@ -374,7 +374,7 @@ class TestCollectSpy:
             lambda url, wait_selector=None: FIXTURE_HTML_DASH_VALUES,
         )
         with pytest.raises(RuntimeError, match="perf values"):
-            collect_module.collect_spy(bench_path=bench_path)
+            collect_module.collect_bench("SPY", bench_path=bench_path)
 
     def test_raises_when_no_perf_cols_parsed(self, tmp_path, monkeypatch):
         bench_path = tmp_path / "benchmark" / "snapshots.csv"
@@ -383,7 +383,7 @@ class TestCollectSpy:
             lambda url, wait_selector=None: FIXTURE_HTML_EMPTY,
         )
         with pytest.raises(RuntimeError, match="perf values"):
-            collect_module.collect_spy(bench_path=bench_path)
+            collect_module.collect_bench("SPY", bench_path=bench_path)
 
     def test_creates_benchmark_directory(self, tmp_path, monkeypatch):
         bench_path = tmp_path / "nested" / "dir" / "snapshots.csv"
@@ -391,7 +391,7 @@ class TestCollectSpy:
             "scripts.collect.fetch_html",
             lambda url, wait_selector=None: FIXTURE_HTML_FULL,
         )
-        collect_module.collect_spy(bench_path=bench_path)
+        collect_module.collect_bench("SPY", bench_path=bench_path)
         assert bench_path.exists()
 
     def test_csv_has_correct_columns(self, tmp_path, monkeypatch):
@@ -400,7 +400,7 @@ class TestCollectSpy:
             "scripts.collect.fetch_html",
             lambda url, wait_selector=None: FIXTURE_HTML_FULL,
         )
-        collect_module.collect_spy(bench_path=bench_path)
+        collect_module.collect_bench("SPY", bench_path=bench_path)
         with open(bench_path, newline="") as f:
             reader = csv.DictReader(f)
             assert list(reader.fieldnames) == BENCH_CSV_COLUMNS
@@ -412,7 +412,7 @@ class TestCollectSpy:
 
 class TestQuoteFieldSet:
     def _parse(self, html, date_str="2026-09-18"):
-        return parse_spy_quote(html, date_str, "2026-09-18T19:48:00Z")
+        return parse_bench_quote(html, "SPY", date_str, "2026-09-18T19:48:00Z")
 
     def test_perf_cols_unchanged_in_name_order_and_value(self):
         # The original 7 perf_* columns must be untouched by the widening.
@@ -466,7 +466,7 @@ class TestQuoteFieldSet:
         assert rec["sales"] == "0.00"
         assert rec["optionable"] == "Yes"
         assert rec["shortable"] == "Yes"
-        assert rec["spy_index"] == "DJI S&P500"
+        assert rec["index"] == "DJI S&P500"
 
     def test_dash_values_become_none(self):
         rec = self._parse(FIXTURE_HTML_QUOTE_FULL)
@@ -487,7 +487,7 @@ class TestQuoteFieldSet:
         # Every appended CSV column is reachable from a Finviz label, and
         # every mapped field has a CSV column — the two stay in sync.
         new_cols = set(BENCH_CSV_COLUMNS[10:])
-        assert set(SPY_FIELD_MAP.values()) == new_cols
+        assert set(BENCH_FIELD_MAP.values()) == new_cols
 
     def test_unknown_label_captured_and_warned(self, capsys):
         rec = self._parse(FIXTURE_HTML_UNKNOWN_LABEL)
@@ -495,18 +495,18 @@ class TestQuoteFieldSet:
         assert rec["perf_day"] == pytest.approx(0.54)
         assert "Unknown SPY quote labels" in capsys.readouterr().err
 
-    def test_normalize_spy_label(self):
-        assert _normalize_spy_label("RSI (14)") == "rsi_14"
-        assert _normalize_spy_label("52W Range") == "52w_range"
-        assert _normalize_spy_label("Dividend Est.") == "dividend_est"
+    def test_normalize_bench_label(self):
+        assert _normalize_bench_label("RSI (14)") == "rsi_14"
+        assert _normalize_bench_label("52W Range") == "52w_range"
+        assert _normalize_bench_label("Dividend Est.") == "dividend_est"
 
-    def test_collect_spy_writes_new_columns(self, tmp_path, monkeypatch):
+    def test_collect_bench_writes_new_columns(self, tmp_path, monkeypatch):
         bench_path = tmp_path / "benchmark" / "snapshots.csv"
         monkeypatch.setattr(
             "scripts.collect.fetch_html",
             lambda url, wait_selector=None: FIXTURE_HTML_QUOTE_FULL,
         )
-        collect_module.collect_spy(bench_path=bench_path)
+        collect_module.collect_bench("SPY", bench_path=bench_path)
         with open(bench_path, newline="") as f:
             reader = csv.DictReader(f)
             assert list(reader.fieldnames) == BENCH_CSV_COLUMNS
@@ -527,7 +527,7 @@ class TestQuoteFieldSet:
             writer.writeheader()
             writer.writerow({"date": "2026-06-18", "ticker": "SPY", "perf_week": "0.5"})
             writer.writerow({"date": "2026-06-19", "ticker": "SPY", "perf_week": "1.0"})
-        _evict_bench_row(path, "2026-06-19")
+        _evict_bench_row(path, "2026-06-19", "SPY")
         with open(path, newline="") as f:
             reader = csv.DictReader(f)
             assert list(reader.fieldnames) == BENCH_CSV_COLUMNS
@@ -549,7 +549,7 @@ class TestQuoteFieldSet:
             writer.writerow({"date": "2026-06-18"})
         assert _migrate_bench_header(path) is False
 
-    def test_collect_spy_appends_onto_pre_existing_old_schema_file(self, tmp_path, monkeypatch):
+    def test_collect_bench_appends_onto_pre_existing_old_schema_file(self, tmp_path, monkeypatch):
         # Reproduces the production scenario: data/benchmark/snapshots.csv
         # already exists with the old 10-column header, and today's date is
         # NOT yet in the file (so _evict_bench_row alone is a no-op). Without
@@ -566,7 +566,7 @@ class TestQuoteFieldSet:
             "scripts.collect.fetch_html",
             lambda url, wait_selector=None: FIXTURE_HTML_QUOTE_FULL,
         )
-        collect_module.collect_spy(bench_path=bench_path)
+        collect_module.collect_bench("SPY", bench_path=bench_path)
 
         with open(bench_path, newline="") as f:
             reader = csv.DictReader(f)
@@ -578,3 +578,91 @@ class TestQuoteFieldSet:
         assert rows[0]["price"] == ""
         assert rows[1]["price"] == "684.12"
         assert rows[1]["rsi_14"] == "58.24"
+
+
+# ---------------------------------------------------------------------------
+# Multi-ticker benchmark (SPY/QQQ/IWM): (date, ticker) key, per-ticker URL,
+# main() failure policy, SPY-only RS reader.
+# ---------------------------------------------------------------------------
+
+class TestMultiTickerBenchmark:
+    def _patch_fetch(self, monkeypatch, fail=()):
+        urls = []
+
+        def fake_fetch(url, wait_selector=None):
+            urls.append(url)
+            if any(f"t={t}&" in url for t in fail):
+                raise RuntimeError("boom")
+            return FIXTURE_HTML_FULL
+
+        monkeypatch.setattr("scripts.collect.fetch_html", fake_fetch)
+        return urls
+
+    def test_bench_tickers_include_spy_qqq_iwm(self):
+        from scripts.delta_config import BENCH_TICKERS, RS_BENCHMARK_TICKER
+        assert BENCH_TICKERS[:3] == ["SPY", "QQQ", "IWM"]
+        assert RS_BENCHMARK_TICKER in BENCH_TICKERS
+
+    def test_fetches_ticker_specific_url_and_stamps_ticker(self, tmp_path, monkeypatch):
+        urls = self._patch_fetch(monkeypatch)
+        bench_path = tmp_path / "snapshots.csv"
+        collect_module.collect_bench("QQQ", bench_path=bench_path)
+        assert urls == ["https://finviz.com/stock?t=QQQ&p=d"]
+        with open(bench_path, newline="") as f:
+            rows = list(csv.DictReader(f))
+        assert [r["ticker"] for r in rows] == ["QQQ"]
+
+    def test_one_row_per_ticker_and_rerun_only_evicts_same_ticker(self, tmp_path, monkeypatch):
+        self._patch_fetch(monkeypatch)
+        bench_path = tmp_path / "snapshots.csv"
+        for t in ("SPY", "QQQ", "IWM"):
+            collect_module.collect_bench(t, bench_path=bench_path)
+        collect_module.collect_bench("QQQ", bench_path=bench_path)  # same-day re-run
+        with open(bench_path, newline="") as f:
+            rows = list(csv.DictReader(f))
+        assert sorted(r["ticker"] for r in rows) == ["IWM", "QQQ", "SPY"]
+        assert len({r["date"] for r in rows}) == 1
+
+    def test_evict_keeps_other_tickers_same_date(self, tmp_path):
+        path = tmp_path / "bench.csv"
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=BENCH_CSV_COLUMNS)
+            w.writeheader()
+            for t in ("SPY", "QQQ"):
+                w.writerow({c: {"date": "2026-06-20", "ticker": t}.get(c, "") for c in BENCH_CSV_COLUMNS})
+        assert _evict_bench_row(path, "2026-06-20", "QQQ") == 1
+        with open(path, newline="") as f:
+            assert [r["ticker"] for r in csv.DictReader(f)] == ["SPY"]
+
+    def _run_main(self, tmp_path, monkeypatch, fail):
+        self._patch_fetch(monkeypatch, fail=fail)
+        monkeypatch.setattr("scripts.collect.collect", lambda group_type: None)
+        real = collect_module.collect_bench
+        monkeypatch.setattr(
+            "scripts.collect.collect_bench",
+            lambda t: real(t, bench_path=tmp_path / "snapshots.csv"),
+        )
+        collect_module.main()
+
+    def test_main_secondary_etf_failure_does_not_exit_nonzero(self, tmp_path, monkeypatch, capsys):
+        self._run_main(tmp_path, monkeypatch, fail=("QQQ",))  # no SystemExit
+        assert "::warning::QQQ" in capsys.readouterr().out
+        with open(tmp_path / "snapshots.csv", newline="") as f:
+            assert sorted(r["ticker"] for r in csv.DictReader(f)) == ["IWM", "SPY"]
+
+    def test_main_spy_failure_exits_nonzero_after_other_tickers(self, tmp_path, monkeypatch):
+        with pytest.raises(SystemExit) as exc:
+            self._run_main(tmp_path, monkeypatch, fail=("SPY",))
+        assert exc.value.code == 1
+        with open(tmp_path / "snapshots.csv", newline="") as f:
+            assert sorted(r["ticker"] for r in csv.DictReader(f)) == ["IWM", "QQQ"]
+
+    def test_load_benchmark_returns_spy_rows_only(self, tmp_path, monkeypatch):
+        from scripts.compute_deltas import load_benchmark
+        self._patch_fetch(monkeypatch)
+        bench_path = tmp_path / "snapshots.csv"
+        for t in ("SPY", "QQQ", "IWM"):
+            collect_module.collect_bench(t, bench_path=bench_path)
+        df = load_benchmark(bench_path)
+        assert list(df["ticker"]) == ["SPY"]
+        assert df["perf_week"].iloc[0] == pytest.approx(1.23)

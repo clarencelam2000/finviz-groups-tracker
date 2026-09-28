@@ -21,7 +21,7 @@ SNAPSHOT_COLS = [
     "perf_half", "perf_year", "perf_ytd", "avg_volume", "rel_volume", "change",
 ]
 
-# data/benchmark/snapshots.csv columns (one SPY row per trading date).
+# data/benchmark/snapshots.csv columns (one row per (date, ticker); see BENCH_TICKERS).
 # Raw perf_* values are stored here — never derived spreads. This is the
 # two-way-door invariant: rs_ratio and RRG axes are retroactively derivable
 # from raw perf_* without data loss. See ADR-005.
@@ -50,8 +50,20 @@ BENCH_CSV_COLUMNS = [
     "dividend", "dividend_ttm", "dividend_est", "payout",
     "income", "sales",
     "optionable", "shortable",
-    "spy_index", "employees",
+    "index", "employees",
 ]
+
+# Benchmark ETFs scraped into data/benchmark/snapshots.csv, one row per
+# (date, ticker). Adding a ticker here is all it takes to start collecting it
+# (one extra quote-page fetch, ~5-10s, per collect.py run). Rows before
+# 2026-09-28 are SPY-only; QQQ/IWM history starts on the first run after.
+# Order matters only for log output; RS_BENCHMARK_TICKER is always fetched.
+BENCH_TICKERS = ["SPY", "QQQ", "IWM"]
+
+# The ticker compute_deltas.py (rs_* columns) and evaluate_picks.py (alpha vs
+# market) measure against. Every benchmark reader MUST filter to this ticker —
+# the file holds several ETFs per date. Must be a member of BENCH_TICKERS.
+RS_BENCHMARK_TICKER = "SPY"
 
 # The 7 performance columns within BENCH_CSV_COLUMNS. All 7 must parse
 # successfully for a SPY scrape to be valid — SPY always has full perf history,
