@@ -362,8 +362,9 @@ def evict_today_rows(csv_path: Path, date_str: str) -> int:
     with open(csv_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         all_rows = list(reader)
-    kept = [r for r in all_rows
-            if not (r.get("date") == date_str and r.get("ticker") == ticker)]
+    # Group snapshots have no ticker column — evict on date alone (unlike
+    # _evict_bench_row, which is keyed on (date, ticker)).
+    kept = [r for r in all_rows if r.get("date") != date_str]
     evicted = len(all_rows) - len(kept)
     if evicted == 0:
         return 0
