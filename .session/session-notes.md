@@ -397,3 +397,18 @@ release surface updated in the same PR. Non-Playwright pytest suite green (797 p
 **Next steps / deferred (SPRINT § AGENT-FEED):**
 - Fast-follow: read-only authenticated endpoint on worker-positions (`GET /positions/summary`) + vaulted token for Muse, if/when owner wants position-aware answers. Security-sensitive; needs explicit sign-off. Prefer a narrow REST endpoint over handing Muse Cloudflare/wrangler account keys (blast-radius).
 - Verify the two new workflow steps actually run green in Actions on the next scheduled collect (couldn't run collect.py in cloud — Cloudflare blocks it).
+
+---
+
+## 2026-09-28 — PR #425 review + multi-ETF benchmark extension (SPY/QQQ/IWM)
+
+**Status:** safe to close once the stacked PR is reviewed. Nothing merged by Claude.
+
+**What landed (branch `claude/pr425-etf-extension-9psr9a`, PR stacked onto `feat/spy-full-columns` / #425):**
+- Reviewed #425: sound, merges clean, tests pass. Findings: unknown quote labels were *dropped*, not "captured" as the docstring/warning claimed (now worded correctly); `BENCH_FIELD_MAP` mirrors the stock page, ETF-page labels unverified.
+- Generalised the benchmark scrape to `BENCH_TICKERS = ["SPY","QQQ","IWM"]` (`delta_config.py`), eviction key `(date, ticker)`, renames `spy_index`→`index`, `SPY_*`→`BENCH_*`, `parse_spy_quote`→`parse_bench_quote`, `collect_spy`→`collect_bench`.
+- `RS_BENCHMARK_TICKER = "SPY"`: `compute_deltas.load_benchmark` and `evaluate_picks.compute_scores` now filter to it. The evaluate_picks filter matters: its `drop_duplicates(keep="last")` would otherwise have silently scored picks against IWM.
+- Only a SPY failure exits collect.py non-zero; QQQ/IWM failures emit `::warning::` — a non-zero exit would skip deltas and fail the picks gate for the day.
+- Docs: CLAUDE.md benchmark section, README data tree + config table (`BENCH_TICKERS`, `RS_BENCHMARK_TICKER`).
+
+**Next steps:** merge #425 then the stacked PR (or retarget), dispatch `collect.yml` once, do BENCH-ETF-2 (add real ETF labels). BENCH-ETF-3/4 in SPRINT backlog.

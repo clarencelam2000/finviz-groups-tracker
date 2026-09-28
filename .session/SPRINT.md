@@ -8,6 +8,12 @@
 
 ### 🔴 Backlog
 
+#### Benchmark ETF follow-ups (BENCH-ETF, 2026-09-28)
+
+- **BENCH-ETF-2** — After the first live `collect.yml` run with PR #425 + the stacked PR merged: read the `[warn] Unknown <T> quote labels` lines for SPY/QQQ/IWM and add those labels to `BENCH_FIELD_MAP` + `BENCH_CSV_COLUMNS`. `BENCH_FIELD_MAP` was modelled on the *stock* quote page; ETF pages likely show different fields (expense ratio, NAV, holdings, AUM, flows...) which are currently dropped. Also confirm all 7 perf labels parse for QQQ/IWM. Nothing was verified live from the cloud sandbox (Cloudflare).
+- **BENCH-ETF-3** — Agent feed contract: `data/api/manifest.json`'s `history.benchmark_snapshots` now has 3 rows per date. Decide whether to bump `build_signals.SCHEMA_VERSION` / add a manifest note telling external agents to filter `ticker`.
+- **BENCH-ETF-4** — Consumers for QQQ/IWM (e.g. RS vs QQQ for tech groups, SPY-vs-IWM breadth/regime read in the PWA). Nothing reads them yet — pure collection for now.
+
 #### Agent feed → private book access (AGENT-FEED, 2026-09-17)
 
 Public read-only feed (`scripts/build_signals.py` → `data/api/{manifest,latest_signals}.json`)
@@ -479,6 +485,7 @@ Full plan: `planning/PLAN_sector_industry_hierarchy.md` — 22 features across 5
 
 | # | Task | Branch | Notes |
 |---|------|--------|-------|
+| BENCH-ETF-1 | **Full ETF quote-page scrape for SPY + QQQ + IWM** (#419, PR #425 + stacked PR) | `feat/spy-full-columns` ← `claude/pr425-etf-extension-9psr9a` | #425 widens `data/benchmark/snapshots.csv` to the full quote-page field set. Stacked PR generalises it: `BENCH_TICKERS`/`RS_BENCHMARK_TICKER` in `delta_config.py`, `(date, ticker)` eviction key, `spy_index`→`index`, `parse_bench_quote`/`collect_bench`, SPY-only filter in `compute_deltas.load_benchmark` + `evaluate_picks.compute_scores`. Only a SPY failure exits collect.py non-zero. Needs one live `collect.yml` run — see BENCH-ETF-2. |
 | WS5-2 | **Held-tickers feed → `ticker_quotes`** (#297, #312) | `claude/ws5-phase2-held-feed-gez3ja` | Mechanical plumbing landed (not yet committed at time of writing): `scripts/collect_held.py` (reuses `collect_morning.fetch_ticker_quotes(block="held")`) + `tests/test_collect_held.py` + `.github/workflows/collect_held.yml` (D1-write-via-HTTP, no git commit step) + `worker-cron` `held` scheduled job (17:30 ET, ungated). Worker endpoints (`GET /held-tickers`, `POST /ingest/quotes`) landed separately on `worker-positions/**` (security-critical, lead-owned). Not yet exercised against live D1/positions — see `worker-positions/README.md` § Phase status. **2026-08-13 first manual `collect_held.yml` dispatch failed** (`GET /held-tickers failed: HTTP 403 Forbidden`) — root cause was NOT missing secrets (owner had set both `POSITIONS_WORKER_URL`/`POSITIONS_INGEST_TOKEN` correctly); Cloudflare's Bot Fight Mode on the `*.workers.dev` zone blocks the default `Python-urllib/x.y` User-Agent with error 1010 before the request reaches the Worker's own auth code (verified live: even `/health`, unauthenticated, 403s under that UA). Fixed by setting a non-generic `User-Agent` header in `_authed_request()`; regression test added. Re-run `collect_held.yml` to confirm end-to-end before considering go-live complete.
 
 ---
