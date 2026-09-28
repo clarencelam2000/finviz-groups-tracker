@@ -487,7 +487,8 @@ def parse_bench_quote(html: str, ticker: str, snapshot_date: str, collected_at: 
     perf_* keep their parsed float values (unchanged in name, order, and
     value); every other field is stored as raw stripped text. Labels not in
     either map are kept in the returned dict under a normalized name and
-    warned about (CI-visible), but the CSV writer only persists
+    warned about (CI-visible) — prefixed `unmapped_` if that name would
+    collide with a real column — but the CSV writer only persists
     BENCH_CSV_COLUMNS — so an unknown label is DROPPED from the CSV until it
     is added to BENCH_FIELD_MAP + BENCH_CSV_COLUMNS. The warning is the signal. Any missing label leaves the column as None.
     """
@@ -522,7 +523,13 @@ def parse_bench_quote(html: str, ticker: str, snapshot_date: str, collected_at: 
             rec[BENCH_FIELD_MAP[label]] = _parse_raw(value)
         elif label and label not in unknown:
             unknown.append(label)
-            rec[_normalize_bench_label(label)] = _parse_raw(value)
+            key = _normalize_bench_label(label)
+            # An unmapped label whose normalized name collides with a real
+            # column (e.g. a renamed "Perf. Week" -> perf_week) must not
+            # clobber it — perf_* would get raw text instead of a float.
+            if key in BENCH_CSV_COLUMNS:
+                key = f"unmapped_{key}"
+            rec[key] = _parse_raw(value)
 
     if unknown:
         print(

@@ -167,6 +167,19 @@ FIXTURE_HTML_UNKNOWN_LABEL = """
 </body></html>
 """
 
+# Unmapped label whose normalized name collides with a real column
+# ("Perf. Week" -> perf_week), placed AFTER the mapped label so it would win.
+FIXTURE_HTML_COLLIDING_LABEL = """
+<html><body>
+<table class="snapshot-table2">
+  <tr>
+    <td>Perf Week</td><td>1.23%</td>
+    <td>Perf. Week</td><td>9.99%</td>
+  </tr>
+</table>
+</body></html>
+"""
+
 # 2026-08-07: Finviz renamed the quote-page daily-change label from "Change"
 # to "Change %". Both forms must resolve to perf_day (BENCH_LABEL_MAP).
 FIXTURE_HTML_CHANGE_PCT_LABEL = """
@@ -494,6 +507,12 @@ class TestQuoteFieldSet:
         assert rec["quantum_flux"] == "42"
         assert rec["perf_day"] == pytest.approx(0.54)
         assert "Unknown SPY quote labels" in capsys.readouterr().err
+
+    def test_unknown_label_cannot_clobber_real_column(self, capsys):
+        rec = self._parse(FIXTURE_HTML_COLLIDING_LABEL)
+        assert rec["perf_week"] == pytest.approx(1.23)
+        assert rec["unmapped_perf_week"] == "9.99%"
+        assert "Perf. Week" in capsys.readouterr().err
 
     def test_normalize_bench_label(self):
         assert _normalize_bench_label("RSI (14)") == "rsi_14"
