@@ -349,3 +349,12 @@ exact block), but worth a quick spot-check on the next PWA session.
 
 **Next steps:** none blocking. If Conviction/Headline are ever wanted back, the pre-removal
 prompt/parser is in git history (see the `TASK_SPECS` comment in `generate_ai.py`).
+
+---
+
+## 2026-09-29 — process: `restate-intent` skill
+
+- **Status:** safe to close.
+- **Landed:** `.claude/skills/restate-intent/SKILL.md` + a CLAUDE.md "Restate intent" rule (under Session continuity). Doc/process only — no code, data, or PWA change, so no release triplet.
+- **Why:** owner wants a plain-language restatement of goal + problem after long/rambling messages, before any work. Skill is committed per-repo (user-level skills aren't versioned and don't persist in cloud sessions); mirrored in the `distil` repo.
+- **Next steps:** none.
