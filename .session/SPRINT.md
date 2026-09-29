@@ -8,6 +8,10 @@
 
 ### 🔴 Backlog
 
+#### Process (2026-09-29)
+
+- [x] `restate-intent` skill + CLAUDE.md rule (`.claude/skills/restate-intent/`) — ✅ Done 2026-09-29. Mirrors the same skill added to the `distil` repo.
+
 #### Agent feed → private book access (AGENT-FEED, 2026-09-17)
 
 Public read-only feed (`scripts/build_signals.py` → `data/api/{manifest,latest_signals}.json`)
