@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-09-30T21:15:23Z",
+  "generated_at": "2026-09-30T23:14:52Z",
   "as_of": "2026-09-30",
   "session": "eod",
   "data_branch": "claude/elegant-babbage-hlxnfy",
@@ -40,8 +40,8 @@
     {
       "group": "Footwear & Accessories",
       "rank_ytd": 141.0,
-      "regime_short_long": 0.4534,
-      "momentum_score": 0.1935,
+      "regime_short_long": 0.4569,
+      "momentum_score": 0.1946,
       "rs_score": 0.0
     },
     {
@@ -73,17 +73,17 @@
       "rs_score": 0.5
     },
     {
-      "group": "Utilities - Regulated Electric",
-      "rank_ytd": 89.0,
-      "regime_short_long": 0.359,
-      "momentum_score": 0.3916,
+      "group": "Apparel Manufacturing",
+      "rank_ytd": 102.0,
+      "regime_short_long": 0.3601,
+      "momentum_score": 0.4254,
       "rs_score": 0.1667
     },
     {
-      "group": "Apparel Manufacturing",
-      "rank_ytd": 102.0,
-      "regime_short_long": 0.3566,
-      "momentum_score": 0.4242,
+      "group": "Utilities - Regulated Electric",
+      "rank_ytd": 89.0,
+      "regime_short_long": 0.3601,
+      "momentum_score": 0.3939,
       "rs_score": 0.1667
     },
     {
@@ -123,15 +123,15 @@
       "rank_delta": 43.0
     },
     {
+      "group": "Real Estate - Diversified",
+      "timeframe": "20d",
+      "to_rank": 71.0,
+      "rank_delta": 37.0
+    },
+    {
       "group": "Department Stores",
       "timeframe": "20d",
       "to_rank": 60.0,
-      "rank_delta": 36.0
-    },
-    {
-      "group": "Real Estate - Diversified",
-      "timeframe": "20d",
-      "to_rank": 72.0,
       "rank_delta": 36.0
     },
     {
@@ -251,22 +251,16 @@
       "rank_delta": -19.0
     },
     {
-      "group": "Gold",
-      "timeframe": "20d",
-      "to_rank": 66.0,
-      "rank_delta": -18.0
-    },
-    {
       "group": "Agricultural Inputs",
       "timeframe": "20d",
       "to_rank": 39.0,
       "rank_delta": -17.0
     },
     {
-      "group": "Capital Markets",
+      "group": "Gold",
       "timeframe": "20d",
-      "to_rank": 69.0,
-      "rank_delta": -16.0
+      "to_rank": 65.0,
+      "rank_delta": -17.0
     },
     {
       "group": "Integrated Freight & Logistics",
@@ -279,6 +273,12 @@
       "timeframe": "20d",
       "to_rank": 106.0,
       "rank_delta": -16.0
+    },
+    {
+      "group": "Capital Markets",
+      "timeframe": "20d",
+      "to_rank": 68.0,
+      "rank_delta": -15.0
     },
     {
       "group": "Telecom Services",
