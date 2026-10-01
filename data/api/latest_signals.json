@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-10-01T19:52:31Z",
+  "generated_at": "2026-10-01T21:02:20Z",
   "as_of": "2026-10-01",
   "session": "eod",
   "data_branch": "claude/elegant-babbage-hlxnfy",
@@ -12,29 +12,43 @@
     {
       "group": "Luxury Goods",
       "rank_ytd": 101.0,
-      "regime_short_long": 0.6247,
-      "momentum_score": 0.5012,
+      "regime_short_long": 0.627,
+      "momentum_score": 0.5058,
       "rs_score": 0.3333
     },
     {
       "group": "Footwear & Accessories",
       "rank_ytd": 141.0,
-      "regime_short_long": 0.5198,
-      "momentum_score": 0.2506,
+      "regime_short_long": 0.4988,
+      "momentum_score": 0.2436,
       "rs_score": 0.0
     },
     {
       "group": "Apparel Manufacturing",
-      "rank_ytd": 99.0,
-      "regime_short_long": 0.4604,
-      "momentum_score": 0.472,
+      "rank_ytd": 100.0,
+      "regime_short_long": 0.4627,
+      "momentum_score": 0.4755,
       "rs_score": 0.1667
     },
     {
+      "group": "Electronic Gaming & Multimedia",
+      "rank_ytd": 130.0,
+      "regime_short_long": 0.4487,
+      "momentum_score": 0.3368,
+      "rs_score": 0.0
+    },
+    {
       "group": "Grocery Stores",
-      "rank_ytd": 104.0,
-      "regime_short_long": 0.4336,
-      "momentum_score": 0.4301,
+      "rank_ytd": 105.0,
+      "regime_short_long": 0.4394,
+      "momentum_score": 0.4289,
+      "rs_score": 0.1667
+    },
+    {
+      "group": "Information Technology Services",
+      "rank_ytd": 134.0,
+      "regime_short_long": 0.4312,
+      "momentum_score": 0.4895,
       "rs_score": 0.1667
     },
     {
@@ -45,52 +59,45 @@
       "rs_score": 0.3333
     },
     {
-      "group": "Electronic Gaming & Multimedia",
-      "rank_ytd": 130.0,
-      "regime_short_long": 0.4254,
-      "momentum_score": 0.3252,
-      "rs_score": 0.0
-    },
-    {
-      "group": "Information Technology Services",
-      "rank_ytd": 134.0,
-      "regime_short_long": 0.4254,
-      "momentum_score": 0.4895,
+      "group": "Leisure",
+      "rank_ytd": 114.0,
+      "regime_short_long": 0.4079,
+      "momentum_score": 0.3963,
       "rs_score": 0.1667
     },
     {
-      "group": "Leisure",
-      "rank_ytd": 113.0,
-      "regime_short_long": 0.4068,
-      "momentum_score": 0.4009,
+      "group": "Apparel Retail",
+      "rank_ytd": 94.0,
+      "regime_short_long": 0.3893,
+      "momentum_score": 0.5513,
       "rs_score": 0.1667
     },
     {
       "group": "Mortgage Finance",
       "rank_ytd": 142.0,
-      "regime_short_long": 0.3916,
-      "momentum_score": 0.1562,
+      "regime_short_long": 0.3881,
+      "momentum_score": 0.155,
       "rs_score": 0.0
-    },
-    {
-      "group": "Apparel Retail",
-      "rank_ytd": 94.0,
-      "regime_short_long": 0.3811,
-      "momentum_score": 0.5466,
-      "rs_score": 0.1667
     },
     {
       "group": "Utilities - Regulated Electric",
       "rank_ytd": 88.0,
-      "regime_short_long": 0.366,
-      "momentum_score": 0.3718,
+      "regime_short_long": 0.3706,
+      "momentum_score": 0.3753,
       "rs_score": 0.1667
     },
     {
       "group": "Utilities - Diversified",
       "rank_ytd": 92.0,
-      "regime_short_long": 0.3462,
-      "momentum_score": 0.4266,
+      "regime_short_long": 0.3473,
+      "momentum_score": 0.4289,
+      "rs_score": 0.1667
+    },
+    {
+      "group": "Solar",
+      "rank_ytd": 139.0,
+      "regime_short_long": 0.345,
+      "momentum_score": 0.183,
       "rs_score": 0.1667
     },
     {
@@ -101,18 +108,11 @@
       "rs_score": 0.1667
     },
     {
-      "group": "Solar",
-      "rank_ytd": 139.0,
-      "regime_short_long": 0.3368,
-      "momentum_score": 0.1783,
-      "rs_score": 0.0
-    },
-    {
-      "group": "Personal Services",
-      "rank_ytd": 137.0,
-      "regime_short_long": 0.3275,
-      "momentum_score": 0.1853,
-      "rs_score": 0.1667
+      "group": "Engineering & Construction",
+      "rank_ytd": 25.0,
+      "regime_short_long": 0.3333,
+      "momentum_score": 0.6772,
+      "rs_score": 0.6667
     }
   ],
   "top_movers": [
@@ -137,8 +137,8 @@
     {
       "group": "Airlines",
       "timeframe": "20d",
-      "to_rank": 87.0,
-      "rank_delta": 30.0
+      "to_rank": 86.0,
+      "rank_delta": 31.0
     },
     {
       "group": "Diagnostics & Research",
@@ -155,14 +155,20 @@
     {
       "group": "Lodging",
       "timeframe": "20d",
-      "to_rank": 48.0,
-      "rank_delta": 23.0
+      "to_rank": 49.0,
+      "rank_delta": 22.0
     },
     {
       "group": "Aerospace & Defense",
       "timeframe": "20d",
-      "to_rank": 86.0,
-      "rank_delta": 22.0
+      "to_rank": 87.0,
+      "rank_delta": 21.0
+    },
+    {
+      "group": "Department Stores",
+      "timeframe": "20d",
+      "to_rank": 64.0,
+      "rank_delta": 20.0
     },
     {
       "group": "Luxury Goods",
@@ -173,8 +179,14 @@
     {
       "group": "Medical Care Facilities",
       "timeframe": "20d",
-      "to_rank": 59.0,
-      "rank_delta": 20.0
+      "to_rank": 60.0,
+      "rank_delta": 19.0
+    },
+    {
+      "group": "Rental & Leasing Services",
+      "timeframe": "20d",
+      "to_rank": 46.0,
+      "rank_delta": 19.0
     },
     {
       "group": "Building Products & Equipment",
@@ -183,27 +195,15 @@
       "rank_delta": 18.0
     },
     {
-      "group": "Department Stores",
-      "timeframe": "20d",
-      "to_rank": 66.0,
-      "rank_delta": 18.0
-    },
-    {
-      "group": "Rental & Leasing Services",
-      "timeframe": "20d",
-      "to_rank": 47.0,
-      "rank_delta": 18.0
-    },
-    {
-      "group": "Grocery Stores",
-      "timeframe": "20d",
-      "to_rank": 104.0,
-      "rank_delta": 16.0
-    },
-    {
       "group": "Industrial Distribution",
       "timeframe": "20d",
       "to_rank": 44.0,
+      "rank_delta": 16.0
+    },
+    {
+      "group": "Specialty Industrial Machinery",
+      "timeframe": "20d",
+      "to_rank": 36.0,
       "rank_delta": 16.0
     }
   ],
@@ -217,8 +217,8 @@
     {
       "group": "Coking Coal",
       "timeframe": "20d",
-      "to_rank": 100.0,
-      "rank_delta": -60.0
+      "to_rank": 99.0,
+      "rank_delta": -59.0
     },
     {
       "group": "Aluminum",
@@ -241,14 +241,14 @@
     {
       "group": "Thermal Coal",
       "timeframe": "20d",
-      "to_rank": 90.0,
-      "rank_delta": -28.0
+      "to_rank": 89.0,
+      "rank_delta": -27.0
     },
     {
       "group": "Gold",
       "timeframe": "20d",
-      "to_rank": 67.0,
-      "rank_delta": -21.0
+      "to_rank": 69.0,
+      "rank_delta": -23.0
     },
     {
       "group": "Packaged Foods",
@@ -263,27 +263,9 @@
       "rank_delta": -18.0
     },
     {
-      "group": "Restaurants",
-      "timeframe": "20d",
-      "to_rank": 110.0,
-      "rank_delta": -17.0
-    },
-    {
-      "group": "Telecom Services",
-      "timeframe": "20d",
-      "to_rank": 97.0,
-      "rank_delta": -17.0
-    },
-    {
       "group": "Auto & Truck Dealerships",
       "timeframe": "20d",
       "to_rank": 122.0,
-      "rank_delta": -16.0
-    },
-    {
-      "group": "Capital Markets",
-      "timeframe": "20d",
-      "to_rank": 69.0,
       "rank_delta": -16.0
     },
     {
@@ -291,6 +273,24 @@
       "timeframe": "20d",
       "to_rank": 70.0,
       "rank_delta": -16.0
+    },
+    {
+      "group": "REIT - Office",
+      "timeframe": "20d",
+      "to_rank": 78.0,
+      "rank_delta": -16.0
+    },
+    {
+      "group": "Telecom Services",
+      "timeframe": "20d",
+      "to_rank": 96.0,
+      "rank_delta": -16.0
+    },
+    {
+      "group": "Capital Markets",
+      "timeframe": "20d",
+      "to_rank": 68.0,
+      "rank_delta": -15.0
     },
     {
       "group": "Farm Products",
