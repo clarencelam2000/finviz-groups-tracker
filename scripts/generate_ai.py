@@ -716,40 +716,6 @@ def serialize_watchlist_candidates(snap_df: pd.DataFrame, delta_df: pd.DataFrame
 # Focused briefing prompts (one job each — better adherence than one mega-prompt)
 # ---------------------------------------------------------------------------
 
-def build_pulse_prompt(group_type: str, snap_df: pd.DataFrame,
-                       delta_df: pd.DataFrame, date_str: str) -> str:
-    """Headline + Conviction. Fed quantified breadth so the rating is grounded."""
-    group_name = "sectors" if group_type == "sector" else "industries"
-    state = serialize_breadth_metrics(snap_df, delta_df)
-    movers = serialize_top_movers(delta_df, n=5)
-    divergences = serialize_divergences(snap_df, delta_df)
-    return f"""You are a markets strategist summarizing US {group_name} for {date_str}.
-
-Use ONLY the data below. Do not invent numbers or {group_name} not present.
-
-Respond in Markdown with EXACTLY these two `##` sections, in order, nothing before the first header, no `###`:
-
-## Headline
-One punchy line, 12 words or fewer, capturing today's single most important {group_name} takeaway. No bullet, no bold.
-
-## Conviction
-Exactly two lines:
-Level: <one of High, Medium, Low>
-Why: <one sentence citing the breadth %, mean agreement, and divergence count>
-
-Set the level by these thresholds (use the MARKET STATE numbers):
-- High: all-green breadth >55% AND mean rank agreement >0.65 AND few divergences.
-- Low: all-green breadth <30% OR many fading divergences.
-- Medium: anything in between.
-
-DATA:
-{state}
-
-{movers}
-
-{divergences}"""
-
-
 def build_rotation_map_prompt(group_type: str, snap_df: pd.DataFrame,
                               delta_df: pd.DataFrame, date_str: str) -> str:
     """Rotation Map only — with a strict pairing guardrail and an escape hatch."""
@@ -850,56 +816,15 @@ def _split_markdown_sections(text: str, alias_map) -> dict:
     return sections
 
 
-_PULSE_ALIASES = [
-    ("headline", ("headline", "daily headline", "tl;dr")),
-    ("conviction", ("conviction", "conviction meter")),
-]
 _RISK_ALIASES = [
     ("relative_strength", ("relative strength", "relative strength vs s&p", "rs", "vs market")),
     ("risks", ("risks", "risks & fragility", "risks and fragility", "fragility")),
 ]
 
 
-def parse_pulse_response(text: str) -> dict:
-    """Parse the pulse call into {headline, conviction:{level,why}}."""
-    sections = _split_markdown_sections(text, _PULSE_ALIASES)
-    if "conviction" in sections:
-        sections["conviction"] = _parse_conviction(sections["conviction"])
-    return sections
-
-
 def parse_risk_radar_response(text: str) -> dict:
     """Parse the risk-radar call into {relative_strength, risks}."""
     return _split_markdown_sections(text, _RISK_ALIASES)
-
-
-def _parse_conviction(body: str) -> dict:
-    """Parse the conviction body into {level, why}. Tolerant of missing prefixes:
-    falls back to a word-boundary scan for a High/Medium/Low token (so a phrase
-    like 'Medium-term risk' in a Why line does NOT get mistaken for the level)."""
-    result = {"level": "", "why": ""}
-    for line in body.split("\n"):
-        low = line.strip().lower()
-        if low.startswith("level:"):
-            result["level"] = line.split(":", 1)[1].strip()
-        elif low.startswith("why:") or low.startswith("reasoning:"):
-            result["why"] = line.split(":", 1)[1].strip()
-    if not result["level"]:
-        # Only scan lines that aren't the Why line, with word boundaries.
-        for line in body.split("\n"):
-            if line.strip().lower().startswith("why:"):
-                continue
-            m = re.search(r"\b(High|Medium|Low)\b", line, re.IGNORECASE)
-            if m:
-                result["level"] = m.group(1).capitalize()
-                break
-    if not result["why"]:
-        for line in body.split("\n"):
-            s = line.strip()
-            if s and not s.lower().startswith("level:"):
-                result["why"] = s
-                break
-    return result
 
 
 def build_note_prompt(group_type: str, snap_df: pd.DataFrame,
@@ -1016,15 +941,6 @@ def _input_phase(snap_df: pd.DataFrame, delta_df: pd.DataFrame) -> str:
     return "\n\n".join(p for p in parts if p)
 
 
-def _input_pulse(group_type: str, snap_df: pd.DataFrame, delta_df: pd.DataFrame) -> str:
-    parts = [
-        serialize_breadth_metrics(snap_df, delta_df),
-        serialize_top_movers(delta_df, n=5),
-        serialize_divergences(snap_df, delta_df),
-    ]
-    return "\n\n".join(p for p in parts if p)
-
-
 def _input_rotation_map(group_type: str, snap_df: pd.DataFrame, delta_df: pd.DataFrame) -> str:
     return serialize_rotation_pairs(snap_df, delta_df, n=5)
 
@@ -1063,17 +979,20 @@ def _build_prompt(spec: dict, group_type: str, snap_df, delta_df, date_str: str)
 #
 #   note          × 2 (sector + industry)  = 2 calls
 #   rotation_phase × 1 (sector only)       = 1 call
-#   pulse          × 2                     = 2 calls
 #   rotation_map   × 2                     = 2 calls
 #   watchlist      × 2                     = 2 calls
 #   risk_radar     × 2                     = 2 calls
-#                                  TOTAL   = 11 calls/run × 3 runs/day = ~33/day
+#                                  TOTAL   = 9 calls/run × 3 runs/day = ~27/day
+#
+# The "pulse" task (headline + conviction) was removed 2026-09-23 — not useful
+# display-wise and it was 2 calls/run of pure AI spend for no benefit.  See git
+# history for the pre-removal prompt/parser if it's ever wanted back.
 #
 # This is intentionally more calls than the original single-call design.  Each
 # task has its own focused prompt and purpose-curated input, so adherence and
 # output quality are much better.  The cost increase is acceptable on Vertex AI
 # (no per-day request ceiling; pay-per-token).  If budget becomes a concern,
-# the four briefing tasks (pulse/rotation_map/watchlist/risk_radar) can be
+# the three remaining briefing tasks (rotation_map/watchlist/risk_radar) can be
 # collapsed back into one call by merging their prompts and re-adding a combined
 # parser — see git history for the pre-refactor design.
 TASK_SPECS = [
@@ -1094,22 +1013,11 @@ TASK_SPECS = [
     },
     # ---- Focused briefing tasks (one job per call) ---------------------------
     # On Vertex AI there is no per-day request ceiling, so the single mega-call
-    # is split into four: pulse (headline+conviction), rotation_map, watchlist,
-    # and risk_radar (RS+risks).  Each prompt does one job, which dramatically
-    # improves section adherence and isolates failures (a bad watchlist response
-    # doesn't corrupt the rotation map).  Low temps on structural tasks keep the
-    # bullet/label syntax stable; pulse/risk allow a little more creativity.
-    {
-        "name": "pulse",
-        # headline: one punchy line. conviction: High/Med/Low + one-sentence why.
-        # Parsed into {headline: str, conviction: {level: str, why: str}}.
-        "group_types": ("sector", "industry"),
-        "build_prompt": build_pulse_prompt,
-        "input_fn": _input_pulse,
-        "pass_group_type": True,
-        "parse": parse_pulse_response,
-        "generation_config": {"temperature": 0.4},
-    },
+    # is split into three: rotation_map, watchlist, and risk_radar (RS+risks).
+    # Each prompt does one job, which dramatically improves section adherence
+    # and isolates failures (a bad watchlist response doesn't corrupt the
+    # rotation map). Low temps on structural tasks keep the bullet/label
+    # syntax stable; risk allows a little more creativity.
     {
         "name": "rotation_map",
         # Freeform markdown string — OUT->IN pairing bullets, or plain
@@ -1531,7 +1439,7 @@ def _run_preview(date_str: str, task_filter: str = None,
 
     Usage:
         python scripts/generate_ai.py --preview [--date YYYY-MM-DD]
-                                                 [--task pulse] [--group sector]
+                                                 [--task note] [--group sector]
                                                  [--json]
     """
     print(f"[preview] Building prompts for {date_str} — no API calls")
@@ -1630,7 +1538,7 @@ def main():
     parser.add_argument("--preview", action="store_true",
                         help="Build prompts from CSVs and print them (no API calls, no creds required)")
     parser.add_argument("--task", default=None,
-                        help="With --preview: limit to one task name (e.g. pulse, note)")
+                        help="With --preview: limit to one task name (e.g. note, watchlist)")
     parser.add_argument("--group", default=None, choices=["sector", "industry"],
                         help="With --preview: limit to one group type")
     parser.add_argument("--json", dest="as_json", action="store_true",

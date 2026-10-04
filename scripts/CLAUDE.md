@@ -405,7 +405,7 @@ AI-selected read; the third just moves sentence wording from the model to the ap
 
 **Preview mode (no creds needed):**
 ```bash
-python scripts/generate_ai.py --preview [--task pulse] [--group sector] [--json]
+python scripts/generate_ai.py --preview [--task note] [--group sector] [--json]
 ```
 Builds prompts from existing CSVs and writes Tier-1 provenance — no API call, no credentials required. Add `--date YYYY-MM-DD` to use a specific date (defaults to latest snapshot date).
 

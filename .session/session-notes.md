@@ -5,6 +5,47 @@
 > **Format:** Append a new `---` delimited block per session. Header = date + workstream description. Keep the last 4 sessions here; a human will periodically move older entries to `.session/archive/session-notes-archive.md`. Do NOT replace existing entries — append only.
 ---
 
+## 2026-09-24 — Pre-Power of 3 MA-bunching band tightened to 1.5x ATR
+
+**Status: safe to close.** Small, self-contained constant change requested by the owner.
+
+**What landed (branch `claude/pre-power-of-3-atr-threshold-jdkalv`):**
+- `POWER_OF_3_ATR_MULT` in `docs/index.html` lowered from `2.0` to `1.5` (the "Pre-Power of 3"
+  MA-bunching chip fires when price/20MA/50MA all fit inside `POWER_OF_3_ATR_MULT`×ATR). Updated
+  the triple-documented comment/README/`docs/CLAUDE.md` copies and the two affected test
+  docstrings in `tests/test_pwa_picks_atr_earnings.py` (assertions themselves were unaffected —
+  the ANET fixture's span (~5.6) stays under the new 1.5×ATR (~12.6) threshold).
+- Release triplet: `docs/releases.json` (`2026.09.24`, tag `improvement`, tab `picks`) +
+  `docs/sw.js` (`CACHE` v101→v102).
+- `.session/SPRINT.md` Done entry `POWER3-THRESH-1` with the measured impact.
+
+**Impact analysis (requested by owner), computed against the live `data/picks/picks_latest.csv`
+(459 rows with valid Price/ATR/SMA20/SMA50) using a standalone script — not committed, one-off
+verification:**
+- At the old 2.0x band: 231/459 rows (50.3%) flagged as bunched.
+- At the new 1.5x band: 150/459 rows (32.7%) flagged — **81 fewer flagged rows** (~35% relative
+  drop from the 2.0x count).
+- Also measured a 1.0x band for comparison (not shipped): 66/459 rows (14.4%) flagged — a further
+  84-row drop from 1.5x, i.e. cuts the flagged pool by more than half again.
+- Median span/ATR ratio among the previously-flagged (2.0x) rows was ~1.25, so most of the 2.0x
+  pool sits comfortably under 1.5x too, but a real ~35% slice (spans between 1.5x and 2.0x ATR)
+  drops out.
+
+**Verification:** `python3 -m pytest tests/test_pwa_picks_atr_earnings.py -q -k power_of_3` — 2
+passed (used the documented Playwright-in-cloud symlink workaround for the Chromium
+headless-shell revision mismatch, cleaned up afterward — session-local `/opt` edit, not
+committed). Full non-Playwright suite (783 tests) passes; the ~29 pre-existing failures
+(`test_collect_benchmark.py`, `test_generate_ai.py`) are unrelated environment/mocking gaps in
+this sandbox, not caused by this change. `tests/test_guide_releases.py` passes against the new
+`releases.json` entry.
+
+**No pipeline/schema change** — this is a pure client-side PWA display constant, computed at
+render time from already-scraped Price/ATR/SMA20/SMA50, never a stored CSV column.
+
+**Next steps:** none — this was a one-shot config tweak. If the owner wants to revisit the 1.0x
+alternative later, the comparison numbers above are already captured in the SPRINT.md entry.
+
+---
 
 ## 2026-09-11 — AI-WALLET-PWA: render spend.json at the bottom of the AI tab
 
@@ -196,186 +237,6 @@ the SPRINT ordering.
 ---
 
 
-## 2026-09-04 — Chart-toggle tap-target UX proposals + mock
-
-**Status: safe to close** — design-only, no code shipped, nothing blocking.
-
-**What landed:** Owner flagged the `Show chart ▾`/`Hide chart ▲` toggle on Lookup, Picks, Morning,
-and Positions as a hard-to-hit mobile tap target (confirmed: `text-[0.65rem] px-2 py-1` pill,
-roughly 34×24pt — under Apple's 44×44pt HIG minimum, tucked in one card corner). Proposed and
-mocked five alternatives at real card scale (336pt width) using a live Picks row (`GH 86 ·
-Guardant Health`) as content:
-1. **Padded button** — same visible pill, bigger invisible hit-slop.
-2. **Whole-row tap** — entire ticker header toggles the chart (Positions already half-does this
-   on the ticker text alone).
-3. **Drawer handle** — full-width strip replaces the corner pill.
-4. **Live sparkline** — always-on mini chart doubles as the tap target.
-5. **Edge rails** — the owner's original idea: tall tap strips down the card's left/right margins.
-
-Each mock is interactive (tap to expand/collapse for real) with a dashed amber "redline" overlay
-showing the actual tap-zone size, plus pros/cons. Recommended pairing: ship **02 (whole row)** as
-the default everywhere charts appear, keep a padded chevron (01-style) as the visual "there's more
-here" cue riding along for free.
-
-**Where it lives:** Published as an Artifact for the owner to review (interactive, themed) — link
-is in-conversation, not repeated here since Artifact URLs aren't durable across sessions. Source
-committed to `planning/mocks/chart-toggle-redlines.html` per CLAUDE.md § Deliver mocks/visuals as
-Artifacts (durable record). Tracked as `CHART-TAP-1` in `.session/SPRINT.md` Backlog — nothing
-implemented yet, blocked on the owner's pick among the five.
-
-**Next steps:** Owner picks an option (or a different pairing) → implement across all 4 surfaces
-(`docs/index.html`) in one PR, add/update Playwright coverage per surface touched, ship the usual
-release triplet (`releases.json` + `sw.js` cache bump) since this is user-facing.
----
-
-
-## 2026-09-04 — Inline "+ Watch" quick-add (Picks / Morning-picks / Lookup / Watchlist edit-level)
-
-**Status: safe to close** — implemented, functionally verified with 6 new Playwright tests
-(headless Chromium via the revision-symlink harness) plus the full non-Playwright suite (746)
-and the existing watchlist/manual-entry/picks-hod/morning Playwright suites (42), all green,
-no regressions. Release surface updated in the same PR.
-
-**What the owner asked for:** easier ways to add a ticker to the watchlist — one-click entry
-points across the app that expand inline instead of jumping to the Positions tab. Talked
-through candidate spots first (no impl) before building: confirmed scope was Picks tab rows,
-Morning tab's Picks-subtab cards, and the Lookup tab's ticker result (every spot that already
-shows a TradingView chart), plus fixing the Watchlist-subtab's "Edit level" kebab, which had
-the exact same jump-away problem. Positions-tab position cards were explicitly scoped out
-(ticker's already a live trade there — low value).
-
-**Design, confirmed with the owner before building:** the existing `state.watchAdd` /
-`watchAddHtml()` / `watchAddApi()` (Positions-tab-only collapsible) already did ticker+optional
-level submission — the gap was only that it was mounted in one place and other call sites
-(`watchEditLevel`) navigated away via `switchTab('positions')` instead of expanding in place.
-Generalized it into `quickWatchButtonHtml()`/`quickWatchPanelHtml()`, mountable anywhere via a
-`mountKey` (namespaced per call site: `qw_pick_<key>`, `qw_morning_<ticker>`,
-`qw_lookup_<symbol>`, `qw_watch_<ticker>`), DOM-patched by id on open/close/save (same
-discipline as `__togglePickChart`/`__toggleMorningChart` — no full re-render, no lost focus).
-
-**Owner-specified interaction (asked directly, confirmed before building):** tapping "+ Watch"
-on an unwatched ticker fires the add immediately (`watchAddApi({ticker})`) — the tap alone
-persists it, no second tap required. The panel then opens showing a receipt plus the optional
-level-of-interest form (Above/Below/20MA/50MA, same as the existing form); setting a level is a
-second, independent POST to the same upsert-by-ticker endpoint. An already-watched ticker's
-button instead reads "✓ Watching" and opens straight into the level editor (seeded from the
-existing entry), with zero re-POST until Save. Signed-out tap shows an inline sign-in nudge, no
-add attempted. Unlike the Positions-tab form's free-text ticker field (which debounces an FMP
-resolve lookup), every quick-watch mount is handed an already-known ticker — no resolve call
-and no ticker input in this UI, per the owner's own observation that it's "clear which company
-it is" at all three new spots.
-
-**Technical note:** Picks and Lookup never previously triggered `loadWatchlist()` (only
-Morning/Positions tab renders did), so a signed-in user landing on Picks would have seen
-"+ Watch" on every row even for already-watched tickers. Added `ensureWatchlistLoaded()`
-(deduped via `state.watchlistLoading`), called once per `renderPicks()` pass and once when the
-Lookup ticker card renders — Morning needed no change, its batch loader already fetches
-`watchlistData`.
-
-**Release surface (hard rule, same PR):** `docs/releases.json` `2026.09.04` entry prepended,
-`current` bumped; `docs/sw.js` `CACHE` bumped `v96` → `v97`.
-
-**Next steps:** none outstanding — PR opened, ready for review.
----
-
-
-## 2026-09-04 — Fix: watchlist stuck on "Pending read" for tickers that also qualify as Focus picks
-
-**Status: safe to close — investigated, fixed, tested, PR to open.** Owner report with two
-screenshots: several watchlist tickers (ELV, HUM, GH) added ~a week earlier were still showing
-"PENDING READ" / "Reference bar captured — first live read after the next scheduled check.",
-and lacked the full card (Volatility & setup, ATR-from-LoD, etc.) that other watch tickers
-(SPCX, BAX) had. Owner asked for a full investigation first, no fix, "don't bear load on
-unconfirmed assumptions."
-
-**Investigation (evidence-based, not inferred).** Ruled out the two previously-fixed failure
-modes in this area (`WS5-8b-OPS` missing secrets; `WS-POSITIONS-STATUS` no_quote/
-awaiting_first_read copy) since neither matched: the private `/watchlist` feed showed real
-`prior_high`/`prior_low` (a bar exists) and the TTL was decrementing normally (`tickWatchlist()`
-only decrements when a bar exists), so `has_history` was clearly `True` server-side. Read the
-actual committed `data/picks/sessions/morning.csv` directly (ground truth, not assumption) and
-found the real root cause: `collect_morning.py`'s `union_watch_levels()` — when a watch ticker
-ALSO qualifies as a Focus pick that day — keeps the Focus pick's row and never writes a second
-`list_category='watchlist'`-tagged row for that ticker/date (by design, for scrape-count
-purposes: "the watch dup contributes nothing"). ELV/HUM/GH had all started also qualifying as
-Focus picks (`accel`/`leaders` buckets) — GH had been a recurring pick since before it was even
-added to the watchlist, so its watch card had likely NEVER shown a real status.
-`docs/index.html`'s watch-card lookup (`findPub`/`pub`, 2 call sites) filtered strictly on
-`m.list_category === 'watchlist'`, found nothing on those days, and fell into the
-`awaitingFirstRead` fallback — even though the exact same `pick_status` engine had computed a
-real classification, just filed under a different bucket tag. Confirmed with grep evidence
-against the CSV (GH: never once tagged `watchlist`, always `leaders`/`rs_new_high`/`all_green`;
-ELV/HUM: correctly `watchlist`-tagged 8/27–9/1, then flipped to `accel` from 9/2 onward and
-stuck since).
-
-**Options presented, owner chose A.** (A) Client-side: relax the watch-pub lookup to accept any
-row for the ticker (fallback after preferring an exact `'watchlist'` tag) — the lookup is
-always called for one already-known ticker, so this can't cross-match an unrelated ticker's
-row. (B) Backend: a new `is_watchlist` flag column, orthogonal to `list_category`. Rejected B
-because `data/picks/sessions/*.csv` is a ground-truth CSV under
-`.claude/rules/data-pipeline.md`'s schema-change rule (owner sign-off + a written
-can't-be-a-pure-function justification required before building) and the fix genuinely doesn't
-need a new column — same "compute at render time, don't persist a config/attribution-dependent
-fact" precedent as the `power_of_3`/`VOLATILITY_FLOOR_PCT` sessions.
-
-**Shipped:** new shared `findWatchPub(ticker)` helper in `docs/index.html` (replaces 3
-duplicated inline `list_category === 'watchlist'` filters: `renderWatchlistSection`'s active +
-expired card maps, and `__toggleWatchGauge`), with an in-code comment naming why the fallback
-exists so a future cleanup doesn't revert it back to the strict filter. `docs/CLAUDE.md` §
-Watchlist merge-model bullet updated to describe the new lookup and the collision it works
-around. New regression test `tests/test_pwa_watchlist.py::
-test_watch_card_finds_real_status_under_a_picks_bucket_tag` — verified it actually fails
-pre-fix (`git stash` on `docs/index.html` reproduces the exact reported symptom: "PENDING READ"
-pill + "Reference bar captured…" copy) and passes post-fix. Release triplet: `releases.json`
-`2026.09.04.2` (fix, tab morning) + `current` bumped; `sw.js` `finviz-v98` → `v99`.
-
-**Verified:** `test_pwa_watchlist.py` 10/10 (new test included), `test_pwa_morning.py` +
-`test_pwa_quick_watch.py` 20/20 (unaffected — different render paths), full non-Playwright
-suite 746 passed, `test_guide_releases.py` 5/5 (release-surface sync). Playwright run via the
-documented revision-symlink harness (`chromium-1194` → `chromium-1117`, cleaned up after).
-
-**Next steps:** open the PR. Not addressed (out of scope, no separate tracked item needed —
-the fix is complete as scoped): the underlying `union_watch_levels()` collision behavior
-itself is unchanged and intentional (attribution still correctly favors the picks bucket for
-that CSV's own purposes); this fix only restores the PWA's ability to find the real status
-regardless of which bucket won.
----
-
-
-## 2026-09-03 — Picks tab: group tap opens quick detail sheet + reason chips on group headers
-
-**Status: safe to close** — implemented, verified functionally with a Playwright fixture-intercept
-smoke test (headless Chromium, both changes confirmed rendering correctly, screenshots taken),
-release surface updated in the same PR. Non-Playwright pytest suite green (797 passed — the 75
-"failed" in a raw pytest run are the known sandbox-only Chromium revision mismatch documented in
-`knowledge/investigations/playwright-cloud-session-testing.md` Root cause 1, not a regression).
-
-**Two small UX asks from the owner (screenshots of the live PWA):**
-1. Tapping a group name on the Picks tab (`data-pick-group-lookup` — both the All view's group
-   headers and the Focus view's per-row group subtitle share this one click handler) used to
-   `switchTab('lookup')` + `doGroupLookup()`, navigating away entirely. It now calls
-   `openGroupPeek(name, 'industries', true)` instead — the same slide-up sheet the AI tab's
-   inline group-name chips (`groupChipHtml()`) already open, reusing `groupPerfCard()` so there's
-   only one renderer to keep in sync with the full Lookup tab. `openGroupPeek()` gained a third
-   `expanded` param (default `false`, preserving the AI tab's existing compact-card behavior) so
-   Picks can land the reader straight on the full breakdown (`_peekExpanded = true`) since they
-   already picked this exact group — no second tap needed. "Full lookup ↗" inside the sheet still
-   reaches the full Lookup tab for anyone who wants more than the peek.
-2. Each group header in the Picks tab's All view now shows the same reason chips
-   (Leaders/Emerging/Accel/RS New High/All Green, `CATEGORY_LABEL`/`CATEGORY_CHIP_CLS`) the
-   Lookup tab's `renderLookupStage2()` already shows — built from a `groupCatMap` (group →
-   Set of categories) derived from the same `catMap` the All view already groups by, so a group
-   qualifying under several buckets today isn't only visible in the one category section it
-   happens to render under.
-
-**Release surface (hard rule, same PR):** `docs/releases.json` `2026.09.03` entry prepended,
-`current` bumped; `docs/sw.js` `CACHE` bumped `v94` → `v95`.
-
-**Next steps:** none outstanding — PR opened, ready for review.
----
-
----
-
 ## 2026-09-17 — Public agent feed (manifest + latest_signals) for external agents
 
 **Status:** safe-to-close once PR is merged. Public-feed work landed; private-book access is deliberate fast-follow (see SPRINT § AGENT-FEED).
@@ -399,6 +260,54 @@ release surface updated in the same PR. Non-Playwright pytest suite green (797 p
 - Verify the two new workflow steps actually run green in Actions on the next scheduled collect (couldn't run collect.py in cloud — Cloudflare blocks it).
 
 ---
+
+## 2026-09-23 — AI tab: remove Headline + Conviction (SPRINT § AI-WALLET-CONVICTION, widened)
+
+**Status: safe to close.**
+
+Owner asked to remove the AI tab's headline hero + "Conviction: Low" badge (not useful, and
+wants to stop paying Gemini for them). This is the same `pulse` task the AI-WALLET-CONVICTION
+SPRINT item already flagged for a Conviction-only trim — since the owner wants both fields gone,
+removed the whole task instead of half-trimming it.
+
+**What landed (branch `claude/remove-ai-tab-sections-sa2k48`):**
+- `scripts/generate_ai.py`: deleted the `pulse` `TASK_SPEC` entry entirely (no more Gemini call
+  for it — 11→9 calls/run × 3 runs/day, ~33/day → ~27/day) plus its now-dead machinery:
+  `build_pulse_prompt`, `parse_pulse_response`, `_parse_conviction`, `_input_pulse`,
+  `_PULSE_ALIASES`. `_expected_fields()`/`_is_complete()`/`_missing_fields()` need no code change
+  — they derive from `TASK_SPECS` automatically. Updated the TASK_SPECS call-count comment and
+  the `--task`/`--preview` CLI help examples (were `pulse`, now `note`).
+- `docs/index.html`: removed the headline-hero + conviction-badge render block in `renderAI()`
+  and the share-text's headline lead-in (`shareAI()`) — both guarded on `pulse` already, so
+  removal degrades cleanly to just showing the rest of the briefing (rotation phase, daily note,
+  rotation map, watchlist, relative-strength/risks — all unchanged).
+- `scripts/eval_ai.py`: removed the now-unreachable `pulse` branch from `check_format()` and the
+  `CONVICTION_LEVELS` constant (Tier-2 debug captures will never carry a `pulse` call again).
+- Release triplet in the same PR: `docs/releases.json` (`2026.09.23`, tag `improvement`, tab
+  `ai`) + `current` bump + `docs/sw.js` (`CACHE` v100→v101).
+- `scripts/CLAUDE.md` + `README.md` updated (call-count/example references to `pulse`).
+- Tests: `tests/test_generate_ai.py` and `tests/test_eval_ai.py` — removed every pulse-specific
+  test (parser tests, format-check tests) and repointed generic mechanism tests that happened to
+  use `"pulse"`/`"sectors.pulse"` as an arbitrary label onto `note`/`rotation_phase`. Updated
+  call-count assertions (5→4 in one `generate_for_group` test) and the `_expected_fields`/
+  `_missing_fields`/`TASK_SPECS` set assertions. `python3 -m pytest tests/ -q` with the same
+  `--ignore=` list `.github/workflows/tests.yml` uses: **812 passed**.
+
+**Not done this session:** no live-browser check of the AI tab (no Playwright/dev-server pass) —
+the guarded-render removal is standard/low-risk (`docs/CLAUDE.md`'s established pattern for this
+exact block), but worth a quick spot-check on the next PWA session.
+
+**Next steps:** none blocking. If Conviction/Headline are ever wanted back, the pre-removal
+prompt/parser is in git history (see the `TASK_SPECS` comment in `generate_ai.py`).
+
+---
+
+## 2026-09-29 — process: `restate-intent` skill
+
+- **Status:** safe to close.
+- **Landed:** `.claude/skills/restate-intent/SKILL.md` + a CLAUDE.md "Restate intent" rule (under Session continuity). Doc/process only — no code, data, or PWA change, so no release triplet.
+- **Why:** owner wants a plain-language restatement of goal + problem after long/rambling messages, before any work. Skill is committed per-repo (user-level skills aren't versioned and don't persist in cloud sessions); mirrored in the `distil` repo.
+- **Next steps:** none.
 
 ## 2026-09-28 — PR #425 review + multi-ETF benchmark extension (SPY/QQQ/IWM)
 

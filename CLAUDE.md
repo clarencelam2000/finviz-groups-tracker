@@ -351,6 +351,16 @@ them. Full steps, the Guide-glossary sync, and the "Start Here" intro carousel: 
 
 Only use these if the owner explicitly asks you to watch a PR. If they do ask, acknowledge the request and set it up. 
 
+### Restate intent before acting on a long or multi-ask message (2026-09-29)
+
+When the owner's message is long, rambling, dictated, or bundles several asks, invoke the
+`restate-intent` skill (`.claude/skills/restate-intent/SKILL.md`) **before** acting: restate their
+goal and the problem in plain language, separate what they said from what you're inferring, flag
+low-confidence spots and questions, and stop for a correction when anything is low-confidence,
+changes what gets built, or is hard to undo. Other triggers: vague ask + pasted material, ambiguous
+"this/that", an ask that reverses a recorded decision, before a CSV schema change or delegating a
+big task, resuming after a context reset. Skip for short clear asks and mid-flow follow-ups.
+
 ### Deliver mocks/visuals as Artifacts, not plain HTML files
 
 When you produce an HTML mock, visual, or any page for the owner to *look at* (design mocks,
@@ -359,6 +369,12 @@ URL — do **not** send it as a raw `.html` file via `SendUserFile`. Artifacts r
 plain HTML files don't. (Owner directive, 2026-08-09.) Committing the mock's source into
 `planning/mocks/` for history is still expected — the Artifact is *how the owner reviews it*, the
 committed file is the durable record.
+
+The same applies when no screen is involved: for a decision with 3+ options, or one
+that turns on a flow, sequence or timeline (pipeline order, cron/job timing, what
+changes downstream), publish an Artifact with a diagram or comparison table rather
+than a wall of chat text. Lead the reply with the conclusion; the page is backup.
+Skip it for simple answers.
 
 ### Cloudflare can be queried directly — no MCP/OAuth needed
 
