@@ -216,3 +216,10 @@ def delta_columns() -> list[str]:
     cols += MOMENTUM_COLS
     cols += RS_COLS
     return cols
+
+# Fail fast at import if the RS benchmark isn't collected — otherwise removing
+# SPY from BENCH_TICKERS would silently stop writing SPY rows and blank every
+# rs_* column without collect.py ever exiting non-zero.
+assert RS_BENCHMARK_TICKER in BENCH_TICKERS, (
+    f"RS_BENCHMARK_TICKER={RS_BENCHMARK_TICKER!r} must be in BENCH_TICKERS"
+)
