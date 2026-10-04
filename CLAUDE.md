@@ -357,6 +357,12 @@ plain HTML files don't. (Owner directive, 2026-08-09.) Committing the mock's sou
 `planning/mocks/` for history is still expected — the Artifact is *how the owner reviews it*, the
 committed file is the durable record.
 
+The same applies when no screen is involved: for a decision with 3+ options, or one
+that turns on a flow, sequence or timeline (pipeline order, cron/job timing, what
+changes downstream), publish an Artifact with a diagram or comparison table rather
+than a wall of chat text. Lead the reply with the conclusion; the page is backup.
+Skip it for simple answers.
+
 ### Cloudflare can be queried directly — no MCP/OAuth needed
 
 `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are already present as env vars in the session environment.
