@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-10-09T19:51:52Z",
+  "generated_at": "2026-10-09T21:01:41Z",
   "as_of": "2026-10-09",
   "session": "eod",
   "data_branch": "claude/elegant-babbage-hlxnfy",
@@ -12,78 +12,78 @@
     {
       "group": "Footwear & Accessories",
       "rank_ytd": 141.0,
-      "regime_short_long": 0.6503,
-      "momentum_score": 0.2844,
+      "regime_short_long": 0.6643,
+      "momentum_score": 0.289,
       "rs_score": 0.1667
     },
     {
       "group": "Electronic Gaming & Multimedia",
       "rank_ytd": 129.0,
-      "regime_short_long": 0.6352,
-      "momentum_score": 0.4779,
+      "regime_short_long": 0.6224,
+      "momentum_score": 0.4755,
       "rs_score": 0.3333
     },
     {
       "group": "Utilities - Independent Power Producers",
       "rank_ytd": 124.0,
-      "regime_short_long": 0.5361,
-      "momentum_score": 0.5245,
+      "regime_short_long": 0.5373,
+      "momentum_score": 0.5268,
       "rs_score": 0.3333
     },
     {
       "group": "Personal Services",
-      "rank_ytd": 134.0,
-      "regime_short_long": 0.5128,
-      "momentum_score": 0.2739,
+      "rank_ytd": 135.0,
+      "regime_short_long": 0.5093,
+      "momentum_score": 0.2716,
       "rs_score": 0.1667
-    },
-    {
-      "group": "Apparel Manufacturing",
-      "rank_ytd": 98.0,
-      "regime_short_long": 0.4953,
-      "momentum_score": 0.4499,
-      "rs_score": 0.3333
     },
     {
       "group": "Grocery Stores",
       "rank_ytd": 101.0,
-      "regime_short_long": 0.493,
-      "momentum_score": 0.4592,
+      "regime_short_long": 0.5093,
+      "momentum_score": 0.4744,
+      "rs_score": 0.3333
+    },
+    {
+      "group": "Apparel Manufacturing",
+      "rank_ytd": 97.0,
+      "regime_short_long": 0.4907,
+      "momentum_score": 0.4534,
       "rs_score": 0.3333
     },
     {
       "group": "Education & Training Services",
       "rank_ytd": 74.0,
-      "regime_short_long": 0.472,
-      "momentum_score": 0.6002,
+      "regime_short_long": 0.4732,
+      "momentum_score": 0.5967,
       "rs_score": 0.3333
     },
     {
       "group": "Discount Stores",
       "rank_ytd": 66.0,
-      "regime_short_long": 0.3939,
-      "momentum_score": 0.6399,
+      "regime_short_long": 0.4009,
+      "momentum_score": 0.6422,
       "rs_score": 0.3333
-    },
-    {
-      "group": "Home Improvement Retail",
-      "rank_ytd": 126.0,
-      "regime_short_long": 0.3916,
-      "momentum_score": 0.2389,
-      "rs_score": 0.1667
     },
     {
       "group": "Advertising Agencies",
       "rank_ytd": 144.0,
-      "regime_short_long": 0.3869,
-      "momentum_score": 0.1503,
+      "regime_short_long": 0.3939,
+      "momentum_score": 0.1527,
+      "rs_score": 0.1667
+    },
+    {
+      "group": "Home Improvement Retail",
+      "rank_ytd": 126.0,
+      "regime_short_long": 0.3846,
+      "momentum_score": 0.2366,
       "rs_score": 0.1667
     },
     {
       "group": "Consulting Services",
       "rank_ytd": 130.0,
-      "regime_short_long": 0.3753,
-      "momentum_score": 0.3765,
+      "regime_short_long": 0.3788,
+      "momentum_score": 0.3776,
       "rs_score": 0.1667
     },
     {
@@ -94,24 +94,24 @@
       "rs_score": 0.1667
     },
     {
-      "group": "Publishing",
-      "rank_ytd": 48.0,
-      "regime_short_long": 0.3555,
-      "momentum_score": 0.683,
-      "rs_score": 0.5
+      "group": "Utilities - Diversified",
+      "rank_ytd": 84.0,
+      "regime_short_long": 0.3613,
+      "momentum_score": 0.4371,
+      "rs_score": 0.1667
     },
     {
-      "group": "Utilities - Diversified",
-      "rank_ytd": 83.0,
-      "regime_short_long": 0.3543,
-      "momentum_score": 0.4359,
-      "rs_score": 0.1667
+      "group": "Publishing",
+      "rank_ytd": 48.0,
+      "regime_short_long": 0.3497,
+      "momentum_score": 0.6772,
+      "rs_score": 0.5
     },
     {
       "group": "Apparel Retail",
       "rank_ytd": 99.0,
-      "regime_short_long": 0.3508,
-      "momentum_score": 0.5093,
+      "regime_short_long": 0.3333,
+      "momentum_score": 0.5035,
       "rs_score": 0.3333
     }
   ],
@@ -191,19 +191,19 @@
     {
       "group": "Apparel Manufacturing",
       "timeframe": "20d",
-      "to_rank": 98.0,
-      "rank_delta": 14.0
+      "to_rank": 97.0,
+      "rank_delta": 15.0
+    },
+    {
+      "group": "Department Stores",
+      "timeframe": "20d",
+      "to_rank": 69.0,
+      "rank_delta": 15.0
     },
     {
       "group": "Publishing",
       "timeframe": "20d",
       "to_rank": 48.0,
-      "rank_delta": 14.0
-    },
-    {
-      "group": "Specialty Retail",
-      "timeframe": "20d",
-      "to_rank": 79.0,
       "rank_delta": 14.0
     }
   ],
@@ -217,8 +217,8 @@
     {
       "group": "Capital Markets",
       "timeframe": "20d",
-      "to_rank": 77.0,
-      "rank_delta": -33.0
+      "to_rank": 78.0,
+      "rank_delta": -34.0
     },
     {
       "group": "Other Precious Metals & Mining",
@@ -245,12 +245,6 @@
       "rank_delta": -23.0
     },
     {
-      "group": "REIT - Office",
-      "timeframe": "20d",
-      "to_rank": 89.0,
-      "rank_delta": -23.0
-    },
-    {
       "group": "Thermal Coal",
       "timeframe": "20d",
       "to_rank": 92.0,
@@ -263,10 +257,16 @@
       "rank_delta": -22.0
     },
     {
+      "group": "REIT - Office",
+      "timeframe": "20d",
+      "to_rank": 87.0,
+      "rank_delta": -21.0
+    },
+    {
       "group": "Agricultural Inputs",
       "timeframe": "20d",
-      "to_rank": 44.0,
-      "rank_delta": -21.0
+      "to_rank": 43.0,
+      "rank_delta": -20.0
     },
     {
       "group": "Banks - Diversified",
@@ -275,15 +275,9 @@
       "rank_delta": -19.0
     },
     {
-      "group": "Farm Products",
+      "group": "Banks - Regional",
       "timeframe": "20d",
-      "to_rank": 42.0,
-      "rank_delta": -17.0
-    },
-    {
-      "group": "REIT - Mortgage",
-      "timeframe": "20d",
-      "to_rank": 135.0,
+      "to_rank": 72.0,
       "rank_delta": -17.0
     },
     {
@@ -293,9 +287,15 @@
       "rank_delta": -17.0
     },
     {
-      "group": "Banks - Regional",
+      "group": "Farm Products",
       "timeframe": "20d",
-      "to_rank": 71.0,
+      "to_rank": 41.0,
+      "rank_delta": -16.0
+    },
+    {
+      "group": "REIT - Mortgage",
+      "timeframe": "20d",
+      "to_rank": 134.0,
       "rank_delta": -16.0
     }
   ],
