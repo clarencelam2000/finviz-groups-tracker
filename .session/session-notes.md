@@ -308,3 +308,12 @@ prompt/parser is in git history (see the `TASK_SPECS` comment in `generate_ai.py
 - **Landed:** `.claude/skills/restate-intent/SKILL.md` + a CLAUDE.md "Restate intent" rule (under Session continuity). Doc/process only — no code, data, or PWA change, so no release triplet.
 - **Why:** owner wants a plain-language restatement of goal + problem after long/rambling messages, before any work. Skill is committed per-repo (user-level skills aren't versioned and don't persist in cloud sessions); mirrored in the `distil` repo.
 - **Next steps:** none.
+
+---
+## 2026-10-23 — Picks scrape outage RCA + fix (Finviz screener redesign)
+
+- **Status:** PR open, awaiting merge. Not safe to close until it merges (picks stays broken until then).
+- **RCA:** since 2026-10-17 Finviz serves a redesigned screener (`/screener/stocks`, no `table.screener_table`, canvas grid). Not Cloudflare, not filter codes; I checked both on Actions. Full data is in `<script data-ssr-props>` JSON.
+- **Landed (PR):** `_parse_table` SSR-JSON fallback rendered in legacy formats under legacy labels; `SCREENER_READY_SELECTOR` wait; `tests/test_screener_ssr_parse.py` + trimmed real fixture; `knowledge/investigations/finviz-screener-redesign-2026-10.md`. Verified live: probe on fix branch → Semiconductors 37 rows / 2 pages / 84 cols PASS.
+- **Data gap:** picks for 2026-10-19..10-22 are lost (screen is live-only). Morning/pre-close/held use the same parser; they worked through 10-22 (probably a gradual rollout) but are covered by this fix too.
+- **Next steps:** merge, then manually dispatch `collect_picks.yml` to capture 2026-10-23. Delete the `claude/diag-picks-screener` branch (push --delete was refused from the session).
