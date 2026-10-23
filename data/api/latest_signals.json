@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-10-23T19:52:08Z",
+  "generated_at": "2026-10-23T21:02:11Z",
   "as_of": "2026-10-23",
   "session": "eod",
   "data_branch": "claude/elegant-babbage-hlxnfy",
@@ -12,36 +12,43 @@
     {
       "group": "Personal Services",
       "rank_ytd": 126.0,
-      "regime_short_long": 0.6072,
-      "momentum_score": 0.4604,
+      "regime_short_long": 0.6084,
+      "momentum_score": 0.4627,
       "rs_score": 0.3333
     },
     {
       "group": "Mortgage Finance",
       "rank_ytd": 142.0,
-      "regime_short_long": 0.5921,
-      "momentum_score": 0.2424,
+      "regime_short_long": 0.5932,
+      "momentum_score": 0.2448,
       "rs_score": 0.1667
     },
     {
       "group": "Recreational Vehicles",
-      "rank_ytd": 130.0,
-      "regime_short_long": 0.535,
-      "momentum_score": 0.3228,
+      "rank_ytd": 129.0,
+      "regime_short_long": 0.542,
+      "momentum_score": 0.3263,
       "rs_score": 0.3333
     },
     {
       "group": "Gambling",
       "rank_ytd": 143.0,
-      "regime_short_long": 0.5012,
+      "regime_short_long": 0.4953,
       "momentum_score": 0.2051,
       "rs_score": 0.1667
     },
     {
       "group": "Home Improvement Retail",
-      "rank_ytd": 115.0,
-      "regime_short_long": 0.5012,
-      "momentum_score": 0.4242,
+      "rank_ytd": 114.0,
+      "regime_short_long": 0.4942,
+      "momentum_score": 0.4289,
+      "rs_score": 0.3333
+    },
+    {
+      "group": "Building Materials",
+      "rank_ytd": 128.0,
+      "regime_short_long": 0.493,
+      "momentum_score": 0.2879,
       "rs_score": 0.3333
     },
     {
@@ -52,60 +59,53 @@
       "rs_score": 0.5
     },
     {
-      "group": "Building Materials",
-      "rank_ytd": 129.0,
-      "regime_short_long": 0.479,
-      "momentum_score": 0.2821,
-      "rs_score": 0.3333
-    },
-    {
       "group": "Airports & Air Services",
       "rank_ytd": 140.0,
-      "regime_short_long": 0.472,
-      "momentum_score": 0.2611,
+      "regime_short_long": 0.4825,
+      "momentum_score": 0.2646,
       "rs_score": 0.1667
     },
     {
       "group": "Leisure",
-      "rank_ytd": 101.0,
-      "regime_short_long": 0.4254,
-      "momentum_score": 0.528,
+      "rank_ytd": 100.0,
+      "regime_short_long": 0.4149,
+      "momentum_score": 0.5373,
       "rs_score": 0.3333
     },
     {
       "group": "Residential Construction",
       "rank_ytd": 106.0,
-      "regime_short_long": 0.4056,
-      "momentum_score": 0.4301,
+      "regime_short_long": 0.4044,
+      "momentum_score": 0.4277,
       "rs_score": 0.3333
-    },
-    {
-      "group": "Utilities - Regulated Electric",
-      "rank_ytd": 76.0,
-      "regime_short_long": 0.3776,
-      "momentum_score": 0.5082,
-      "rs_score": 0.3333
-    },
-    {
-      "group": "Information Technology Services",
-      "rank_ytd": 124.0,
-      "regime_short_long": 0.3753,
-      "momentum_score": 0.6573,
-      "rs_score": 0.6667
-    },
-    {
-      "group": "Insurance Brokers",
-      "rank_ytd": 95.0,
-      "regime_short_long": 0.3753,
-      "momentum_score": 0.6503,
-      "rs_score": 0.5
     },
     {
       "group": "Grocery Stores",
       "rank_ytd": 84.0,
-      "regime_short_long": 0.366,
-      "momentum_score": 0.627,
+      "regime_short_long": 0.3858,
+      "momentum_score": 0.6375,
       "rs_score": 0.5
+    },
+    {
+      "group": "Information Technology Services",
+      "rank_ytd": 124.0,
+      "regime_short_long": 0.373,
+      "momentum_score": 0.6585,
+      "rs_score": 0.6667
+    },
+    {
+      "group": "Insurance Brokers",
+      "rank_ytd": 94.0,
+      "regime_short_long": 0.373,
+      "momentum_score": 0.6527,
+      "rs_score": 0.5
+    },
+    {
+      "group": "Utilities - Regulated Electric",
+      "rank_ytd": 76.0,
+      "regime_short_long": 0.3683,
+      "momentum_score": 0.507,
+      "rs_score": 0.3333
     },
     {
       "group": "Specialty Business Services",
@@ -119,8 +119,8 @@
     {
       "group": "Waste Management",
       "timeframe": "20d",
-      "to_rank": 61.0,
-      "rank_delta": 34.0
+      "to_rank": 60.0,
+      "rank_delta": 35.0
     },
     {
       "group": "Medical Distribution",
@@ -135,22 +135,22 @@
       "rank_delta": 33.0
     },
     {
-      "group": "Utilities - Regulated Water",
-      "timeframe": "20d",
-      "to_rank": 38.0,
-      "rank_delta": 30.0
-    },
-    {
       "group": "Grocery Stores",
       "timeframe": "20d",
       "to_rank": 84.0,
       "rank_delta": 29.0
     },
     {
+      "group": "Utilities - Regulated Water",
+      "timeframe": "20d",
+      "to_rank": 39.0,
+      "rank_delta": 29.0
+    },
+    {
       "group": "Insurance Brokers",
       "timeframe": "20d",
-      "to_rank": 95.0,
-      "rank_delta": 27.0
+      "to_rank": 94.0,
+      "rank_delta": 28.0
     },
     {
       "group": "Publishing",
@@ -167,8 +167,14 @@
     {
       "group": "Department Stores",
       "timeframe": "20d",
-      "to_rank": 45.0,
-      "rank_delta": 26.0
+      "to_rank": 46.0,
+      "rank_delta": 25.0
+    },
+    {
+      "group": "Discount Stores",
+      "timeframe": "20d",
+      "to_rank": 52.0,
+      "rank_delta": 25.0
     },
     {
       "group": "Beverages - Brewers",
@@ -177,34 +183,28 @@
       "rank_delta": 24.0
     },
     {
-      "group": "Discount Stores",
-      "timeframe": "20d",
-      "to_rank": 53.0,
-      "rank_delta": 24.0
-    },
-    {
       "group": "Healthcare Plans",
       "timeframe": "20d",
-      "to_rank": 18.0,
-      "rank_delta": 23.0
+      "to_rank": 17.0,
+      "rank_delta": 24.0
     },
     {
       "group": "Household & Personal Products",
       "timeframe": "20d",
-      "to_rank": 57.0,
-      "rank_delta": 22.0
-    },
-    {
-      "group": "Insurance - Property & Casualty",
-      "timeframe": "20d",
       "to_rank": 56.0,
-      "rank_delta": 22.0
+      "rank_delta": 23.0
     },
     {
       "group": "Lodging",
       "timeframe": "20d",
       "to_rank": 33.0,
       "rank_delta": 22.0
+    },
+    {
+      "group": "Financial Data & Stock Exchanges",
+      "timeframe": "20d",
+      "to_rank": 89.0,
+      "rank_delta": 21.0
     }
   ],
   "fading": [
@@ -235,8 +235,8 @@
     {
       "group": "Capital Markets",
       "timeframe": "20d",
-      "to_rank": 100.0,
-      "rank_delta": -41.0
+      "to_rank": 101.0,
+      "rank_delta": -42.0
     },
     {
       "group": "Other Industrial Metals & Mining",
