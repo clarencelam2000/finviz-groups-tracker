@@ -104,6 +104,14 @@ SCREENER_BASE = "https://finviz.com/screener.ashx"
 # _dump_diagnostics will print the page title/snippet to identify the new class.
 SCREENER_TABLE_SELECTOR = "table.screener_table"
 
+# Selector the scrapers WAIT on before reading page.content(). Matches either the
+# legacy results table or a row of the redesigned grid (issue: 2026-10 Finviz
+# screener redesign — `/screener.ashx` now redirects to `/screener/stocks`, the
+# <table> is gone, and rows render as `div.fv-table_row` in a virtualized canvas
+# grid). Parsing does NOT use the grid DOM (only ~22 of 84 cells are rendered);
+# _parse_table reads the server-rendered JSON in <script data-ssr-props> instead.
+SCREENER_READY_SELECTOR = "table.screener_table, div.fv-table_row[data-row-key]"
+
 # Where raw page HTML is dumped on a parse failure, for upload as a CI artifact.
 # probe_picks.yml has an `if: failure()` upload step pointed here. Inspect these
 # files to see exactly what Finviz returned when the probe can't be debugged
@@ -141,6 +149,137 @@ def _build_url(config: dict, ind_slug: str, offset: int = 1) -> str:
     return url
 
 
+
+# ---------------------------------------------------------------------------
+# Redesigned-screener (2026-10) JSON parsing
+# ---------------------------------------------------------------------------
+# The redesigned page embeds the full result page as JSON in
+# <script type="application/json" data-ssr-props=...>: data.rows[i] has
+# "text" (strings) and "numbers" (raw floats). To keep picks.csv / sessions /
+# held quotes byte-compatible with the legacy table, each value is rendered back
+# into the legacy display string under the legacy header label. Legacy formats
+# were verified against stored picks.csv rows (e.g. NVDA 2026-10-09).
+#
+# (legacy header label, JSON key, format). Formats:
+#   text  — data.rows[i].text passthrough     f2  — 2-decimal float
+#   pct   — 2-decimal float + "%"             int — comma-grouped integer
+#   money — input in $ millions -> "1.23B" / "187.90M"
+#   count — raw units -> "4.77M" / "429.77K"  earn — ISO datetime -> "Aug 26/a"
+SSR_COLUMN_MAP = [
+    ("Ticker", "ticker", "text"), ("Company", "company", "text"),
+    ("Industry", "industry", "text"), ("Country", "country", "text"),
+    ("Market Cap", "marketCap", "money"), ("P/E", "PE", "f2"),
+    ("Volume", "volume", "int"), ("Price", "price", "f2"),
+    ("Change", "change", "pct"), ("Earnings", "earningsDate", "earn"),
+    ("Index", "index", "text"), ("Forward P/E", "forwardPE", "f2"),
+    ("PEG", "PEG", "f2"), ("P/S", "PS", "f2"), ("P/FCF", "PFCF", "f2"),
+    ("EV/EBITDA", "evEbitda", "f2"), ("EV/Sales", "evSales", "f2"),
+    ("ROE", "roe", "pct"), ("ROA", "roa", "pct"), ("ROIC", "roi", "pct"),
+    ("LTDebt/Eq", "ltdebtEq", "f2"), ("Debt/Eq", "debtEq", "f2"),
+    ("Dividend Gr. 5Y", "dividend5y", "pct"), ("EPS", "eps", "f2"),
+    ("EPS next Q", "estQ1", "f2"), ("EPS This Y", "epsYoY", "pct"),
+    ("EPS Next Y", "epsYoY1", "pct"), ("EPS Past 3Y", "eps3Years", "pct"),
+    ("EPS Past 5Y", "eps5Years", "pct"), ("EPS Next 5Y", "estLTGrowth", "pct"),
+    ("Sales Past 3Y", "sales3Years", "pct"), ("Sales Past 5Y", "sales5Years", "pct"),
+    ("Sales Q/Q", "salesQoQ", "pct"), ("EPS Q/Q", "epsQoQ", "pct"),
+    ("EPS YoY TTM", "epsYoYTTM", "pct"), ("Sales YoY TTM", "salesYoYTTM", "pct"),
+    ("Gross M", "grossMargin", "pct"), ("Oper M", "operMargin", "pct"),
+    ("Profit M", "netMargin", "pct"), ("Insider Trans", "insiderTrans", "pct"),
+    ("Inst Trans", "instTrans", "pct"), ("Perf Week", "perf1w", "pct"),
+    ("Perf Month", "perf4w", "pct"), ("Perf Quart", "perf13w", "pct"),
+    ("Perf Half", "perf26w", "pct"), ("Perf YTD", "perfYtd", "pct"),
+    ("Perf Year", "perf52w", "pct"), ("Perf 3Y", "perf3y", "pct"),
+    ("ATR", "averageTrueRange", "f2"), ("Volatility M", "volatility4w", "pct"),
+    ("Beta", "beta", "f2"), ("SMA20", "sma20", "pct"), ("SMA50", "sma50", "pct"),
+    ("SMA200", "sma200", "pct"), ("RSI", "rsi", "f2"),
+    ("Avg Volume", "averageVolume", "count"), ("Rel Volume", "relativeVolume", "f2"),
+    ("Prev Close", "prevClose", "f2"), ("Open", "open", "f2"),
+    ("High", "high", "f2"), ("Low", "low", "f2"), ("Recom", "recom", "f2"),
+    ("Target Price", "targetPrice", "f2"), ("News Time", "newsTime", "text"),
+    ("News Title", "newsTitle", "text"), ("News URL", "newsUrl", "text"),
+    ("Daily Digest", "wiimDailyDigest", "text"), ("Sector", "sector", "text"),
+    ("P/C", "PC", "f2"), ("Enterprise Value", "enterpriseValue", "money"),
+    ("Curr R", "curRatio", "f2"), ("Quick R", "quickRatio", "f2"),
+    ("Sales", "sales", "money"), ("Income", "income", "money"),
+    ("Inst Own", "instOwn", "pct"), ("Perf 5Y", "perf5y", "pct"),
+    ("Volatility W", "volatility1w", "pct"), ("52W High", "high52w", "pct"),
+    ("52W Low", "low52w", "pct"), ("Change from Open", "changeopen", "pct"),
+    ("Gap", "gap", "pct"), ("Dividend Gr. 3Y", "dividend3y", "pct"),
+    ("EPS Surprise", "epsSurprise", "pct"), ("Revenue Surprise", "revenueSurprise", "pct"),
+]
+_SSR_LABEL_TO_SPEC = {label: (key, fmt) for label, key, fmt in SSR_COLUMN_MAP}
+_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+           "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _fmt_ssr_value(value, fmt: str) -> str:
+    """Render one SSR JSON value in the legacy screener display format ("-" = missing)."""
+    if value is None or value == "":
+        return "-"
+    if fmt == "text":
+        return str(value)
+    if fmt == "earn":
+        # "2026-08-26T16:30:00" -> "Aug 26/a" (a = after close, b = before open)
+        m = re.match(r"(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}))?", str(value))
+        if not m:
+            return "-"
+        hour = int(m.group(4) or 0)
+        return f"{_MONTHS[int(m.group(2)) - 1]} {m.group(3)}/{'b' if hour < 12 else 'a'}"
+    try:
+        x = float(value)
+    except (TypeError, ValueError):
+        return "-"
+    if x != x:  # NaN
+        return "-"
+    if fmt == "f2":
+        return f"{x:.2f}"
+    if fmt == "pct":
+        return f"{x:.2f}%"
+    if fmt == "int":
+        return f"{int(round(x)):,}"
+    if fmt == "money":  # $ millions; legacy never used "T" (NVDA = "5114.26B")
+        if abs(x) >= 1000:
+            return f"{x / 1000:.2f}B"
+        return f"{x:.2f}M"
+    if fmt == "count":  # raw units
+        for div, suf in ((1e9, "B"), (1e6, "M"), (1e3, "K")):
+            if abs(x) >= div:
+                return f"{x / div:.2f}{suf}"
+        return f"{x:.2f}"
+    raise ValueError(f"unknown SSR format {fmt!r}")
+
+
+def _parse_ssr_json(soup) -> tuple[list[str], list[dict]]:
+    """Parse the redesigned screener's <script data-ssr-props> JSON → (headers, rows).
+
+    Headers are the legacy labels (SSR_COLUMN_MAP order) so downstream code that
+    keys rows by label (picks.csv columns, morning/held quote fields) is unchanged.
+    Every row carries all mapped labels; the requested column set (`c=` param) is
+    selected later by label exactly as with the legacy table.
+    """
+    for tag in soup.select("script[data-ssr-props]"):
+        try:
+            props = json.loads(tag.string or "")
+        except ValueError:
+            continue
+        data = props.get("data") if isinstance(props, dict) else None
+        if not isinstance(data, dict) or not isinstance(data.get("rows"), list):
+            continue
+        headers = [label for label, _k, _f in SSR_COLUMN_MAP]
+        out = []
+        for r in data["rows"]:
+            text = r.get("text") or {}
+            nums = r.get("numbers") or {}
+            if not text.get("ticker"):
+                continue
+            row = {}
+            for label, key, fmt in SSR_COLUMN_MAP:
+                raw = text.get(key) if fmt in ("text", "earn") else nums.get(key)
+                row[label] = _fmt_ssr_value(raw, fmt)
+            out.append(row)
+        return (headers, out) if out else ([], [])
+    return [], []
+
 def _parse_table(html: str) -> tuple[list[str], list[dict]]:
     """
     Parse Finviz screener HTML → (header_labels, rows).
@@ -149,8 +288,9 @@ def _parse_table(html: str) -> tuple[list[str], list[dict]]:
     soup = BeautifulSoup(html, "html.parser")
     table = soup.select_one(SCREENER_TABLE_SELECTOR)
     if not table:
-        # Finviz returns HTTP 200 with no table when the slug is wrong or 0 results
-        return [], []
+        # Redesigned screener (2026-10): no <table>; data lives in SSR JSON.
+        # Returns ([], []) when that is absent too (wrong slug / 0 results / block).
+        return _parse_ssr_json(soup)
 
     rows = table.find_all("tr")
     if not rows:
@@ -258,7 +398,7 @@ def _scrape_group(page, config: dict, ind_slug: str) -> tuple[list[str], list[di
         # for .groups_table. Without this wait the probe sees 0 rows / 0 cols
         # even though the URL renders fine in a real browser.
         try:
-            page.wait_for_selector(SCREENER_TABLE_SELECTOR, timeout=30_000)
+            page.wait_for_selector(SCREENER_READY_SELECTOR, timeout=30_000)
         except Exception as exc:
             # Selector never appeared — dump diagnostics so the failure is
             # debuggable from CI logs (Cloudflare challenge vs. wrong selector

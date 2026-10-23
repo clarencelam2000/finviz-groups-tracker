@@ -27,7 +27,7 @@ from pathlib import Path
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
-import probe_picks  # noqa: E402  (reuse _parse_table, PAGE_SIZE, SCREENER_TABLE_SELECTOR)
+import probe_picks  # noqa: E402  (reuse _parse_table, PAGE_SIZE, SCREENER_READY_SELECTOR)
 import replay_picks  # noqa: E402  (reuse the server-side Focus reconstruction — issue #293)
 import session_config  # noqa: E402
 from collect import NYSE_HOLIDAYS, _is_trading_day  # noqa: E402  (reuse holiday table only — NOT trading_date's rollback)
@@ -223,7 +223,7 @@ def fetch_ticker_quotes(page, tickers: list, config: dict, block: str = "morning
             url = build_ticker_url(config, batch, offset=offset, block=block)
             page.goto(url, wait_until="domcontentloaded", timeout=30_000)
             try:
-                page.wait_for_selector(probe_picks.SCREENER_TABLE_SELECTOR, timeout=30_000)
+                page.wait_for_selector(probe_picks.SCREENER_READY_SELECTOR, timeout=30_000)
             except Exception as exc:
                 # An out-of-range/empty result page may not render the table shell.
                 # Mirror probe_picks._scrape_group: fall through to parse (0 rows ->
@@ -232,7 +232,7 @@ def fetch_ticker_quotes(page, tickers: list, config: dict, block: str = "morning
                 # Log it (like probe_picks' WARNING) so a Cloudflare block / network
                 # stall on a batch is distinguishable in CI logs from a genuinely
                 # empty page — batch[0]..batch[-1] identifies which chunk stalled.
-                print(f"  WARNING: '{probe_picks.SCREENER_TABLE_SELECTOR}' not found "
+                print(f"  WARNING: '{probe_picks.SCREENER_READY_SELECTOR}' not found "
                       f"after 30s for batch {batch[0]}..{batch[-1]} (r={offset}): {exc}",
                       file=sys.stderr)
             html = page.content()
