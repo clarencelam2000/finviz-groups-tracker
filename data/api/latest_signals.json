@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-10-26T19:52:01Z",
+  "generated_at": "2026-10-26T21:02:09Z",
   "as_of": "2026-10-26",
   "session": "eod",
   "data_branch": "claude/elegant-babbage-hlxnfy",
@@ -12,107 +12,107 @@
     {
       "group": "Personal Services",
       "rank_ytd": 126.0,
-      "regime_short_long": 0.6492,
-      "momentum_score": 0.4627,
+      "regime_short_long": 0.6457,
+      "momentum_score": 0.4615,
       "rs_score": 0.3333
     },
     {
       "group": "Mortgage Finance",
       "rank_ytd": 142.0,
-      "regime_short_long": 0.5548,
-      "momentum_score": 0.2145,
+      "regime_short_long": 0.5641,
+      "momentum_score": 0.2214,
       "rs_score": 0.1667
     },
     {
       "group": "Recreational Vehicles",
       "rank_ytd": 128.0,
-      "regime_short_long": 0.5443,
-      "momentum_score": 0.3263,
+      "regime_short_long": 0.5618,
+      "momentum_score": 0.3322,
       "rs_score": 0.3333
     },
     {
       "group": "Consulting Services",
-      "rank_ytd": 118.0,
+      "rank_ytd": 117.0,
       "regime_short_long": 0.507,
-      "momentum_score": 0.6072,
+      "momentum_score": 0.6084,
       "rs_score": 0.5
     },
     {
       "group": "Airports & Air Services",
       "rank_ytd": 139.0,
-      "regime_short_long": 0.4732,
-      "momentum_score": 0.2646,
+      "regime_short_long": 0.4755,
+      "momentum_score": 0.2634,
       "rs_score": 0.1667
     },
     {
       "group": "Home Improvement Retail",
       "rank_ytd": 115.0,
-      "regime_short_long": 0.4662,
-      "momentum_score": 0.3951,
+      "regime_short_long": 0.4627,
+      "momentum_score": 0.3998,
       "rs_score": 0.3333
     },
     {
       "group": "Residential Construction",
       "rank_ytd": 107.0,
-      "regime_short_long": 0.4406,
-      "momentum_score": 0.3939,
+      "regime_short_long": 0.4359,
+      "momentum_score": 0.3904,
       "rs_score": 0.3333
     },
     {
       "group": "REIT - Mortgage",
       "rank_ytd": 135.0,
-      "regime_short_long": 0.4277,
-      "momentum_score": 0.2016,
+      "regime_short_long": 0.4347,
+      "momentum_score": 0.204,
       "rs_score": 0.1667
-    },
-    {
-      "group": "Building Materials",
-      "rank_ytd": 129.0,
-      "regime_short_long": 0.4266,
-      "momentum_score": 0.2587,
-      "rs_score": 0.3333
     },
     {
       "group": "Utilities - Regulated Electric",
       "rank_ytd": 78.0,
-      "regime_short_long": 0.4242,
-      "momentum_score": 0.5408,
-      "rs_score": 0.3333
-    },
-    {
-      "group": "Leisure",
-      "rank_ytd": 97.0,
-      "regime_short_long": 0.4219,
-      "momentum_score": 0.5315,
-      "rs_score": 0.3333
-    },
-    {
-      "group": "Grocery Stores",
-      "rank_ytd": 83.0,
-      "regime_short_long": 0.3881,
-      "momentum_score": 0.655,
-      "rs_score": 0.5
-    },
-    {
-      "group": "Insurance Brokers",
-      "rank_ytd": 98.0,
-      "regime_short_long": 0.3869,
-      "momentum_score": 0.6002,
-      "rs_score": 0.5
-    },
-    {
-      "group": "Utilities - Regulated Gas",
-      "rank_ytd": 79.0,
-      "regime_short_long": 0.3858,
-      "momentum_score": 0.5676,
+      "regime_short_long": 0.4277,
+      "momentum_score": 0.542,
       "rs_score": 0.3333
     },
     {
       "group": "Gambling",
       "rank_ytd": 143.0,
-      "regime_short_long": 0.3834,
-      "momentum_score": 0.1562,
+      "regime_short_long": 0.4254,
+      "momentum_score": 0.176,
       "rs_score": 0.1667
+    },
+    {
+      "group": "Leisure",
+      "rank_ytd": 96.0,
+      "regime_short_long": 0.4242,
+      "momentum_score": 0.5315,
+      "rs_score": 0.3333
+    },
+    {
+      "group": "Building Materials",
+      "rank_ytd": 129.0,
+      "regime_short_long": 0.4196,
+      "momentum_score": 0.2564,
+      "rs_score": 0.3333
+    },
+    {
+      "group": "Utilities - Regulated Gas",
+      "rank_ytd": 79.0,
+      "regime_short_long": 0.3951,
+      "momentum_score": 0.5688,
+      "rs_score": 0.3333
+    },
+    {
+      "group": "Insurance Brokers",
+      "rank_ytd": 97.0,
+      "regime_short_long": 0.3869,
+      "momentum_score": 0.6014,
+      "rs_score": 0.5
+    },
+    {
+      "group": "Grocery Stores",
+      "rank_ytd": 84.0,
+      "regime_short_long": 0.3869,
+      "momentum_score": 0.6515,
+      "rs_score": 0.5
     }
   ],
   "top_movers": [
@@ -147,6 +147,12 @@
       "rank_delta": 26.0
     },
     {
+      "group": "Insurance Brokers",
+      "timeframe": "20d",
+      "to_rank": 97.0,
+      "rank_delta": 25.0
+    },
+    {
       "group": "Discount Stores",
       "timeframe": "20d",
       "to_rank": 49.0,
@@ -155,19 +161,19 @@
     {
       "group": "Grocery Stores",
       "timeframe": "20d",
-      "to_rank": 83.0,
-      "rank_delta": 24.0
-    },
-    {
-      "group": "Insurance Brokers",
-      "timeframe": "20d",
-      "to_rank": 98.0,
-      "rank_delta": 24.0
+      "to_rank": 84.0,
+      "rank_delta": 23.0
     },
     {
       "group": "Financial Data & Stock Exchanges",
       "timeframe": "20d",
       "to_rank": 88.0,
+      "rank_delta": 22.0
+    },
+    {
+      "group": "Leisure",
+      "timeframe": "20d",
+      "to_rank": 96.0,
       "rank_delta": 22.0
     },
     {
@@ -177,10 +183,10 @@
       "rank_delta": 22.0
     },
     {
-      "group": "Leisure",
+      "group": "Apparel Manufacturing",
       "timeframe": "20d",
-      "to_rank": 97.0,
-      "rank_delta": 21.0
+      "to_rank": 83.0,
+      "rank_delta": 20.0
     },
     {
       "group": "Chemicals",
@@ -195,15 +201,9 @@
       "rank_delta": 20.0
     },
     {
-      "group": "Apparel Manufacturing",
+      "group": "Consulting Services",
       "timeframe": "20d",
-      "to_rank": 84.0,
-      "rank_delta": 19.0
-    },
-    {
-      "group": "Utilities - Regulated Gas",
-      "timeframe": "20d",
-      "to_rank": 79.0,
+      "to_rank": 117.0,
       "rank_delta": 19.0
     }
   ],
@@ -217,14 +217,14 @@
     {
       "group": "Engineering & Construction",
       "timeframe": "20d",
-      "to_rank": 75.0,
-      "rank_delta": -48.0
+      "to_rank": 76.0,
+      "rank_delta": -49.0
     },
     {
       "group": "Biotechnology",
       "timeframe": "20d",
-      "to_rank": 77.0,
-      "rank_delta": -45.0
+      "to_rank": 75.0,
+      "rank_delta": -43.0
     },
     {
       "group": "Metal Fabrication",
@@ -233,16 +233,16 @@
       "rank_delta": -41.0
     },
     {
+      "group": "Capital Markets",
+      "timeframe": "20d",
+      "to_rank": 102.0,
+      "rank_delta": -37.0
+    },
+    {
       "group": "Internet Content & Information",
       "timeframe": "20d",
       "to_rank": 92.0,
       "rank_delta": -37.0
-    },
-    {
-      "group": "Capital Markets",
-      "timeframe": "20d",
-      "to_rank": 101.0,
-      "rank_delta": -36.0
     },
     {
       "group": "Other Industrial Metals & Mining",
@@ -253,25 +253,25 @@
     {
       "group": "Gold",
       "timeframe": "20d",
-      "to_rank": 102.0,
-      "rank_delta": -33.0
+      "to_rank": 101.0,
+      "rank_delta": -32.0
     },
     {
       "group": "Electronic Components",
       "timeframe": "20d",
-      "to_rank": 41.0,
-      "rank_delta": -27.0
+      "to_rank": 43.0,
+      "rank_delta": -29.0
+    },
+    {
+      "group": "Coking Coal",
+      "timeframe": "20d",
+      "to_rank": 118.0,
+      "rank_delta": -26.0
     },
     {
       "group": "Aluminum",
       "timeframe": "20d",
       "to_rank": 127.0,
-      "rank_delta": -25.0
-    },
-    {
-      "group": "Coking Coal",
-      "timeframe": "20d",
-      "to_rank": 117.0,
       "rank_delta": -25.0
     },
     {
