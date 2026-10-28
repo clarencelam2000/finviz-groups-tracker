@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-10-28T21:01:56Z",
+  "generated_at": "2026-10-28T23:39:59Z",
   "as_of": "2026-10-28",
   "session": "eod",
   "data_branch": "claude/elegant-babbage-hlxnfy",
@@ -189,12 +189,6 @@
       "rank_delta": 17.0
     },
     {
-      "group": "Insurance - Diversified",
-      "timeframe": "20d",
-      "to_rank": 66.0,
-      "rank_delta": 16.0
-    },
-    {
       "group": "Insurance - Property & Casualty",
       "timeframe": "20d",
       "to_rank": 59.0,
@@ -205,6 +199,12 @@
       "timeframe": "20d",
       "to_rank": 78.0,
       "rank_delta": 16.0
+    },
+    {
+      "group": "Household & Personal Products",
+      "timeframe": "20d",
+      "to_rank": 62.0,
+      "rank_delta": 15.0
     }
   ],
   "fading": [
