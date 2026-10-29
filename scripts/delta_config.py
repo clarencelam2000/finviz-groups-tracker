@@ -25,10 +25,32 @@ SNAPSHOT_COLS = [
 # Raw perf_* values are stored here — never derived spreads. This is the
 # two-way-door invariant: rs_ratio and RRG axes are retroactively derivable
 # from raw perf_* without data loss. See ADR-005.
+#
+# 2026-09-20 (issue #419): widened to the full SPY quote-page field set.
+# The original 10 columns keep their names and positions (compute_deltas.py's
+# RS computation reads perf_* unchanged); the new quote-page fields are
+# appended after perf_ytd. Rows collected before 2026-09-20 leave the new
+# columns blank — unavoidable, Finviz serves a point-in-time quote page with
+# no historical endpoint. perf_* stay parsed floats; the new fields are stored
+# as raw Finviz text (formats vary: "593.21 - 712.80", "1.24% 1.87%", "Yes").
 BENCH_CSV_COLUMNS = [
     "date", "collected_at", "ticker",
     "perf_day", "perf_week", "perf_month", "perf_quarter",
     "perf_half", "perf_year", "perf_ytd",
+    # --- full quote-page field set (issue #419) ---
+    "price", "prev_close", "high", "low",
+    "sma20", "sma50", "sma200",
+    "dist_52w_high", "dist_52w_low", "range_52w",
+    "rsi_14", "beta", "atr", "volatility",
+    "volume", "avg_volume", "rel_volume",
+    "market_cap", "pe", "fwd_pe",
+    "target_price", "recom",
+    "short_ratio", "short_float", "inst_own", "inst_trans",
+    "shs_outstand", "shs_float",
+    "dividend", "dividend_ttm", "dividend_est", "payout",
+    "income", "sales",
+    "optionable", "shortable",
+    "spy_index", "employees",
 ]
 
 # The 7 performance columns within BENCH_CSV_COLUMNS. All 7 must parse

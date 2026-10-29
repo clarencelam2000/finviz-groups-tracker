@@ -64,7 +64,7 @@ data/
     snapshots.csv    # append-only; one row per (date, industry) ~150 rows/day
     deltas.csv       # append-only; one row per (date, industry) ~150 rows/day
   benchmark/
-    snapshots.csv    # append-only; one SPY row per trading date; raw perf_* (never spread-only)
+    snapshots.csv    # append-only; one SPY row per trading date; raw perf_* (never spread-only) + full quote-page field set (issue #419)
   finviz_sector_industry_map.json  # static; sector→industry containment tree; re-seed if Finviz restructures
   finviz_sector_industry_map.csv   # flat (finviz_sector, finviz_industry) pairs; for pandas joins
   picks/
@@ -89,6 +89,17 @@ Seeded by `scripts/seed_taxonomy.py` from [fasiha/finviz-git-scraper](https://gi
 - `market_cap` is in billions (e.g., `1.23` = $1.23B)
 - `avg_volume` is in raw units (e.g., `1230000`)
 - Null values stored as empty string in CSV
+
+### benchmark/snapshots.csv columns (issue #419)
+
+`date, collected_at, ticker, perf_day, perf_week, perf_month, perf_quarter, perf_half, perf_year, perf_ytd`,
+then the full SPY quote-page field set, appended after `perf_ytd`:
+`price, prev_close, high, low, sma20, sma50, sma200, dist_52w_high, dist_52w_low, range_52w, rsi_14, beta, atr, volatility, volume, avg_volume, rel_volume, market_cap, pe, fwd_pe, target_price, recom, short_ratio, short_float, inst_own, inst_trans, shs_outstand, shs_float, dividend, dividend_ttm, dividend_est, payout, income, sales, optionable, shortable, spy_index, employees`
+
+- The first 10 columns (through `perf_ytd`) are unchanged in name and order — `compute_deltas.py`'s RS computation reads them as before.
+- `perf_*` are parsed floats; all other fields are raw Finviz text as shown on the quote page (e.g. `range_52w` = `"593.21 - 712.80"`, `volatility` = `"1.24% 1.87%"`, `dist_52w_high` = `"-4.12%"` = % below the 52-week high).
+- Schema is append-only and backfill-safe: rows collected before 2026-09-20 leave the new columns blank (Finviz has no historical quote endpoint, so those days are unrecoverable).
+- Unknown quote-page labels are captured under a normalized name and logged as `[warn]` in the collect run, so a future Finviz label change is CI-visible instead of silently dropped.
 
 ### deltas.csv columns
 

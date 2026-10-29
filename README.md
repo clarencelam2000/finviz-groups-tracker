@@ -110,6 +110,8 @@ data/
   industries/
     snapshots.csv      # same structure, for industries
     deltas.csv
+  benchmark/
+    snapshots.csv      # SPY benchmark: one row per trading date; 7 parsed perf_* + full quote-page field set (price, SMAs, 52W range, RSI, beta, volume, …)
   ai/
     YYYY-MM-DD.json    # nightly AI analysis output (one file per trading day)
   fetch_log.csv        # workflow run history: outcome, row counts, AI status
@@ -119,6 +121,10 @@ data/
 ### Snapshot columns
 
 `date, collected_at, group_type, name, stocks, market_cap, pe, fwd_pe, perf_day, perf_week, perf_month, perf_quarter, perf_half, perf_year, perf_ytd, avg_volume, rel_volume, change`
+
+### Benchmark snapshot columns
+
+`data/benchmark/snapshots.csv` holds one SPY row per trading date: the 10 base columns (`date, collected_at, ticker, perf_day, perf_week, perf_month, perf_quarter, perf_half, perf_year, perf_ytd`) followed by the full quote-page field set — `price, prev_close, high, low, sma20, sma50, sma200, dist_52w_high, dist_52w_low, range_52w, rsi_14, beta, atr, volatility, volume, avg_volume, rel_volume, market_cap, pe, fwd_pe, target_price, recom, short_ratio, short_float, inst_own, inst_trans, shs_outstand, shs_float, dividend, dividend_ttm, dividend_est, payout, income, sales, optionable, shortable, spy_index, employees`. See `CLAUDE.md` § `benchmark/snapshots.csv columns` for semantics. Rows before 2026-09-20 leave the new columns blank (unrecoverable — Finviz has no historical quote endpoint).
 
 ### Delta columns
 
