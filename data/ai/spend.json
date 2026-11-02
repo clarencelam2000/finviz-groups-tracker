@@ -1,21 +1,21 @@
 {
-  "updated_at": "2026-10-30T23:24:40Z",
+  "updated_at": "2026-11-02T20:54:04Z",
   "model": "gemini-3.8-flash",
   "month": "2026-10",
-  "month_to_date_usd": 0.8943,
-  "runs": 65,
-  "runs_with_cost": 65,
+  "month_to_date_usd": 0.9115,
+  "runs": 66,
+  "runs_with_cost": 66,
   "soft_budget_usd": 10.0,
   "budget_is_shared": true,
   "last_run": {
     "date": "2026-10-30",
-    "cost_usd": 0.014588,
+    "cost_usd": 0.017117,
     "tokens": {
-      "prompt_tokens": 5801,
-      "output_tokens": 2730,
-      "thoughts_tokens": 0,
+      "prompt_tokens": 5798,
+      "output_tokens": 2864,
+      "thoughts_tokens": 541,
       "cached_tokens": 0,
-      "total_tokens": 8531
+      "total_tokens": 9203
     },
     "outcome": "complete"
   }
