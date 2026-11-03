@@ -309,6 +309,7 @@ prompt/parser is in git history (see the `TASK_SPECS` comment in `generate_ai.py
 - **Why:** owner wants a plain-language restatement of goal + problem after long/rambling messages, before any work. Skill is committed per-repo (user-level skills aren't versioned and don't persist in cloud sessions); mirrored in the `distil` repo.
 - **Next steps:** none.
 
+---
 ## 2026-09-28 — PR #425 review + multi-ETF benchmark extension (SPY/QQQ/IWM)
 
 **Status:** safe to close once the stacked PR is reviewed. Nothing merged by Claude.
@@ -321,3 +322,21 @@ prompt/parser is in git history (see the `TASK_SPECS` comment in `generate_ai.py
 - Docs: CLAUDE.md benchmark section, README data tree + config table (`BENCH_TICKERS`, `RS_BENCHMARK_TICKER`).
 
 **Next steps:** merge #425 then the stacked PR (or retarget), dispatch `collect.yml` once, do BENCH-ETF-2 (add real ETF labels). BENCH-ETF-3/4 in SPRINT backlog.
+
+---
+## 2026-10-23 — Picks scrape outage RCA + fix (Finviz screener redesign)
+
+- **Status:** PR open, awaiting merge. Not safe to close until it merges (picks stays broken until then).
+- **RCA:** since 2026-10-17 Finviz serves a redesigned screener (`/screener/stocks`, no `table.screener_table`, canvas grid). Not Cloudflare, not filter codes; I checked both on Actions. Full data is in `<script data-ssr-props>` JSON.
+- **Landed (PR):** `_parse_table` SSR-JSON fallback rendered in legacy formats under legacy labels; `SCREENER_READY_SELECTOR` wait; `tests/test_screener_ssr_parse.py` + trimmed real fixture; `knowledge/investigations/finviz-screener-redesign-2026-10.md`. Verified live: probe on fix branch → Semiconductors 37 rows / 2 pages / 84 cols PASS.
+- **Data gap:** picks for 2026-10-19..10-22 are lost (screen is live-only). Morning/pre-close/held use the same parser; they worked through 10-22 (probably a gradual rollout) but are covered by this fix too.
+- **Next steps:** merge, then manually dispatch `collect_picks.yml` to capture 2026-10-23. Delete the `claude/diag-picks-screener` branch (push --delete was refused from the session).
+
+---
+
+## 2026-11-03 — picks outage: review + merge of screener-redesign fix (PR #435)
+
+- **Status:** safe to close once post-merge verification below passes.
+- **Landed:** reviewed PR #435. One fix applied: `_fmt_ssr_value` "earn" no longer guesses `/b` for date-only `earningsDate`; it emits bare `Mon DD` (already accepted by `replay_picks.py` and the PWA's earnings parser). Regression test added. Merged #435 and dispatched `collect_picks.yml` on default to confirm.
+- **Outage scope:** picks failed 2026-10-17 → 2026-11-02 (fix sat unmerged 10-23 → 11-03). Dates 10-19..11-02 are unrecoverable (screener is live-only).
+- **Next steps:** watch the next morning / pre-close / held runs (same parser). Delete stale `claude/diag-picks-screener` branch.
