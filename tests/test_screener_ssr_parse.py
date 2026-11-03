@@ -45,7 +45,7 @@ def test_values_rendered_in_legacy_display_format(parsed):
 @pytest.mark.parametrize("value,fmt,expected", [
     (None, "pct", "-"), ("", "text", "-"), (float("nan"), "f2", "-"),
     (187.9, "money", "187.90M"), (429770, "count", "429.77K"),
-    ("2026-10-21T08:00:00", "earn", "Oct 21/b"), ("garbage", "earn", "-"),
+    ("2026-10-21T08:00:00", "earn", "Oct 21/b"), ("2026-10-21", "earn", "Oct 21"), ("garbage", "earn", "-"),
     ("x", "f2", "-"),
 ])
 def test_fmt_ssr_value_edges(value, fmt, expected):

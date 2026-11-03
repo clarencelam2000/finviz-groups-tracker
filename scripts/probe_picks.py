@@ -223,8 +223,10 @@ def _fmt_ssr_value(value, fmt: str) -> str:
         m = re.match(r"(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}))?", str(value))
         if not m:
             return "-"
-        hour = int(m.group(4) or 0)
-        return f"{_MONTHS[int(m.group(2)) - 1]} {m.group(3)}/{'b' if hour < 12 else 'a'}"
+        day = f"{_MONTHS[int(m.group(2)) - 1]} {m.group(3)}"
+        if m.group(4) is None:  # date-only: session unknown, so no /b or /a suffix
+            return day
+        return f"{day}/{'b' if int(m.group(4)) < 12 else 'a'}"
     try:
         x = float(value)
     except (TypeError, ValueError):
