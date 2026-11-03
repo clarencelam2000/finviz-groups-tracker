@@ -283,10 +283,10 @@ class TestPicksAtrRowAndEarnings:
 
     def test_power_of_3_chip_and_ma_distances(self):
         """B-5 (issue #379): the 'MA bunching' block shows the green 'Pre-Power of 3' coil-precondition
-        chip when price/20MA/50MA are bunched within the 2xATR band, plus the two shown SMA % distances
+        chip when price/20MA/50MA are bunched within the 1.5xATR band, plus the two shown SMA % distances
         and the classic MA-to-MA cluster spread % (SHOWN values, doc §4.0). The chip is computed
         CLIENT-SIDE from raw Price/ATR/SMA20/SMA50 — no stored power_of_3 column. ANET fixture: Price
-        165.45, ATR 8.39, SMA20 1.16%, SMA50 3.52% → span ~5.6 <= 2×8.39 → bunched; spread ~2.25%."""
+        165.45, ATR 8.39, SMA20 1.16%, SMA50 3.52% → span ~5.6 <= 1.5×8.39 → bunched; spread ~2.25%."""
         from playwright.sync_api import sync_playwright
 
         body = _single_row_csv({})  # ANET: raw cols → client computes bunched
@@ -309,7 +309,7 @@ class TestPicksAtrRowAndEarnings:
             browser.close()
 
     def test_power_of_3_no_chip_when_not_bunched(self):
-        """Pushing the 50MA far from price (SMA50 30% → 50MA$ ~127 vs price 165.45, span ~38 > 2×ATR)
+        """Pushing the 50MA far from price (SMA50 30% → 50MA$ ~127 vs price 165.45, span ~38 > 1.5×ATR)
         shows the MA-distance values but NOT the 'Pre-Power of 3' chip — the client-computed chip is a
         fact that either fires or doesn't, never a score (doc §4.0)."""
         from playwright.sync_api import sync_playwright

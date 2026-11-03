@@ -260,6 +260,20 @@ All pipeline parameters live in `scripts/delta_config.py`. Edit that file to cha
 | `RS_AGREEMENT_COLS` | `["rs_month", "rs_quarter", "rs_half"]` | RS spread columns used to compute `rs_agreement`. Mirrors `rank_agreement` inputs for consistency. |
 | `RS_REGIME_SHORT` / `RS_REGIME_LONG` | wk+month / qtr+half+year | Buckets for `rs_regime_short_long` (RS analog of `regime_short_long`). |
 | `RS_BEAT_TIMEFRAMES` | `["day","week","month","quarter","half","year","ytd"]` | Timeframe suffixes that get a `beats_benchmark_X` boolean column. Changing this adds or removes columns from the delta schema; auto-migrated by `ensure_deltas_csv()`. |
+
+### Agent feed (`scripts/build_signals.py`)
+
+Publishes `data/api/manifest.json` + `data/api/latest_signals.json` — a small, versioned,
+**public** JSON contract for external read-only agents so they never couple to the raw CSV
+schemas. Regenerated at the end of `collect.yml` and `collect_picks.yml`. Nothing derived from
+the private position book is ever written here.
+
+| Parameter | Default | What it controls |
+|-----------|---------|-----------------|
+| `SCHEMA_VERSION` | `"1.0"` | major.minor contract version. **Additive-only within a major**; bump the minor for additive fields, the major only for a breaking shape change. Consumers halt on a major bump. |
+| `TOP_N` | `15` | Rows per top-N signal list (emerging leaders / movers / fading). Keeps the file KBs, not MBs. |
+| `MOVERS_WINDOW` | `20` | Lookback (sessions) for the movers/fading `rank_ytd_delta_Nd` column. Must exist in `LOOKBACK_WINDOWS`. |
+| `ATR_BANDS` | `{actionable_max: 4.0, trim_min: 8.0}` | ATR-extension band thresholds **published (not applied)** in the manifest so a consumer derives the band itself. Source of truth is the PWA `ATR_EXT_ACTIONABLE` / `ATR_EXT_TRIM` (`docs/CLAUDE.md`); keep in sync in the same PR. |
 | `RS_NEW_HIGH_WINDOW` | `20` | Trading sessions looked back for `rs_new_high`. 20 ≈ 1 trading month — classic IBD RS-new-high window. Must be ≥ 2. |
 | `RS_CROSS_WINDOW` | `5` | Trading sessions looked back for `rs_cross`. 5 ≈ 1 trading week — tight window to catch fresh rotations and filter noise. Must be ≥ 2. |
 
@@ -390,7 +404,7 @@ These constants control when visual indicators appear or change state. All are n
 | `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start (≥8× = trim-10% candidate for held positions). Amber band is 4–8×. |
 | `ATR_FROM_LOD_CLEAN` / `ATR_FROM_LOD_CHASE` | `0.8` / `1.0` | Morning tab (WS3) entry-quality bands on `atr_from_lod` = (price − session low) / ATR, shown on every card status (not gated to actionable cards, since 2026-09-02). `≤0.8` clean entry, `>1.0` chasing, between = caution. Also in `docs/CLAUDE.md` threshold table. |
 | `LAUNCH_NEAR_HIGH_PCT` | `8` | Launch-ready chip (Picks tab, Phase 1): `ohMag` (% below 52-week high) at or under this counts as "near the high" (little overhead supply). Also in `docs/CLAUDE.md` threshold table. |
-| `POWER_OF_3_ATR_MULT` | `2.0` | Pre-Power of 3 MA-bunching chip (B-5, Volatility & setup section): width, in ATR multiples, of the band that price, the 20MA and the 50MA must all fit inside for the chip to fire. Owner-set band (a fact, not an invented cutoff); larger = looser. Computed client-side in `volSetupSectionHtml` from raw Price/ATR/SMA20/SMA50 — deliberately **not** a stored CSV column (a config-dependent pure single-row value belongs at render time; see `.claude/rules/data-pipeline.md` § Schema changes). Also in `docs/CLAUDE.md` threshold table. |
+| `POWER_OF_3_ATR_MULT` | `1.5` | Pre-Power of 3 MA-bunching chip (B-5, Volatility & setup section): width, in ATR multiples, of the band that price, the 20MA and the 50MA must all fit inside for the chip to fire. Owner-set band (a fact, not an invented cutoff); larger = looser. Computed client-side in `volSetupSectionHtml` from raw Price/ATR/SMA20/SMA50 — deliberately **not** a stored CSV column (a config-dependent pure single-row value belongs at render time; see `.claude/rules/data-pipeline.md` § Schema changes). Also in `docs/CLAUDE.md` threshold table. |
 | `VOLATILITY_FLOOR_PCT` | `1.0` | Hard exclusion gate (2026-09-02): hides a row from Picks/Focus/Morning when Volatility W % OR ATR/Price % is below this floor — catches near-dead names (buyout-frozen, halted, perpetual preferreds) whose tight range would otherwise read as a false coiled setup. Missing data passes through (NaN ≠ low). Watchlist and a direct Lookup ticker search are exempt and get a "Low volatility" warning chip instead of being hidden. Computed client-side (`passesVolatilityFloor()`) from already-scraped Volatility W/ATR/Price — not a stored CSV column. Also in `docs/CLAUDE.md` threshold table. |
 | `LAUNCH_CALM_EXT_MAX` | `3` | Launch-ready chip: `atr_ext_50` at or under this (and `> 0`), combined with near-high, classifies the pick as `Coiled`; above this = `Extended`. Also in `docs/CLAUDE.md` threshold table. |
 | `LAUNCH_OVERHEAD_PCT` | `20` | Launch-ready chip: `ohMag` above this classifies the pick as `Overhead` (deep below high, heavy overhead supply). Also in `docs/CLAUDE.md` threshold table. |
@@ -491,6 +505,26 @@ Controls Tier-1 (provenance) and Tier-2 (debug capture) output, auth, and retent
 | `GOOGLE_API_KEY` (env) | unset | Vertex AI express key (third auth path). Priority: express key > Vertex ADC > AI Studio. Enables Vertex without a full GCP project credential setup. |
 
 **Auth priority for Vertex AI:** `GOOGLE_API_KEY` (express key) → `GOOGLE_CLOUD_PROJECT` + ADC → graceful-skip with a clear error message.
+
+#### AI spend controls (`scripts/generate_ai.py` / `scripts/ai_cost.py`)
+
+Added 2026-09-10 to protect the shared monthly Gemini credit once free-trial credits lapse.
+
+| Parameter | Default | What it controls |
+|-----------|---------|-----------------|
+| `GEMINI_MODEL` | `gemini-3.8-flash` | The model. 3.8 is durably cheaper than 3.5 on output ($7.50 vs $9.00/1M standard; $3.75 intro through 2026-12-31). Same `thinking_level` API; we never used the `minimal` level 3.8 dropped. |
+| `THINKING_LEVEL` | `"low"` | Reasoning effort (`"low"`/`"medium"`/`"high"`/`None`). **Biggest cost lever** — MEDIUM (the model default) was ~85% of the bill in billed thinking tokens. Applied to every call; a `TASK_SPEC`'s `generation_config` may override. Degrades to model default (warn, not outage) if an SDK rejects it. |
+| `DEFAULT_MAX_OUTPUT_TOKENS` | `2048` | Anti-truncation ceiling on **visible** output, every call. Not a cost lever (thinking governs cost). Set generously on purpose — too low with thinking on can surface as an empty-response error. |
+| `MAX_API_CALLS_PER_RUN` | `25` | Runaway/loop guard. Expected is 9 calls/run (11 before the `pulse` task — headline + conviction — was removed 2026-09-23); exceeding this raises `RunawayGuardError` and the run aborts **loud (exit 1)**. |
+| `AI_DISABLED` (env) | unset | **Kill switch.** Set to `1`/`true` to make every run exit 0 immediately with no API call — the documented "stop spending now" toggle; no secret/WIF teardown, CI stays green. |
+| `SPEND_SOFT_BUDGET_USD` | `10.0` | Display-only reference for the PWA spend surface — the **shared** monthly Gemini credit (other projects draw on it too), so a ceiling to stay under, not a target. Nothing enforces it. |
+| `PRICING` (ai_cost.py) | see file | Date-aware USD/1M-token table per model. Encodes the 2027-01-01 intro→standard cliff so month-to-date cost stays correct across it. Update here when Google changes published rates. |
+
+**Kill switch / pause AI spend:** set repo/workflow env `AI_DISABLED=1` (no code change, no secret deletion). Re-enable by removing it. `generate_ai.py` also still exits 0 gracefully if credentials are simply absent.
+
+**Actual-cost surface:** each run records real token usage + dollar cost (from the API's `usage_metadata`) into `data/ai_run_log.jsonl`, and rebuilds `data/ai/spend.json` (month-to-date actual cost). The PWA's AI tab renders this as a small "AI Spend" card at the bottom (AI-WALLET-PWA, 2026-09-11) — month-to-date cost vs. `SPEND_SOFT_BUDGET_USD`, run counts, and the last run's model/outcome; the card is account-wide, not tied to whichever date is being browsed, and silently omits itself if `spend.json` doesn't exist yet. The hard stops that protect the wallet are `THINKING_LEVEL`, `MAX_API_CALLS_PER_RUN`, `AI_DISABLED`, and a GCP-side billing budget + API quota cap (set in the Cloud console, out of repo).
+
+**Dedupe:** a run whose input data is byte-identical to the already-committed output for that date skips regeneration (no API spend) — kills the EOD backstop's redundant 3rd run. `--force-ai` bypasses.
 
 **Preview mode:** `python scripts/generate_ai.py --preview [--task TASK] [--group TYPE] [--json]` — builds prompts from CSVs, writes Tier-1 provenance, no API calls, no credentials required.
 

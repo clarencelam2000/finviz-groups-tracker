@@ -59,7 +59,7 @@ from picks_config import (
 from picks_metrics import METRICS_COLS, compute_metrics_row, compute_trailing_setup
 # Inherit the pure scrape/url/parse helpers from the Phase-1 probe — no need to
 # rewrite them. They are import-safe (Playwright is imported inside probe main()).
-from probe_picks import slugify_industry, _build_url, _parse_table, SCREENER_TABLE_SELECTOR
+from probe_picks import slugify_industry, _build_url, _parse_table, SCREENER_READY_SELECTOR
 
 BASE_DIR = Path(__file__).parent.parent
 DELTAS_CSV = BASE_DIR / "data" / "industries" / "deltas.csv"
@@ -736,7 +736,7 @@ def main():
             print(f"  GET {url}")
             page.goto(url, wait_until="domcontentloaded", timeout=30_000)
             try:
-                page.wait_for_selector(SCREENER_TABLE_SELECTOR, timeout=30_000)
+                page.wait_for_selector(SCREENER_READY_SELECTOR, timeout=30_000)
             except Exception as exc:
                 print(f"  WARNING: table selector not found: {exc}")
             return _parse_table(page.content())

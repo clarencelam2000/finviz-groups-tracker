@@ -37,7 +37,7 @@ parameters and, if it's a scoring/display constant tracked by the anti-drift gua
 | `ATR_EXT_TRIM` | `8.0` | ATR-extension red band start; flags a held position as a trim-10% candidate. |
 | `ATR_FROM_LOD_CLEAN` / `ATR_FROM_LOD_CHASE` | `0.8` / `1.0` | Morning tab (WS3, ADR-013) entry-quality bands on `atr_from_lod` = (price − session low) / ATR, shown on every Morning/Watch card status (owner decision 2026-09-02 dropped the original actionable-only gate — see below). `<= 0.8` clean entry (emerald "ok to act"), `> 1.0` chasing (red), between = caution (amber), same bands regardless of status. Owner-set 2026-08-08. |
 | `LAUNCH_NEAR_HIGH_PCT` | `8` | Launch-ready chip (Picks tab, Phase 1, `computeLaunchReady()`): `ohMag` (% below 52-week high) `<=` this = "near the high" (little overhead supply). Display-only, no scoring effect. |
-| `POWER_OF_3_ATR_MULT` | `2.0` | "Pre-Power of 3" MA-bunching chip (B-5, issue #379) in the Volatility & setup section (`volSetupSectionHtml`): fires when price, the 20MA and the 50MA all fit inside one band this many ATRs wide. Owner-set band (a fact, doc §4.0 — not an invented cutoff); larger = looser. **Computed client-side from the raw Price/ATR/SMA20/SMA50 columns — deliberately NOT a stored CSV column** (a config-dependent pure single-row value belongs at render time — see `.claude/rules/data-pipeline.md` § Schema changes to ground-truth CSVs). Real-time on Morning/Watch because those four are in `_SETUP_FRESH_COLS`. Not tracked by `display_methodology.json` (a display fact, not part of the All/Focus scoring). |
+| `POWER_OF_3_ATR_MULT` | `1.5` | "Pre-Power of 3" MA-bunching chip (B-5, issue #379) in the Volatility & setup section (`volSetupSectionHtml`): fires when price, the 20MA and the 50MA all fit inside one band this many ATRs wide. Owner-set band (a fact, doc §4.0 — not an invented cutoff); larger = looser. **Computed client-side from the raw Price/ATR/SMA20/SMA50 columns — deliberately NOT a stored CSV column** (a config-dependent pure single-row value belongs at render time — see `.claude/rules/data-pipeline.md` § Schema changes to ground-truth CSVs). Real-time on Morning/Watch because those four are in `_SETUP_FRESH_COLS`. Not tracked by `display_methodology.json` (a display fact, not part of the All/Focus scoring). |
 | `VOLATILITY_FLOOR_PCT` | `1.0` | Hard exclusion gate (2026-09-02, owner call after the APGE false-"coiled" case, `passesVolatilityFloor()`): a row is hidden from Picks (`passesPicksBaseFilter`), Focus (`isFocusEligible`), and the Morning picks-confirmation read (`renderMorning`) when its `Volatility W` % OR ATR/Price % is below this floor — provably near-dead (buyout-frozen, halted, or a perpetual preferred) rather than a genuine tight coil. NaN passes through (unknown ≠ low). The user's own **watchlist** and a direct **Lookup** ticker search are exempt (explicit intent) — Lookup instead shows an amber "Low volatility" chip (`tickerContextHtml`). Validated 2026-09-02 against the live picks pool: both `Volatility W` and `ATR/Price` have a real gap between ~0.5% and ~1.2% (the next names up are legitimate low-vol mega-caps starting at 1.2%+), so `1.0` sits in that gap rather than being an eyeballed cutoff. **Computed client-side from the already-scraped `Volatility W`/`ATR`/`Price` columns — not a stored CSV column** (a row-visibility decision, not a schema change; see `.claude/rules/data-pipeline.md` § Schema changes to ground-truth CSVs). Tracked by `display_methodology.json` under `base_filter`/`focus_dq` (`v6` entry) — the Focus *scoring formula* itself is unchanged, only the candidate pool. |
 | `LAUNCH_CALM_EXT_MAX` | `3` | Launch-ready chip: `atr_ext_50` `<=` this (and `> 0`) alongside near-high = `Coiled`; `>` this = `Extended`. |
 | `LAUNCH_OVERHEAD_PCT` | `20` | Launch-ready chip: `ohMag >` this = `Overhead` (deep below high, heavy overhead supply). |
@@ -200,6 +200,29 @@ there is no resolve step and no ticker input in this UI at all.
 - Signed-out tap opens the panel showing a sign-in nudge only ("Session expired — sign in on
   the Positions tab…") — no add attempted, same wording convention as `watchAddErrorText`.
 - Tests: `tests/test_pwa_quick_watch.py` (Playwright — in the CI `--ignore=` list).
+
+## AI tab — spend card (AI-WALLET-PWA, 2026-09-11)
+
+A small "AI Spend" card renders at the bottom of `renderAI()`'s output, reading
+`data/ai/spend.json` (rebuilt by every `generate_ai.py` run — see `scripts/CLAUDE.md` § AI
+spend controls). `loadSpend()`/`state.spendData`/`SPEND_URL` follow the same load-once,
+reset-on-`__refresh()` convention as the rest of the AI tab's data (`loadAI`/`state.aiData`).
+
+- **Account-wide, not date-scoped.** Unlike the rest of the AI tab, the spend card doesn't
+  change when the user navigates the AI date picker — `spendSectionHtml()` is called from
+  every one of `renderAI()`'s three exit points (`_noData`, "not yet available" empty state,
+  and the normal briefing-cards path), so it's always the last thing rendered regardless of
+  which state the tab is in.
+- **Self-omits on a missing/failed fetch** (a repo that hasn't run `generate_ai.py` since
+  AI-WALLET landed, or a network hiccup) — `spendSectionHtml()` returns `''` when
+  `state.spendData` is null, same silent-degrade convention as `behindThis()`'s provenance
+  drawer.
+- **Budget bar is a display ceiling, not an enforcement mechanism** — mirrors
+  `SPEND_SOFT_BUDGET_USD`'s own doc note (scripts/CLAUDE.md, root CLAUDE.md § AI spend
+  controls): going over it shows a red bar + explicit "nothing is blocked" copy rather than
+  implying a hard stop. Tested in `tests/test_pwa_ai_spend.py` (Playwright — in the CI
+  `--ignore=` list, see `.claude/rules/branch-commit-discipline.md` § New Playwright test
+  files).
 
 ## Morning tab (WS3, ADR-013)
 

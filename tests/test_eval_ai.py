@@ -13,7 +13,6 @@ from eval_ai import (
     check_format,
     check_capture,
     main,
-    CONVICTION_LEVELS,
     PHASE_LABELS,
     _WARN_TAG,
 )
@@ -65,32 +64,32 @@ def test_name_in_absent():
 
 def test_hallucination_catches_name_absent_from_input():
     call = make_call(
-        "pulse",
+        "note",
         raw="Technology leads the market broadly.",
         input_blocks="MARKET STATE: breadth 5/5",  # "Technology" NOT here
     )
-    issues = check_hallucinations("sectors.pulse", call, {"Technology"})
+    issues = check_hallucinations("sectors.note", call, {"Technology"})
     assert any("hallucination" in i and "Technology" in i for i in issues)
 
 
 def test_hallucination_passes_when_name_in_input():
     call = make_call(
-        "pulse",
+        "note",
         raw="Technology leads the market broadly.",
         input_blocks="TOP GAINERS: Technology δ=+3 mom=0.88",
     )
-    issues = check_hallucinations("sectors.pulse", call, {"Technology"})
+    issues = check_hallucinations("sectors.note", call, {"Technology"})
     assert issues == []
 
 
 def test_hallucination_empty_raw_no_issues():
-    call = make_call("pulse", raw="", input_blocks="")
-    assert check_hallucinations("sectors.pulse", call, KNOWN) == []
+    call = make_call("note", raw="", input_blocks="")
+    assert check_hallucinations("sectors.note", call, KNOWN) == []
 
 
 def test_hallucination_empty_known_no_issues():
-    call = make_call("pulse", raw="Technology leads", input_blocks="")
-    assert check_hallucinations("sectors.pulse", call, set()) == []
+    call = make_call("note", raw="Technology leads", input_blocks="")
+    assert check_hallucinations("sectors.note", call, set()) == []
 
 
 def test_hallucination_multi_names():
@@ -105,60 +104,6 @@ def test_hallucination_multi_names():
     assert any("Semiconductors" in i for i in names_flagged)
     # Energy was in input — should NOT be flagged
     assert not any("Energy" in i for i in names_flagged)
-
-
-# ---------------------------------------------------------------------------
-# check_format — pulse
-# ---------------------------------------------------------------------------
-
-def test_format_pulse_good():
-    call = make_call(
-        "pulse",
-        parsed={"headline": "Tech leads broad recovery", "conviction": {"level": "High", "why": "All-green breadth"}},
-    )
-    assert check_format("sectors.pulse", call) == []
-
-
-def test_format_pulse_bad_level():
-    call = make_call(
-        "pulse",
-        parsed={"headline": "Tech leads", "conviction": {"level": "Very High", "why": "..."}},
-    )
-    issues = check_format("sectors.pulse", call)
-    assert any("conviction.level" in i and "Very High" in i for i in issues)
-
-
-def test_format_pulse_empty_headline():
-    call = make_call(
-        "pulse",
-        parsed={"headline": "", "conviction": {"level": "High", "why": "..."}},
-    )
-    issues = check_format("sectors.pulse", call)
-    assert any("headline is empty" in i for i in issues)
-
-
-def test_format_pulse_none_parsed():
-    call = make_call("pulse", parsed=None)
-    issues = check_format("sectors.pulse", call)
-    assert any("not a dict" in i for i in issues)
-
-
-def test_format_pulse_conviction_not_dict():
-    call = make_call(
-        "pulse",
-        parsed={"headline": "X", "conviction": "High"},
-    )
-    issues = check_format("sectors.pulse", call)
-    assert any("conviction is not a dict" in i for i in issues)
-
-
-def test_format_pulse_all_valid_levels():
-    for level in CONVICTION_LEVELS:
-        call = make_call(
-            "pulse",
-            parsed={"headline": "X", "conviction": {"level": level, "why": "ok"}},
-        )
-        assert check_format("sectors.pulse", call) == []
 
 
 # ---------------------------------------------------------------------------
@@ -260,8 +205,8 @@ def test_format_risk_radar_not_dict():
 # ---------------------------------------------------------------------------
 
 def test_format_skips_error_status():
-    call = make_call("pulse", parsed=None, status="error")
-    assert check_format("sectors.pulse", call) == []
+    call = make_call("rotation_phase", parsed=None, status="error")
+    assert check_format("sectors.rotation_phase", call) == []
 
 
 def test_format_skips_quota_exhausted():
@@ -289,11 +234,10 @@ def test_format_rotation_map_no_checks():
 
 def test_check_capture_clean():
     capture = make_capture({
-        "sectors.pulse": make_call(
-            "pulse",
+        "sectors.note": make_call(
+            "note",
             raw="Technology leads",
             input_blocks="Technology δ=+3",
-            parsed={"headline": "Tech leads", "conviction": {"level": "High", "why": "..."}},
         ),
         "sectors.rotation_phase": make_call(
             "rotation_phase",
@@ -307,26 +251,25 @@ def test_check_capture_clean():
 
 def test_check_capture_with_issues():
     capture = make_capture({
-        "sectors.pulse": make_call(
-            "pulse",
+        "sectors.rotation_phase": make_call(
+            "rotation_phase",
             raw="Financials lead strongly",  # Financials not in input
             input_blocks="Technology δ=+3",
-            parsed={"headline": "", "conviction": {"level": "VeryHigh", "why": "..."}},
+            parsed={"label": "VeryHigh", "reasoning": "..."},
         ),
     })
     issues = check_capture(capture, {"Technology", "Financials"})
     assert len(issues) > 0
     # Should have a header line for the fkey
-    assert any("[sectors.pulse]" in i for i in issues)
+    assert any("[sectors.rotation_phase]" in i for i in issues)
 
 
 def test_check_capture_skip_hallucination():
     capture = make_capture({
-        "sectors.pulse": make_call(
-            "pulse",
+        "sectors.note": make_call(
+            "note",
             raw="Financials lead",
             input_blocks="",
-            parsed={"headline": "ok", "conviction": {"level": "High", "why": "..."}},
         ),
     })
     # With skip_hallucination=True, Financials mention should not be flagged
@@ -357,11 +300,10 @@ def test_main_no_files_returns_zero(tmp_path):
 
 def test_main_good_file_returns_zero(tmp_path):
     capture = make_capture({
-        "sectors.pulse": make_call(
-            "pulse",
+        "sectors.note": make_call(
+            "note",
             raw="Technology is strong",
             input_blocks="Technology δ=+3",
-            parsed={"headline": "Tech leads", "conviction": {"level": "High", "why": "ok"}},
         ),
         "sectors.rotation_phase": make_call(
             "rotation_phase",
@@ -378,9 +320,9 @@ def test_main_good_file_returns_zero(tmp_path):
 
 def test_main_bad_file_returns_one(tmp_path):
     capture = make_capture({
-        "sectors.pulse": make_call(
-            "pulse",
-            parsed={"headline": "", "conviction": {"level": "UNKNOWN", "why": ""}},
+        "sectors.rotation_phase": make_call(
+            "rotation_phase",
+            parsed={"label": "UNKNOWN", "reasoning": ""},
         ),
     })
     p = tmp_path / "2026-06-22.json"
@@ -458,12 +400,11 @@ def test_check_capture_sector_name_still_flagged_in_sectors_call():
         "industries": set(),
     }
     call = make_call(
-        "pulse",
+        "note",
         raw="Industrials leads strongly today.",
         input_blocks="Technology δ=+3",  # "Industrials" NOT in input
-        parsed={"headline": "ok", "conviction": {"level": "High", "why": "..."}},
     )
-    capture = make_capture({"sectors.pulse": call})
+    capture = make_capture({"sectors.note": call})
     issues = check_capture(capture, known_dict)
     assert any("hallucination" in i and "Industrials" in i for i in issues)
 
@@ -491,12 +432,11 @@ def test_check_capture_industry_name_flagged_in_industries_call():
 def test_check_capture_warn_hallucination_tags_issues():
     """Hallucination issues are prefixed with _WARN_TAG when warn_hallucination=True."""
     call = make_call(
-        "pulse",
+        "note",
         raw="Financials lead strongly",
         input_blocks="Technology δ=+3",
-        parsed={"headline": "ok", "conviction": {"level": "High", "why": "..."}},
     )
-    capture = make_capture({"sectors.pulse": call})
+    capture = make_capture({"sectors.note": call})
     issues = check_capture(capture, {"Financials"}, warn_hallucination=True)
     hallu_lines = [i for i in issues if "hallucination" in i.lower()]
     assert hallu_lines, "Hallucination issue should still appear when warn_hallucination=True"
@@ -508,12 +448,12 @@ def test_check_capture_warn_hallucination_tags_issues():
 def test_check_capture_warn_hallucination_format_still_blocking():
     """Format violations are not affected by warn_hallucination."""
     call = make_call(
-        "pulse",
+        "rotation_phase",
         raw="Financials lead",
         input_blocks="Financials δ=+3",
-        parsed={"headline": "", "conviction": {"level": "INVALID", "why": "..."}},
+        parsed={"label": "INVALID", "reasoning": "..."},
     )
-    capture = make_capture({"sectors.pulse": call})
+    capture = make_capture({"sectors.rotation_phase": call})
     issues = check_capture(capture, {"Financials"}, warn_hallucination=True)
     format_lines = [i for i in issues if "format:" in i]
     assert format_lines, "Format issues must remain blocking even in warn mode"
@@ -523,11 +463,10 @@ def test_check_capture_warn_hallucination_format_still_blocking():
 def test_main_warn_hallucination_does_not_fail(tmp_path):
     """--warn-hallucination: file with only hallucination issues returns exit 0."""
     capture = make_capture({
-        "sectors.pulse": make_call(
-            "pulse",
+        "sectors.note": make_call(
+            "note",
             raw="Financials lead strongly",  # Financials not in input
             input_blocks="Technology δ=+3",
-            parsed={"headline": "ok", "conviction": {"level": "High", "why": "..."}},
         ),
     })
     p = tmp_path / "2026-06-22.json"
@@ -539,11 +478,11 @@ def test_main_warn_hallucination_does_not_fail(tmp_path):
 def test_main_warn_hallucination_still_fails_on_format(tmp_path):
     """--warn-hallucination: file with format issues still exits 1."""
     capture = make_capture({
-        "sectors.pulse": make_call(
-            "pulse",
+        "sectors.rotation_phase": make_call(
+            "rotation_phase",
             raw="Financials lead",
             input_blocks="Financials δ=+3",
-            parsed={"headline": "", "conviction": {"level": "INVALID", "why": ""}},
+            parsed={"label": "INVALID", "reasoning": ""},
         ),
     })
     p = tmp_path / "2026-06-22.json"

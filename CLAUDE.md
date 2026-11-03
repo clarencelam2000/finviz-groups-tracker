@@ -37,10 +37,12 @@ python scripts/export_db.py
 |--------|-------------|----------------|
 | `scripts/collect.py` | Playwright scraper; appends to snapshot CSVs; deduplicates on `(date, name)` | ~200–250 |
 | `scripts/compute_deltas.py` | Computes ranks, trading-day deltas (5/10/20/50), and momentum variants; appends to delta CSVs. Accepts `--date YYYY-MM-DD` | ~300–400 |
-| `scripts/generate_ai.py` | Gemini AI analysis from latest deltas; writes `data/ai/YYYY-MM-DD.json`. Auth: Vertex express key (GOOGLE_API_KEY) > Vertex ADC > AI Studio (GEMINI_API_KEY). Supports `--preview` (no API), `--capture` (Tier-2 debug). | ~1300 |
+| `scripts/generate_ai.py` | Gemini AI analysis from latest deltas; writes `data/ai/YYYY-MM-DD.json`. Model `gemini-3.8-flash` at `THINKING_LEVEL="low"`. Auth: Vertex express key (GOOGLE_API_KEY) > Vertex ADC > AI Studio (GEMINI_API_KEY). Supports `--preview` (no API), `--capture` (Tier-2 debug). **Spend controls (AI-WALLET):** `AI_DISABLED=1` kill switch, `MAX_API_CALLS_PER_RUN` runaway guard, input-diff dedupe of redundant runs, and per-run actual-cost logging → `data/ai/spend.json`. See `scripts/CLAUDE.md` § AI spend controls. | ~1300 |
+| `scripts/ai_cost.py` | Reusable cost meter: date-aware Gemini pricing (`price_for`, handles the 2027-01-01 intro-price cliff) + `cost_of_usage`. Shared by `generate_ai.py` now and the AI-NEXT workstream later. | ~60 |
 | `scripts/export_db.py` | Exports CSVs → SQLite (`finviz_groups.db`) + Parquet in `./exports/` (not committed) | ~150 |
 | `scripts/backfill.py` | Shows current date coverage; prints manual backfill instructions. Accepts `--status` | ~50 |
 | `scripts/evaluate_picks.py` | Picks alpha scoreboard: rebuilds `data/picks/eval/group_scores.csv` (forward group returns vs SPY + cross-sectional median + non-selected control, per bucket, horizons 1/3/5/10 sessions). `--report` prints the alpha roll-up with a sample-size guard. Derived artifact — fully rebuilt each run, not append-only. Runs in `collect.yml` after `compute_deltas.py`. | ~150 |
+| `scripts/build_signals.py` | Builds the **public agent feed** — `data/api/manifest.json` (freshness + self-describing file index + config constants) and `data/api/latest_signals.json` (versioned top-N signal summary). A stable read contract for external read-only agents so they don't couple to raw CSV schemas. Runs at the end of `collect.yml` and `collect_picks.yml`. **Public-only** — nothing from the private position book (worker-positions D1) is ever written here. `SCHEMA_VERSION` is major.minor, additive-only within a major. See README § Agent feed. | ~120 |
 | `scripts/seed_taxonomy.py` | Seeds `data/finviz_sector_industry_map.{json,csv}` by parsing fasiha/finviz-git-scraper's `map-sec_all.json` (plain HTTP — no Playwright, no Cloudflare). Run once; re-run only after Finviz restructures taxonomy. Validates against snapshot CSVs automatically. | ~80 |
 | `dashboard/app.py` | Streamlit dashboard: Snapshot, Top Movers, Time Series, Momentum tabs | ~100 |
 
@@ -52,6 +54,9 @@ python scripts/export_db.py
 
 ```
 data/
+  api/
+    manifest.json         # DERIVED (rebuilt each run): freshness + file index + config for the public agent feed
+    latest_signals.json   # DERIVED (rebuilt each run): versioned top-N signal summary; external agent read contract
   sectors/
     snapshots.csv    # append-only; one row per (date, sector)   ~11 rows/day
     deltas.csv       # append-only; one row per (date, sector)   ~11 rows/day
@@ -333,6 +338,16 @@ them. Full steps, the Guide-glossary sync, and the "Start Here" intro carousel: 
 
 Only use these if the owner explicitly asks you to watch a PR. If they do ask, acknowledge the request and set it up. 
 
+### Restate intent before acting on a long or multi-ask message (2026-09-29)
+
+When the owner's message is long, rambling, dictated, or bundles several asks, invoke the
+`restate-intent` skill (`.claude/skills/restate-intent/SKILL.md`) **before** acting: restate their
+goal and the problem in plain language, separate what they said from what you're inferring, flag
+low-confidence spots and questions, and stop for a correction when anything is low-confidence,
+changes what gets built, or is hard to undo. Other triggers: vague ask + pasted material, ambiguous
+"this/that", an ask that reverses a recorded decision, before a CSV schema change or delegating a
+big task, resuming after a context reset. Skip for short clear asks and mid-flow follow-ups.
+
 ### Deliver mocks/visuals as Artifacts, not plain HTML files
 
 When you produce an HTML mock, visual, or any page for the owner to *look at* (design mocks,
@@ -341,6 +356,12 @@ URL — do **not** send it as a raw `.html` file via `SendUserFile`. Artifacts r
 plain HTML files don't. (Owner directive, 2026-08-09.) Committing the mock's source into
 `planning/mocks/` for history is still expected — the Artifact is *how the owner reviews it*, the
 committed file is the durable record.
+
+The same applies when no screen is involved: for a decision with 3+ options, or one
+that turns on a flow, sequence or timeline (pipeline order, cron/job timing, what
+changes downstream), publish an Artifact with a diagram or comparison table rather
+than a wall of chat text. Lead the reply with the conclusion; the page is backup.
+Skip it for simple answers.
 
 ### Cloudflare can be queried directly — no MCP/OAuth needed
 
