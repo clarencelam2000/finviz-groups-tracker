@@ -237,56 +237,6 @@ the SPRINT ordering.
 ---
 
 
-## 2026-09-04 — Inline "+ Watch" quick-add (Picks / Morning-picks / Lookup / Watchlist edit-level)
-
-**Status: safe to close** — implemented, functionally verified with 6 new Playwright tests
-(headless Chromium via the revision-symlink harness) plus the full non-Playwright suite (746)
-and the existing watchlist/manual-entry/picks-hod/morning Playwright suites (42), all green,
-no regressions. Release surface updated in the same PR.
-
-**What the owner asked for:** easier ways to add a ticker to the watchlist — one-click entry
-points across the app that expand inline instead of jumping to the Positions tab. Talked
-through candidate spots first (no impl) before building: confirmed scope was Picks tab rows,
-Morning tab's Picks-subtab cards, and the Lookup tab's ticker result (every spot that already
-shows a TradingView chart), plus fixing the Watchlist-subtab's "Edit level" kebab, which had
-the exact same jump-away problem. Positions-tab position cards were explicitly scoped out
-(ticker's already a live trade there — low value).
-
-**Design, confirmed with the owner before building:** the existing `state.watchAdd` /
-`watchAddHtml()` / `watchAddApi()` (Positions-tab-only collapsible) already did ticker+optional
-level submission — the gap was only that it was mounted in one place and other call sites
-(`watchEditLevel`) navigated away via `switchTab('positions')` instead of expanding in place.
-Generalized it into `quickWatchButtonHtml()`/`quickWatchPanelHtml()`, mountable anywhere via a
-`mountKey` (namespaced per call site: `qw_pick_<key>`, `qw_morning_<ticker>`,
-`qw_lookup_<symbol>`, `qw_watch_<ticker>`), DOM-patched by id on open/close/save (same
-discipline as `__togglePickChart`/`__toggleMorningChart` — no full re-render, no lost focus).
-
-**Owner-specified interaction (asked directly, confirmed before building):** tapping "+ Watch"
-on an unwatched ticker fires the add immediately (`watchAddApi({ticker})`) — the tap alone
-persists it, no second tap required. The panel then opens showing a receipt plus the optional
-level-of-interest form (Above/Below/20MA/50MA, same as the existing form); setting a level is a
-second, independent POST to the same upsert-by-ticker endpoint. An already-watched ticker's
-button instead reads "✓ Watching" and opens straight into the level editor (seeded from the
-existing entry), with zero re-POST until Save. Signed-out tap shows an inline sign-in nudge, no
-add attempted. Unlike the Positions-tab form's free-text ticker field (which debounces an FMP
-resolve lookup), every quick-watch mount is handed an already-known ticker — no resolve call
-and no ticker input in this UI, per the owner's own observation that it's "clear which company
-it is" at all three new spots.
-
-**Technical note:** Picks and Lookup never previously triggered `loadWatchlist()` (only
-Morning/Positions tab renders did), so a signed-in user landing on Picks would have seen
-"+ Watch" on every row even for already-watched tickers. Added `ensureWatchlistLoaded()`
-(deduped via `state.watchlistLoading`), called once per `renderPicks()` pass and once when the
-Lookup ticker card renders — Morning needed no change, its batch loader already fetches
-`watchlistData`.
-
-**Release surface (hard rule, same PR):** `docs/releases.json` `2026.09.04` entry prepended,
-`current` bumped; `docs/sw.js` `CACHE` bumped `v96` → `v97`.
-
-**Next steps:** none outstanding — PR opened, ready for review.
----
-
-
 ## 2026-09-17 — Public agent feed (manifest + latest_signals) for external agents
 
 **Status:** safe-to-close once PR is merged. Public-feed work landed; private-book access is deliberate fast-follow (see SPRINT § AGENT-FEED).
@@ -368,3 +318,30 @@ the only positive bucket. This is **not significant yet** (overlapping windows #
 **Next steps:** owner merges #425 (SPY history is unrecoverable daily), then decides the stale-PR
 closures and the other asks in the doc's "what I need" section. After that, one PR for
 #401/#402/#403.
+
+---
+
+## 2026-09-29 — process: `restate-intent` skill
+
+- **Status:** safe to close.
+- **Landed:** `.claude/skills/restate-intent/SKILL.md` + a CLAUDE.md "Restate intent" rule (under Session continuity). Doc/process only — no code, data, or PWA change, so no release triplet.
+- **Why:** owner wants a plain-language restatement of goal + problem after long/rambling messages, before any work. Skill is committed per-repo (user-level skills aren't versioned and don't persist in cloud sessions); mirrored in the `distil` repo.
+- **Next steps:** none.
+
+---
+## 2026-10-23 — Picks scrape outage RCA + fix (Finviz screener redesign)
+
+- **Status:** PR open, awaiting merge. Not safe to close until it merges (picks stays broken until then).
+- **RCA:** since 2026-10-17 Finviz serves a redesigned screener (`/screener/stocks`, no `table.screener_table`, canvas grid). Not Cloudflare, not filter codes; I checked both on Actions. Full data is in `<script data-ssr-props>` JSON.
+- **Landed (PR):** `_parse_table` SSR-JSON fallback rendered in legacy formats under legacy labels; `SCREENER_READY_SELECTOR` wait; `tests/test_screener_ssr_parse.py` + trimmed real fixture; `knowledge/investigations/finviz-screener-redesign-2026-10.md`. Verified live: probe on fix branch → Semiconductors 37 rows / 2 pages / 84 cols PASS.
+- **Data gap:** picks for 2026-10-19..10-22 are lost (screen is live-only). Morning/pre-close/held use the same parser; they worked through 10-22 (probably a gradual rollout) but are covered by this fix too.
+- **Next steps:** merge, then manually dispatch `collect_picks.yml` to capture 2026-10-23. Delete the `claude/diag-picks-screener` branch (push --delete was refused from the session).
+
+---
+
+## 2026-11-03 — picks outage: review + merge of screener-redesign fix (PR #435)
+
+- **Status:** safe to close once post-merge verification below passes.
+- **Landed:** reviewed PR #435. One fix applied: `_fmt_ssr_value` "earn" no longer guesses `/b` for date-only `earningsDate`; it emits bare `Mon DD` (already accepted by `replay_picks.py` and the PWA's earnings parser). Regression test added. Merged #435 and dispatched `collect_picks.yml` on default to confirm.
+- **Outage scope:** picks failed 2026-10-17 → 2026-11-02 (fix sat unmerged 10-23 → 11-03). Dates 10-19..11-02 are unrecoverable (screener is live-only).
+- **Next steps:** watch the next morning / pre-close / held runs (same parser). Delete stale `claude/diag-picks-screener` branch.
