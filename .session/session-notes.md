@@ -682,3 +682,13 @@ closures and the other asks in the doc's "what I need" section. After that, one 
 - **Landed:** reviewed PR #435. One fix applied: `_fmt_ssr_value` "earn" no longer guesses `/b` for date-only `earningsDate`; it emits bare `Mon DD` (already accepted by `replay_picks.py` and the PWA's earnings parser). Regression test added. Merged #435 and dispatched `collect_picks.yml` on default to confirm.
 - **Outage scope:** picks failed 2026-10-17 → 2026-11-02 (fix sat unmerged 10-23 → 11-03). Dates 10-19..11-02 are unrecoverable (screener is live-only).
 - **Next steps:** watch the next morning / pre-close / held runs (same parser). Delete stale `claude/diag-picks-screener` branch.
+
+---
+
+## 2026-11-03 — Open-PR triage (#418, #424, #425, #429, #430)
+
+- **Status:** don't close until the owner merges the #425 → #430 stack in the GitHub UI (see below).
+- **Merged this session:** #424 (#406 docs), #429 (roadmap triage), #418 (emerging-alpha study + exec-brief skill). For #418/#429/#430 I resolved conflicts by merging default in (only `.session/` files, plus derived `group_scores.csv` in #430: took default's, regenerated, identical). Session-note entries default had already archived were not re-added.
+- **Fix pushed to #430:** `scripts/analyze_signals.py` `efficiency_series` now filters to `RS_BENCHMARK_TICKER`. Once #430 writes QQQ/IWM rows, its `drop_duplicates(keep="last")` would otherwise have measured the tape on IWM (the same bug #430 already fixed in `evaluate_picks`). Regression test added; 875 tests pass.
+- **Blocker:** GitHub's API refuses to merge stacked PRs ("Merging stacked PRs via this endpoint is not supported"; auto-merge is also refused). #425 → #430 must be merged from the GitHub UI.
+- **Next steps:** owner merges #425, then #430. Then manually dispatch `collect.yml` once to confirm the 38 new benchmark columns and the QQQ/IWM rows populate (never live-verified; Cloudflare blocks the cloud sandbox). Then BENCH-ETF-2 (real ETF-page labels; see SPRINT).
