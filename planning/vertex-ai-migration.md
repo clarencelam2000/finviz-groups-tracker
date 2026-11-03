@@ -393,8 +393,12 @@ Secrets until after 2+ stable Vertex runs.
 ## 11. Cleanup (follow-up, after 2+ stable Vertex runs)
 
 - Delete `GEMINI_API_KEY` from GitHub Secrets.
-- Remove the AI Studio (`api_key`) branch from `generate_ai.py`, simplifying to a
-  single backend; update docs again.
+- ~~Remove the AI Studio (`api_key`) branch from `generate_ai.py`, simplifying to a
+  single backend; update docs again.~~ **Decision (2026-09-20, issue #406): KEEP.**
+  The AI Studio fallback branch (`generate_ai.py`, the `else: client =
+  genai.Client(api_key=api_key)` arm) is retained intentionally as a rollback
+  path, not removed — see the in-code comment at that branch. Do not delete it
+  as part of this cleanup.
 - Optional: tighten the WIF `attribute-condition` to a specific branch once the
   default branch is settled.
 

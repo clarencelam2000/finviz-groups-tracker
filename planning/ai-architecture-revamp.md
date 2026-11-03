@@ -1,3 +1,5 @@
+> **Superseded 2026-09-20 by `planning/ai-tab-daily-note.md`.**
+
 # Plan: AI Server-Side Architecture Revamp
 
 ## Phase Status
