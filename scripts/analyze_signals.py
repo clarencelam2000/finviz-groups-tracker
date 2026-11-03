@@ -42,6 +42,7 @@ import numpy as np
 import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).parent))
+from delta_config import RS_BENCHMARK_TICKER  # noqa: E402
 from picks_config import (  # noqa: E402
     ACCEL_RS_FLOOR,
     ACCEL_THRESHOLD,
@@ -395,6 +396,11 @@ def efficiency_series(benchmark: pd.DataFrame,
     """
     if len(benchmark) == 0:
         return pd.Series(dtype=float)
+    # The benchmark file holds one row per (date, ticker) for every BENCH_TICKERS
+    # ETF; the tape is measured on SPY only. Without this filter the
+    # drop_duplicates(keep="last") below would silently use IWM.
+    if "ticker" in benchmark.columns:
+        benchmark = benchmark[benchmark["ticker"] == RS_BENCHMARK_TICKER]
     b = benchmark[["date", "perf_day"]].copy()
     b["perf_day"] = pd.to_numeric(b["perf_day"], errors="coerce")
     b = b.drop_duplicates("date", keep="last").sort_values("date")

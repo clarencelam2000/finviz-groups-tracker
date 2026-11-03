@@ -68,6 +68,19 @@ def test_efficiency_series_respects_warmup_and_has_no_lookahead():
         ae.efficiency_ratio(np.array([1.0, -1.0, 1.0])))
 
 
+
+def test_efficiency_series_uses_only_the_rs_benchmark_ticker():
+    # Multi-ETF benchmark file: IWM written last per date must not leak in.
+    dates = [f"2026-01-{i:02d}" for i in range(1, 4)]
+    bench = pd.DataFrame({
+        "date": dates * 2,
+        "ticker": ["SPY"] * 3 + ["IWM"] * 3,
+        "perf_day": [1.0, 1.0, 1.0, 1.0, -1.0, 1.0],
+    })
+    s = ae.efficiency_series(bench, window=3)
+    assert s["2026-01-03"] == pytest.approx(
+        ae.efficiency_ratio(np.array([1.0, 1.0, 1.0])))  # SPY rows only
+
 # ------------------------------------------------------------------- the gate
 
 def _deltas(rows):
