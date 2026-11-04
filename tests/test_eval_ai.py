@@ -13,6 +13,8 @@ from eval_ai import (
     check_format,
     check_capture,
     main,
+    _resolve_paths,
+    EXCLUDED_CAPTURES,
     PHASE_LABELS,
     _WARN_TAG,
 )
@@ -489,3 +491,16 @@ def test_main_warn_hallucination_still_fails_on_format(tmp_path):
     p.write_text(json.dumps(capture), encoding="utf-8")
     rc = main([str(p), "--warn-hallucination"])
     assert rc == 1, "Format violations must still fail even with --warn-hallucination"
+
+
+def test_all_skips_excluded_captures_but_explicit_date_does_not(tmp_path, monkeypatch):
+    import argparse
+    import eval_ai
+    (tmp_path / "2026-10-26.json").write_text("{}")
+    (tmp_path / "2026-10-27.json").write_text("{}")
+    monkeypatch.setattr(eval_ai, "DEBUG_DIR", tmp_path)
+    assert "2026-10-26" in EXCLUDED_CAPTURES
+    ns = argparse.Namespace(files=[], date=None, all_=True)
+    assert [p.stem for p in _resolve_paths(ns)] == ["2026-10-27"]
+    ns = argparse.Namespace(files=[], date="2026-10-26", all_=False)
+    assert [p.stem for p in _resolve_paths(ns)] == ["2026-10-26"]

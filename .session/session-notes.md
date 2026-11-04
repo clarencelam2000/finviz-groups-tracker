@@ -707,3 +707,22 @@ closures and the other asks in the doc's "what I need" section. After that, one 
 - **Blocker:** GitHub's API refuses to merge stacked PRs ("Merging stacked PRs via this endpoint is not supported"; auto-merge is also refused). #425 → #430 must be merged from the GitHub UI.
 - **CI note:** `test` job is red on default (and so on every PR) from `eval_ai.py --all` flagging the 2026-10-26 AI capture ("Industrials" not in input). Pre-existing, unrelated to these PRs, tracked as #437. pytest itself passes.
 - **Next steps:** owner merges #425, then #430. Then manually dispatch `collect.yml` once to confirm the 38 new benchmark columns and the QQQ/IWM rows populate (never live-verified; Cloudflare blocks the cloud sandbox). Then BENCH-ETF-2 (real ETF-page labels; see SPRINT).
+
+---
+
+## 2026-11-04 — Unblock and merge PR #430 (BENCH-ETF-1) + eval_ai exclusion
+
+**Status:** safe to close once the exclusion PR is merged.
+
+**What landed:** #430 was conflicted and flagged as a GitHub *stacked* PR (parent #425 already merged), so
+the merge endpoint, auto-merge and base change were all refused. Merged default into its branch (clean, 875
+pytest pass locally), then opened #438 from the identical head as a non-stacked PR and merged it (merge
+`3ed4b4b`). Owner explicitly approved merging over the red `test` check. #430 itself may still show open:
+close it by hand if so (its commits are in default).
+
+**CI red cause (pre-existing):** `eval_ai.py --all` flagged `data/ai/debug/2026-10-26.json`
+(`sectors.rotation_phase`: 'Industrials' not in input_blocks). Owner approved excluding it:
+`EXCLUDED_CAPTURES` in `scripts/eval_ai.py` (`--all` only), SPRINT AI-EVAL-EXCLUDE.
+
+**Next:** BENCH-ETF-2 (one live `collect.yml` run to confirm QQQ/IWM columns populate). Open question: was the
+2026-10-26 'Industrials' a real hallucination or a guard false positive (cf. #414)?
