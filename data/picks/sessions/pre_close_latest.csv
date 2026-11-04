@@ -1,101 +1,49 @@
 date,session,collected_at,ticker,group,list_category,trigger,stop,atr,price,open,high,low,change,status,atr_from_lod,reclaim_ref,reclaim_ref_value,RSI,Volatility W,Volatility M,Rel Volume,52W High,Price,SMA20,SMA50,ATR
-2026-10-23,pre_close,2026-10-23T19:33:21Z,A,Diagnostics & Research,leaders,177.47,172.16,4.61,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,AAPL,Consumer Electronics,all_green,347.82,340.46,6.7,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,ABBV,Drug Manufacturers - General,rs_new_high,286.64,282.95,6.41,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,ACGL,Insurance - Diversified,all_green,101.58,99.59,1.93,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,ADP,Software - Application,leaders,290.12,285.68,5.52,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,ADSK,Software - Application,leaders,251.74,237.77,8.55,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,AFG,Insurance - Property & Casualty,all_green,149.31,146.06,2.45,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,AFRM,Credit Services,accel,78.22,72.73,4.05,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,AIZ,Insurance - Property & Casualty,all_green,285.67,281.83,5.62,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,ALL,Insurance - Property & Casualty,all_green,248.4,241.1,5.6,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,AMGN,Drug Manufacturers - General,rs_new_high,438.82,431.39,10.66,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,AR,Oil & Gas E&P,all_green,38.75,36.51,1.16,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,BF-B,Beverages - Wineries & Distilleries,rs_new_high,29.27,28.52,0.69,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,BIIB,Drug Manufacturers - General,rs_new_high,236.87,232.36,6.33,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,BSY,Software - Application,leaders,36.86,35.1,1.23,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,BTSG,Health Information Services,leaders,62.78,60.27,2.06,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,BUD,Beverages - Brewers,accel,83.17,82.09,1.55,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,CAH,Medical Distribution,all_green,255.56,251.95,5.77,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,CHRD,Oil & Gas E&P,all_green,154.9,149.25,4.38,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,CI,Healthcare Plans,emerging,303.08,298.23,7.45,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,CL,Household & Personal Products,accel,94.12,92.93,1.68,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,CNC,Healthcare Plans,emerging,71.21,69.02,2.15,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,COKE,Beverages - Non-Alcoholic,leaders,210.79,205.73,6.42,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,COR,Medical Distribution,all_green,343.31,339.01,7.3,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,CRGY,Oil & Gas E&P,all_green,13.8,12.54,0.54,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,CRL,Diagnostics & Research,leaders,308.83,296.35,11.55,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,CRM,Software - Application,leaders,251.94,237.26,9.08,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,CVE,Oil & Gas Integrated,all_green,33.07,32.26,0.97,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,CVS,Healthcare Plans,emerging,93.35,92.05,2.29,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,DDS,Department Stores,leaders,680.09,649.3,27.18,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,DEO,Beverages - Wineries & Distilleries,rs_new_high,95.54,94.21,1.74,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,DOCU,Software - Application,leaders,78.8,73.79,2.76,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,DSGX,Software - Application,leaders,89.86,85.74,2.77,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,DT,Software - Application,leaders,65.04,59.9,2.08,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,DVA,Medical Care Facilities,all_green,189.91,186.54,4.67,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,DVN,Oil & Gas E&P,all_green,50.76,49.42,1.37,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,EC,Oil & Gas Integrated,all_green,18.01,17.58,0.5,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,EG,Insurance - Reinsurance,leaders,389.11,380.42,7.43,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,EHC,Medical Care Facilities,all_green,129.35,126.86,2.82,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,EL,Household & Personal Products,accel,108.71,104.41,3.42,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,ENSG,Medical Care Facilities,all_green,179.94,176.02,3.65,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,ESTC,Software - Application,leaders,99.16,89.82,4.41,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,FANG,Oil & Gas E&P,all_green,204.1,197.01,5.28,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,GILD,Drug Manufacturers - General,rs_new_high,157.57,155.62,3.8,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,GWRE,Software - Application,leaders,178.35,166.5,7.67,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,H,Lodging,emerging,175.39,169.01,4.76,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,HCA,Medical Care Facilities,all_green,472.49,453.94,12.33,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,HNGE,Health Information Services,leaders,106.71,97.44,4.36,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,HST,REIT - Hotel & Motel,rs_new_high,24.83,23.92,0.52,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,HTHT,Lodging,emerging,46.6,45.97,1.04,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,HUBS,Software - Application,leaders,243.1,224.88,12.97,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,HUM,Healthcare Plans,emerging,432.4,411.77,18.38,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,ICLR,Diagnostics & Research,leaders,176.81,167.95,7.38,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,ILMN,Diagnostics & Research,leaders,272.01,259.26,13.48,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,IMO,Oil & Gas Integrated,all_green,134.12,130.95,3.17,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,INTU,Software - Application,leaders,336.26,320.86,12.67,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,IQV,Diagnostics & Research,leaders,272.98,263.21,7.5,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,KVUE,Household & Personal Products,accel,18.94,18.72,0.33,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,LLY,Drug Manufacturers - General,rs_new_high,1274.56,1251.25,35.8,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,M,Department Stores,leaders,24.71,23.88,0.89,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,MANH,Software - Application,leaders,231.63,220.02,7.35,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,MCY,Insurance - Property & Casualty,all_green,103.05,101.74,2.08,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,MNST,Beverages - Non-Alcoholic,leaders,46.42,45.46,1.01,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,MRK,Drug Manufacturers - General,rs_new_high,147.79,145.61,3.87,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,MSTR,Software - Application,leaders,146.83,134.11,9.73,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,MTDR,Oil & Gas E&P,all_green,57.56,54.19,1.89,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,NOW,Software - Application,leaders,154.2,139.94,6.59,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,NTRA,Diagnostics & Research,leaders,410.63,387.26,16.79,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,NVS,Drug Manufacturers - General,rs_new_high,151.74,150.23,2.77,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,OSCR,Healthcare Plans,emerging,33.51,31.65,1.56,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,OXY,Oil & Gas E&P,all_green,62.51,60.74,1.53,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,PACS,Medical Care Facilities,all_green,47.89,46.29,1.58,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,PBF,Oil & Gas Refining & Marketing,all_green,88.67,84.1,4.65,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,PCOR,Software - Application,leaders,59.8,55.72,2.39,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,PFE,Drug Manufacturers - General,rs_new_high,29.74,29.42,0.55,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,PR,Oil & Gas E&P,all_green,24.62,23.78,0.72,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,PYPL,Credit Services,accel,57.81,56.4,1.35,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,QGEN,Diagnostics & Research,leaders,46.75,45.97,1.22,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,RGA,Insurance - Reinsurance,leaders,267.46,263.82,5.06,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,RHP,REIT - Hotel & Motel,rs_new_high,129.17,125.51,3.19,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,RNR,Insurance - Reinsurance,leaders,351.2,344.19,7.07,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,RRC,Oil & Gas E&P,all_green,43.23,41.28,1.13,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,RVTY,Diagnostics & Research,leaders,155.5,151.61,5.57,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,SHOP,Software - Application,leaders,180.41,167.34,7.8,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,SM,Oil & Gas E&P,all_green,39.55,37.9,1.4,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,SONY,Consumer Electronics,all_green,25.17,24.77,0.47,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,SYY,Food Distribution,rs_new_high,83.14,81.42,1.5,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,TEAM,Software - Application,leaders,223.7,204.0,9.64,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,THC,Medical Care Facilities,all_green,278.39,265.65,7.32,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,THG,Insurance - Property & Casualty,all_green,233.13,228.16,4.43,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,TTE,Oil & Gas Integrated,all_green,91.37,89.91,1.91,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,TYL,Software - Application,leaders,369.93,354.04,11.57,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,UHS,Medical Care Facilities,all_green,189.19,182.71,4.82,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,UL,Household & Personal Products,accel,66.46,65.44,1.08,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,UNH,Healthcare Plans,emerging,412.37,395.52,12.07,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,USFD,Food Distribution,rs_new_high,103.07,100.01,2.38,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,VIST,Oil & Gas E&P,all_green,72.35,70.71,2.47,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,WAT,Diagnostics & Research,leaders,448.39,431.99,12.85,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,WAY,Health Information Services,leaders,29.09,27.27,1.19,,,,,,no_quote,,,,,,,,,,,,
-2026-10-23,pre_close,2026-10-23T19:33:21Z,YPF,Oil & Gas Integrated,all_green,52.25,51.15,1.69,,,,,,no_quote,,,,,,,,,,,,
+2026-11-03,pre_close,2026-11-03T20:31:32Z,ABBV,Drug Manufacturers - General,all_green,294.86,286.14,6.57,285.73,288.86,291.32,285.67,-1.08,invalidated,0.009132420091324547,,,57.30,2.30%,2.44%,0.63,-4.35%,285.73,0.70%,5.75%,6.50
+2026-11-03,pre_close,2026-11-03T20:31:32Z,AVY,Packaging & Containers,rs_new_high,187.43,184.58,4.13,186.62,186.0,187.76,183.49,-0.21,reclaim,0.757869249394672,prior_low,184.58,69.31,2.36%,2.08%,0.63,-6.47%,186.62,5.23%,7.08%,4.14
+2026-11-03,pre_close,2026-11-03T20:31:32Z,BF-B,Beverages - Wineries & Distilleries,leaders,30.29,28.65,0.84,29.01,29.72,29.81,28.91,-3.3,setting_up,0.11904761904762075,,,56.41,3.04%,2.70%,0.51,-9.12%,29.01,2.91%,6.69%,0.86
+2026-11-03,pre_close,2026-11-03T20:31:32Z,BIIB,Drug Manufacturers - General,all_green,255.53,247.9,7.74,248.67,246.89,253.14,246.25,-0.14,reclaim,0.3126614987080087,prior_low,247.9,60.64,3.69%,3.11%,0.75,-3.91%,248.67,3.67%,8.91%,7.68
+2026-11-03,pre_close,2026-11-03T20:31:32Z,BMY,Drug Manufacturers - General,all_green,63.14,62.17,1.68,61.7,63.02,63.26,61.71,-2.09,invalidated,-0.005952380952379768,,,51.05,1.97%,2.75%,0.47,-10.11%,61.70,1.93%,-1.45%,1.67
+2026-11-03,pre_close,2026-11-03T20:31:32Z,BRO,Insurance Brokers,leaders,72.03,69.11,2.3,70.73,71.35,71.65,70.2,-1.6,setting_up,0.23043478260869615,,,57.05,3.50%,2.88%,0.75,-14.34%,70.73,3.93%,5.70%,2.26
+2026-11-03,pre_close,2026-11-03T20:31:32Z,BTSG,Health Information Services,leaders,67.88,64.91,2.57,69.32,66.5,69.45,66.26,4.61,triggered,1.1906614785992171,,,70.36,4.71%,3.43%,1.04,-6.01%,69.32,10.92%,14.98%,2.62
+2026-11-03,pre_close,2026-11-03T20:31:32Z,CCEP,Beverages - Non-Alcoholic,leaders,116.01,114.22,2.37,112.41,113.18,113.35,111.33,-2.74,invalidated,0.45569620253164483,,,57.37,1.64%,1.80%,0.77,-3.10%,112.41,2.39%,5.80%,2.51
+2026-11-03,pre_close,2026-11-03T20:31:32Z,CL,Household & Personal Products,leaders,97.76,95.87,2.1,95.45,96.72,96.9,95.45,-2.03,invalidated,0.0,,,59.35,2.05%,2.00%,0.65,-3.91%,95.45,2.96%,6.36%,2.09
+2026-11-03,pre_close,2026-11-03T20:31:32Z,CME,Financial Data & Stock Exchanges,rs_new_high,306.59,301.74,6.77,304.09,306.11,306.52,300.93,-0.7,reclaim,0.4667651403249584,prior_low,301.74,64.59,2.30%,2.18%,0.58,-5.80%,304.09,3.90%,8.04%,6.69
+2026-11-03,pre_close,2026-11-03T20:31:32Z,CNI,Railroads,all_green,127.18,123.82,2.51,126.56,126.31,126.82,125.28,-0.18,setting_up,0.5099601593625503,,,63.12,2.54%,1.91%,0.45,-3.79%,126.56,3.92%,4.10%,2.44
+2026-11-03,pre_close,2026-11-03T20:31:32Z,COF,Credit Services,leaders,212.29,207.0,5.08,208.32,211.07,211.97,207.5,-1.16,setting_up,0.16141732283464433,,,57.00,2.10%,2.22%,0.48,-19.76%,208.32,3.01%,1.93%,5.04
+2026-11-03,pre_close,2026-11-03T20:31:32Z,CP,Railroads,all_green,91.75,89.4,1.94,91.53,90.87,91.69,90.46,0.05,setting_up,0.5515463917525811,,,61.72,2.99%,2.05%,0.44,-5.54%,91.53,4.15%,3.36%,1.89
+2026-11-03,pre_close,2026-11-03T20:31:32Z,CSX,Railroads,all_green,52.48,51.39,1.06,50.97,51.45,51.57,50.71,-1.25,invalidated,0.24528301886792264,,,58.67,2.26%,1.89%,0.64,-4.90%,50.97,2.80%,4.35%,1.05
+2026-11-03,pre_close,2026-11-03T20:31:32Z,DEO,Beverages - Wineries & Distilleries,leaders,97.72,95.42,2.02,94.02,95.33,95.53,93.96,-3.7,invalidated,0.02970297029703083,,,55.32,1.58%,1.55%,0.64,-8.48%,94.02,1.81%,4.85%,2.14
+2026-11-03,pre_close,2026-11-03T20:31:32Z,DG,Discount Stores,all_green,136.58,132.45,4.3,130.39,135.16,135.18,129.95,-3.97,invalidated,0.10232558139534831,,,51.82,2.31%,3.28%,0.42,-17.59%,130.39,0.12%,2.90%,4.41
+2026-11-03,pre_close,2026-11-03T20:31:32Z,EG,Insurance - Reinsurance,all_green,420.59,409.09,9.67,411.28,417.69,421.52,411.26,-1.54,failed_breakout,0.0020682523267819865,,,64.91,2.99%,2.25%,0.93,-2.21%,411.28,5.49%,8.18%,9.71
+2026-11-03,pre_close,2026-11-03T20:31:32Z,FDX,Integrated Freight & Logistics,accel,321.78,315.67,7.37,320.07,321.1,323.0,317.24,0.57,failed_breakout,0.38398914518317284,,,70.26,3.05%,2.20%,0.83,-7.32%,320.07,6.68%,5.33%,7.26
+2026-11-03,pre_close,2026-11-03T20:31:32Z,H,Lodging,all_green,188.75,184.14,5.41,185.52,184.74,188.12,184.74,-0.23,setting_up,0.14417744916820724,,,67.92,3.40%,2.77%,0.53,-10.31%,185.52,8.12%,11.75%,5.26
+2026-11-03,pre_close,2026-11-03T20:31:32Z,HQY,Health Information Services,leaders,105.21,102.35,2.74,102.88,103.51,104.21,100.83,-0.77,reclaim,0.7481751824817507,prior_low,102.35,65.49,2.65%,2.81%,0.65,-4.41%,102.88,5.89%,7.97%,2.79
+2026-11-03,pre_close,2026-11-03T20:31:32Z,HTHT,Lodging,all_green,48.98,47.0,1.32,48.82,49.4,49.5,48.51,0.79,gapped_through,0.23484848484848656,,,67.13,2.92%,2.60%,0.90,-13.80%,48.82,6.56%,8.80%,1.30
+2026-11-03,pre_close,2026-11-03T20:31:32Z,ICE,Financial Data & Stock Exchanges,rs_new_high,172.33,167.51,4.18,170.71,171.64,171.97,168.79,-0.91,setting_up,0.4593301435406737,,,65.70,2.90%,2.21%,0.47,-3.03%,170.71,6.68%,8.09%,4.13
+2026-11-03,pre_close,2026-11-03T20:31:32Z,IHG,Lodging,all_green,173.54,171.04,3.56,169.78,171.27,171.92,169.7,-1.07,invalidated,0.022471910112363064,,,58.62,1.68%,1.51%,0.64,-3.47%,169.78,2.40%,5.32%,3.46
+2026-11-03,pre_close,2026-11-03T20:31:32Z,IP,Packaging & Containers,rs_new_high,37.18,36.48,1.17,35.21,36.49,36.49,35.11,-3.91,invalidated,0.08547008547008669,,,56.02,4.84%,3.15%,0.75,-29.94%,35.21,4.65%,1.36%,1.20
+2026-11-03,pre_close,2026-11-03T20:31:32Z,JNJ,Drug Manufacturers - General,all_green,273.01,267.43,6.64,266.24,267.74,271.07,266.22,-1.59,invalidated,0.003012048192768345,,,51.78,2.36%,2.30%,0.50,-5.59%,266.24,1.52%,0.29%,6.51
+2026-11-03,pre_close,2026-11-03T20:31:32Z,KO,Beverages - Non-Alcoholic,leaders,96.25,94.28,1.67,94.92,94.88,95.49,94.18,-0.95,reclaim,0.44311377245508676,prior_low,94.28,62.77,1.77%,1.63%,0.62,-1.39%,94.92,3.17%,5.92%,1.66
+2026-11-03,pre_close,2026-11-03T20:31:32Z,KVUE,Household & Personal Products,leaders,19.31,19.31,0.38,19.31,19.31,19.31,19.31,0.0,invalidated,0.0,,,59.98,1.89%,1.76%,0.00,-4.07%,19.31,3.57%,4.91%,0.38
+2026-11-03,pre_close,2026-11-03T20:31:32Z,MCO,Financial Data & Stock Exchanges,rs_new_high,509.27,495.0,12.62,501.97,506.25,506.62,495.96,-0.8,setting_up,0.47622820919176295,,,62.88,2.57%,2.47%,0.78,-8.21%,501.97,4.82%,5.19%,12.48
+2026-11-03,pre_close,2026-11-03T20:31:32Z,MDLZ,Confectioners,emerging,66.49,65.18,1.41,65.41,65.68,65.99,65.01,-1.46,reclaim,0.2836879432624053,prior_low,65.18,60.57,1.62%,1.90%,0.54,-1.86%,65.41,3.93%,5.76%,1.40
+2026-11-03,pre_close,2026-11-03T20:31:32Z,MO,Tobacco,leaders,78.43,76.91,1.69,76.68,76.37,77.26,75.73,-0.64,invalidated,0.5621301775147945,,,63.19,2.22%,1.96%,0.52,-3.93%,76.68,3.66%,8.23%,1.68
+2026-11-03,pre_close,2026-11-03T20:31:32Z,MRK,Drug Manufacturers - General,all_green,150.26,147.1,4.5,143.55,147.18,147.62,143.54,-3.24,invalidated,0.002222222222226517,,,47.45,2.66%,2.95%,0.54,-8.52%,143.55,-1.07%,-2.10%,4.53
+2026-11-03,pre_close,2026-11-03T20:31:32Z,NSC,Railroads,all_green,347.39,342.78,5.98,342.43,347.41,347.41,340.68,-0.94,invalidated,0.2926421404682274,,,64.31,1.87%,1.70%,0.28,-4.51%,342.43,3.86%,5.02%,6.03
+2026-11-03,pre_close,2026-11-03T20:31:32Z,OLLI,Discount Stores,all_green,92.04,88.31,3.63,87.92,89.15,89.15,86.66,-1.14,invalidated,0.3471074380165303,,,50.91,4.70%,3.96%,0.51,-32.57%,87.92,-1.65%,6.05%,3.55
+2026-11-03,pre_close,2026-11-03T20:31:32Z,PHM,Residential Construction,accel,131.74,126.11,4.03,127.04,129.99,129.99,126.97,-3.24,setting_up,0.017369727047148235,,,61.56,3.47%,3.03%,0.65,-12.08%,127.04,8.32%,6.51%,4.05
+2026-11-03,pre_close,2026-11-03T20:31:32Z,PM,Tobacco,leaders,209.94,205.57,5.14,208.22,206.74,209.16,205.06,-0.03,reclaim,0.6147859922178982,prior_low,205.57,63.39,2.09%,2.51%,0.45,-2.86%,208.22,2.90%,6.85%,5.06
+2026-11-03,pre_close,2026-11-03T20:31:32Z,PYPL,Credit Services,leaders,59.03,57.26,1.44,58.47,58.78,59.05,58.12,-0.53,failed_breakout,0.24305555555555655,,,62.58,2.91%,2.34%,0.39,-16.89%,58.47,3.31%,5.84%,1.40
+2026-11-03,pre_close,2026-11-03T20:31:32Z,RNR,Insurance - Reinsurance,all_green,354.29,340.58,8.91,347.94,351.12,352.61,347.98,-0.85,setting_up,-0.004489337822673452,,,56.04,3.49%,2.43%,1.10,-4.37%,347.94,1.17%,4.18%,8.60
+2026-11-03,pre_close,2026-11-03T20:31:32Z,RYAN,Insurance Brokers,leaders,45.9,43.29,1.62,45.5,44.83,46.7,44.81,0.04,failed_breakout,0.4259259259259245,,,67.09,4.49%,3.36%,0.82,-22.80%,45.50,9.91%,12.35%,1.64
+2026-11-03,pre_close,2026-11-03T20:31:32Z,SUNB,Rental & Leasing Services,accel,85.47,83.2,2.65,83.0,84.02,84.22,82.65,-0.94,invalidated,0.13207547169811107,,,65.69,2.64%,3.45%,0.33,-4.25%,83.00,5.50%,10.21%,2.57
+2026-11-03,pre_close,2026-11-03T20:31:32Z,SYF,Credit Services,leaders,77.16,76.0,1.91,75.26,76.9,77.07,74.89,-2.03,invalidated,0.1937172774869134,,,52.56,1.97%,2.32%,0.85,-15.22%,75.26,1.35%,0.52%,1.93
+2026-11-03,pre_close,2026-11-03T20:31:32Z,TGT,Discount Stores,all_green,159.29,155.0,4.2,153.46,157.91,158.35,152.05,-3.11,invalidated,0.3357142857142849,,,49.24,2.42%,2.75%,0.66,-10.13%,153.46,0.13%,-2.06%,4.35
+2026-11-03,pre_close,2026-11-03T20:31:32Z,TRU,Financial Data & Stock Exchanges,rs_new_high,80.74,76.98,3.44,78.33,79.05,79.43,76.95,-1.14,reclaim,0.4011627906976731,prior_low,76.98,57.84,5.11%,4.50%,0.52,-12.11%,78.33,6.14%,5.50%,3.37
+2026-11-03,pre_close,2026-11-03T20:31:32Z,UL,Household & Personal Products,leaders,66.62,65.78,1.21,64.96,65.47,65.59,64.96,-2.24,invalidated,0.0,,,53.50,1.13%,1.38%,0.71,-13.36%,64.96,0.81%,2.47%,1.23
+2026-11-03,pre_close,2026-11-03T20:31:32Z,UNP,Railroads,all_green,307.89,304.04,5.56,304.94,306.0,306.1,301.69,-0.67,reclaim,0.5845323741007195,prior_low,304.04,68.40,1.72%,1.85%,0.45,-3.50%,304.94,4.70%,6.12%,5.54
+2026-11-03,pre_close,2026-11-03T20:31:32Z,URI,Rental & Leasing Services,accel,1201.94,1174.62,38.15,1174.71,1176.6,1185.19,1166.02,-0.06,reclaim,0.22778505897772097,prior_low,1174.62,66.25,2.92%,3.41%,0.65,-2.28%,1174.71,7.29%,11.62%,36.79
+2026-11-03,pre_close,2026-11-03T20:31:32Z,VEEV,Health Information Services,leaders,316.2,306.92,9.24,304.03,301.25,306.55,299.07,-0.97,invalidated,0.5367965367965346,,,52.52,2.70%,3.04%,0.62,-6.74%,304.03,-1.40%,6.25%,9.15
+2026-11-03,pre_close,2026-11-03T20:31:32Z,WAB,Railroads,all_green,289.13,283.08,7.4,291.98,289.12,294.21,288.1,1.81,triggered,0.5243243243243236,,,57.58,2.16%,2.54%,0.51,-4.78%,291.98,2.94%,2.36%,7.41
+2026-11-03,pre_close,2026-11-03T20:31:32Z,WTW,Insurance Brokers,leaders,327.42,322.45,7.87,326.21,324.58,328.16,320.83,0.22,reclaim,0.6836086404066067,prior_low,322.45,62.43,2.55%,2.34%,1.07,-7.20%,326.21,3.99%,3.83%,7.83
