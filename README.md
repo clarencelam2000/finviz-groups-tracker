@@ -509,6 +509,7 @@ Controls Tier-1 (provenance) and Tier-2 (debug capture) output, auth, and retent
 | `CAPTURE_DIR` | `data/ai/debug/` | Directory for Tier-2 debug JSON files (full prompt + raw + parsed + usage + latency). Written (and committed) only when `AI_CAPTURE=1`. Rolling 30-day window in HEAD; older files pruned from HEAD but fully recoverable from git history. Always on in CI. |
 | `PROVENANCE_DIR` | `data/ai/provenance/` | Directory for Tier-1 provenance JSON files (input data blocks only — no instruction text). Always written on every successful run. Committed permanently. |
 | `CAPTURE_RETENTION_DAYS` | `30` | How many days of Tier-2 debug files to keep in HEAD (older files are deleted from the working tree on the next run, but remain in git history). |
+| `EXCLUDED_CAPTURES` (`scripts/eval_ai.py`) | `{"2026-10-26"}` | Capture dates skipped by `eval_ai.py --all` (CI guard) only; explicit `--date`/path still checks them. Add a date only for a reviewed, owner-approved capture; entries can be pruned once the file ages out of `data/ai/debug/`. |
 | `AI_CAPTURE` (env) | unset (off) | Set to `1` to enable Tier-2 debug capture. Always on in CI (`generate_ai.yml`). Off by default locally to avoid committing verbose debug blobs. |
 | `GOOGLE_API_KEY` (env) | unset | Vertex AI express key (third auth path). Priority: express key > Vertex ADC > AI Studio. Enables Vertex without a full GCP project credential setup. |
 

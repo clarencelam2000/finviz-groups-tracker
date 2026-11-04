@@ -400,6 +400,7 @@ AI-selected read; the third just moves sentence wording from the model to the ap
 | `CAPTURE_RETENTION_DAYS` | `30` | Number of Tier-2 debug files kept in HEAD; older files are pruned from HEAD on each run but stay recoverable in git history. ~1 MB total at 30 days. |
 | `AI_CAPTURE` env / `--capture` flag | off (on in CI) | Controls whether Tier-2 debug file is written. Set `AI_CAPTURE=1` or pass `--capture` to enable locally. Always enabled in `generate_ai.yml`. |
 | `GOOGLE_API_KEY` | (set in env) | Vertex express key — sidesteps ADC and AI Studio 429s. Takes priority over Vertex ADC (`GOOGLE_CLOUD_PROJECT`) when `GOOGLE_GENAI_USE_VERTEXAI=true`. Sets `_backend="vertex_express"`. |
+| `EXCLUDED_CAPTURES` (`eval_ai.py`) | `{"2026-10-26"}` | Dates skipped by `eval_ai.py --all` (the CI guard step). Explicit `--date`/path still checks. Owner-approved 2026-11-04: 10-26 `rotation_phase` named 'Industrials' absent from input_blocks. |
 
 **Auth priority:** `GOOGLE_API_KEY` (Vertex express) > `GOOGLE_CLOUD_PROJECT` (Vertex ADC) > `GEMINI_API_KEY` (AI Studio).
 

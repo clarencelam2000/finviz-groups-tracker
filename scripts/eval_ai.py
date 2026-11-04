@@ -33,6 +33,18 @@ DEBUG_DIR = DATA_DIR / "ai" / "debug"
 
 PHASE_LABELS = frozenset({"Early Cycle", "Mid Cycle", "Late Cycle", "Defensive"})
 
+# EXCLUDED_CAPTURES — capture dates skipped by `--all` ONLY (an explicit --date or file path
+# still checks them). Use for a capture already reviewed and accepted, so one stale historical
+# file doesn't keep the CI `test` job red for every unrelated PR. Add a date ONLY with an
+# owner-approved reason in the comment next to it; to remove, delete the entry. Captures also
+# age out of data/ai/debug/ after CAPTURE_RETENTION_DAYS (30), so entries can be pruned then.
+# Tracked in .session/SPRINT.md § AI-EVAL-EXCLUDE.
+EXCLUDED_CAPTURES = frozenset({
+    # 2026-10-26: sectors.rotation_phase output named 'Industrials' absent from input_blocks.
+    # Owner approved exclusion 2026-11-04 (was failing CI on the default branch, unrelated to PRs).
+    "2026-10-26",
+})
+
 # Prefix used to mark hallucination findings as non-blocking warnings.
 _WARN_TAG = "  [WARN] "
 
@@ -200,7 +212,9 @@ def _resolve_paths(args) -> list:
         p = DEBUG_DIR / f"{args.date}.json"
         return [p] if p.exists() else []
     if getattr(args, 'all_', False):
-        return sorted(DEBUG_DIR.glob("*.json")) if DEBUG_DIR.exists() else []
+        if not DEBUG_DIR.exists():
+            return []
+        return [p for p in sorted(DEBUG_DIR.glob("*.json")) if p.stem not in EXCLUDED_CAPTURES]
     # Default: latest capture
     if DEBUG_DIR.exists():
         candidates = sorted(DEBUG_DIR.glob("*.json"))
