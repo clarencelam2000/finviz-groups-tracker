@@ -73,6 +73,20 @@ class TestComputeScores:
         assert h3["n_sessions_avail"] == 3
         assert list(out.columns) == SCORE_COLUMNS
 
+    def test_multi_ticker_benchmark_uses_spy_only(self):
+        # Benchmark file holds SPY/QQQ/IWM per date; IWM is written last, so
+        # without the ticker filter drop_duplicates(keep="last") would pick it.
+        dates = ["2026-01-05", "2026-01-06"]
+        snapshots = self.make_snapshots(dates, {"A": [0, 1], "B": [0, 2]})
+        bench = pd.DataFrame(
+            [(d, t, p) for d in dates
+             for t, p in (("SPY", 0.5), ("QQQ", 3.0), ("IWM", -2.0))],
+            columns=["date", "ticker", "perf_day"],
+        )
+        picks = picks_frame([("2026-01-05", "A", "leaders", "v2")])
+        out = compute_scores(picks, snapshots, bench, horizons=[1])
+        assert out.iloc[0]["fwd_ret_spy"] == pytest.approx(0.5)
+
     def test_gap_dates_counted_positionally(self):
         # A weekend/holiday gap between sessions must not shrink the window:
         # horizons count trading sessions (positions), not calendar days.

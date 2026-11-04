@@ -90,7 +90,7 @@ EXPECTED_COL_0 = "Ticker"
 # labels (extrasaction="ignore") — renaming the canonical label instead of
 # aliasing it here would blank every historical row's value for that column on
 # the next write (see scripts/CLAUDE.md § Header-drift guard). Mirrors the
-# same alias pattern used for collect.py's HEADER_MAP/SPY_LABEL_MAP.
+# same alias pattern used for collect.py's HEADER_MAP/BENCH_LABEL_MAP.
 HEADER_LABEL_ALIASES = {
     "Change %": "Change",
     "Change from Open %": "Change from Open",

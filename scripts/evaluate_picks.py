@@ -31,10 +31,14 @@ existing finviz-data-commit concurrency group instead of racing it).
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from delta_config import RS_BENCHMARK_TICKER  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 PICKS_CSV = ROOT / "data" / "picks" / "picks.csv"
@@ -129,6 +133,11 @@ def compute_scores(
     dates = list(perf.index)
     date_pos = {d: i for i, d in enumerate(dates)}
 
+    # The benchmark file holds several ETFs per date (BENCH_TICKERS); score
+    # against SPY only. Without this filter drop_duplicates(keep="last") below
+    # would silently pick whichever ETF was written last (IWM).
+    if len(benchmark) and "ticker" in benchmark.columns:
+        benchmark = benchmark[benchmark["ticker"] == RS_BENCHMARK_TICKER]
     bench = benchmark[["date", "perf_day"]].copy() if len(benchmark) else pd.DataFrame(columns=["date", "perf_day"])
     bench["perf_day"] = pd.to_numeric(bench.get("perf_day"), errors="coerce")
     spy = bench.drop_duplicates("date", keep="last").set_index("date")["perf_day"]
