@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-11-20T22:01:25Z",
+  "generated_at": "2026-11-20T22:09:05Z",
   "as_of": "2026-11-20",
   "session": "eod",
   "data_branch": "claude/elegant-babbage-hlxnfy",
@@ -302,2000 +302,1200 @@
   "picks": {
     "accel": [
       {
-        "ticker": "AIN",
-        "group": "Textile Manufacturing",
+        "ticker": "VLTO",
+        "group": "Pollution & Treatment Controls",
         "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.07
-      },
-      {
-        "ticker": "URI",
-        "group": "Rental & Leasing Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.34
-      },
-      {
-        "ticker": "SUNB",
-        "group": "Rental & Leasing Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.17
-      },
-      {
-        "ticker": "AER",
-        "group": "Rental & Leasing Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.3
-      },
-      {
-        "ticker": "R",
-        "group": "Rental & Leasing Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.53
-      },
-      {
-        "ticker": "UHAL-B",
-        "group": "Rental & Leasing Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -1.37
-      },
-      {
-        "ticker": "UHAL",
-        "group": "Rental & Leasing Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -1.37
-      },
-      {
-        "ticker": "GATX",
-        "group": "Rental & Leasing Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.35
-      },
-      {
-        "ticker": "HRI",
-        "group": "Rental & Leasing Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.31
-      },
-      {
-        "ticker": "EQPT",
-        "group": "Rental & Leasing Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -1.02
-      },
-      {
-        "ticker": "CAR",
-        "group": "Rental & Leasing Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -1.28
-      },
-      {
-        "ticker": "WSC",
-        "group": "Rental & Leasing Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.76
-      },
-      {
-        "ticker": "MGRC",
-        "group": "Rental & Leasing Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.82
-      },
-      {
-        "ticker": "CTOS",
-        "group": "Rental & Leasing Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.39
-      },
-      {
-        "ticker": "ALLE",
-        "group": "Security & Protection Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 6.7
-      },
-      {
-        "ticker": "ADT",
-        "group": "Security & Protection Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 8.96
-      },
-      {
-        "ticker": "GEO",
-        "group": "Security & Protection Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -1.97
-      },
-      {
-        "ticker": "CXW",
-        "group": "Security & Protection Services",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -1.14
-      },
-      {
-        "ticker": "UPS",
-        "group": "Integrated Freight & Logistics",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.28
-      },
-      {
-        "ticker": "FDX",
-        "group": "Integrated Freight & Logistics",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.95
-      },
-      {
-        "ticker": "EXPD",
-        "group": "Integrated Freight & Logistics",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.73
-      },
-      {
-        "ticker": "JBHT",
-        "group": "Integrated Freight & Logistics",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -2.28
-      },
-      {
-        "ticker": "FDXF",
-        "group": "Integrated Freight & Logistics",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.07
-      },
-      {
-        "ticker": "LSTR",
-        "group": "Integrated Freight & Logistics",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -2.96
-      },
-      {
-        "ticker": "PBI",
-        "group": "Integrated Freight & Logistics",
-        "list_category": "accel",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -2.75
-      }
-    ],
-    "all_green": [
-      {
-        "ticker": "AIN",
-        "group": "Textile Manufacturing",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.07
-      },
-      {
-        "ticker": "LLY",
-        "group": "Drug Manufacturers - General",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.63
-      },
-      {
-        "ticker": "JNJ",
-        "group": "Drug Manufacturers - General",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.1
-      },
-      {
-        "ticker": "ABBV",
-        "group": "Drug Manufacturers - General",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.41
-      },
-      {
-        "ticker": "MRK",
-        "group": "Drug Manufacturers - General",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.44
-      },
-      {
-        "ticker": "NVS",
-        "group": "Drug Manufacturers - General",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.43
-      },
-      {
-        "ticker": "AMGN",
-        "group": "Drug Manufacturers - General",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.7
-      },
-      {
-        "ticker": "GILD",
-        "group": "Drug Manufacturers - General",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.41
-      },
-      {
-        "ticker": "PFE",
-        "group": "Drug Manufacturers - General",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.16
-      },
-      {
-        "ticker": "BMY",
-        "group": "Drug Manufacturers - General",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.53
-      },
-      {
-        "ticker": "BIIB",
-        "group": "Drug Manufacturers - General",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.68
-      },
-      {
-        "ticker": "OGN",
-        "group": "Drug Manufacturers - General",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.75
-      },
-      {
-        "ticker": "GRFS",
-        "group": "Drug Manufacturers - General",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.12
-      },
-      {
-        "ticker": "MAR",
-        "group": "Lodging",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.62
-      },
-      {
-        "ticker": "HLT",
-        "group": "Lodging",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.64
-      },
-      {
-        "ticker": "IHG",
-        "group": "Lodging",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.59
-      },
-      {
-        "ticker": "H",
-        "group": "Lodging",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.69
-      },
-      {
-        "ticker": "HTHT",
-        "group": "Lodging",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.1
-      },
-      {
-        "ticker": "CHH",
-        "group": "Lodging",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.79
-      },
-      {
-        "ticker": "HST",
-        "group": "REIT - Hotel & Motel",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.24
-      },
-      {
-        "ticker": "RHP",
-        "group": "REIT - Hotel & Motel",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.29
-      },
-      {
-        "ticker": "APLE",
-        "group": "REIT - Hotel & Motel",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.43
-      },
-      {
-        "ticker": "PK",
-        "group": "REIT - Hotel & Motel",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.33
-      },
-      {
-        "ticker": "DRH",
-        "group": "REIT - Hotel & Motel",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.21
-      },
-      {
-        "ticker": "PEB",
-        "group": "REIT - Hotel & Motel",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
+        "signal_date": "2026-11-20",
         "atr_ext_50": 4.87
       },
       {
-        "ticker": "SHO",
-        "group": "REIT - Hotel & Motel",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.6
+        "ticker": "CECO",
+        "group": "Pollution & Treatment Controls",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -2.32
       },
       {
-        "ticker": "RGA",
-        "group": "Insurance - Reinsurance",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.19
+        "ticker": "USFD",
+        "group": "Food Distribution",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.29
       },
       {
-        "ticker": "EG",
-        "group": "Insurance - Reinsurance",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.1
+        "ticker": "PFGC",
+        "group": "Food Distribution",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.43
       },
       {
-        "ticker": "RNR",
-        "group": "Insurance - Reinsurance",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.48
+        "ticker": "CHEF",
+        "group": "Food Distribution",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -1.38
       },
       {
-        "ticker": "HG",
-        "group": "Insurance - Reinsurance",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.4
+        "ticker": "UNFI",
+        "group": "Food Distribution",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.09
       },
       {
-        "ticker": "SPNT",
-        "group": "Insurance - Reinsurance",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.48
+        "ticker": "LNG",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.89
       },
       {
-        "ticker": "SN",
-        "group": "Furnishings, Fixtures & Appliances",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.72
+        "ticker": "TRGP",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -1.06
       },
       {
-        "ticker": "MHK",
-        "group": "Furnishings, Fixtures & Appliances",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.36
+        "ticker": "OKE",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -2.72
       },
       {
-        "ticker": "HNI",
-        "group": "Furnishings, Fixtures & Appliances",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.58
+        "ticker": "VG",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -1.71
       },
       {
-        "ticker": "TILE",
-        "group": "Furnishings, Fixtures & Appliances",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.06
+        "ticker": "PBA",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.02
       },
       {
-        "ticker": "MCK",
-        "group": "Medical Distribution",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.14
+        "ticker": "PAGP",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -2.15
       },
       {
-        "ticker": "COR",
-        "group": "Medical Distribution",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.24
+        "ticker": "PAA",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -2.3
       },
       {
-        "ticker": "CAH",
-        "group": "Medical Distribution",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.53
+        "ticker": "FRO",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -2.51
       },
       {
-        "ticker": "HSIC",
-        "group": "Medical Distribution",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -1.75
+        "ticker": "KNTK",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.72
       },
       {
-        "ticker": "BRK-B",
-        "group": "Insurance - Diversified",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.44
+        "ticker": "SOBO",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -2.92
       },
       {
-        "ticker": "SLF",
-        "group": "Insurance - Diversified",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.93
+        "ticker": "INSW",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -2.41
       },
       {
-        "ticker": "ACGL",
-        "group": "Insurance - Diversified",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.16
+        "ticker": "CMBT",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -3.47
       },
       {
-        "ticker": "AEG",
-        "group": "Insurance - Diversified",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -3.6
+        "ticker": "STNG",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -1.99
       },
       {
-        "ticker": "PLGO",
-        "group": "Insurance - Diversified",
-        "list_category": "all_green",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.63
+        "ticker": "EE",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.61
+      },
+      {
+        "ticker": "DHT",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -1.37
+      },
+      {
+        "ticker": "BWLP",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -3.37
+      },
+      {
+        "ticker": "TRMD",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -3.54
+      },
+      {
+        "ticker": "SUNC",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -3.82
+      },
+      {
+        "ticker": "TNK",
+        "group": "Oil & Gas Midstream",
+        "list_category": "accel",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -2.91
       }
     ],
     "emerging": [
       {
-        "ticker": "VRSK",
-        "group": "Consulting Services",
+        "ticker": "BC",
+        "group": "Recreational Vehicles",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.33
-      },
-      {
-        "ticker": "EFX",
-        "group": "Consulting Services",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.28
-      },
-      {
-        "ticker": "BAH",
-        "group": "Consulting Services",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.7
-      },
-      {
-        "ticker": "FCN",
-        "group": "Consulting Services",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 6.52
-      },
-      {
-        "ticker": "HURN",
-        "group": "Consulting Services",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.59
-      },
-      {
-        "ticker": "MRSH",
-        "group": "Insurance Brokers",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.66
-      },
-      {
-        "ticker": "AJG",
-        "group": "Insurance Brokers",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.36
-      },
-      {
-        "ticker": "AON",
-        "group": "Insurance Brokers",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.64
-      },
-      {
-        "ticker": "WTW",
-        "group": "Insurance Brokers",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.7
-      },
-      {
-        "ticker": "BRO",
-        "group": "Insurance Brokers",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.77
-      },
-      {
-        "ticker": "ERIE",
-        "group": "Insurance Brokers",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.27
-      },
-      {
-        "ticker": "RYAN",
-        "group": "Insurance Brokers",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.19
-      },
-      {
-        "ticker": "BWIN",
-        "group": "Insurance Brokers",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.57
-      },
-      {
-        "ticker": "ARX",
-        "group": "Insurance Brokers",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.52
-      },
-      {
-        "ticker": "CRVL",
-        "group": "Insurance Brokers",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.21
-      },
-      {
-        "ticker": "NP",
-        "group": "Insurance Brokers",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.49
-      },
-      {
-        "ticker": "LIFE",
-        "group": "Insurance Brokers",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.84
-      },
-      {
-        "ticker": "RL",
-        "group": "Apparel Manufacturing",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.29
-      },
-      {
-        "ticker": "LEVI",
-        "group": "Apparel Manufacturing",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.74
-      },
-      {
-        "ticker": "VFC",
-        "group": "Apparel Manufacturing",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 7.12
-      },
-      {
-        "ticker": "ZGN",
-        "group": "Apparel Manufacturing",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.63
-      },
-      {
-        "ticker": "KTB",
-        "group": "Apparel Manufacturing",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.39
-      },
-      {
-        "ticker": "PVH",
-        "group": "Apparel Manufacturing",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.41
-      },
-      {
-        "ticker": "COLM",
-        "group": "Apparel Manufacturing",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.44
-      },
-      {
-        "ticker": "FIGS",
-        "group": "Apparel Manufacturing",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.95
-      },
-      {
-        "ticker": "UAA",
-        "group": "Apparel Manufacturing",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.18
-      },
-      {
-        "ticker": "UA",
-        "group": "Apparel Manufacturing",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.99
-      },
-      {
-        "ticker": "MDLZ",
-        "group": "Confectioners",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.34
-      },
-      {
-        "ticker": "CTAS",
-        "group": "Specialty Business Services",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.77
-      },
-      {
-        "ticker": "RELX",
-        "group": "Specialty Business Services",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.77
-      },
-      {
-        "ticker": "TRI",
-        "group": "Specialty Business Services",
-        "list_category": "emerging",
-        "signal_date": "2026-11-03",
+        "signal_date": "2026-11-20",
         "atr_ext_50": 1.01
       },
       {
-        "ticker": "CPRT",
-        "group": "Specialty Business Services",
+        "ticker": "DOO",
+        "group": "Recreational Vehicles",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.73
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.62
       },
       {
-        "ticker": "ULS",
-        "group": "Specialty Business Services",
+        "ticker": "PII",
+        "group": "Recreational Vehicles",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.66
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.79
       },
       {
-        "ticker": "ARMK",
-        "group": "Specialty Business Services",
+        "ticker": "HOG",
+        "group": "Recreational Vehicles",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.9
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.14
       },
       {
-        "ticker": "RTO",
-        "group": "Specialty Business Services",
+        "ticker": "PATK",
+        "group": "Recreational Vehicles",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.42
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.75
       },
       {
-        "ticker": "DLB",
-        "group": "Specialty Business Services",
+        "ticker": "LCII",
+        "group": "Recreational Vehicles",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.65
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.72
       },
       {
-        "ticker": "AMTM",
-        "group": "Specialty Business Services",
+        "ticker": "KHC",
+        "group": "Packaged Foods",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.38
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.02
       },
       {
-        "ticker": "UNF",
-        "group": "Specialty Business Services",
+        "ticker": "SJM",
+        "group": "Packaged Foods",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -1.02
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.27
       },
       {
-        "ticker": "AZZ",
-        "group": "Specialty Business Services",
+        "ticker": "HRL",
+        "group": "Packaged Foods",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.47
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 4.4
       },
       {
-        "ticker": "FA",
-        "group": "Specialty Business Services",
+        "ticker": "MICC",
+        "group": "Packaged Foods",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.06
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.3
       },
       {
-        "ticker": "MMS",
-        "group": "Specialty Business Services",
+        "ticker": "DAR",
+        "group": "Packaged Foods",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.68
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -3.62
       },
       {
-        "ticker": "ABM",
-        "group": "Specialty Business Services",
+        "ticker": "LW",
+        "group": "Packaged Foods",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.37
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.43
       },
       {
-        "ticker": "CBZ",
-        "group": "Specialty Business Services",
+        "ticker": "CPB",
+        "group": "Packaged Foods",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.25
+      },
+      {
+        "ticker": "FRPT",
+        "group": "Packaged Foods",
+        "list_category": "emerging",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.6
+      },
+      {
+        "ticker": "CENTA",
+        "group": "Packaged Foods",
+        "list_category": "emerging",
+        "signal_date": "2026-11-20",
         "atr_ext_50": 2.14
       },
       {
-        "ticker": "TIC",
-        "group": "Specialty Business Services",
+        "ticker": "UTZ",
+        "group": "Packaged Foods",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.6
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.43
       },
       {
-        "ticker": "VLTO",
-        "group": "Pollution & Treatment Controls",
+        "ticker": "RDN",
+        "group": "Insurance - Specialty",
         "list_category": "emerging",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 6.21
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.15
+      },
+      {
+        "ticker": "SBUX",
+        "group": "Restaurants",
+        "list_category": "emerging",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.03
+      },
+      {
+        "ticker": "CMG",
+        "group": "Restaurants",
+        "list_category": "emerging",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.52
+      },
+      {
+        "ticker": "DRI",
+        "group": "Restaurants",
+        "list_category": "emerging",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.79
+      },
+      {
+        "ticker": "YUMC",
+        "group": "Restaurants",
+        "list_category": "emerging",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 4.56
+      },
+      {
+        "ticker": "DPZ",
+        "group": "Restaurants",
+        "list_category": "emerging",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.49
+      },
+      {
+        "ticker": "EAT",
+        "group": "Restaurants",
+        "list_category": "emerging",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -1.35
+      },
+      {
+        "ticker": "CAKE",
+        "group": "Restaurants",
+        "list_category": "emerging",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.12
+      },
+      {
+        "ticker": "WING",
+        "group": "Restaurants",
+        "list_category": "emerging",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.41
+      },
+      {
+        "ticker": "SHAK",
+        "group": "Restaurants",
+        "list_category": "emerging",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.64
       }
     ],
     "leaders": [
       {
-        "ticker": "AIN",
-        "group": "Textile Manufacturing",
+        "ticker": "MCK",
+        "group": "Medical Distribution",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.07
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.66
       },
       {
-        "ticker": "LLY",
-        "group": "Drug Manufacturers - General",
+        "ticker": "COR",
+        "group": "Medical Distribution",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.63
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.07
       },
       {
-        "ticker": "JNJ",
-        "group": "Drug Manufacturers - General",
+        "ticker": "CAH",
+        "group": "Medical Distribution",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.1
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.96
       },
       {
-        "ticker": "ABBV",
-        "group": "Drug Manufacturers - General",
+        "ticker": "HSIC",
+        "group": "Medical Distribution",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.41
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.75
       },
       {
-        "ticker": "MRK",
-        "group": "Drug Manufacturers - General",
+        "ticker": "WMT",
+        "group": "Discount Stores",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.44
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.9
       },
       {
-        "ticker": "NVS",
-        "group": "Drug Manufacturers - General",
+        "ticker": "COST",
+        "group": "Discount Stores",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 6.05
+      },
+      {
+        "ticker": "TGT",
+        "group": "Discount Stores",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.65
+      },
+      {
+        "ticker": "DG",
+        "group": "Discount Stores",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.34
+      },
+      {
+        "ticker": "DLTR",
+        "group": "Discount Stores",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.47
+      },
+      {
+        "ticker": "BJ",
+        "group": "Discount Stores",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.04
+      },
+      {
+        "ticker": "TBBB",
+        "group": "Discount Stores",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.42
+      },
+      {
+        "ticker": "OLLI",
+        "group": "Discount Stores",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.44
+      },
+      {
+        "ticker": "PSMT",
+        "group": "Discount Stores",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.37
+      },
+      {
+        "ticker": "BRK-B",
+        "group": "Insurance - Diversified",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
         "atr_ext_50": 3.43
       },
       {
-        "ticker": "AMGN",
-        "group": "Drug Manufacturers - General",
+        "ticker": "SLF",
+        "group": "Insurance - Diversified",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.7
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -5.39
       },
       {
-        "ticker": "GILD",
-        "group": "Drug Manufacturers - General",
+        "ticker": "ACGL",
+        "group": "Insurance - Diversified",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.41
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.35
       },
       {
-        "ticker": "PFE",
-        "group": "Drug Manufacturers - General",
+        "ticker": "PLGO",
+        "group": "Insurance - Diversified",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.16
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.37
       },
       {
-        "ticker": "BMY",
-        "group": "Drug Manufacturers - General",
+        "ticker": "ALLE",
+        "group": "Security & Protection Services",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.53
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.43
       },
       {
-        "ticker": "BIIB",
-        "group": "Drug Manufacturers - General",
+        "ticker": "ADT",
+        "group": "Security & Protection Services",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.68
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 15.24
       },
       {
-        "ticker": "OGN",
-        "group": "Drug Manufacturers - General",
+        "ticker": "BCO",
+        "group": "Security & Protection Services",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.75
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.31
       },
       {
-        "ticker": "GRFS",
-        "group": "Drug Manufacturers - General",
+        "ticker": "GEO",
+        "group": "Security & Protection Services",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.12
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.31
+      },
+      {
+        "ticker": "CXW",
+        "group": "Security & Protection Services",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -1.16
+      },
+      {
+        "ticker": "CB",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.86
+      },
+      {
+        "ticker": "PGR",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.82
+      },
+      {
+        "ticker": "TRV",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.11
+      },
+      {
+        "ticker": "ALL",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.02
+      },
+      {
+        "ticker": "WRB",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.36
+      },
+      {
+        "ticker": "CINF",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.36
+      },
+      {
+        "ticker": "AIZ",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 4.58
+      },
+      {
+        "ticker": "AFG",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 4.5
+      },
+      {
+        "ticker": "KNSL",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.06
+      },
+      {
+        "ticker": "THG",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.04
+      },
+      {
+        "ticker": "RLI",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 5.04
+      },
+      {
+        "ticker": "SIGI",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.84
+      },
+      {
+        "ticker": "HGTY",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.66
+      },
+      {
+        "ticker": "PLMR",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 4.43
+      },
+      {
+        "ticker": "SLDE",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.43
+      },
+      {
+        "ticker": "SKWD",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.76
+      },
+      {
+        "ticker": "HCI",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.47
+      },
+      {
+        "ticker": "PRCH",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.41
+      },
+      {
+        "ticker": "HMN",
+        "group": "Insurance - Property & Casualty",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.79
       },
       {
         "ticker": "MAR",
         "group": "Lodging",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.62
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.36
       },
       {
         "ticker": "HLT",
         "group": "Lodging",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.64
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.83
       },
       {
         "ticker": "IHG",
         "group": "Lodging",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.59
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.1
       },
       {
         "ticker": "H",
         "group": "Lodging",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.69
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.04
       },
       {
         "ticker": "HTHT",
         "group": "Lodging",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.1
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.17
       },
       {
         "ticker": "CHH",
         "group": "Lodging",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.79
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.13
       },
       {
-        "ticker": "VRSK",
-        "group": "Consulting Services",
+        "ticker": "ATAT",
+        "group": "Lodging",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.33
-      },
-      {
-        "ticker": "EFX",
-        "group": "Consulting Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.28
-      },
-      {
-        "ticker": "BAH",
-        "group": "Consulting Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.7
-      },
-      {
-        "ticker": "FCN",
-        "group": "Consulting Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 6.52
-      },
-      {
-        "ticker": "HURN",
-        "group": "Consulting Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.59
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.31
       },
       {
         "ticker": "HST",
         "group": "REIT - Hotel & Motel",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.24
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.39
       },
       {
         "ticker": "RHP",
         "group": "REIT - Hotel & Motel",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.29
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.58
       },
       {
         "ticker": "APLE",
         "group": "REIT - Hotel & Motel",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.43
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.25
       },
       {
         "ticker": "PK",
         "group": "REIT - Hotel & Motel",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.33
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.32
       },
       {
         "ticker": "DRH",
         "group": "REIT - Hotel & Motel",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.21
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.34
       },
       {
         "ticker": "PEB",
         "group": "REIT - Hotel & Motel",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.87
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.63
       },
       {
         "ticker": "SHO",
         "group": "REIT - Hotel & Motel",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.6
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.57
+      },
+      {
+        "ticker": "PG",
+        "group": "Household & Personal Products",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.89
+      },
+      {
+        "ticker": "CL",
+        "group": "Household & Personal Products",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.06
+      },
+      {
+        "ticker": "EL",
+        "group": "Household & Personal Products",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.68
+      },
+      {
+        "ticker": "CHD",
+        "group": "Household & Personal Products",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.29
+      },
+      {
+        "ticker": "CLX",
+        "group": "Household & Personal Products",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 4.06
+      },
+      {
+        "ticker": "ELF",
+        "group": "Household & Personal Products",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.87
+      },
+      {
+        "ticker": "IPAR",
+        "group": "Household & Personal Products",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 4.55
+      },
+      {
+        "ticker": "COTY",
+        "group": "Household & Personal Products",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.72
+      },
+      {
+        "ticker": "NWL",
+        "group": "Household & Personal Products",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.99
       },
       {
         "ticker": "MRSH",
         "group": "Insurance Brokers",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.66
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.98
       },
       {
         "ticker": "AJG",
         "group": "Insurance Brokers",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.36
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.12
       },
       {
         "ticker": "AON",
         "group": "Insurance Brokers",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.64
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.73
       },
       {
         "ticker": "WTW",
         "group": "Insurance Brokers",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.7
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.01
       },
       {
         "ticker": "BRO",
         "group": "Insurance Brokers",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.77
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.54
       },
       {
         "ticker": "ERIE",
         "group": "Insurance Brokers",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.27
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.87
       },
       {
         "ticker": "RYAN",
         "group": "Insurance Brokers",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.19
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.03
       },
       {
         "ticker": "BWIN",
         "group": "Insurance Brokers",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.57
-      },
-      {
-        "ticker": "ARX",
-        "group": "Insurance Brokers",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.52
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.3
       },
       {
         "ticker": "CRVL",
         "group": "Insurance Brokers",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.21
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.31
+      },
+      {
+        "ticker": "ARX",
+        "group": "Insurance Brokers",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.62
       },
       {
         "ticker": "NP",
         "group": "Insurance Brokers",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.49
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.89
       },
       {
         "ticker": "LIFE",
         "group": "Insurance Brokers",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.84
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -2.2
       },
       {
-        "ticker": "VEEV",
-        "group": "Health Information Services",
+        "ticker": "RGA",
+        "group": "Insurance - Reinsurance",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.87
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.27
       },
       {
-        "ticker": "TEM",
-        "group": "Health Information Services",
+        "ticker": "EG",
+        "group": "Insurance - Reinsurance",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.11
-      },
-      {
-        "ticker": "BTSG",
-        "group": "Health Information Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.59
-      },
-      {
-        "ticker": "HNGE",
-        "group": "Health Information Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.84
-      },
-      {
-        "ticker": "HQY",
-        "group": "Health Information Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.42
-      },
-      {
-        "ticker": "DOCS",
-        "group": "Health Information Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.29
-      },
-      {
-        "ticker": "WAY",
-        "group": "Health Information Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.08
-      },
-      {
-        "ticker": "HTFL",
-        "group": "Health Information Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.1
-      },
-      {
-        "ticker": "SDGR",
-        "group": "Health Information Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.91
-      },
-      {
-        "ticker": "V",
-        "group": "Credit Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.89
-      },
-      {
-        "ticker": "MA",
-        "group": "Credit Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.64
-      },
-      {
-        "ticker": "PYPL",
-        "group": "Credit Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.12
-      },
-      {
-        "ticker": "AFRM",
-        "group": "Credit Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.26
-      },
-      {
-        "ticker": "SOFI",
-        "group": "Credit Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.35
-      },
-      {
-        "ticker": "FCFS",
-        "group": "Credit Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -2.11
-      },
-      {
-        "ticker": "OMF",
-        "group": "Credit Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -1.57
-      },
-      {
-        "ticker": "ENVA",
-        "group": "Credit Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -2.36
-      },
-      {
-        "ticker": "SEZL",
-        "group": "Credit Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.17
-      },
-      {
-        "ticker": "BFH",
-        "group": "Credit Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.68
-      },
-      {
-        "ticker": "AGM",
-        "group": "Credit Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -2.22
-      },
-      {
-        "ticker": "ECPG",
-        "group": "Credit Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.22
-      },
-      {
-        "ticker": "SPGI",
-        "group": "Financial Data & Stock Exchanges",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.03
-      },
-      {
-        "ticker": "CME",
-        "group": "Financial Data & Stock Exchanges",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.38
-      },
-      {
-        "ticker": "ICE",
-        "group": "Financial Data & Stock Exchanges",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
+        "signal_date": "2026-11-20",
         "atr_ext_50": 3.14
       },
       {
-        "ticker": "MCO",
-        "group": "Financial Data & Stock Exchanges",
+        "ticker": "RNR",
+        "group": "Insurance - Reinsurance",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.12
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.51
       },
       {
-        "ticker": "NDAQ",
-        "group": "Financial Data & Stock Exchanges",
+        "ticker": "HG",
+        "group": "Insurance - Reinsurance",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.82
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.59
       },
       {
-        "ticker": "MSCI",
-        "group": "Financial Data & Stock Exchanges",
+        "ticker": "SPNT",
+        "group": "Insurance - Reinsurance",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.03
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.23
       },
       {
-        "ticker": "CBOE",
-        "group": "Financial Data & Stock Exchanges",
+        "ticker": "VLTO",
+        "group": "Pollution & Treatment Controls",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.59
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 4.87
       },
       {
-        "ticker": "TRU",
-        "group": "Financial Data & Stock Exchanges",
+        "ticker": "CECO",
+        "group": "Pollution & Treatment Controls",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.28
-      },
-      {
-        "ticker": "FDS",
-        "group": "Financial Data & Stock Exchanges",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.08
-      },
-      {
-        "ticker": "MORN",
-        "group": "Financial Data & Stock Exchanges",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.17
-      },
-      {
-        "ticker": "WM",
-        "group": "Waste Management",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.2
-      },
-      {
-        "ticker": "RSG",
-        "group": "Waste Management",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.78
-      },
-      {
-        "ticker": "WCN",
-        "group": "Waste Management",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.16
-      },
-      {
-        "ticker": "GFL",
-        "group": "Waste Management",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.08
-      },
-      {
-        "ticker": "CLH",
-        "group": "Waste Management",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -2.59
-      },
-      {
-        "ticker": "CWST",
-        "group": "Waste Management",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.13
-      },
-      {
-        "ticker": "IBM",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.96
-      },
-      {
-        "ticker": "ACN",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.53
-      },
-      {
-        "ticker": "FISV",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.98
-      },
-      {
-        "ticker": "CTSH",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.54
-      },
-      {
-        "ticker": "WIT",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.67
-      },
-      {
-        "ticker": "BR",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.75
-      },
-      {
-        "ticker": "FIS",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.59
-      },
-      {
-        "ticker": "CDW",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.32
-      },
-      {
-        "ticker": "LDOS",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.13
-      },
-      {
-        "ticker": "GIB",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.03
-      },
-      {
-        "ticker": "CACI",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.54
-      },
-      {
-        "ticker": "IT",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.63
-      },
-      {
-        "ticker": "JKHY",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.16
-      },
-      {
-        "ticker": "EPAM",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.21
-      },
-      {
-        "ticker": "G",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.13
-      },
-      {
-        "ticker": "EXLS",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.87
-      },
-      {
-        "ticker": "SAIC",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.99
-      },
-      {
-        "ticker": "INGM",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.91
-      },
-      {
-        "ticker": "PSN",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.0
-      },
-      {
-        "ticker": "MAAS",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -2.17
-      },
-      {
-        "ticker": "CIFR",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -5.31
-      },
-      {
-        "ticker": "PENG",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.54
-      },
-      {
-        "ticker": "KD",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.2
-      },
-      {
-        "ticker": "DXC",
-        "group": "Information Technology Services",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.69
-      },
-      {
-        "ticker": "PM",
-        "group": "Tobacco",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.6
-      },
-      {
-        "ticker": "MO",
-        "group": "Tobacco",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.63
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -2.32
       },
       {
         "ticker": "KO",
         "group": "Beverages - Non-Alcoholic",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.13
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.91
       },
       {
         "ticker": "MNST",
         "group": "Beverages - Non-Alcoholic",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.38
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.97
       },
       {
         "ticker": "CCEP",
         "group": "Beverages - Non-Alcoholic",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.12
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.59
       },
       {
         "ticker": "KDP",
         "group": "Beverages - Non-Alcoholic",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.32
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.03
       },
       {
         "ticker": "COKE",
         "group": "Beverages - Non-Alcoholic",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.18
-      },
-      {
-        "ticker": "CELH",
-        "group": "Beverages - Non-Alcoholic",
-        "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.9
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.03
       },
       {
         "ticker": "PRMB",
         "group": "Beverages - Non-Alcoholic",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.38
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.87
+      },
+      {
+        "ticker": "CELH",
+        "group": "Beverages - Non-Alcoholic",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.4
       },
       {
         "ticker": "KOF",
         "group": "Beverages - Non-Alcoholic",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.29
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.7
       },
       {
         "ticker": "COCO",
         "group": "Beverages - Non-Alcoholic",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.82
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.67
       },
       {
         "ticker": "FIZZ",
         "group": "Beverages - Non-Alcoholic",
         "list_category": "leaders",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.6
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.39
+      },
+      {
+        "ticker": "LLY",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.89
+      },
+      {
+        "ticker": "JNJ",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.46
+      },
+      {
+        "ticker": "ABBV",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.07
+      },
+      {
+        "ticker": "MRK",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -2.56
+      },
+      {
+        "ticker": "NVS",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.0
+      },
+      {
+        "ticker": "AMGN",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.45
+      },
+      {
+        "ticker": "GILD",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.02
+      },
+      {
+        "ticker": "BMY",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -1.48
+      },
+      {
+        "ticker": "BIIB",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.77
+      },
+      {
+        "ticker": "OGN",
+        "group": "Drug Manufacturers - General",
+        "list_category": "leaders",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.79
       }
     ],
     "rs_new_high": [
       {
-        "ticker": "AIN",
-        "group": "Textile Manufacturing",
+        "ticker": "USFD",
+        "group": "Food Distribution",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.07
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.29
       },
       {
-        "ticker": "RL",
-        "group": "Apparel Manufacturing",
+        "ticker": "PFGC",
+        "group": "Food Distribution",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.29
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.43
       },
       {
-        "ticker": "LEVI",
-        "group": "Apparel Manufacturing",
+        "ticker": "CHEF",
+        "group": "Food Distribution",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.74
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -1.38
       },
       {
-        "ticker": "VFC",
-        "group": "Apparel Manufacturing",
+        "ticker": "UNFI",
+        "group": "Food Distribution",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 7.12
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.09
       },
       {
-        "ticker": "ZGN",
-        "group": "Apparel Manufacturing",
+        "ticker": "AAPL",
+        "group": "Consumer Electronics",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.63
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.09
       },
       {
-        "ticker": "KTB",
-        "group": "Apparel Manufacturing",
+        "ticker": "SONY",
+        "group": "Consumer Electronics",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.39
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.8
       },
       {
-        "ticker": "PVH",
-        "group": "Apparel Manufacturing",
+        "ticker": "SONO",
+        "group": "Consumer Electronics",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.41
-      },
-      {
-        "ticker": "COLM",
-        "group": "Apparel Manufacturing",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 5.44
-      },
-      {
-        "ticker": "FIGS",
-        "group": "Apparel Manufacturing",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.95
-      },
-      {
-        "ticker": "UAA",
-        "group": "Apparel Manufacturing",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.18
-      },
-      {
-        "ticker": "UA",
-        "group": "Apparel Manufacturing",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.99
-      },
-      {
-        "ticker": "UPS",
-        "group": "Integrated Freight & Logistics",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.28
-      },
-      {
-        "ticker": "FDX",
-        "group": "Integrated Freight & Logistics",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.95
-      },
-      {
-        "ticker": "EXPD",
-        "group": "Integrated Freight & Logistics",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.73
-      },
-      {
-        "ticker": "JBHT",
-        "group": "Integrated Freight & Logistics",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -2.28
-      },
-      {
-        "ticker": "FDXF",
-        "group": "Integrated Freight & Logistics",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.07
-      },
-      {
-        "ticker": "LSTR",
-        "group": "Integrated Freight & Logistics",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -2.96
-      },
-      {
-        "ticker": "PBI",
-        "group": "Integrated Freight & Logistics",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -2.75
-      },
-      {
-        "ticker": "WELL",
-        "group": "REIT - Healthcare Facilities",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.29
-      },
-      {
-        "ticker": "DOC",
-        "group": "REIT - Healthcare Facilities",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.55
-      },
-      {
-        "ticker": "AHR",
-        "group": "REIT - Healthcare Facilities",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.29
-      },
-      {
-        "ticker": "LTC",
-        "group": "REIT - Healthcare Facilities",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.03
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.1
       },
       {
         "ticker": "GWW",
         "group": "Industrial Distribution",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.24
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.36
       },
       {
         "ticker": "FAST",
         "group": "Industrial Distribution",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.46
-      },
-      {
-        "ticker": "WCC",
-        "group": "Industrial Distribution",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.06
-      },
-      {
-        "ticker": "AIT",
-        "group": "Industrial Distribution",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -2.05
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -0.79
       },
       {
         "ticker": "POOL",
         "group": "Industrial Distribution",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.65
-      },
-      {
-        "ticker": "MSM",
-        "group": "Industrial Distribution",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.7
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 3.11
       },
       {
         "ticker": "XMTR",
         "group": "Industrial Distribution",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.75
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.01
+      },
+      {
+        "ticker": "MSM",
+        "group": "Industrial Distribution",
+        "list_category": "rs_new_high",
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -4.55
       },
       {
         "ticker": "SITE",
         "group": "Industrial Distribution",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.39
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 2.07
       },
       {
         "ticker": "REZI",
         "group": "Industrial Distribution",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.29
-      },
-      {
-        "ticker": "DNOW",
-        "group": "Industrial Distribution",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.54
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 1.46
       },
       {
         "ticker": "DXPE",
         "group": "Industrial Distribution",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.28
+        "signal_date": "2026-11-20",
+        "atr_ext_50": -2.85
       },
       {
-        "ticker": "TAK",
-        "group": "Drug Manufacturers - Specialty & Generic",
+        "ticker": "SUZ",
+        "group": "Paper & Paper Products",
         "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.41
-      },
-      {
-        "ticker": "TEVA",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.04
-      },
-      {
-        "ticker": "ZTS",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.9
-      },
-      {
-        "ticker": "UTHR",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.37
-      },
-      {
-        "ticker": "VTRS",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.92
-      },
-      {
-        "ticker": "NBIX",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 3.65
-      },
-      {
-        "ticker": "ELAN",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.0
-      },
-      {
-        "ticker": "RDY",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 6.0
-      },
-      {
-        "ticker": "ALKS",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.15
-      },
-      {
-        "ticker": "KNSA",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 2.95
-      },
-      {
-        "ticker": "AMRX",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.36
-      },
-      {
-        "ticker": "LNTH",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.27
-      },
-      {
-        "ticker": "HIMS",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -1.65
-      },
-      {
-        "ticker": "INDV",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.87
-      },
-      {
-        "ticker": "LQDA",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -2.64
-      },
-      {
-        "ticker": "AMLX",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.92
-      },
-      {
-        "ticker": "RGC",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.73
-      },
-      {
-        "ticker": "BHC",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 4.29
-      },
-      {
-        "ticker": "TRLV",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 0.48
-      },
-      {
-        "ticker": "BCRX",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": -0.04
-      },
-      {
-        "ticker": "PRGO",
-        "group": "Drug Manufacturers - Specialty & Generic",
-        "list_category": "rs_new_high",
-        "signal_date": "2026-11-03",
-        "atr_ext_50": 1.38
+        "signal_date": "2026-11-20",
+        "atr_ext_50": 0.46
       }
     ]
   }
