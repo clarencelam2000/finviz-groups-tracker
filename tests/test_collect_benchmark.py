@@ -685,3 +685,39 @@ class TestMultiTickerBenchmark:
         df = load_benchmark(bench_path)
         assert list(df["ticker"]) == ["SPY"]
         assert df["perf_week"].iloc[0] == pytest.approx(1.23)
+
+
+# ---------------------------------------------------------------------------
+# Regression (BENCH-QUOTE-FIX, 2026-11-20): the live ETF quote page is split
+# across 6 `.snapshot-table2` tables and the perf labels are in the last one.
+# The parser used select_one (first table only) → 0/7 perf values → every
+# collect.yml run failed 2026-11-04..11-19. Fixture = the real SPY page's
+# snapshot tables captured on GitHub Actions 2026-11-20, trimmed.
+# ---------------------------------------------------------------------------
+
+REAL_ETF_FIXTURE = Path(__file__).parent / "fixtures" / "etf_quote_spy_2026-11.html"
+
+
+def test_parse_real_multi_table_etf_page_gets_all_perf():
+    html = REAL_ETF_FIXTURE.read_text(encoding="utf-8")
+    rec = parse_bench_quote(html, "SPY", "2026-11-20", "2026-11-20T21:00:00Z")
+    assert rec["perf_day"] == -1.83
+    assert rec["perf_week"] == -6.84
+    assert rec["perf_month"] == -8.01
+    assert rec["perf_quarter"] == -7.95
+    assert rec["perf_half"] == -5.75
+    assert rec["perf_year"] == 7.7
+    assert rec["perf_ytd"] == 3.06
+    # Fields from earlier tables in the split are still picked up.
+    assert rec["price"] == "702.78"
+    assert rec["sma50"] == "-7.58%"
+
+
+def test_parse_scans_every_snapshot_table():
+    html = """
+    <table class="snapshot-table2"><tr><td>Price</td><td>100.00</td></tr></table>
+    <table class="snapshot-table2"><tr><td>Perf Week</td><td>1.50%</td></tr></table>
+    """
+    rec = parse_bench_quote(html, "SPY", "2026-11-20", "x")
+    assert rec["price"] == "100.00"
+    assert rec["perf_week"] == 1.5

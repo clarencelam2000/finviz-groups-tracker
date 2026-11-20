@@ -482,7 +482,7 @@ def parse_bench_quote(html: str, ticker: str, snapshot_date: str, collected_at: 
 
     `ticker` is stamped from the caller (the URL we fetched), not read from the page.
 
-    Captures the full quote-page field set from `.snapshot-table2`
+    Captures the full quote-page field set from every `.snapshot-table2` table
     (BENCH_LABEL_MAP + BENCH_FIELD_MAP), not just the 7 perf_* columns.
     perf_* keep their parsed float values (unchanged in name, order, and
     value); every other field is stored as raw stripped text. Labels not in
@@ -493,9 +493,14 @@ def parse_bench_quote(html: str, ticker: str, snapshot_date: str, collected_at: 
     is added to BENCH_FIELD_MAP + BENCH_CSV_COLUMNS. The warning is the signal. Any missing label leaves the column as None.
     """
     soup = BeautifulSoup(html, "lxml")
-    # Scope to the quote table; fall back to the whole page for resilience
+    # Scope to the quote tables; fall back to the whole page for resilience
     # (some fixture/legacy pages lack the class).
-    table = soup.select_one(".snapshot-table2") or soup
+    # NOTE: the ETF quote page is split into SEVERAL `.snapshot-table2` tables
+    # (6 as of 2026-11: fund info, ETF type, tags/SMA, returns/flows,
+    # holdings/technicals, perf/price). The perf labels live in the LAST one.
+    # Scanning only the first (select_one) yielded 0/7 perf values and failed
+    # every collect.yml run from 2026-11-04 to 2026-11-19. Scan them all.
+    tables = soup.select(".snapshot-table2") or [soup]
 
     rec: dict = {
         "date": snapshot_date,
@@ -508,7 +513,7 @@ def parse_bench_quote(html: str, ticker: str, snapshot_date: str, collected_at: 
 
     unknown = []
     consumed = set()  # ids of <td>s already taken as values — the table is
-    for td in table.find_all("td"):  # strict label/value alternation, so a
+    for td in (td for t in tables for td in t.find_all("td")):  # strict label/value alternation, so a
         if id(td) in consumed:  # value cell must not be re-read as a label
             continue
         label = td.get_text(strip=True)
