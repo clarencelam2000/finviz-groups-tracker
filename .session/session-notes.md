@@ -133,3 +133,13 @@ close it by hand if so (its commits are in default).
 
 **Next:** BENCH-ETF-2 (one live `collect.yml` run to confirm QQQ/IWM columns populate). Open question: was the
 2026-10-26 'Industrials' a real hallucination or a guard false positive (cf. #414)?
+
+---
+
+## 2026-11-20 — Daily scrape outage RCA + fix (ETF quote page multi-table)
+
+- **Status:** PR open. Don't close until it is merged (ideally before the 17:00 ET EOD run today).
+- **RCA:** `collect.yml` failed every run 2026-11-04..11-19. `parse_bench_quote` (from #425/#430) read only the first of six `.snapshot-table2` tables on the ETF quote page; perf labels are in the last → 0/7 → exit 1 → deltas skipped → picks aborted (green!) → morning/pre-close refused stale picks. Verified with a live-HTML probe on Actions (throwaway step on this branch's `probe_picks.yml`, reverted before the PR).
+- **Landed (PR):** scan all `.snapshot-table2` tables; regression test on trimmed real fixture `tests/fixtures/etf_quote_spy_2026-11.html`; `knowledge/investigations/etf-quote-multi-table-2026-11.md`. 915 tests pass.
+- **Data gap:** snapshots exist for every day; deltas missing 11-04..11-19 (recoverable, BENCH-QUOTE-FIX-4, owner decision); SPY/QQQ/IWM rows and picks for those dates are lost (live-only).
+- **Next steps:** merge, then dispatch `collect.yml` (or let the 17:00 ET run go) and confirm deltas for 2026-11-20 + picks + Monday morning status. Owner decisions pending: BENCH-QUOTE-FIX-3 (decouple benchmark failure from deltas) and -4 (backfill). BENCH-QUOTE-FIX-2 (picks job false green) is a straightforward fix.
