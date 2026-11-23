@@ -1,6 +1,13 @@
 {
-  "updated_at": "2026-11-23T20:53:50Z",
+  "updated_at": "2026-11-23T22:03:50Z",
   "entries": [
+    {
+      "date": "2026-11-23",
+      "status": "complete",
+      "model": "gemini-3.8-flash",
+      "generated_at": "2026-11-23T22:03:12Z",
+      "rotation_phase": "Defensive"
+    },
     {
       "date": "2026-11-20",
       "status": "complete",
@@ -623,13 +630,6 @@
       "model": "gemini-3.5-flash",
       "generated_at": "2026-07-01T14:32:51Z",
       "rotation_phase": "Mid Cycle"
-    },
-    {
-      "date": "2026-06-29",
-      "status": "complete",
-      "model": "gemini-3.5-flash",
-      "generated_at": "2026-06-30T14:32:44Z",
-      "rotation_phase": "Defensive"
     }
   ]
 }
