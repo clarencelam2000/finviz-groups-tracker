@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "generated_at": "2026-11-27T22:09:25Z",
+  "generated_at": "2026-11-28T02:15:16Z",
   "as_of": "2026-11-27",
   "session": "eod",
   "data_branch": "claude/elegant-babbage-hlxnfy",
@@ -47,8 +47,8 @@
     {
       "group": "Advertising Agencies",
       "rank_ytd": 140.0,
-      "regime_short_long": 0.4953,
-      "momentum_score": 0.4942,
+      "regime_short_long": 0.4977,
+      "momentum_score": 0.493,
       "rs_score": 0.5
     },
     {
@@ -135,6 +135,12 @@
       "rank_delta": 32.0
     },
     {
+      "group": "Home Improvement Retail",
+      "timeframe": "20d",
+      "to_rank": 81.0,
+      "rank_delta": 30.0
+    },
+    {
       "group": "Insurance Brokers",
       "timeframe": "20d",
       "to_rank": 61.0,
@@ -144,12 +150,6 @@
       "group": "Broadcasting",
       "timeframe": "20d",
       "to_rank": 107.0,
-      "rank_delta": 29.0
-    },
-    {
-      "group": "Home Improvement Retail",
-      "timeframe": "20d",
-      "to_rank": 82.0,
       "rank_delta": 29.0
     },
     {
@@ -245,21 +245,21 @@
       "rank_delta": -36.0
     },
     {
+      "group": "Engineering & Construction",
+      "timeframe": "20d",
+      "to_rank": 83.0,
+      "rank_delta": -33.0
+    },
+    {
       "group": "Other Industrial Metals & Mining",
       "timeframe": "20d",
-      "to_rank": 91.0,
-      "rank_delta": -34.0
+      "to_rank": 90.0,
+      "rank_delta": -33.0
     },
     {
       "group": "Capital Markets",
       "timeframe": "20d",
       "to_rank": 121.0,
-      "rank_delta": -32.0
-    },
-    {
-      "group": "Software - Infrastructure",
-      "timeframe": "20d",
-      "to_rank": 81.0,
       "rank_delta": -32.0
     },
     {
@@ -269,10 +269,10 @@
       "rank_delta": -32.0
     },
     {
-      "group": "Engineering & Construction",
+      "group": "Software - Infrastructure",
       "timeframe": "20d",
-      "to_rank": 78.0,
-      "rank_delta": -28.0
+      "to_rank": 80.0,
+      "rank_delta": -31.0
     },
     {
       "group": "Healthcare Plans",
